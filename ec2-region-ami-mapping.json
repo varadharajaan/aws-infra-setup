@@ -1,0 +1,104 @@
+{
+  "region_ami_mapping": {
+    "us-east-1": "ami-0953476d60561c955",
+    "us-east-2": "ami-06c8f2ec674c67112",
+    "us-west-1": "ami-07706bb32254a7fe5",
+    "us-west-2": "ami-04999cd8f2624f834",
+    "ap-south-1": "ami-0af9569868786b23a"
+  },
+  "allowed_instance_types": [
+    "t2.micro",
+    "t3.micro",
+    "t3.medium",
+    "t3a.medium",
+    "t4g.medium",
+    "t3.large",
+    "t3a.large",
+    "t4g.large",
+    "c6a.large",
+    "c6i.large",
+    "c5.large",
+    "m6a.large",
+    "m6i.large",
+    "m5.large"
+  ],
+  "global_allowed_instance_types": [
+    "t2.micro",
+    "t3.micro",
+    "t3.medium",
+    "t3a.medium",
+    "t4g.medium",
+    "t3.large",
+    "t3a.large",
+    "t4g.large",
+    "c6a.large",
+    "c6i.large",
+    "c5.large",
+    "m6a.large",
+    "m6i.large",
+    "m5.large"
+  ],
+  "region_instance_types": {
+    "us-east-1": [
+      "t2.micro",
+      "t3.micro",
+      "t3.medium",
+      "t3a.medium",
+      "t4g.medium",
+      "t3.large",
+      "t3a.large",
+      "t4g.large",
+      "c6a.large",
+      "c6i.large",
+      "c5.large",
+      "m6a.large",
+      "m6i.large",
+      "m5.large"
+    ],
+    "us-west-2": [
+      "t3.micro",
+      "t3.medium",
+      "t3a.medium",
+      "t4g.medium",
+      "t3.large",
+      "t3a.large",
+      "c6a.large",
+      "c6i.large",
+      "m6a.large"
+    ],
+    "ap-south-1": [
+      "t3.micro",
+      "t3.medium",
+      "t3a.medium",
+      "t3.large",
+      "t3a.large",
+      "c6a.large",
+      "c6i.large",
+      "m6a.large",
+      "m6i.large"
+    ]
+  },
+  "default_instance_type": "t3.micro",
+  "recommended_instance_types": [
+    "t3.micro",
+    "c6a.large",
+    "c6i.large",
+    "t3.medium",
+    "t3a.medium"
+  ],
+  "eks_unsupported_azs": {
+    "us-east-1": [ "us-east-1e" ],
+    "us-west-1": [ "" ],
+    "ap-south-1": [ "" ],
+    "ap-northeast-1": [ "" ],
+    "eu-west-1": [ "" ],
+    "ca-central-1": [ "" ]
+  },
+  "eks_config": {
+    "supported_versions": [ "1.27", "1.28", "1.29" ],
+    "default_version": "1.28",
+    "min_subnets_required": 2,
+    "min_azs_required": 2,
+    "ami_type": "AL2023_x86_64_STANDARD"
+  }
+}

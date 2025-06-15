@@ -1,0 +1,188 @@
+
+reference files: in branch varad/enchance-spot
+aws_accounts_config.json
+ec2-region-ami-mapping.json
+create-ec2-instance-configure.py
+create_iam_users_logging.py
+eks_new_version_cluster.py
+spot_instance_scrapper.py
+userdata_allsupport.sh
+
+refer these files first. 
+
+1). create standlone ec2 & eks cluster at root level creds. 
+
+- I shold be able to choose which account I want to create and use that creds and re-run the eks script to create eks cluster for the same. here i should befirst asked first do you create cluster for root user/iam user, then i should selcet account and then if chosen root then no need to ask list users instread i should be asked for which region i want to create and for list of regions u can check aws_accounts_config.json file look for "user_regions" array &  if chosen iam then existing approach without any changes
+
+- I shold be able to choose which account I want to create and use that creds and re-run the ec2 script to create ec2 instance for the same. here i should befirst asked first do you create cluster for root user/iam user, then i should selcet account and then if chosen root then no need to ask list users instread i should be asked for which region i want to create and for list of regions u can check aws_accounts_config.json file "user_regions" array &  if chosen iam then existing approach without any changes
+
+2). if it is possible create 1ng with 1 ondemand & 1ng with 2 spot isntances with multiple instance types and desired size 1 & 2 accordingly. default instance types look for "allowed_instance_types" array in aws_accounts_config.json file you can all instances if possible or t3micro c6alarge c6ilarge t3medium t3amedium default ones. 
+
+3). create auto scaling group for the user per isntance ec2 so that even if instance goes down it gets created automatically. probably you can hardcode userdata_allsupport to launch template and then apply it. 
+
+4). there is a file spot instance scraper that will give list of spot instances available use those instances in order for auto scaling group in ec2 with desired as 2 nodes. show the user analysis and probaly u can also save this json and ask user to take a look before using. so user selects root/iam -> selects region/users based on previous selection -> ask user spot/on-demand/mixed stragerty -> choose ondemand then run live available service quota check and say if instance can be creatd or not and let user choose instance based on analysis, sort the instance by high service quota availalbe show instance & service quota available. OR if user chose spot then run ask run spot analysis Y/N -> use spot scraper method & also do service quota comparsion show result also save to json and ask to check user and then let him choose the instance listed. if he choose no analysis then directly list instance without analysis. auto scaling group in both cases on-demand or spot user can choose multiple instance types -> if choose mixed then run both above together and ask user what instancetypes for ondemand and what instancetypes for spot and strategy should b1 50-50% and also is it possible to create ec2 asg with schedule like 9am to 6pm ist
+
+so basically for can you combine this aling with service quota availability exame if i choose m7g medium based o score but r faily not available then it is an issue. can also do that analyss and sort based on score, interuption rate and service quota availbliity?
+
+5). there is a file spot instance scraper that will give list of spot instances available use those instances in order for auto scaling group in EKS - mixed stragtegy for nodegroup with desired 2 node groups ng-on-demand & ng-spot and in ng-spot you can create 3 nodes as default show the user analysis and probaly u can also save this json and ask user to take a look before using. so user selects root/iam -> selects region/users based on previous selection -> ask user spot/on-demand/mixed stragerty -> choose ondemand then run live available service quota check and say if instance can be creatd or not and let user choose instance based on analysis, sort the instance by high service quota availalbe show instance & service quota available. OR if user chose spot then run ask run spot analysis Y/N -> use spot scraper method & also do service quota comparsion show result also save to json and ask to check user and then let him choose the instance listed. if he choose no analysis then directly list instance without analysis. auto scaling group in both cases on-demand or spot user can choose multiple instance types -> if choose mixed then run both above together and ask user what instancetypes for ondemand and what instancetypes for spot and strategy should b1 50-50%
+
+so basically for can you combine this aling with service quota availability exame if i choose m7g medium based o score but r faily not available then it is an issue. can also do that analyss and sort based on score, interuption rate and service quota availbliity? also instead of hardcoding default version in the cluster creation fetch it from ec2-ami-region-mapping.json inside eks_config object i have default_version you can use that if not found then fall back to 1.27 and amitype is also fetch from same file same object under ami_type key.
+
+6). ultra iam cleanup for accounts in aws_accounts_config.json
+
+7). instance families to be moved to ec2-ami-region-mapping.json in new ekscluster creation file and accessed from there
+
+8). i want health status metadata & live cost calculator for running ec2 and eks instances in my root accounts, take input as account-id. live cost should be list all live services under ec2 and eks and i select certain ec2 or all & certain eks or all, I need live cost calculator for them and in double value and make sure they dont show ZERO
+
+10). all iam users to be attached a group - account01_cloudusergroup account02_cloudusergroup and instead of assinging admin access to userlavel add to group and then user inherit it
+
+give me these inputs in a proper way make sure u dont get corrupted and stop in middle. i am fine even if u share 2 to 3 methods at a time and ask me if you can proceed further. 
+
+
+
+9). add this policy as well to eks nodeinstancerole
+{
+	"Version": "2012-10-17",
+	"Statement": [
+		{
+			"Effect": "Allow",
+			"Action": [
+				"ec2:CreateSnapshot",
+				"ec2:AttachVolume",
+				"ec2:DetachVolume",
+				"ec2:ModifyVolume",
+				"ec2:DescribeAvailabilityZones",
+				"ec2:DescribeInstances",
+				"ec2:DescribeSnapshots",
+				"ec2:DescribeTags",
+				"ec2:DescribeVolumes",
+				"ec2:DescribeVolumesModifications"
+			],
+			"Resource": "*"
+		},
+		{
+			"Effect": "Allow",
+			"Action": [
+				"ec2:CreateTags"
+			],
+			"Resource": [
+				"arn:aws:ec2:*:*:volume/*",
+				"arn:aws:ec2:*:*:snapshot/*"
+			],
+			"Condition": {
+				"StringEquals": {
+					"ec2:CreateAction": [
+						"CreateVolume",
+						"CreateSnapshot"
+					]
+				}
+			}
+		},
+		{
+			"Effect": "Allow",
+			"Action": [
+				"ec2:DeleteTags"
+			],
+			"Resource": [
+				"arn:aws:ec2:*:*:volume/*",
+				"arn:aws:ec2:*:*:snapshot/*"
+			]
+		},
+		{
+			"Effect": "Allow",
+			"Action": [
+				"ec2:CreateVolume"
+			],
+			"Resource": "*",
+			"Condition": {
+				"StringLike": {
+					"aws:RequestTag/ebs.csi.aws.com/cluster": "true"
+				}
+			}
+		},
+		{
+			"Effect": "Allow",
+			"Action": [
+				"ec2:CreateVolume"
+			],
+			"Resource": "*",
+			"Condition": {
+				"StringLike": {
+					"aws:RequestTag/CSIVolumeName": "*"
+				}
+			}
+		},
+		{
+			"Effect": "Allow",
+			"Action": [
+				"ec2:CreateVolume"
+			],
+			"Resource": "*",
+			"Condition": {
+				"StringLike": {
+					"aws:RequestTag/kubernetes.io/cluster/*": "owned"
+				}
+			}
+		},
+		{
+			"Effect": "Allow",
+			"Action": [
+				"ec2:DeleteVolume"
+			],
+			"Resource": "*",
+			"Condition": {
+				"StringLike": {
+					"ec2:ResourceTag/ebs.csi.aws.com/cluster": "true"
+				}
+			}
+		},
+		{
+			"Effect": "Allow",
+			"Action": [
+				"ec2:DeleteVolume"
+			],
+			"Resource": "*",
+			"Condition": {
+				"StringLike": {
+					"ec2:ResourceTag/CSIVolumeName": "*"
+				}
+			}
+		},
+		{
+			"Effect": "Allow",
+			"Action": [
+				"ec2:DeleteVolume"
+			],
+			"Resource": "*",
+			"Condition": {
+				"StringLike": {
+					"ec2:ResourceTag/kubernetes.io/cluster/*": "owned"
+				}
+			}
+		},
+		{
+			"Effect": "Allow",
+			"Action": [
+				"ec2:DeleteSnapshot"
+			],
+			"Resource": "*",
+			"Condition": {
+				"StringLike": {
+					"ec2:ResourceTag/CSIVolumeSnapshotName": "*"
+				}
+			}
+		},
+		{
+			"Effect": "Allow",
+			"Action": [
+				"ec2:DeleteSnapshot"
+			],
+			"Resource": "*",
+			"Condition": {
+				"StringLike": {
+					"ec2:ResourceTag/ebs.csi.aws.com/cluster": "true"
+				}
+			}
+		}
+	]
+}

@@ -1,0 +1,36 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DenyIfNotInRegion",
+      "Effect": "Deny",
+      "Action": "*",
+      "Resource": "*",
+      "Condition": {
+        "StringNotEquals": {
+          "aws:RequestedRegion": "us-east-1"
+        }
+      }
+    },
+    {
+      "Sid": "DenyIfDisallowedInstanceType",
+      "Effect": "Deny",
+      "Action": [
+        "ec2:RunInstances",
+        "ec2:CreateFleet",
+        "ec2:CreateLaunchTemplate",
+        "ec2:CreateLaunchTemplateVersion"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringNotEqualsIfExists": {
+          "ec2:InstanceType": [
+            "t2.micro",
+            "t3.micro",
+            "c6a.large"
+          ]
+        }
+      }
+    }
+  ]
+}

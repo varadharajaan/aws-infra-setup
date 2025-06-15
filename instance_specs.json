@@ -1,0 +1,601 @@
+{
+  "metadata": {
+    "last_updated": "2025-06-10 17:45:01",
+    "version": "1.1",
+    "source": "AWS EC2 Pricing API",
+    "region_base": "us-east-1",
+    "currency": "USD",
+    "pricing_model": "on-demand",
+    "updated_by": "varadharajaan"
+  },
+  "instance_families": {
+    "t2": {
+      "description": "Previous Generation Burstable Performance",
+      "category": "general_purpose",
+      "processor": "Intel Xeon Family",
+      "base_interruption_rate": 0.055,
+      "performance_multiplier": 0.9
+    },
+    "t3": {
+      "description": "Burstable Performance Instances",
+      "category": "general_purpose",
+      "processor": "Intel Xeon Platinum",
+      "base_interruption_rate": 0.05,
+      "performance_multiplier": 1.0
+    },
+    "t3a": {
+      "description": "AMD-based Burstable Performance",
+      "category": "general_purpose",
+      "processor": "AMD EPYC 7000",
+      "base_interruption_rate": 0.048,
+      "performance_multiplier": 1.05
+    },
+    "t4g": {
+      "description": "ARM-based Burstable Performance",
+      "category": "general_purpose", 
+      "processor": "AWS Graviton2",
+      "base_interruption_rate": 0.04,
+      "performance_multiplier": 1.2
+    },
+    "c5": {
+      "description": "Compute Optimized",
+      "category": "compute_optimized",
+      "processor": "Intel Xeon Platinum",
+      "base_interruption_rate": 0.03,
+      "performance_multiplier": 1.5
+    },
+    "c6a": {
+      "description": "Latest AMD Compute Optimized",
+      "category": "compute_optimized",
+      "processor": "AMD EPYC",
+      "base_interruption_rate": 0.025,
+      "performance_multiplier": 1.8
+    },
+    "c6i": {
+      "description": "Latest Intel Compute Optimized",
+      "category": "compute_optimized",
+      "processor": "Intel Xeon Ice Lake",
+      "base_interruption_rate": 0.028,
+      "performance_multiplier": 1.75
+    },
+    "m5": {
+      "description": "General Purpose",
+      "category": "general_purpose",
+      "processor": "Intel Xeon Platinum",
+      "base_interruption_rate": 0.04,
+      "performance_multiplier": 1.3
+    },
+    "m6a": {
+      "description": "Latest AMD General Purpose",
+      "category": "general_purpose",
+      "processor": "AMD EPYC",
+      "base_interruption_rate": 0.038,
+      "performance_multiplier": 1.55
+    },
+    "m6i": {
+      "description": "Latest Intel General Purpose",
+      "category": "general_purpose",
+      "processor": "Intel Xeon Ice Lake",
+      "base_interruption_rate": 0.035,
+      "performance_multiplier": 1.6
+    },
+    "r5": {
+      "description": "Memory Optimized",
+      "category": "memory_optimized",
+      "processor": "Intel Xeon Platinum",
+      "base_interruption_rate": 0.06,
+      "performance_multiplier": 1.4
+    },
+    "r6i": {
+      "description": "Latest Memory Optimized",
+      "category": "memory_optimized",
+      "processor": "Intel Xeon Ice Lake",
+      "base_interruption_rate": 0.055,
+      "performance_multiplier": 1.7
+    }
+  },
+  "instance_sizes": {
+    "nano": {
+      "size_multiplier": 0.5,
+      "interruption_adjustment": 1.1,
+      "stability_rating": "low"
+    },
+    "micro": {
+      "size_multiplier": 1.0,
+      "interruption_adjustment": 1.1,
+      "stability_rating": "low"
+    },
+    "small": {
+      "size_multiplier": 2.0,
+      "interruption_adjustment": 1.0,
+      "stability_rating": "medium"
+    },
+    "medium": {
+      "size_multiplier": 4.0,
+      "interruption_adjustment": 1.0,
+      "stability_rating": "medium"
+    },
+    "large": {
+      "size_multiplier": 8.0,
+      "interruption_adjustment": 0.9,
+      "stability_rating": "good"
+    },
+    "xlarge": {
+      "size_multiplier": 16.0,
+      "interruption_adjustment": 0.85,
+      "stability_rating": "good"
+    },
+    "2xlarge": {
+      "size_multiplier": 32.0,
+      "interruption_adjustment": 0.8,
+      "stability_rating": "very_good"
+    },
+    "4xlarge": {
+      "size_multiplier": 64.0,
+      "interruption_adjustment": 0.7,
+      "stability_rating": "excellent"
+    },
+    "8xlarge": {
+      "size_multiplier": 128.0,
+      "interruption_adjustment": 0.6,
+      "stability_rating": "excellent"
+    },
+    "12xlarge": {
+      "size_multiplier": 192.0,
+      "interruption_adjustment": 0.6,
+      "stability_rating": "excellent"
+    }
+  },
+  "instance_types": {
+    "t2.micro": {
+      "vcpus": 1,
+      "memory_gb": 1.0,
+      "family": "t2",
+      "size": "micro",
+      "network_performance": "Low to Moderate",
+      "ebs_optimized": false,
+      "pricing": {
+        "us-east-1": 0.0116,
+        "us-east-2": 0.0112,
+        "us-west-1": 0.0130,
+        "us-west-2": 0.0116,
+        "eu-west-1": 0.0132,
+        "eu-central-1": 0.0136,
+        "ap-southeast-1": 0.0141,
+        "ap-northeast-1": 0.0150
+      }
+    },
+    "t3.nano": {
+      "vcpus": 2,
+      "memory_gb": 0.5,
+      "family": "t3",
+      "size": "nano",
+      "network_performance": "Up to 5 Gigabit",
+      "ebs_optimized": false,
+      "pricing": {
+        "us-east-1": 0.0052,
+        "us-east-2": 0.0050,
+        "us-west-1": 0.0058,
+        "us-west-2": 0.0052,
+        "eu-west-1": 0.0059,
+        "eu-central-1": 0.0061,
+        "ap-southeast-1": 0.0063,
+        "ap-northeast-1": 0.0067
+      }
+    },
+    "t3.micro": {
+      "vcpus": 2,
+      "memory_gb": 1.0,
+      "family": "t3",
+      "size": "micro",
+      "network_performance": "Up to 5 Gigabit",
+      "ebs_optimized": false,
+      "pricing": {
+        "us-east-1": 0.0104,
+        "us-east-2": 0.0100,
+        "us-west-1": 0.0116,
+        "us-west-2": 0.0104,
+        "eu-west-1": 0.0118,
+        "eu-central-1": 0.0122,
+        "ap-southeast-1": 0.0126,
+        "ap-northeast-1": 0.0134
+      }
+    },
+    "t3.small": {
+      "vcpus": 2,
+      "memory_gb": 2.0,
+      "family": "t3",
+      "size": "small",
+      "network_performance": "Up to 5 Gigabit",
+      "ebs_optimized": false,
+      "pricing": {
+        "us-east-1": 0.0208,
+        "us-east-2": 0.0200,
+        "us-west-1": 0.0232,
+        "us-west-2": 0.0208,
+        "eu-west-1": 0.0236,
+        "eu-central-1": 0.0244,
+        "ap-southeast-1": 0.0252,
+        "ap-northeast-1": 0.0268
+      }
+    },
+    "t3.medium": {
+      "vcpus": 2,
+      "memory_gb": 4.0,
+      "family": "t3",
+      "size": "medium",
+      "network_performance": "Up to 5 Gigabit",
+      "ebs_optimized": false,
+      "pricing": {
+        "us-east-1": 0.0416,
+        "us-east-2": 0.0400,
+        "us-west-1": 0.0464,
+        "us-west-2": 0.0416,
+        "eu-west-1": 0.0472,
+        "eu-central-1": 0.0488,
+        "ap-southeast-1": 0.0504,
+        "ap-northeast-1": 0.0536
+      }
+    },
+    "t3a.medium": {
+      "vcpus": 2,
+      "memory_gb": 4.0,
+      "family": "t3a",
+      "size": "medium",
+      "network_performance": "Up to 5 Gigabit",
+      "ebs_optimized": false,
+      "pricing": {
+        "us-east-1": 0.0374,
+        "us-east-2": 0.0360,
+        "us-west-1": 0.0418,
+        "us-west-2": 0.0374,
+        "eu-west-1": 0.0425,
+        "eu-central-1": 0.0439,
+        "ap-southeast-1": 0.0454,
+        "ap-northeast-1": 0.0482
+      }
+    },
+    "t4g.medium": {
+      "vcpus": 2,
+      "memory_gb": 4.0,
+      "family": "t4g",
+      "size": "medium",
+      "network_performance": "Up to 5 Gigabit",
+      "ebs_optimized": false,
+      "pricing": {
+        "us-east-1": 0.0336,
+        "us-east-2": 0.0323,
+        "us-west-1": 0.0376,
+        "us-west-2": 0.0336,
+        "eu-west-1": 0.0381,
+        "eu-central-1": 0.0394,
+        "ap-southeast-1": 0.0407,
+        "ap-northeast-1": 0.0433
+      }
+    },
+    "t3.large": {
+      "vcpus": 2,
+      "memory_gb": 8.0,
+      "family": "t3",
+      "size": "large",
+      "network_performance": "Up to 5 Gigabit",
+      "ebs_optimized": false,
+      "pricing": {
+        "us-east-1": 0.0832,
+        "us-east-2": 0.0800,
+        "us-west-1": 0.0928,
+        "us-west-2": 0.0832,
+        "eu-west-1": 0.0944,
+        "eu-central-1": 0.0976,
+        "ap-southeast-1": 0.1008,
+        "ap-northeast-1": 0.1072
+      }
+    },
+    "t3a.large": {
+      "vcpus": 2,
+      "memory_gb": 8.0,
+      "family": "t3a",
+      "size": "large",
+      "network_performance": "Up to 5 Gigabit",
+      "ebs_optimized": false,
+      "pricing": {
+        "us-east-1": 0.0749,
+        "us-east-2": 0.0720,
+        "us-west-1": 0.0835,
+        "us-west-2": 0.0749,
+        "eu-west-1": 0.0849,
+        "eu-central-1": 0.0878,
+        "ap-southeast-1": 0.0907,
+        "ap-northeast-1": 0.0965
+      }
+    },
+    "t4g.large": {
+      "vcpus": 2,
+      "memory_gb": 8.0,
+      "family": "t4g",
+      "size": "large",
+      "network_performance": "Up to 5 Gigabit",
+      "ebs_optimized": false,
+      "pricing": {
+        "us-east-1": 0.0672,
+        "us-east-2": 0.0646,
+        "us-west-1": 0.0751,
+        "us-west-2": 0.0672,
+        "eu-west-1": 0.0762,
+        "eu-central-1": 0.0788,
+        "ap-southeast-1": 0.0814,
+        "ap-northeast-1": 0.0866
+      }
+    },
+    "t3.xlarge": {
+      "vcpus": 4,
+      "memory_gb": 16.0,
+      "family": "t3",
+      "size": "xlarge",
+      "network_performance": "Up to 5 Gigabit",
+      "ebs_optimized": false,
+      "pricing": {
+        "us-east-1": 0.1664,
+        "us-east-2": 0.1600,
+        "us-west-1": 0.1856,
+        "us-west-2": 0.1664,
+        "eu-west-1": 0.1888,
+        "eu-central-1": 0.1952,
+        "ap-southeast-1": 0.2016,
+        "ap-northeast-1": 0.2144
+      }
+    },
+    "t4g.nano": {
+      "vcpus": 2,
+      "memory_gb": 0.5,
+      "family": "t4g",
+      "size": "nano",
+      "network_performance": "Up to 5 Gigabit",
+      "ebs_optimized": false,
+      "pricing": {
+        "us-east-1": 0.0042,
+        "us-east-2": 0.0040,
+        "us-west-1": 0.0046,
+        "us-west-2": 0.0042,
+        "eu-west-1": 0.0047,
+        "eu-central-1": 0.0049,
+        "ap-southeast-1": 0.0050,
+        "ap-northeast-1": 0.0054
+      }
+    },
+    "t4g.micro": {
+      "vcpus": 2,
+      "memory_gb": 1.0,
+      "family": "t4g",
+      "size": "micro",
+      "network_performance": "Up to 5 Gigabit",
+      "ebs_optimized": false,
+      "pricing": {
+        "us-east-1": 0.0084,
+        "us-east-2": 0.0080,
+        "us-west-1": 0.0093,
+        "us-west-2": 0.0084,
+        "eu-west-1": 0.0095,
+        "eu-central-1": 0.0098,
+        "ap-southeast-1": 0.0101,
+        "ap-northeast-1": 0.0107
+      }
+    },
+    "c6a.large": {
+      "vcpus": 2,
+      "memory_gb": 4.0,
+      "family": "c6a",
+      "size": "large",
+      "network_performance": "Up to 12.5 Gigabit",
+      "ebs_optimized": true,
+      "pricing": {
+        "us-east-1": 0.0864,
+        "us-east-2": 0.0831,
+        "us-west-1": 0.0965,
+        "us-west-2": 0.0864,
+        "eu-west-1": 0.0978,
+        "eu-central-1": 0.1011,
+        "ap-southeast-1": 0.1043,
+        "ap-northeast-1": 0.1109
+      }
+    },
+    "c6i.large": {
+      "vcpus": 2,
+      "memory_gb": 4.0,
+      "family": "c6i",
+      "size": "large",
+      "network_performance": "Up to 12.5 Gigabit",
+      "ebs_optimized": true,
+      "pricing": {
+        "us-east-1": 0.0918,
+        "us-east-2": 0.0882,
+        "us-west-1": 0.1025,
+        "us-west-2": 0.0918,
+        "eu-west-1": 0.1039,
+        "eu-central-1": 0.1074,
+        "ap-southeast-1": 0.1110,
+        "ap-northeast-1": 0.1180
+      }
+    },
+    "c5.large": {
+      "vcpus": 2,
+      "memory_gb": 4.0,
+      "family": "c5",
+      "size": "large",
+      "network_performance": "Up to 10 Gigabit",
+      "ebs_optimized": true,
+      "pricing": {
+        "us-east-1": 0.085,
+        "us-east-2": 0.082,
+        "us-west-1": 0.095,
+        "us-west-2": 0.085,
+        "eu-west-1": 0.096,
+        "eu-central-1": 0.099,
+        "ap-southeast-1": 0.102,
+        "ap-northeast-1": 0.108
+      }
+    },
+    "m6a.large": {
+      "vcpus": 2,
+      "memory_gb": 8.0,
+      "family": "m6a",
+      "size": "large",
+      "network_performance": "Up to 12.5 Gigabit",
+      "ebs_optimized": true,
+      "pricing": {
+        "us-east-1": 0.0864,
+        "us-east-2": 0.0831,
+        "us-west-1": 0.0965,
+        "us-west-2": 0.0864,
+        "eu-west-1": 0.0978,
+        "eu-central-1": 0.1011,
+        "ap-southeast-1": 0.1043,
+        "ap-northeast-1": 0.1109
+      }
+    },
+    "m6i.large": {
+      "vcpus": 2,
+      "memory_gb": 8.0,
+      "family": "m6i",
+      "size": "large",
+      "network_performance": "Up to 12.5 Gigabit",
+      "ebs_optimized": true,
+      "pricing": {
+        "us-east-1": 0.0864,
+        "us-east-2": 0.0831,
+        "us-west-1": 0.0965,
+        "us-west-2": 0.0864,
+        "eu-west-1": 0.0978,
+        "eu-central-1": 0.1011,
+        "ap-southeast-1": 0.1043,
+        "ap-northeast-1": 0.1109
+      }
+    },
+    "m5.large": {
+      "vcpus": 2,
+      "memory_gb": 8.0,
+      "family": "m5",
+      "size": "large",
+      "network_performance": "Up to 10 Gigabit",
+      "ebs_optimized": true,
+      "pricing": {
+        "us-east-1": 0.096,
+        "us-east-2": 0.092,
+        "us-west-1": 0.107,
+        "us-west-2": 0.096,
+        "eu-west-1": 0.109,
+        "eu-central-1": 0.112,
+        "ap-southeast-1": 0.116,
+        "ap-northeast-1": 0.123
+      }
+    },
+    "c5.xlarge": {
+      "vcpus": 4,
+      "memory_gb": 8.0,
+      "family": "c5",
+      "size": "xlarge",
+      "network_performance": "Up to 10 Gigabit",
+      "ebs_optimized": true,
+      "pricing": {
+        "us-east-1": 0.17,
+        "us-east-2": 0.164,
+        "us-west-1": 0.19,
+        "us-west-2": 0.17,
+        "eu-west-1": 0.192,
+        "eu-central-1": 0.198,
+        "ap-southeast-1": 0.204,
+        "ap-northeast-1": 0.216
+      }
+    },
+    "c6a.xlarge": {
+      "vcpus": 4,
+      "memory_gb": 8.0,
+      "family": "c6a",
+      "size": "xlarge",
+      "network_performance": "Up to 12.5 Gigabit",
+      "ebs_optimized": true,
+      "pricing": {
+        "us-east-1": 0.1728,
+        "us-east-2": 0.1662,
+        "us-west-1": 0.1930,
+        "us-west-2": 0.1728,
+        "eu-west-1": 0.1956,
+        "eu-central-1": 0.2022,
+        "ap-southeast-1": 0.2086,
+        "ap-northeast-1": 0.2218
+      }
+    },
+    "m5.xlarge": {
+      "vcpus": 4,
+      "memory_gb": 16.0,
+      "family": "m5",
+      "size": "xlarge",
+      "network_performance": "Up to 10 Gigabit",
+      "ebs_optimized": true,
+      "pricing": {
+        "us-east-1": 0.192,
+        "us-east-2": 0.184,
+        "us-west-1": 0.214,
+        "us-west-2": 0.192,
+        "eu-west-1": 0.218,
+        "eu-central-1": 0.224,
+        "ap-southeast-1": 0.232,
+        "ap-northeast-1": 0.246
+      }
+    },
+    "r5.large": {
+      "vcpus": 2,
+      "memory_gb": 16.0,
+      "family": "r5",
+      "size": "large",
+      "network_performance": "Up to 10 Gigabit",
+      "ebs_optimized": true,
+      "pricing": {
+        "us-east-1": 0.126,
+        "us-east-2": 0.121,
+        "us-west-1": 0.140,
+        "us-west-2": 0.126,
+        "eu-west-1": 0.143,
+        "eu-central-1": 0.147,
+        "ap-southeast-1": 0.152,
+        "ap-northeast-1": 0.161
+      }
+    },
+    "r5.xlarge": {
+      "vcpus": 4,
+      "memory_gb": 32.0,
+      "family": "r5",
+      "size": "xlarge",
+      "network_performance": "Up to 10 Gigabit",
+      "ebs_optimized": true,
+      "pricing": {
+        "us-east-1": 0.252,
+        "us-east-2": 0.242,
+        "us-west-1": 0.280,
+        "us-west-2": 0.252,
+        "eu-west-1": 0.286,
+        "eu-central-1": 0.294,
+        "ap-southeast-1": 0.304,
+        "ap-northeast-1": 0.322
+      }
+    }
+  },
+  "regional_adjustments": {
+    "us-east-1": 1.0,
+    "us-east-2": 0.96,
+    "us-west-1": 1.12,
+    "us-west-2": 1.0,
+    "eu-west-1": 1.13,
+    "eu-central-1": 1.17,
+    "ap-southeast-1": 1.21,
+    "ap-northeast-1": 1.29
+  },
+  "analysis_thresholds": {
+    "min_savings_percentage": 15,
+    "min_availability_zones": 2,
+    "max_interruption_rate": 0.12,
+    "min_confidence_score": 0.6,
+    "price_volatility_threshold": 0.2,
+    "min_data_points": 10
+  }
+}

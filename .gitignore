@@ -1,0 +1,140 @@
+# === Python Standard Ignores ===
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+./aws
+./aws/*
+./cache
+./cache/*
+/logs
+/logs/*
+/.vs
+/.vs/*
+/__pycache__
+/__pycache__/*
+/venv
+/venv/*	
+./enchanced_future_scope*
+./future_scope*
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+#  Usually these files are written by a python script from a template
+#  before PyInstaller builds the exe, so as to inject date/other infos into it.
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Virtual environments
+venv/
+ENV/
+env/
+venv.bak/
+venv-old/
+
+# PyCharm and VSCode settings
+.idea/
+.vscode/
+
+# Test results
+htmlcov/
+.tox/
+.nox/
+coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre
+.pyre/
+
+# === Custom Project-Specific Ignores ===
+
+# Logs and outputs
+/logs/
+/output/
+/livestatus/
+/livecost/
+/aws_accounts_config.json
+/iam_users_credentials_*
+
+# Specific files and patterns
+/kubectl_commands_*
+/eks_creation_log*
+/eks_clusters_simple*
+/eks_clusters_created*
+/ec2_instance_report*
+/ec2_creation_log*
+/cost_calculations*
+/iam_user_instance_mapping_*
+/ultra_ec2_cleanup_report_*
+/eks_deletion_report_*.txt
+/eks_cluster_created_*.json
+/eks_clusters_created_*.json
+/ec2_instance_report_*.json
+/ec2_instances_report_*.json
+/ec2_report_*.json
+/aws_account_info_*.json
+
+/eks_deletion_report_*
+/eks_deletion_log*
+/elb_cleanup_log*
+/elb_deletion_report*
+/iam_cleanup_report*
+/iam_deletion_report*
+/user_instructions_*
+/aws_resource_creation_*
+/ultra_ec2_cleanup_*
+/ec2_cleanup_*
+/ec2/*
+/eks/*
+/iam/*
+file_organizer.log
+/aws/*
+cloud-nuke_windows_amd64.exe
+cloudnuke*
+aws_default_vpc_Check_report*
+aws_accounts_config*.json
+vpc_compliance_report_*.json
+vpc_recovery_report_*.json
+aws_vpc_autofix*.json
+./cache/*
+./aws/*
+cache
+aws

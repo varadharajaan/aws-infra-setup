@@ -1,0 +1,79 @@
+{
+  "accounts": {
+    "account01": {
+      "account_id": "145548337206",
+      "email": "varadharajan_cloud_002@proton.me",
+      "access_key": "AKIAS**********PGQWV",
+      "secret_key": "N8/PJ******************************xdRRK",
+      "users_per_account": 5
+    },
+    "account02": {
+      "account_id": "996335889295",
+      "email": "varadharajan.ai@pm.me",
+      "access_key": "AKIA6**********MQ5X3",
+      "secret_key": "lSslP******************************DRhc4",
+      "users_per_account": 5
+    },
+    "account03": {
+      "account_id": "534739421744",
+      "email": "varadharajan.ai@proton.me",
+      "access_key": "AKIAX**********IU6GG",
+      "secret_key": "SU4fu******************************mgnlc",
+      "users_per_account": 5
+    },
+    "account04": {
+      "account_id": "135521914217",
+      "email": "mergerawsaccount001@proton.me",
+      "access_key": "AKIAR**********2NNVL",
+      "secret_key": "pQbRr******************************0vjJG",
+      "users_per_account": 6
+    },
+    "account05": {
+      "account_id": "984974410376",
+      "email": "varadharajan_cloud_001@proton.me",
+      "access_key": "AKIA6**********HGC3P",
+      "secret_key": "05ifH******************************B1ow1",
+      "users_per_account": 0
+    },
+    "account06": {
+      "account_id": "984974410376",
+      "email": "varadharajaan@proton.me",
+      "access_key": "AKIA6**********HGC3P",
+      "secret_key": "05ifH******************************B1ow1",
+      "users_per_account": 0
+    }
+  },
+  "user_settings": {
+    "password": "DemoUser@123",
+    "allowed_instance_types": [
+      "t2.micro",
+      "t3.micro",
+      "t3.medium",
+      "t3a.medium",
+      "t4g.medium",
+      "t3.large",
+      "t3a.large",
+      "t4g.large",
+      "c6a.large",
+      "c6i.large",
+      "c5.large",
+      "m6a.large",
+      "m6i.large",
+      "m5.large"
+    ],
+    "users_per_account": 5,
+    "user_regions": [
+      "us-east-1",
+      "us-east-2",
+      "us-west-1",
+      "us-west-2",
+      "ap-south-1"
+    ]
+  },
+  "default_instance_type": "t3.micro",
+  "metadata": {
+    "created_at": "2025-06-14 18:34:22",
+    "sanitized": true,
+    "created_by": "varadharajaan"
+  }
+}
