@@ -257,103 +257,315 @@ class EKSAutomation:
             import traceback
             traceback.print_exc()
             return False
-    
+
     def select_ondemand_instance_types(self, credentials: CredentialInfo, allowed_types: List[str]) -> Dict[str, List[str]]:
-        """Select instance types for On-Demand nodegroup"""
+        """Select instance types for On-Demand nodegroup with caching support"""
         region = credentials.regions[0]
-        
+    
         print("\n💰 ON-DEMAND INSTANCE TYPE SELECTION")
         print("-" * 60)
+    
+        # Ask for cache preference
+        refresh_choice = input("Use cached on-demand quota data if available? (y/n): ").strip().lower()
+        force_refresh = refresh_choice == 'n'
+    
+        if force_refresh:
+            print("🔄 Invalidating cache and fetching fresh data...")
+            self.invalidate_quota_cache()
+    
         print("Analyzing service quotas for On-Demand instances...")
-        
-        # Get quota information
-        quota_info = self.spot_analyzer.analyze_service_quotas(credentials, allowed_types)
-        
+    
+        # Get quota information with cache control
+        quota_info = self.analyze_service_quotas_with_cache(credentials, allowed_types, force_refresh)
+    
         # Display quota information
         print("\n📊 Service Quota Analysis:")
         print("-" * 50)
-        
+    
         # Sort instance types by available quota
         instance_data = []
-        
+    
         for instance_type in allowed_types:
             family = instance_type.split('.')[0]
             if family in quota_info:
                 quota = quota_info[family]
-                available = quota.available_capacity
-                used = f"{quota.current_usage}/{quota.quota_limit}"
+                available = quota.get('available_capacity', quota.get('quota_limit', 0) - quota.get('current_usage', 0))
+                used = f"{quota.get('current_usage', 0)}/{quota.get('quota_limit', 'Unknown')}"
+                status = "✅ Available" if available > 0 else "❌ Limited"
             else:
-                available = "Unknown"
-                used = "Unknown"
-            
+                available = 0
+                used = "Unknown/Unknown"
+                status = "⚠️ Unknown"
+        
             instance_data.append({
                 'type': instance_type,
                 'available': available if isinstance(available, int) else 0,
-                'used': used
+                'used': used,
+                'status': status
             })
-        
+    
         # Sort by available capacity (highest first)
         sorted_instances = sorted(instance_data, key=lambda x: -x['available'])
-        
+    
         # Display all instance types with quota info
-        print(f"{'#':<3} {'Type':<12} {'Available Quota':<15} {'Used':<10}")
-        print("-" * 50)
-        
+        print(f"{'#':<3} {'Type':<12} {'Available':<10} {'Used':<15} {'Status':<15}")
+        print("-" * 60)
+    
         for i, instance in enumerate(sorted_instances, 1):
-            print(f"{i:<3} {instance['type']:<12} {instance['available']:<15} {instance['used']:<10}")
-        
+            print(f"{i:<3} {instance['type']:<12} {instance['available']:<10} {instance['used']:<15} {instance['status']:<15}")
+    
         # Choose instance types
         selected_types = self.multi_select_instance_types(
             [instance['type'] for instance in sorted_instances],
             "On-Demand"
         )
-        
-        return {'on-demand': selected_types}
     
-    def select_spot_instance_types(self, credentials: CredentialInfo, allowed_types: List[str]) -> Dict[str, List[str]]:
-        """Select instance types for Spot nodegroup with analysis"""
-        print("\n📈 SPOT INSTANCE TYPE SELECTION")
-        print("-" * 60)
+        return {'on-demand': selected_types}
+
+    def analyze_service_quotas_with_cache(self, credentials: CredentialInfo, instance_types: List[str], force_refresh: bool = False) -> Dict:
+        """Analyze service quotas with caching support"""
+        import pickle
+        import os
+        from datetime import datetime, timedelta
+    
+        region = credentials.regions[0]
+        cache_file = f"quota_cache_{region}_{credentials.account_id}.pkl"
+        cache_duration = timedelta(hours=1)  # Cache for 1 hour
+    
+        # Check if cache exists and is valid
+        if not force_refresh and os.path.exists(cache_file):
+            try:
+                with open(cache_file, 'rb') as f:
+                    cache_data = pickle.load(f)
+            
+                cache_time = cache_data.get('timestamp')
+                if cache_time and datetime.now() - cache_time < cache_duration:
+                    print(f"📁 Using cached quota data from {cache_time.strftime('%Y-%m-%d %H:%M:%S')}")
+                    return cache_data.get('quota_info', {})
+            except Exception as e:
+                print(f"⚠️ Cache read error: {e}")
+    
+        # Fetch fresh data
+        print("🔍 Fetching fresh service quota data...")
+        quota_info = self.fetch_service_quotas(credentials, instance_types)
+    
+        # Save to cache
+        try:
+            cache_data = {
+                'timestamp': datetime.now(),
+                'quota_info': quota_info
+            }
+            with open(cache_file, 'wb') as f:
+                pickle.dump(cache_data, f)
+            print(f"💾 Quota data cached for future use")
+        except Exception as e:
+            print(f"⚠️ Cache write error: {e}")
+    
+        return quota_info
+
+    def fetch_service_quotas(self, credentials: CredentialInfo, instance_types: List[str]) -> Dict:
+        """Fetch service quotas from AWS"""
+        try:
+            session = boto3.Session(
+                aws_access_key_id=credentials.access_key,
+                aws_secret_access_key=credentials.secret_key,
+                region_name=credentials.regions[0]
+            )
         
-        # Ask for refresh preference
-        refresh_choice = input("Use cached spot data if available? (y/n): ").strip().lower()
-        force_refresh = refresh_choice == 'n'
+            # Get service quotas
+            quotas_client = session.client('service-quotas')
+            ec2_client = session.client('ec2')
         
-        print("Analyzing spot instances and service quotas...")
+            quota_info = {}
         
-        # Get spot analysis
-        spot_analyses = self.spot_analyzer.analyze_spot_instances(credentials, allowed_types, force_refresh)
+            # Get instance families
+            families = list(set([inst_type.split('.')[0] for inst_type in instance_types]))
         
-        # Group by instance type and choose best AZ for each
-        best_spots = {}
-        for analysis in spot_analyses:
-            instance_type = analysis.instance_type
-            if (instance_type not in best_spots or 
-                analysis.score > best_spots[instance_type].score):
-                best_spots[instance_type] = analysis
+            for family in families:
+                try:
+                    # Map instance family to quota code
+                    quota_code = self.get_quota_code_for_family(family)
+                
+                    if quota_code:
+                        # Get quota
+                        quota_response = quotas_client.get_service_quota(
+                            ServiceCode='ec2',
+                            QuotaCode=quota_code
+                        )
+                    
+                        quota_limit = int(quota_response['Quota']['Value'])
+                    
+                        # Get current usage (simplified - you may want to implement actual usage calculation)
+                        current_usage = self.get_current_instance_usage(ec2_client, family)
+                    
+                        quota_info[family] = {
+                            'quota_limit': quota_limit,
+                            'current_usage': current_usage,
+                            'available_capacity': max(0, quota_limit - current_usage)
+                        }
+                    else:
+                        # Default values if quota code not found
+                        quota_info[family] = {
+                            'quota_limit': 20,  # Default assumption
+                            'current_usage': 0,
+                            'available_capacity': 20
+                        }
+                    
+                except Exception as e:
+                    print(f"⚠️ Error fetching quota for {family}: {e}")
+                    quota_info[family] = {
+                        'quota_limit': 10,  # Conservative default
+                        'current_usage': 0,
+                        'available_capacity': 10
+                    }
         
-        # Sort by score (descending)
-        sorted_spots = sorted(best_spots.values(), key=lambda x: x.score, reverse=True)
+            return quota_info
         
-        # Display spot analysis results
-        print("\n📊 SPOT INSTANCE ANALYSIS RESULTS")
-        print("-" * 80)
+        except Exception as e:
+            print(f"❌ Error fetching service quotas: {e}")
+            return {}
+
+    def get_quota_code_for_family(self, family: str) -> str:
+        """Map instance family to service quota code"""
+        quota_codes = {
+            't2':   'L-34B43A08',  # Running On-Demand Standard (A, C, D, H, I, M, R, T, Z) instances
+            't3':   'L-CA2753C9',
+            't3a':  'L-350E1694',
+            't4g':  'L-DB2E81BA',
+
+            'm4':   'L-0263D0A3',
+            'm5':   'L-0263D0A3',
+            'm5a':  'L-87D64B00',
+            'm5n':  'L-2782B381',
+            'm6g':  'L-81078F7A',
+            'm6i':  'L-7B6409FD',
+            'm6a':  'L-DF5E4CA3',
+            'm7g':  'L-A29927B1',
+
+            'c4':   'L-DB2E81BA',
+            'c5':   'L-DB2E81BA',
+            'c5a':  'L-F7808417',
+            'c5n':  'L-13FDFD77',
+            'c6g':  'L-926C2B20',
+            'c6i':  'L-7212CB3C',
+            'c6a':  'L-F7808417',  # Shared code in some regions
+            'c7g':  'L-CE929B4B',
+
+            'r4':   'L-0263D0A3',
+            'r5':   'L-0263D0A3',
+            'r5a':  'L-8E5267A2',
+            'r5n':  'L-43FDD5A2',
+            'r6g':  'L-43E7C9B3',
+            'r6i':  'L-98A3AAFA',
+            'r6a':  'L-85D3672B',
+            'r7g':  'L-50492B47',
+
+            'x1':   'L-F44F0118',
+            'x1e':  'L-78E8E6B4',
+            'x2gd': 'L-2782B381',
+            'x2idn':'L-A5D3B943',
+
+            'i3':   'L-26B8197A',
+            'i3en': 'L-A1D8D5DF',
+            'i4i':  'L-BBD46E7C',
+
+            'z1d':  'L-8D8E09C0',
+
+            'a1':   'L-417A185B',
+
+            'inf1': 'L-DB6F7A5E',
+            'trn1': 'L-2782B381',
+
+            'g4dn': 'L-1216C47A',
+            'g5':   'L-1216C47A',
+            'p2':   'L-417A185B',
+            'p3':   'L-417A185B',
+            'p4':   'L-2782B381',
+
+            'h1':   'L-0263D0A3',
+            'd2':   'L-0263D0A3',
+            'im4gn': 'L-A9E15F92',
+            'is4gen': 'L-2782B381',
+        }
+
+        return quota_codes.get(family.lower())
+
+    def get_current_instance_usage(self, ec2_client, family: str) -> int:
+        """Get current running instance count for a family"""
+        try:
+            response = ec2_client.describe_instances(
+                Filters=[
+                    {'Name': 'instance-state-name', 'Values': ['running']},
+                    {'Name': 'instance-type', 'Values': [f'{family}.*']}
+                ]
+            )
         
-        print(f"{'#':<3} {'Type':<10} {'Zone':<15} {'Price':<8} {'Score':<6} {'Interrupt':<15}")
-        print("-" * 80)
+            count = 0
+            for reservation in response['Reservations']:
+                count += len(reservation['Instances'])
         
-        for i, analysis in enumerate(sorted_spots, 1):
-            print(f"{i:<3} {analysis.instance_type:<10} {analysis.availability_zone:<15} "
-                  f"${analysis.current_price:<7.4f} {analysis.score:<6.1f} "
-                  f"{analysis.interruption_rate}")
+            return count
+        except Exception as e:
+            print(f"⚠️ Error getting current usage for {family}: {e}")
+            return 0
+
+    def invalidate_quota_cache(self):
+        """Invalidate all quota cache files"""
+        import glob
+        import os
+    
+        cache_files = glob.glob("quota_cache_*.pkl")
+        for cache_file in cache_files:
+            try:
+                os.remove(cache_file)
+                print(f"🗑️ Removed cache file: {cache_file}")
+            except Exception as e:
+                print(f"⚠️ Error removing cache file {cache_file}: {e}")    
+
+        def select_spot_instance_types(self, credentials: CredentialInfo, allowed_types: List[str]) -> Dict[str, List[str]]:
+            """Select instance types for Spot nodegroup with analysis"""
+            print("\n📈 SPOT INSTANCE TYPE SELECTION")
+            print("-" * 60)
         
-        # Choose instance types
-        selected_types = self.multi_select_instance_types(
-            [analysis.instance_type for analysis in sorted_spots],
-            "Spot"
-        )
+            # Ask for refresh preference
+            refresh_choice = input("Use cached spot data if available? (y/n): ").strip().lower()
+            force_refresh = refresh_choice == 'n'
         
-        return {'spot': selected_types}
+            print("Analyzing spot instances and service quotas...")
+        
+            # Get spot analysis
+            spot_analyses = self.spot_analyzer.analyze_spot_instances(credentials, allowed_types, force_refresh)
+        
+            # Group by instance type and choose best AZ for each
+            best_spots = {}
+            for analysis in spot_analyses:
+                instance_type = analysis.instance_type
+                if (instance_type not in best_spots or 
+                    analysis.score > best_spots[instance_type].score):
+                    best_spots[instance_type] = analysis
+        
+            # Sort by score (descending)
+            sorted_spots = sorted(best_spots.values(), key=lambda x: x.score, reverse=True)
+        
+            # Display spot analysis results
+            print("\n📊 SPOT INSTANCE ANALYSIS RESULTS")
+            print("-" * 80)
+        
+            print(f"{'#':<3} {'Type':<10} {'Zone':<15} {'Price':<8} {'Score':<6} {'Interrupt':<15}")
+            print("-" * 80)
+        
+            for i, analysis in enumerate(sorted_spots, 1):
+                print(f"{i:<3} {analysis.instance_type:<10} {analysis.availability_zone:<15} "
+                      f"${analysis.current_price:<7.4f} {analysis.score:<6.1f} "
+                      f"{analysis.interruption_rate}")
+        
+            # Choose instance types
+            selected_types = self.multi_select_instance_types(
+                [analysis.instance_type for analysis in sorted_spots],
+                "Spot"
+            )
+        
+            return {'spot': selected_types}
     
     def select_mixed_instance_types(self, credentials: CredentialInfo, allowed_types: List[str]) -> Dict[str, List[str]]:
         """Select instance types for Mixed nodegroup strategy"""
