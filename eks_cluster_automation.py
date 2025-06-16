@@ -22,6 +22,17 @@ from spot_instance_analyzer import SpotInstanceAnalyzer, SpotAnalysis
 # Import EKS manager for cluster operations
 from eks_cluster_manager import EKSClusterManager
 
+class Colors:
+    """ANSI color codes for terminal output"""
+    RED = '\033[0;31m'
+    GREEN = '\033[0;32m'
+    YELLOW = '\033[1;33m'
+    BLUE = '\033[0;34m'
+    PURPLE = '\033[0;35m'
+    CYAN = '\033[0;36m'
+    WHITE = '\033[1;37m'
+    NC = '\033[0m'  # No Color
+
 class EKSAutomation:
     def __init__(self):
         """Initialize the EKS Automation tool"""
@@ -80,41 +91,41 @@ class EKSAutomation:
         })
     
     def run_automation(self):
-        """Main automation flow"""
+        """Main automation flow with enhanced nodegroup configuration"""
         try:
             # Step 1: Get credentials (Root or IAM)
             print("\n🔑 STEP 1: CREDENTIAL SELECTION")
             credentials = self.credential_manager.get_credentials()
-        
+    
             # Step 2: Validate credentials
             if not self.credential_manager.validate_credentials(credentials):
                 print("❌ Credential validation failed. Exiting...")
                 return False
-            
+        
             # Initialize EKS Manager with validated credentials
             self.eks_manager = EKSClusterManager(config_file=None)
-            
+        
             # Step 3: Configure EKS Cluster Settings
             print("\n🔧 STEP 2: EKS CLUSTER CONFIGURATION")
-            
+        
             # Get EKS configuration from mapping file
             eks_config = self.get_eks_config()
             default_version = eks_config.get("default_version", "1.27")
             ami_type = eks_config.get("ami_type", "AL2_x86_64")
-            
+        
             print(f"📋 EKS Default Settings:")
             print(f"   🔸 Default Version: {default_version}")
             print(f"   🔸 Default AMI Type: {ami_type}")
-            
+        
             # Ask for EKS version
             print("\nEKS Version Selection:")
             print("1. Use default version: " + default_version)
             print("2. Use latest version (1.28)")
             print("3. Specify custom version")
-            
+        
             while True:
                 version_choice = input("Select option (1-3): ").strip()
-                
+            
                 if version_choice == '1':
                     eks_version = default_version
                     break
@@ -130,16 +141,16 @@ class EKSAutomation:
                         print("❌ Please enter a valid version")
                 else:
                     print("❌ Invalid choice. Please select 1, 2, or 3")
-            
+        
             # Ask for AMI type
             print("\nAMI Type Selection:")
             print("1. Use default AMI type: " + ami_type)
             print("2. Use AL2023_x86_64_STANDARD (newer)")
             print("3. Specify custom AMI type")
-            
+        
             while True:
                 ami_choice = input("Select option (1-3): ").strip()
-                
+            
                 if ami_choice == '1':
                     selected_ami_type = ami_type
                     break
@@ -155,108 +166,479 @@ class EKSAutomation:
                         print("❌ Please enter a valid AMI type")
                 else:
                     print("❌ Invalid choice. Please select 1, 2, or 3")
-            
+        
             print(f"\n✅ Selected EKS Version: {eks_version}")
             print(f"✅ Selected AMI Type: {selected_ami_type}")
-            
-            # Step 4: Configure Nodegroup Settings
+        
+            # Step 4: NEW ENHANCED NODEGROUP CONFIGURATION
             print("\n🔧 STEP 3: NODEGROUP CONFIGURATION")
-            
-            # Get allowed instance types
-            allowed_instance_types = self.ami_config.get('allowed_instance_types', 
-                                                       ["t3.medium", "t3.large", "m5.large", "c5.large", "c6a.large"])
-            
-            # Nodegroup strategy selection
-            print("\nNodegroup Strategy Selection:")
-            print("1. On-Demand Only (Reliable, Higher Cost)")
-            print("2. Spot Only (Cost-Effective, Higher Risk)")
-            print("3. Mixed Strategy (50/50 Default, Balanced)")
-            
-            while True:
-                ng_strategy_choice = input("Select nodegroup strategy (1-3): ").strip()
-                
-                if ng_strategy_choice == '1':
-                    ng_strategy = "on-demand"
-                    break
-                elif ng_strategy_choice == '2':
-                    ng_strategy = "spot"
-                    break
-                elif ng_strategy_choice == '3':
-                    ng_strategy = "mixed"
-                    break
-                else:
-                    print("❌ Invalid choice. Please select 1, 2, or 3")
-            
-            print(f"✅ Selected Nodegroup Strategy: {ng_strategy.upper()}")
-            
-            # Select instance types based on strategy
-            instance_selections = {}
-            
-            if ng_strategy == "on-demand":
-                instance_selections = self.select_ondemand_instance_types(credentials, allowed_instance_types)
-            elif ng_strategy == "spot":
-                instance_selections = self.select_spot_instance_types(credentials, allowed_instance_types)
-            else:  # mixed
-                instance_selections = self.select_mixed_instance_types(credentials, allowed_instance_types)
-            
-            # Configure cluster scaling
-            min_nodes, desired_nodes, max_nodes = self.prompt_nodegroup_scaling(ng_strategy)
-            
+            nodegroup_configs = self.configure_multiple_nodegroups(credentials)
+        
+            if not nodegroup_configs:
+                print("❌ No nodegroups configured. Exiting...")
+                return False
+        
             # Step 5: Create EKS Cluster
             print("\n🚀 STEP 4: EKS CLUSTER CREATION")
-            
+        
             # Set up cluster configuration
             cluster_config = {
                 'credential_info': credentials,
                 'eks_version': eks_version,
                 'ami_type': selected_ami_type,
-                'nodegroup_strategy': ng_strategy,
-                'instance_selections': instance_selections,
-                'min_nodes': min_nodes,
-                'desired_nodes': desired_nodes,
-                'max_nodes': max_nodes
+                'nodegroup_configs': nodegroup_configs  # Changed from old format
             }
-            
+        
             # Confirm before proceeding
-            print("\n📋 Cluster Creation Summary:")
-            print(f"   Account: {credentials.account_name} ({credentials.account_id})")
-            print(f"   Region: {credentials.regions[0]}")
-            print(f"   EKS Version: {eks_version}")
-            print(f"   AMI Type: {selected_ami_type}")
-            print(f"   Nodegroup Strategy: {ng_strategy.upper()}")
-            
-            if ng_strategy == "on-demand":
-                print(f"   On-Demand Instance Types: {', '.join(instance_selections.get('on-demand', []))}")
-            elif ng_strategy == "spot":
-                print(f"   Spot Instance Types: {', '.join(instance_selections.get('spot', []))}")
-            else:
-                print(f"   On-Demand Instance Types: {', '.join(instance_selections.get('on-demand', []))}")
-                print(f"   Spot Instance Types: {', '.join(instance_selections.get('spot', []))}")
-                print(f"   On-Demand Percentage: {instance_selections.get('on_demand_percentage', 50)}%")
-            
-            print(f"   Nodegroup Scaling: Min={min_nodes}, Desired={desired_nodes}, Max={max_nodes}")
-            
+            self.display_cluster_creation_summary(credentials, eks_version, selected_ami_type, nodegroup_configs)
+        
             # Ask for confirmation
             confirm = input("\nDo you want to proceed with cluster creation? (y/n): ").strip().lower()
             if confirm != 'y':
                 print("❌ Cluster creation cancelled")
                 return False
-            
+        
             # Create EKS cluster with nodegroups
             result = self.eks_manager.create_cluster(cluster_config)
-            
+        
             if result:
                 print("\n✅ EKS Cluster created successfully!")
                 return True
             else:
                 print("\n❌ EKS Cluster creation failed")
                 return False
-            
+        
         except Exception as e:
             print(f"\n❌ Error during automation: {e}")
             import traceback
             traceback.print_exc()
             return False
+
+    def configure_multiple_nodegroups(self, credentials: CredentialInfo) -> List[Dict]:
+        """Configure multiple nodegroups with individual settings"""
+        print("\n🏗️  NODEGROUP CONFIGURATION")
+        print("=" * 60)
+    
+        # Ask for number of nodegroups
+        while True:
+            try:
+                num_nodegroups = input("How many nodegroups do you want to create? (1-5) [default: 2]: ").strip()
+                if not num_nodegroups:
+                    num_nodegroups = 2
+                else:
+                    num_nodegroups = int(num_nodegroups)
+            
+                if 1 <= num_nodegroups <= 5:
+                    break
+                else:
+                    print("❌ Please enter a number between 1 and 5")
+            except ValueError:
+                print("❌ Please enter a valid number")
+    
+        print(f"\n✅ Creating {num_nodegroups} nodegroup(s)")
+    
+        # Get allowed instance types
+        allowed_instance_types = self.ami_config.get('allowed_instance_types', 
+                                                     ["t3.medium", "t3.large", "m5.large", "c5.large", "c6a.large"])
+    
+        nodegroup_configs = []
+    
+        # Configure each nodegroup individually
+        for i in range(num_nodegroups):
+            nodegroup_num = i + 1
+            print(f"\n" + "="*60)
+            print(f"🔧 CONFIGURING NODEGROUP {nodegroup_num} of {num_nodegroups}")
+            print("="*60)
+        
+            # Get nodegroup name
+            default_name = f"nodegroup-{nodegroup_num}"
+            nodegroup_name = input(f"Enter name for nodegroup {nodegroup_num} [default: {default_name}]: ").strip()
+            if not nodegroup_name:
+                nodegroup_name = default_name
+        
+            # Strategy selection for this nodegroup
+            print(f"\n📊 Strategy Selection for {nodegroup_name}:")
+            print("1. On-Demand Only (Reliable, Higher Cost)")
+            print("2. Spot Only (Cost-Effective, Higher Risk)")
+            print("3. Mixed Strategy (On-Demand + Spot)")
+        
+            while True:
+                strategy_choice = input("Select strategy (1-3): ").strip()
+            
+                if strategy_choice == '1':
+                    strategy = "on-demand"
+                    break
+                elif strategy_choice == '2':
+                    strategy = "spot"
+                    break
+                elif strategy_choice == '3':
+                    strategy = "mixed"
+                    break
+                else:
+                    print("❌ Invalid choice. Please select 1, 2, or 3")
+        
+            print(f"✅ Strategy: {strategy.upper()}")
+        
+            # Instance type selection based on strategy
+            instance_selections = {}
+        
+            if strategy == "on-demand":
+                instance_selections = self.select_ondemand_instance_types_for_nodegroup(
+                    credentials, allowed_instance_types, nodegroup_name
+                )
+            elif strategy == "spot":
+                instance_selections = self.select_spot_instance_types_for_nodegroup(
+                    credentials, allowed_instance_types, nodegroup_name
+                )
+            else:  # mixed
+                instance_selections = self.select_mixed_instance_types_for_nodegroup(
+                    credentials, allowed_instance_types, nodegroup_name
+                )
+        
+            # Scaling configuration for this nodegroup
+            min_nodes, desired_nodes, max_nodes = self.prompt_nodegroup_scaling_individual(
+                nodegroup_name, strategy
+            )
+        
+            # Subnet selection for this nodegroup (optional)
+            subnet_preference = self.select_subnet_preference(nodegroup_name)
+        
+            # Add to configurations
+            nodegroup_config = {
+                'name': nodegroup_name,
+                'strategy': strategy,
+                'instance_selections': instance_selections,
+                'min_nodes': min_nodes,
+                'desired_nodes': desired_nodes,
+                'max_nodes': max_nodes,
+                'subnet_preference': subnet_preference,
+                'nodegroup_number': nodegroup_num
+            }
+        
+            nodegroup_configs.append(nodegroup_config)
+        
+            print(f"\n✅ Nodegroup {nodegroup_num} ({nodegroup_name}) configured successfully!")
+            print(f"   Strategy: {strategy.upper()}")
+            print(f"   Scaling: Min={min_nodes}, Desired={desired_nodes}, Max={max_nodes}")
+            print(f"   Instance Types: {self.format_instance_types_summary(instance_selections)}")
+    
+        return nodegroup_configs
+
+    def select_subnet_preference(self, nodegroup_name: str) -> str:
+        """Select subnet preference for nodegroup"""
+        print(f"\n🌐 SUBNET PREFERENCE for {nodegroup_name}")
+        print("-" * 50)
+        print("1. Auto (Use all available subnets)")
+        print("2. Public subnets only")
+        print("3. Private subnets only")
+    
+        while True:
+            choice = input("Select subnet preference (1-3) [default: 1]: ").strip()
+            if not choice:
+                choice = '1'
+        
+            if choice == '1':
+                return "auto"
+            elif choice == '2':
+                return "public"
+            elif choice == '3':
+                return "private"
+            else:
+                print("❌ Invalid choice. Please select 1, 2, or 3")
+
+    def format_instance_types_summary(self, instance_selections: Dict) -> str:
+        """Format instance types for summary display"""
+        summary_parts = []
+    
+        if 'on-demand' in instance_selections and instance_selections['on-demand']:
+            summary_parts.append(f"OnDemand: {', '.join(instance_selections['on-demand'])}")
+    
+        if 'spot' in instance_selections and instance_selections['spot']:
+            summary_parts.append(f"Spot: {', '.join(instance_selections['spot'])}")
+    
+        if 'on_demand_percentage' in instance_selections:
+            summary_parts.append(f"({instance_selections['on_demand_percentage']}% OnDemand)")
+    
+        return " | ".join(summary_parts) if summary_parts else "None"
+
+    def display_cluster_creation_summary(self, credentials, eks_version: str, ami_type: str, nodegroup_configs: List[Dict]):
+        """Display comprehensive cluster creation summary"""
+        print("\n" + "="*80)
+        print("📋 CLUSTER CREATION SUMMARY")
+        print("="*80)
+    
+        print(f"Account: {credentials.account_name} ({credentials.account_id})")
+        print(f"Region: {credentials.regions[0]}")
+        print(f"EKS Version: {eks_version}")
+        print(f"AMI Type: {ami_type}")
+        print(f"Total Nodegroups: {len(nodegroup_configs)}")
+    
+        print("\nNodegroup Details:")
+        print("-" * 60)
+    
+        for i, config in enumerate(nodegroup_configs, 1):
+            print(f"{i}. {config['name']} ({config['strategy'].upper()})")
+            print(f"   Scaling: Min={config['min_nodes']}, Desired={config['desired_nodes']}, Max={config['max_nodes']}")
+            print(f"   Instance Types: {self.format_instance_types_summary(config['instance_selections'])}")
+            print(f"   Subnet Preference: {config['subnet_preference']}")
+            if i < len(nodegroup_configs):
+                print()
+    
+        print("="*80)
+
+    def select_mixed_instance_types_for_nodegroup(self, credentials: CredentialInfo, allowed_types: List[str], nodegroup_name: str) -> Dict[str, List[str]]:
+        """Select instance types for specific Mixed nodegroup"""
+        print(f"\n🔄 MIXED STRATEGY SELECTION for {nodegroup_name}")
+        print("-" * 60)
+    
+        # Get On-Demand types
+        print("Step 1: Select On-Demand instance types")
+        ondemand_selection = self.select_ondemand_instance_types_for_nodegroup(
+            credentials, allowed_types, f"{nodegroup_name}-OnDemand"
+        )
+    
+        # Get Spot types
+        print("\nStep 2: Select Spot instance types")
+        spot_selection = self.select_spot_instance_types_for_nodegroup(
+            credentials, allowed_types, f"{nodegroup_name}-Spot"
+        )
+    
+        # Get On-Demand percentage
+        print(f"\n⚖️ On-Demand vs Spot Percentage for {nodegroup_name}")
+        print("-" * 50)
+        print("Default: 50% On-Demand, 50% Spot")
+    
+        while True:
+            try:
+                percentage = input("Enter On-Demand percentage (0-100, default 50): ").strip()
+                if not percentage:
+                    percentage = 50
+                else:
+                    percentage = int(percentage)
+            
+                if 0 <= percentage <= 100:
+                    break
+                else:
+                    print("❌ Please enter a value between 0 and 100")
+            except ValueError:
+                print("❌ Please enter a valid number")
+    
+        return {
+            'on-demand': ondemand_selection['on-demand'],
+            'spot': spot_selection['spot'],
+            'on_demand_percentage': percentage
+        }
+    
+    def select_ondemand_instance_types_for_nodegroup(self, credentials: CredentialInfo, allowed_types: List[str], nodegroup_name: str) -> Dict[str, List[str]]:
+        """Select instance types for specific On-Demand nodegroup"""
+        print(f"\n💰 ON-DEMAND INSTANCE SELECTION for {nodegroup_name}")
+        print("-" * 60)
+    
+        # Ask for cache preference
+        refresh_choice = input("Use cached on-demand quota data if available? (y/n): ").strip().lower()
+        force_refresh = refresh_choice == 'n'
+    
+        if force_refresh:
+            print("🔄 Invalidating cache and fetching fresh data...")
+            self.invalidate_quota_cache()
+    
+        print("Analyzing service quotas for On-Demand instances...")
+    
+        # Get quota information with cache control
+        quota_info = self.analyze_service_quotas_with_cache(credentials, allowed_types, force_refresh)
+    
+        # Display quota information
+        print(f"\n📊 Service Quota Analysis for {nodegroup_name}:")
+        print("-" * 50)
+    
+        # Sort instance types by available quota
+        instance_data = []
+    
+        for instance_type in allowed_types:
+            family = instance_type.split('.')[0]
+            if family in quota_info:
+                quota = quota_info[family]
+                available = quota.get('available_capacity', quota.get('quota_limit', 0) - quota.get('current_usage', 0))
+                used = f"{quota.get('current_usage', 0)}/{quota.get('quota_limit', 'Unknown')}"
+                status = "✅ Available" if available > 0 else "❌ Limited"
+            else:
+                available = 0
+                used = "Unknown/Unknown"
+                status = "⚠️ Unknown"
+        
+            instance_data.append({
+                'type': instance_type,
+                'available': available if isinstance(available, int) else 0,
+                'used': used,
+                'status': status
+            })
+    
+        # Sort by available capacity (highest first)
+        sorted_instances = sorted(instance_data, key=lambda x: -x['available'])
+    
+        # Display all instance types with quota info
+        print(f"{'#':<3} {'Type':<12} {'Available':<10} {'Used':<15} {'Status':<15}")
+        print("-" * 60)
+    
+        for i, instance in enumerate(sorted_instances, 1):
+            print(f"{i:<3} {instance['type']:<12} {instance['available']:<10} {instance['used']:<15} {instance['status']:<15}")
+    
+        # Choose instance types
+        selected_types = self.multi_select_instance_types(
+            [instance['type'] for instance in sorted_instances],
+            f"On-Demand ({nodegroup_name})"
+        )
+    
+        return {'on-demand': selected_types}
+
+    def select_spot_instance_types_for_nodegroup(self, credentials: CredentialInfo, allowed_types: List[str], nodegroup_name: str) -> Dict[str, List[str]]:
+        """Select instance types for specific Spot nodegroup"""
+        print(f"\n📈 SPOT INSTANCE SELECTION for {nodegroup_name}")
+        print("-" * 60)
+    
+        # Ask for refresh preference
+        refresh_choice = input("Use cached spot data if available? (y/n): ").strip().lower()
+        force_refresh = refresh_choice == 'n'
+    
+        if force_refresh:
+            print("🔄 Invalidating spot cache and fetching fresh data...")
+            self.spot_analyzer.invalidate_cache()
+    
+        print("Analyzing spot instances and service quotas...")
+    
+        # Get spot analysis
+        spot_analyses = self.spot_analyzer.analyze_spot_instances(credentials, allowed_types, force_refresh)
+    
+        # Group by instance type and choose best AZ for each
+        best_spots = {}
+        for analysis in spot_analyses:
+            instance_type = analysis.instance_type
+            if (instance_type not in best_spots or 
+                analysis.score > best_spots[instance_type].score):
+                best_spots[instance_type] = analysis
+    
+        # Sort by score (descending)
+        sorted_spots = sorted(best_spots.values(), key=lambda x: x.score, reverse=True)
+    
+        # Display spot analysis results
+        print(f"\n📊 SPOT ANALYSIS RESULTS for {nodegroup_name}")
+        print("-" * 80)
+    
+        print(f"{'#':<3} {'Type':<10} {'Zone':<15} {'Price':<8} {'Score':<6} {'Interrupt':<15}")
+        print("-" * 80)
+    
+        for i, analysis in enumerate(sorted_spots, 1):
+            print(f"{i:<3} {analysis.instance_type:<10} {analysis.availability_zone:<15} "
+                  f"${analysis.current_price:<7.4f} {analysis.score:<6.1f} "
+                  f"{analysis.interruption_rate}")
+    
+        # Choose instance types
+        selected_types = self.multi_select_instance_types(
+            [analysis.instance_type for analysis in sorted_spots],
+            f"Spot ({nodegroup_name})"
+        )
+    
+        return {'spot': selected_types}
+
+    def select_mixed_instance_types_for_nodegroup(self, credentials: CredentialInfo, allowed_types: List[str], nodegroup_name: str) -> Dict[str, List[str]]:
+        """Select instance types for specific Mixed nodegroup"""
+        print(f"\n🔄 MIXED STRATEGY SELECTION for {nodegroup_name}")
+        print("-" * 60)
+    
+        # Get On-Demand types
+        print("Step 1: Select On-Demand instance types")
+        ondemand_selection = self.select_ondemand_instance_types_for_nodegroup(
+            credentials, allowed_types, f"{nodegroup_name}-OnDemand"
+        )
+    
+        # Get Spot types
+        print("\nStep 2: Select Spot instance types")
+        spot_selection = self.select_spot_instance_types_for_nodegroup(
+            credentials, allowed_types, f"{nodegroup_name}-Spot"
+        )
+    
+        # Get On-Demand percentage
+        print(f"\n⚖️ On-Demand vs Spot Percentage for {nodegroup_name}")
+        print("-" * 50)
+        print("Default: 50% On-Demand, 50% Spot")
+    
+        while True:
+            try:
+                percentage = input("Enter On-Demand percentage (0-100, default 50): ").strip()
+                if not percentage:
+                    percentage = 50
+                else:
+                    percentage = int(percentage)
+            
+                if 0 <= percentage <= 100:
+                    break
+                else:
+                    print("❌ Please enter a value between 0 and 100")
+            except ValueError:
+                print("❌ Please enter a valid number")
+    
+        return {
+            'on-demand': ondemand_selection['on-demand'],
+            'spot': spot_selection['spot'],
+            'on_demand_percentage': percentage
+        }
+
+    def prompt_nodegroup_scaling_individual(self, nodegroup_name: str, strategy: str) -> Tuple[int, int, int]:
+        """Prompt user for individual nodegroup scaling configuration"""
+        print(f"\n📊 SCALING CONFIGURATION for {nodegroup_name}")
+        print("-" * 60)
+    
+        # Default values based on strategy
+        if strategy == "spot":
+            default_min = 1
+            default_desired = 2
+            default_max = 5
+        else:
+            default_min = 1
+            default_desired = 2
+            default_max = 4
+    
+        print(f"Default scaling for {strategy.upper()} strategy:")
+        print(f"  Min: {default_min}")
+        print(f"  Desired: {default_desired}")
+        print(f"  Max: {default_max}")
+    
+        use_defaults = input(f"\nUse default scaling values for {nodegroup_name}? (y/n): ").strip().lower()
+        if use_defaults == 'y':
+            return default_min, default_desired, default_max
+    
+        # Custom scaling values
+        while True:
+            try:
+                min_nodes = int(input(f"Minimum nodes for {nodegroup_name} (default {default_min}): ").strip() or default_min)
+                if min_nodes < 0:
+                    print("❌ Minimum nodes must be >= 0")
+                    continue
+                break
+            except ValueError:
+                print("❌ Please enter a valid number")
+    
+        while True:
+            try:
+                desired_nodes = int(input(f"Desired nodes for {nodegroup_name} (default {default_desired}): ").strip() or default_desired)
+                if desired_nodes < min_nodes:
+                    print(f"❌ Desired nodes must be >= minimum nodes ({min_nodes})")
+                    continue
+                break
+            except ValueError:
+                print("❌ Please enter a valid number")
+    
+        while True:
+            try:
+                max_nodes = int(input(f"Maximum nodes for {nodegroup_name} (default {default_max}): ").strip() or default_max)
+                if max_nodes < desired_nodes:
+                    print(f"❌ Maximum nodes must be >= desired nodes ({desired_nodes})")
+                    continue
+                break
+            except ValueError:
+                print("❌ Please enter a valid number")
+    
+        return min_nodes, desired_nodes, max_nodes
 
     def select_ondemand_instance_types(self, credentials: CredentialInfo, allowed_types: List[str]) -> Dict[str, List[str]]:
         """Select instance types for On-Demand nodegroup with caching support"""
@@ -348,7 +730,12 @@ class EKSAutomation:
         # Fetch fresh data
         print("🔍 Fetching fresh service quota data...")
         quota_info = self.fetch_service_quotas(credentials, instance_types)
-    
+        # NEW: Run diagnostic to see all running instances
+        print("\n🔍 Running instance diagnostic to verify detection...")
+        # Ensure analyzer has credentials and session before running diagnostic
+        self.spot_analyzer.set_credentials(credentials)
+        self.spot_analyzer.diagnose_running_instances()
+
         # Save to cache
         try:
             cache_data = {
@@ -364,150 +751,246 @@ class EKSAutomation:
         return quota_info
 
     def fetch_service_quotas(self, credentials: CredentialInfo, instance_types: List[str]) -> Dict:
-        """Fetch service quotas from AWS"""
-        try:
-            session = boto3.Session(
-                aws_access_key_id=credentials.access_key,
-                aws_secret_access_key=credentials.secret_key,
-                region_name=credentials.regions[0]
-            )
-        
-            # Get service quotas
-            quotas_client = session.client('service-quotas')
-            ec2_client = session.client('ec2')
-        
-            quota_info = {}
-        
-            # Get instance families
-            families = list(set([inst_type.split('.')[0] for inst_type in instance_types]))
-        
-            for family in families:
-                try:
-                    # Map instance family to quota code
-                    quota_code = self.get_quota_code_for_family(family)
-                
-                    if quota_code:
-                        # Get quota
-                        quota_response = quotas_client.get_service_quota(
-                            ServiceCode='ec2',
-                            QuotaCode=quota_code
-                        )
-                    
-                        quota_limit = int(quota_response['Quota']['Value'])
-                    
-                        # Get current usage (simplified - you may want to implement actual usage calculation)
-                        current_usage = self.get_current_instance_usage(ec2_client, family)
-                    
-                        quota_info[family] = {
-                            'quota_limit': quota_limit,
-                            'current_usage': current_usage,
-                            'available_capacity': max(0, quota_limit - current_usage)
-                        }
-                    else:
-                        # Default values if quota code not found
-                        quota_info[family] = {
-                            'quota_limit': 20,  # Default assumption
-                            'current_usage': 0,
-                            'available_capacity': 20
-                        }
-                    
-                except Exception as e:
-                    print(f"⚠️ Error fetching quota for {family}: {e}")
-                    quota_info[family] = {
-                        'quota_limit': 10,  # Conservative default
-                        'current_usage': 0,
-                        'available_capacity': 10
-                    }
-        
-            return quota_info
-        
-        except Exception as e:
-            print(f"❌ Error fetching service quotas: {e}")
-            return {}
-
-    def get_quota_code_for_family(self, family: str) -> str:
-        """Map instance family to service quota code"""
-        quota_codes = {
-            't2':   'L-34B43A08',  # Running On-Demand Standard (A, C, D, H, I, M, R, T, Z) instances
-            't3':   'L-CA2753C9',
-            't3a':  'L-350E1694',
-            't4g':  'L-DB2E81BA',
-
-            'm4':   'L-0263D0A3',
-            'm5':   'L-0263D0A3',
-            'm5a':  'L-87D64B00',
-            'm5n':  'L-2782B381',
-            'm6g':  'L-81078F7A',
-            'm6i':  'L-7B6409FD',
-            'm6a':  'L-DF5E4CA3',
-            'm7g':  'L-A29927B1',
-
-            'c4':   'L-DB2E81BA',
-            'c5':   'L-DB2E81BA',
-            'c5a':  'L-F7808417',
-            'c5n':  'L-13FDFD77',
-            'c6g':  'L-926C2B20',
-            'c6i':  'L-7212CB3C',
-            'c6a':  'L-F7808417',  # Shared code in some regions
-            'c7g':  'L-CE929B4B',
-
-            'r4':   'L-0263D0A3',
-            'r5':   'L-0263D0A3',
-            'r5a':  'L-8E5267A2',
-            'r5n':  'L-43FDD5A2',
-            'r6g':  'L-43E7C9B3',
-            'r6i':  'L-98A3AAFA',
-            'r6a':  'L-85D3672B',
-            'r7g':  'L-50492B47',
-
-            'x1':   'L-F44F0118',
-            'x1e':  'L-78E8E6B4',
-            'x2gd': 'L-2782B381',
-            'x2idn':'L-A5D3B943',
-
-            'i3':   'L-26B8197A',
-            'i3en': 'L-A1D8D5DF',
-            'i4i':  'L-BBD46E7C',
-
-            'z1d':  'L-8D8E09C0',
-
-            'a1':   'L-417A185B',
-
-            'inf1': 'L-DB6F7A5E',
-            'trn1': 'L-2782B381',
-
-            'g4dn': 'L-1216C47A',
-            'g5':   'L-1216C47A',
-            'p2':   'L-417A185B',
-            'p3':   'L-417A185B',
-            'p4':   'L-2782B381',
-
-            'h1':   'L-0263D0A3',
-            'd2':   'L-0263D0A3',
-            'im4gn': 'L-A9E15F92',
-            'is4gen': 'L-2782B381',
+        """Fetch EC2 service quotas with proper error handling and retry logic"""
+        quotas = {}
+        region = credentials.regions[0]
+    
+        # Create AWS session with provided credentials
+        session = boto3.Session(
+            aws_access_key_id=credentials.access_key,
+            aws_secret_access_key=credentials.secret_key,
+            region_name=region
+        )
+    
+        client = session.client('service-quotas')
+        ec2_client = session.client('ec2')
+    
+        # Define correct service code
+        service_code = 'ec2'
+    
+        # Define quota code mappings for instance families
+        quota_code_mappings = {
+            'standard': 'L-1216C47A',     # Standard (A, C, D, H, I, M, R, T, Z) instances
+            'f': 'L-74FC7D96',            # F instances
+            'g': 'L-DB2E81BA',            # G instances
+            'p': 'L-417A185B',            # P instances
+            'x': 'L-7295265B',            # X instances
+            'inf': 'L-1F1C9089',          # Inf instances
+            'high-memory': 'L-44C546A5'   # High Memory instances
         }
-
-        return quota_codes.get(family.lower())
-
-    def get_current_instance_usage(self, ec2_client, family: str) -> int:
-        """Get current running instance count for a family"""
+    
+        # Dictionary to track current usage by family
+        usage = {}
+    
+        # Get current usage
         try:
-            response = ec2_client.describe_instances(
-                Filters=[
-                    {'Name': 'instance-state-name', 'Values': ['running']},
-                    {'Name': 'instance-type', 'Values': [f'{family}.*']}
-                ]
-            )
+            print("🔍 Analyzing current instance usage...")
+            instances = []
         
-            count = 0
-            for reservation in response['Reservations']:
-                count += len(reservation['Instances'])
+            # Use paginator to handle larger number of instances
+            paginator = ec2_client.get_paginator('describe_instances')
+            for page in paginator.paginate(
+                Filters=[{'Name': 'instance-state-name', 'Values': ['pending', 'running']}]
+            ):
+                for reservation in page['Reservations']:
+                    instances.extend(reservation['Instances'])
         
-            return count
+            # Calculate vCPU usage by instance family
+            family_usage = {'standard': 0}
+        
+            # vCPU mapping for common instance types
+            vcpu_mapping = {
+                'c6a.large': 2, 'c6i.large': 2, 'm6a.large': 2, 'm6i.large': 2, 'c5.large': 2, 'm5.large': 2,
+                't2.micro': 2, 't2.small': 2, 't2.medium': 2, 't2.large': 2,
+                't3.micro': 2, 't3.small': 2, 't3.medium': 2, 't3.large': 2,
+                't3a.micro': 2, 't3a.small': 2, 't3a.medium': 2, 't3a.large': 2,
+                't4g.micro': 2, 't4g.small': 2, 't4g.medium': 2, 't4g.large': 2
+            }
+        
+            # Count instances by family
+            for instance in instances:
+                instance_type = instance['InstanceType']
+                family = instance_type.split('.')[0]
+            
+                # Get vCPU count (default to 2 if unknown)
+                vcpu_count = vcpu_mapping.get(instance_type, 2)
+            
+                # Add to specific family or standard bucket
+                if family in ['f', 'g', 'p', 'x', 'inf']:
+                    family_usage[family] = family_usage.get(family, 0) + vcpu_count
+                else:
+                    # Most instance types fall under 'standard'
+                    family_usage['standard'] = family_usage.get('standard', 0) + vcpu_count
+        
+            # Store usage info
+            usage = family_usage
+            print(f"📊 Current vCPU usage: {usage}")
+        
         except Exception as e:
-            print(f"⚠️ Error getting current usage for {family}: {e}")
-            return 0
+            print(f"⚠️ Error analyzing instance usage: {str(e)}")
+            usage = {'standard': 0}  # Default to zero usage if we can't fetch it
+    
+        # Fetch quotas for each family
+        quota_results = {}
+        for instance_family, quota_code in quota_code_mappings.items():
+            try:
+                print(f"🔍 Fetching quota for {instance_family} family...")
+                response = client.get_service_quota(
+                    ServiceCode=service_code,
+                    QuotaCode=quota_code
+                )
+            
+                quota_limit = response['Quota']['Value']
+                current_usage = usage.get(instance_family, 0)
+                available_capacity = quota_limit - current_usage
+            
+                quota_results[instance_family] = {
+                    'quota_limit': quota_limit,
+                    'current_usage': current_usage,
+                    'available_capacity': available_capacity
+                }
+            
+                print(f"✅ {instance_family}: Limit={quota_limit}, Used={current_usage}, Available={available_capacity}")
+            
+            except client.exceptions.NoSuchResourceException:
+                print(f"⚠️ No quota found for {instance_family} with code {quota_code}")
+                # Use a default value as fallback (66 vCPUs is common default)
+                DEFAULT_QUOTA = 66.0
+                quota_results[instance_family] = {
+                    'quota_limit': DEFAULT_QUOTA,
+                    'current_usage': usage.get(instance_family, 0),
+                    'available_capacity': DEFAULT_QUOTA - usage.get(instance_family, 0)
+                }
+            
+            except Exception as e:
+                print(f"⚠️ Error fetching quota for {instance_family}: {str(e)}")
+                # Use a default value as fallback (66 vCPUs is common default)
+                DEFAULT_QUOTA = 66.0
+                quota_results[instance_family] = {
+                    'quota_limit': DEFAULT_QUOTA,
+                    'current_usage': usage.get(instance_family, 0),
+                    'available_capacity': DEFAULT_QUOTA - usage.get(instance_family, 0)
+                }
+    
+        # Debug: Print all quota results
+        print("\n✅ Quota information fetched for all families:")
+        for family, values in quota_results.items():
+            print(f"   {family}: Limit={values['quota_limit']}, Used={values['current_usage']}, Available={values['available_capacity']}")
+    
+        # Map specific instance types to their families
+        instance_quotas = {}
+        for instance_type in instance_types:
+            family = instance_type.split('.')[0]
+        
+            # Map instance family to quota category
+            if family in ['t2', 't3', 't3a', 't4g', 'm5', 'm6a', 'm6i', 'c5', 'c6a', 'c6i', 'r5', 'r6a', 'r6i']:
+                quota_family = 'standard'
+            elif family.startswith('f'):
+                quota_family = 'f'
+            elif family.startswith('g'):
+                quota_family = 'g'
+            elif family.startswith('p'):
+                quota_family = 'p'
+            elif family.startswith('x'):
+                quota_family = 'x'
+            elif family.startswith('inf'):
+                quota_family = 'inf'
+            else:
+                quota_family = 'standard'  # Default to standard for unknown types
+        
+            instance_quotas[family] = quota_results.get(quota_family, {
+                'quota_limit': 66.0,  # Default quota (common AWS default)
+                'current_usage': 0,
+                'available_capacity': 66.0
+            })
+
+            # FIX: Make sure available_capacity is properly calculated and never negative
+            instance_quotas[family]['available_capacity'] = max(0, instance_quotas[family]['quota_limit'] - instance_quotas[family]['current_usage'])
+    
+        return instance_quotas   
+    def get_ondemand_instance_quotas(self):
+        """Get on-demand instance quotas with correct quota codes"""
+        # These are the correct quota codes for vCPU limits by instance family
+        quota_code_mappings = {
+            'standard': 'L-1216C47A',     # Standard (A, C, D, H, I, M, R, T, Z) instances
+            'f': 'L-74FC7D96',            # F instances
+            'g': 'L-DB2E81BA',            # G instances
+            'p': 'L-417A185B',            # P instances
+            'x': 'L-7295265B',            # X instances
+            'inf': 'L-1F1C9089',          # Inf instances
+            'high-memory': 'L-44C546A5'   # High Memory instances
+        }
+    
+        try:
+            # Use the proper function to fetch quotas
+            quotas = self.fetch_service_quotas(quota_code_mappings)
+        
+            # Most instance types fall under 'standard' category
+            standard_types = ['c6a', 'c6i', 'm6a', 'm6i', 't3', 't3a']
+            for instance_type in standard_types:
+                if instance_type not in quotas:
+                    quotas[instance_type] = quotas.get('standard', 5.0)
+        
+            return quotas
+    
+        except Exception as e:
+            self.log_operation('ERROR', f"Error getting on-demand quotas: {str(e)}")
+            return {'standard': 5.0}  # Default fallback
+
+    def calculate_actual_usage(self):
+        """Calculate actual instance usage across all EC2 instances"""
+        try:
+            ec2_client = self.session.client('ec2')
+            instances = []
+        
+            # Use paginator to handle large number of instances
+            paginator = ec2_client.get_paginator('describe_instances')
+            for page in paginator.paginate(
+                Filters=[{'Name': 'instance-state-name', 'Values': ['pending', 'running']}]
+            ):
+                for reservation in page['Reservations']:
+                    instances.extend(reservation['Instances'])
+        
+            # Calculate vCPU usage by instance family
+            usage = {family: 0 for family in ['c6a', 'c6i', 'm6a', 'm6i', 't3', 't3a', 'standard']}
+        
+            # Instance type to vCPU mapping
+            vcpu_mapping = {
+                'c6a.large': 2,
+                'c6i.large': 2,
+                'm6a.large': 2,
+                'm6i.large': 2,
+                't3.micro': 2,
+                't3.small': 2,
+                't3.medium': 2,
+                't3.large': 2,
+                't3a.micro': 2,
+                't3a.small': 2,
+                't3a.medium': 2,
+                't3a.large': 2
+                # Add more mappings as needed
+            }
+        
+            for instance in instances:
+                instance_type = instance['InstanceType']
+                instance_family = instance_type.split('.')[0]
+            
+                # Get vCPU count for this instance type
+                vcpu_count = vcpu_mapping.get(instance_type, 2)
+            
+                # Add to specific family count
+                if instance_family in usage:
+                    usage[instance_family] += vcpu_count
+                else:
+                    # If not a specific tracked family, add to standard
+                    usage['standard'] += vcpu_count
+        
+            self.log_operation('INFO', f"Current instance usage (vCPUs): {usage}")
+            return usage
+        
+        except Exception as e:
+            self.log_operation('ERROR', f"Error calculating instance usage: {str(e)}")
+            return {family: 0 for family in ['c6a', 'c6i', 'm6a', 'm6i', 't3', 't3a', 'standard']}
 
     def invalidate_quota_cache(self):
         """Invalidate all quota cache files"""
@@ -522,7 +1005,7 @@ class EKSAutomation:
             except Exception as e:
                 print(f"⚠️ Error removing cache file {cache_file}: {e}")    
 
-        def select_spot_instance_types(self, credentials: CredentialInfo, allowed_types: List[str]) -> Dict[str, List[str]]:
+    def select_spot_instance_types(self, credentials: CredentialInfo, allowed_types: List[str]) -> Dict[str, List[str]]:
             """Select instance types for Spot nodegroup with analysis"""
             print("\n📈 SPOT INSTANCE TYPE SELECTION")
             print("-" * 60)
@@ -556,8 +1039,8 @@ class EKSAutomation:
         
             for i, analysis in enumerate(sorted_spots, 1):
                 print(f"{i:<3} {analysis.instance_type:<10} {analysis.availability_zone:<15} "
-                      f"${analysis.current_price:<7.4f} {analysis.score:<6.1f} "
-                      f"{analysis.interruption_rate}")
+                        f"${analysis.current_price:<7.4f} {analysis.score:<6.1f} "
+                        f"{analysis.interruption_rate}")
         
             # Choose instance types
             selected_types = self.multi_select_instance_types(
@@ -744,6 +1227,14 @@ class EKSAutomation:
                 print("❌ Please enter a valid number")
         
         return min_nodes, desired_nodes, max_nodes
+
+    def log_operation(self, level: str, message: str):
+        """Basic logger for EKSClusterManager"""
+        print(f"[{level}] {message}")
+
+    def print_colored(self, color: str, message: str) -> None:
+        """Print colored message to terminal"""
+        print(f"{color}{message}{Colors.NC}")
 
 def main():
     """Main entry point"""

@@ -23,6 +23,16 @@ from aws_credential_manager import CredentialInfo
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+class Colors:
+    """ANSI color codes for terminal output"""
+    RED = '\033[0;31m'
+    GREEN = '\033[0;32m'
+    YELLOW = '\033[1;33m'
+    BLUE = '\033[0;34m'
+    PURPLE = '\033[0;35m'
+    CYAN = '\033[0;36m'
+    WHITE = '\033[1;37m'
+    NC = '\033[0m'  # No Color
 @dataclass
 class SpotAnalysis:
     instance_type: str
@@ -56,8 +66,18 @@ class SpotInstanceAnalyzer:
         self.credentials = None
 
     def set_credentials(self, credentials: CredentialInfo):
+        """Set AWS credentials and create a boto3 session"""
         self.credentials = credentials
         self.region = credentials.regions[0]
+    
+        # Create boto3 session
+        self.session = boto3.Session(
+            aws_access_key_id=credentials.access_key,
+            aws_secret_access_key=credentials.secret_key,
+            region_name=self.region
+        )
+    
+        logger.info(f"Credentials set for region: {self.region}")
 
     def _get_current_ist_time(self):
         return datetime.now(self.ist_tz)
@@ -101,6 +121,19 @@ class SpotInstanceAnalyzer:
         with open(cache_file, 'r') as f:
             cache_data = json.load(f)
         return cache_data['data']
+
+    def invalidate_cache(self):
+        """Invalidate cache files"""
+        import glob
+        import os
+    
+        cache_files = glob.glob("*_cache_*.pkl")
+        for cache_file in cache_files:
+            try:
+                os.remove(cache_file)
+                print(f"🗑️ Removed cache file: {cache_file}")
+            except Exception as e:
+                print(f"⚠️ Error removing cache file {cache_file}: {e}")
 
     def get_service_quotas(self, instance_types: List[str], created_by="system") -> Dict[str, Dict]:
         instance_types_hash = self._get_instance_types_hash(instance_types)
@@ -687,3 +720,110 @@ class SpotInstanceAnalyzer:
     def log_operation(self, level: str, message: str):
             """Basic logger for SpotInstanceAnalyzer"""
             print(f"[{level}] {message}")
+
+    def diagnose_running_instances(self):
+        """Diagnostic function to list all running instances with details"""
+        try:
+            # Check if session is initialized
+            if not hasattr(self, 'session') or self.session is None:
+                if hasattr(self, 'credentials') and self.credentials is not None:
+                    # Create session from credentials
+                    self.session = boto3.Session(
+                        aws_access_key_id=self.credentials.access_key,
+                        aws_secret_access_key=self.credentials.secret_key,
+                        region_name=self.region
+                    )
+                    print(f"Created new session for region: {self.region}")
+                else:
+                    print("⚠️  No credentials or session available. Creating default session.")
+                    self.session = boto3.Session(region_name=self.region)
+
+            ec2_client = self.session.client('ec2')
+            instances = []
+    
+            # Use paginator to handle large number of instances
+            print("Fetching instances (this may take a moment)...")
+            paginator = ec2_client.get_paginator('describe_instances')
+            for page in paginator.paginate(
+                Filters=[{'Name': 'instance-state-name', 'Values': ['running', 'pending']}]
+            ):
+                for reservation in page['Reservations']:
+                    instances.extend(reservation['Instances'])
+    
+            # Print diagnostic info
+            print(f"\n🔍 Found {len(instances)} running/pending instances")
+            print("=" * 80)
+    
+            for i, instance in enumerate(instances, 1):
+                instance_id = instance['InstanceId']
+                instance_type = instance['InstanceType']
+                az = instance.get('Placement', {}).get('AvailabilityZone', 'N/A')
+                state = instance.get('State', {}).get('Name', 'unknown')
+        
+                # Get instance name from tags
+                name = "No Name"
+                if 'Tags' in instance:
+                    for tag in instance['Tags']:
+                        if tag['Key'] == 'Name':
+                            name = tag['Value']
+                            break
+        
+                print(f"{i}. {instance_id} | {instance_type} | {name} | {az} | {state}")
+    
+            print("=" * 80)
+    
+            # Summarize by instance type
+            instance_types = {}
+            for instance in instances:
+                instance_type = instance['InstanceType']
+                instance_types[instance_type] = instance_types.get(instance_type, 0) + 1
+        
+            print("\nInstance Type Summary:")
+            for instance_type, count in sorted(instance_types.items()):
+                print(f"  {instance_type}: {count} instances")
+        
+            # Calculate vCPU usage by instance family
+            print("\nvCPU Usage by Instance Family:")
+            # Define vCPU mapping for common instance types
+            vcpu_mapping = {
+                'c6a.large': 2, 'c6i.large': 2, 'm6a.large': 2, 'm6i.large': 2,
+                't3.micro': 2, 't3.small': 2, 't3.medium': 2, 't3.large': 2,
+                't3a.micro': 2, 't3a.small': 2, 't3a.medium': 2, 't3a.large': 2
+            }
+        
+            vcpu_usage = {}
+            for instance in instances:
+                instance_type = instance['InstanceType']
+                family = instance_type.split('.')[0]
+            
+                # Get vCPU count for this instance type
+                vcpu_count = vcpu_mapping.get(instance_type, 2)  # Default to 2 if not known
+            
+                if family not in vcpu_usage:
+                    vcpu_usage[family] = 0
+                vcpu_usage[family] += vcpu_count
+        
+            for family, vcpus in sorted(vcpu_usage.items()):
+                print(f"  {family}: {vcpus} vCPUs")
+            
+            return instances
+    
+        except Exception as e:
+            print(f"❌ Error in diagnostic function: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return []
+
+    def log_operation(self, level: str, message: str):
+            """Basic logger for EKSClusterManager"""
+            print(f"[{level}] {message}")
+
+    def print_colored(self, color: str, message: str) -> None:
+            """Print colored message to terminal"""
+            print(f"{color}{message}{Colors.NC}")
+
+    def set_session(self, session):
+        """Set boto3 session for API calls"""
+        self.session = session
+        self.region = session.region_name
+        logger.info(f"Session set with region: {self.region}")
