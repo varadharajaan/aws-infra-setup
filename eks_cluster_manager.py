@@ -64,6 +64,27 @@ class EKSClusterManager:
             print(f"⚠️  Error loading configuration: {e}")
             self.config_data = {}
     
+    def load_yaml_file(self, filename: str) -> str:
+        """Load a YAML manifest from the k8s_manifests directory."""
+        manifest_dir = os.path.join(os.path.dirname(__file__), "k8s_manifests")
+        file_path = os.path.join(manifest_dir, filename)
+        with open(file_path, "r") as f:
+            return f.read()
+
+    def get_cloudwatch_namespace_manifest_fixed(self) -> str:
+        return self.load_yaml_file("cloudwatch-namespace.yaml")
+
+    def get_cloudwatch_service_account_manifest_fixed(self) -> str:
+        return self.load_yaml_file("cloudwatch-service-account.yaml")
+
+    def get_cloudwatch_daemonset_manifest_fixed(self, cluster_name: str, region: str, account_id: str) -> str:
+        # Load the template and replace placeholders if needed
+        manifest = self.load_yaml_file("cloudwatch-daemonset.yaml")
+        manifest = manifest.replace("{{CLUSTER_NAME}}", cluster_name)
+        manifest = manifest.replace("{{REGION}}", region)
+        manifest = manifest.replace("{{ACCOUNT_ID}}", account_id)
+        return manifest
+
     def generate_cluster_name(self, username: str, region: str) -> str:
         """Generate EKS cluster name with random 4-letter suffix"""
         # Generate 4 random lowercase letters
@@ -2967,60 +2988,6 @@ class EKSClusterManager:
 
 ########
 
-    def get_cloudwatch_namespace_manifest_fixed(self) -> str:
-        """Get CloudWatch namespace manifest with proper formatting"""
-        return """apiVersion: v1
-        kind: Namespace
-        metadata:
-          name: amazon-cloudwatch
-          labels:
-            name: amazon-cloudwatch
-        """
-    def get_cloudwatch_service_account_manifest_fixed(self) -> str:
-        """Get CloudWatch service account manifest with proper indentation"""
-        return """apiVersion: v1
-        kind: ServiceAccount
-        metadata:
-          name: cloudwatch-agent
-          namespace: amazon-cloudwatch
-        ---
-        apiVersion: rbac.authorization.k8s.io/v1
-        kind: ClusterRole
-        metadata:
-          name: cloudwatch-agent-role
-        rules:
-        - apiGroups: [""]
-          resources: ["pods", "nodes", "services", "endpoints", "replicasets"]
-          verbs: ["list", "watch"]
-        - apiGroups: ["apps"]
-          resources: ["replicasets"]
-          verbs: ["list", "watch"]
-        - apiGroups: ["batch"]
-          resources: ["jobs"]
-          verbs: ["list", "watch"]
-        - apiGroups: [""]
-          resources: ["nodes/stats", "configmaps", "events"]
-          verbs: ["create", "get", "list", "watch"]
-        - apiGroups: [""]
-          resources: ["configmaps"]
-          verbs: ["update"]
-        - nonResourceURLs: ["/metrics"]
-          verbs: ["get"]
-        ---
-        apiVersion: rbac.authorization.k8s.io/v1
-        kind: ClusterRoleBinding
-        metadata:
-          name: cloudwatch-agent-role-binding
-        roleRef:
-          apiGroup: rbac.authorization.k8s.io
-          kind: ClusterRole
-          name: cloudwatch-agent-role
-        subjects:
-        - kind: ServiceAccount
-          name: cloudwatch-agent
-          namespace: amazon-cloudwatch
-        """
-
     def get_cloudwatch_configmap_manifest_fixed(self, config: dict, cluster_name: str, region: str) -> str:
         """Get CloudWatch ConfigMap manifest with safely quoted JSON"""
         # Create JSON string and escape it properly for YAML
@@ -3041,100 +3008,6 @@ class EKSClusterManager:
     
         import yaml
         return yaml.dump(manifest, default_flow_style=False)
-
-    def get_cloudwatch_daemonset_manifest_fixed(self, cluster_name: str, region: str, account_id: str) -> str:
-        """Get CloudWatch DaemonSet manifest with proper formatting"""
-        return f"""apiVersion: apps/v1
-        kind: DaemonSet
-        metadata:
-          name: cloudwatch-agent
-          namespace: amazon-cloudwatch
-        spec:
-          selector:
-            matchLabels:
-              name: cloudwatch-agent
-          template:
-            metadata:
-              labels:
-                name: cloudwatch-agent
-            spec:
-              containers:
-              - name: cloudwatch-agent
-                image: public.ecr.aws/cloudwatch-agent/cloudwatch-agent:1.300026.0b303
-                ports:
-                - containerPort: 8125
-                  hostPort: 8125
-                  protocol: UDP
-                resources:
-                  limits:
-                    cpu: 200m
-                    memory: 200Mi
-                  requests:
-                    cpu: 200m
-                    memory: 200Mi
-                env:
-                - name: HOST_IP
-                  valueFrom:
-                    fieldRef:
-                      fieldPath: status.hostIP
-                - name: HOST_NAME
-                  valueFrom:
-                    fieldRef:
-                      fieldPath: spec.nodeName
-                - name: K8S_NAMESPACE
-                  valueFrom:
-                    fieldRef:
-                      fieldPath: metadata.namespace
-                - name: CI_VERSION
-                  value: "k8s/1.3.26"
-                volumeMounts:
-                - name: cwagentconfig
-                  mountPath: /etc/cwagentconfig
-                - name: rootfs
-                  mountPath: /rootfs
-                  readOnly: true
-                - name: dockersock
-                  mountPath: /var/run/docker.sock
-                  readOnly: true
-                - name: varlibdocker
-                  mountPath: /var/lib/docker
-                  readOnly: true
-                - name: varlog
-                  mountPath: /var/log
-                  readOnly: true
-                - name: sys
-                  mountPath: /sys
-                  readOnly: true
-                - name: devdisk
-                  mountPath: /dev/disk
-                  readOnly: true
-              volumes:
-              - name: cwagentconfig
-                configMap:
-                  name: cwagentconfig
-              - name: rootfs
-                hostPath:
-                  path: /
-              - name: dockersock
-                hostPath:
-                  path: /var/run/docker.sock
-              - name: varlibdocker
-                hostPath:
-                  path: /var/lib/docker
-              - name: varlog
-                hostPath:
-                  path: /var/log
-              - name: sys
-                hostPath:
-                  path: /sys
-              - name: devdisk
-                hostPath:
-                  path: /dev/disk/
-              terminationGracePeriodSeconds: 60
-              serviceAccountName: cloudwatch-agent
-              hostNetwork: true
-              dnsPolicy: ClusterFirstWithHostNet
-        """
 
     def apply_kubernetes_manifest_fixed(self, cluster_name: str, region: str, access_key: str, secret_key: str, manifest: str) -> bool:
         """Apply Kubernetes manifest using kubectl with proper error handling and YAML validation"""
