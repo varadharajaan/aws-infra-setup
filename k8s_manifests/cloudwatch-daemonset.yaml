@@ -18,7 +18,8 @@ spec:
       terminationGracePeriodSeconds: 60
       containers:
         - name: cloudwatch-agent
-          image: public.ecr.aws/cloudwatch-agent/cloudwatch-agent:1.300026.0b303
+          image: public.ecr.aws/cloudwatch-agent/cloudwatch-agent:1.300026.1b168
+          #public.ecr.aws/cloudwatch-agent/cloudwatch-agent:latest
           ports:
             - containerPort: 8125
               hostPort: 8125

@@ -30,6 +30,7 @@ import io
 import base64
 import tempfile
 import requests
+from jinja2 import Environment, FileSystemLoader
 
 class Colors:
     """ANSI color codes for terminal output"""
@@ -64,7 +65,24 @@ class EKSClusterManager:
         except Exception as e:
             print(f"⚠️  Error loading configuration: {e}")
             self.config_data = {}
-    
+
+    def render_fluentbit_configmap(self, cluster_name, region_name, http_server_toggle, http_server_port, read_from_head, read_from_tail):
+        """
+        Render the Fluent Bit ConfigMap YAML from a Jinja2 template.
+        """
+        template_dir = os.path.join(os.path.dirname(__file__), "k8s_manifests")
+        env = Environment(loader=FileSystemLoader(template_dir))
+        template = env.get_template("fluent-bit-cluster-info.yaml.j2")
+        rendered_yaml = template.render(
+            cluster_name=cluster_name,
+            region_name=region_name,
+            http_server_toggle=http_server_toggle,
+            http_server_port=http_server_port,
+            read_from_head=read_from_head,
+            read_from_tail=read_from_tail
+        )
+        return rendered_yaml
+
     def load_yaml_file(self, filename: str) -> str:
         """Load a YAML manifest from the k8s_manifests directory."""
         manifest_dir = os.path.join(os.path.dirname(__file__), "k8s_manifests")
@@ -3304,6 +3322,17 @@ class EKSClusterManager:
             ]
         
             for manifest_type, manifest in manifests:
+                # Example values, replace with your actual logic
+                fluentbit_yaml = self.render_fluentbit_configmap(
+                    cluster_name=cluster_name,
+                    region_name=region,
+                    http_server_toggle="On",
+                    http_server_port="2020",
+                    read_from_head="True",
+                    read_from_tail="False"
+                )
+
+                self.apply_kubernetes_manifest_fixed(cluster_name, region, access_key, secret_key, fluentbit_yaml)
                 if self.apply_kubernetes_manifest_fixed(cluster_name, region, access_key, secret_key, manifest):
                     self.log_operation('INFO', f"Applied CloudWatch {manifest_type} manifest")
                     print(f"[INFO] Successfully applied manifest")
