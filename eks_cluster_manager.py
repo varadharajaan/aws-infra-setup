@@ -378,7 +378,7 @@ class EKSClusterManager:
             try:
                 addon = eks_client.describe_addon(clusterName=cluster_name, addonName=addon_name)['addon']
                 current_role = addon.get('serviceAccountRoleArn')
-                if current_role:
+                if current_role and not current_role == None:
                     self.log_operation('INFO', f"{addon_name}: serviceAccountRoleArn already set ({current_role}), skipping.")
                     continue
 
@@ -2042,126 +2042,6 @@ class EKSClusterManager:
                 }
             }
         }
-
-    def get_cloudwatch_namespace_manifest(self) -> str:
-        """Get CloudWatch namespace manifest"""
-        return """
-    apiVersion: v1
-    kind: Namespace
-    metadata:
-      name: amazon-cloudwatch
-      labels:
-        name: amazon-cloudwatch
-    """
-
-    def get_cloudwatch_configmap_manifest(self, config: dict) -> str:
-        """Get CloudWatch ConfigMap manifest"""
-        config_json = json.dumps(config, indent=2)
-        return f"""
-    apiVersion: v1
-    kind: ConfigMap
-    metadata:
-      name: cwagentconfig
-      namespace: amazon-cloudwatch
-    data:
-      cwagentconfig.json: |
-        {textwrap.indent(config_json, '    ')}
-    """
-
-    def get_cloudwatch_daemonset_manifest(self, cluster_name: str, region: str, account_id: str) -> str:
-        """Get CloudWatch DaemonSet manifest"""
-        return f"""
-    apiVersion: apps/v1
-    kind: DaemonSet
-    metadata:
-      name: cloudwatch-agent
-      namespace: amazon-cloudwatch
-    spec:
-      selector:
-        matchLabels:
-          name: cloudwatch-agent
-      template:
-        metadata:
-          labels:
-            name: cloudwatch-agent
-        spec:
-          containers:
-          - name: cloudwatch-agent
-            image: public.ecr.aws/cloudwatch-agent/cloudwatch-agent:1.300026.0b303
-            ports:
-            - containerPort: 8125
-              hostPort: 8125
-              protocol: UDP
-            resources:
-              limits:
-                cpu: 200m
-                memory: 200Mi
-              requests:
-                cpu: 200m
-                memory: 200Mi
-            env:
-            - name: HOST_IP
-              valueFrom:
-                fieldRef:
-                  fieldPath: status.hostIP
-            - name: HOST_NAME
-              valueFrom:
-                fieldRef:
-                  fieldPath: spec.nodeName
-            - name: K8S_NAMESPACE
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.namespace
-            - name: CI_VERSION
-              value: "k8s/1.3.26"
-            volumeMounts:
-            - name: cwagentconfig
-              mountPath: /etc/cwagentconfig
-            - name: rootfs
-              mountPath: /rootfs
-              readOnly: true
-            - name: dockersock
-              mountPath: /var/run/docker.sock
-              readOnly: true
-            - name: varlibdocker
-              mountPath: /var/lib/docker
-              readOnly: true
-            - name: varlog
-              mountPath: /var/log
-              readOnly: true
-            - name: sys
-              mountPath: /sys
-              readOnly: true
-            - name: devdisk
-              mountPath: /dev/disk
-              readOnly: true
-          volumes:
-          - name: cwagentconfig
-            configMap:
-              name: cwagentconfig
-          - name: rootfs
-            hostPath:
-              path: /
-          - name: dockersock
-            hostPath:
-              path: /var/run/docker.sock
-          - name: varlibdocker
-            hostPath:
-              path: /var/lib/docker
-          - name: varlog
-            hostPath:
-              path: /var/log
-          - name: sys
-            hostPath:
-              path: /sys
-          - name: devdisk
-            hostPath:
-              path: /dev/disk/
-          terminationGracePeriodSeconds: 60
-          serviceAccountName: cloudwatch-agent
-          hostNetwork: true
-          dnsPolicy: ClusterFirstWithHostNet
-    """
 
     def display_cost_estimation(self, instance_type: str, capacity_type: str, node_count: int = 1):
         """Display estimated cost information"""
