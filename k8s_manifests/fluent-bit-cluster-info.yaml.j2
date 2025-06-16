@@ -4,9 +4,9 @@ metadata:
   name: fluent-bit-cluster-info
   namespace: amazon-cloudwatch
 data:
-  cluster.name: {{ cluster_name }}
-  logs.region: {{ region_name }}
-  http.server: {{ http_server_toggle }}
-  http.port: {{ http_server_port }}
-  read.head: {{ read_from_head }}
-  read.tail: {{ read_from_tail }}
+  cluster.name: "{{ cluster_name }}"
+  logs.region: "{{ region_name }}"
+  http.server: "{{ http_server_toggle }}"
+  http.port: "{{ http_server_port }}"
+  read.head: "{{ read_from_head }}"
+  read.tail: "{{ read_from_tail }}"

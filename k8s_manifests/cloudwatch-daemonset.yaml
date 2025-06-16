@@ -3,6 +3,9 @@ kind: DaemonSet
 metadata:
   name: cloudwatch-agent
   namespace: amazon-cloudwatch
+  annotations:
+    kubernetes.io/description: "CloudWatch agent for monitoring container insights"
+    kubectl.kubernetes.io/last-applied-configuration: ""
 spec:
   selector:
     matchLabels:
