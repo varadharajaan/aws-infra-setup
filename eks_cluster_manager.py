@@ -528,27 +528,410 @@ class EKSClusterManager:
     
         # Fallback to all subnets
         return all_subnet_ids
-
-    def setup_cluster_autoscaler_multi_nodegroup(self, cluster_name: str, region: str, admin_access_key: str, admin_secret_key: str, account_id: str, nodegroup_names: List[str]) -> bool:
-        """Setup cluster autoscaler for multiple nodegroups"""
-        if not nodegroup_names:
-            self.log_operation('WARNING', f"No nodegroups to configure autoscaler for")
-            return False
-    
-        self.log_operation('INFO', f"Setting up Cluster Autoscaler for {len(nodegroup_names)} nodegroups: {', '.join(nodegroup_names)}")
-        self.print_colored(Colors.YELLOW, f"🔄 Setting up Cluster Autoscaler for nodegroups: {', '.join(nodegroup_names)}")
-    
-        # Call the regular setup method that uses the YAML file
-        autoscaler_success = self.setup_cluster_autoscaler(cluster_name, region, admin_access_key, admin_secret_key, account_id)
-    
-        if autoscaler_success:
-            self.print_colored(Colors.GREEN, f"   ✅ Cluster Autoscaler configured for {len(nodegroup_names)} nodegroups")
-            self.print_colored(Colors.CYAN, f"   📊 Will auto-scale: {', '.join(nodegroup_names)}")
-    
-
-        return autoscaler_success
 ###
     def setup_cluster_autoscaler(self, cluster_name: str, region: str, admin_access_key: str, admin_secret_key: str, account_id: str) -> bool:
+        """Setup cluster autoscaler for automatic node scaling using YAML file - FIXED VERSION"""
+        try:
+            self.log_operation('INFO', f"Setting up Cluster Autoscaler for cluster {cluster_name}")
+            self.print_colored(Colors.YELLOW, f"🔄 Setting up Cluster Autoscaler for {cluster_name}...")
+
+            import subprocess
+            import shutil
+            import tempfile
+
+            kubectl_available = shutil.which('kubectl') is not None
+
+            if not kubectl_available:
+                self.log_operation('WARNING', f"kubectl not found. Cannot deploy Cluster Autoscaler for {cluster_name}")
+                self.print_colored(Colors.YELLOW, f"⚠️  kubectl not found. Cluster Autoscaler deployment skipped.")
+                return False
+
+            # Set environment variables for admin access
+            env = os.environ.copy()
+            env['AWS_ACCESS_KEY_ID'] = admin_access_key
+            env['AWS_SECRET_ACCESS_KEY'] = admin_secret_key
+            env['AWS_DEFAULT_REGION'] = region
+
+            # Step 1: Create IAM policy for cluster autoscaler
+            self.print_colored(Colors.CYAN, "   🔐 Setting up IAM permissions for Cluster Autoscaler...")
+
+            admin_session = boto3.Session(
+                aws_access_key_id=admin_access_key,
+                aws_secret_access_key=admin_secret_key,
+                region_name=region
+            )
+
+            iam_client = admin_session.client('iam')
+
+            # Create policy for cluster autoscaler
+            autoscaler_policy = {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Effect": "Allow",
+                        "Action": [
+                            "autoscaling:DescribeAutoScalingGroups",
+                            "autoscaling:DescribeAutoScalingInstances",
+                            "autoscaling:DescribeLaunchConfigurations",
+                            "autoscaling:DescribeTags",
+                            "autoscaling:SetDesiredCapacity",
+                            "autoscaling:TerminateInstanceInAutoScalingGroup",
+                            "ec2:DescribeLaunchTemplateVersions"
+                        ],
+                        "Resource": "*"
+                    }
+                ]
+            }
+
+            policy_name = f"ClusterAutoscaler-{cluster_name.split('-')[-1]}"
+
+            try:
+                # Create the policy
+                policy_response = iam_client.create_policy(
+                    PolicyName=policy_name,
+                    PolicyDocument=json.dumps(autoscaler_policy),
+                    Description=f"Policy for Cluster Autoscaler on {cluster_name}"
+                )
+                policy_arn = policy_response['Policy']['Arn']
+                self.log_operation('INFO', f"Created Cluster Autoscaler policy: {policy_arn}")
+    
+            except iam_client.exceptions.EntityAlreadyExistsException:
+                # Policy already exists, get its ARN
+                policy_arn = f"arn:aws:iam::{account_id}:policy/{policy_name}"
+                self.log_operation('INFO', f"Using existing Cluster Autoscaler policy: {policy_arn}")
+
+            # Attach policy to node instance role
+            try:
+                iam_client.attach_role_policy(
+                    RoleName="NodeInstanceRole",
+                    PolicyArn=policy_arn
+                )
+                self.print_colored(Colors.GREEN, "   ✅ IAM permissions configured")
+            except Exception as e:
+                self.log_operation('WARNING', f"Failed to attach autoscaler policy: {str(e)}")
+
+            # Step 2: Deploy Cluster Autoscaler - COMPLETELY FIXED VERSION
+            self.print_colored(Colors.CYAN, "   🚀 Deploying Cluster Autoscaler...")
+
+            try:
+                # Update kubeconfig first
+                update_cmd = ['aws', 'eks', 'update-kubeconfig', '--region', region, '--name', cluster_name]
+                update_result = subprocess.run(update_cmd, env=env, capture_output=True, text=True, timeout=60)
+    
+                if update_result.returncode != 0:
+                    self.log_operation('ERROR', f"Failed to update kubeconfig: {update_result.stderr}")
+                    return False
+
+                # FIXED: Remove any existing cluster autoscaler deployment first
+                self.print_colored(Colors.CYAN, "   🗑️ Removing existing cluster autoscaler deployment...")
+                delete_commands = [
+                    ['kubectl', 'delete', 'deployment', 'cluster-autoscaler', '-n', 'kube-system', '--ignore-not-found'],
+                    ['kubectl', 'delete', 'serviceaccount', 'cluster-autoscaler', '-n', 'kube-system', '--ignore-not-found'],
+                    ['kubectl', 'delete', 'clusterrole', 'cluster-autoscaler', '--ignore-not-found'],
+                    ['kubectl', 'delete', 'clusterrolebinding', 'cluster-autoscaler', '--ignore-not-found'],
+                    ['kubectl', 'delete', 'role', 'cluster-autoscaler', '-n', 'kube-system', '--ignore-not-found'],
+                    ['kubectl', 'delete', 'rolebinding', 'cluster-autoscaler', '-n', 'kube-system', '--ignore-not-found']
+                ]
+            
+                for delete_cmd in delete_commands:
+                    try:
+                        subprocess.run(delete_cmd, env=env, capture_output=True, text=True, timeout=30)
+                    except:
+                        pass
+
+                # Wait for cleanup
+                time.sleep(10)
+
+                # FIXED: Create the complete autoscaler YAML with all components
+                autoscaler_yaml = f"""apiVersion: v1
+    kind: ServiceAccount
+    metadata:
+      labels:
+        k8s-addon: cluster-autoscaler.addons.k8s.io
+        k8s-app: cluster-autoscaler
+      name: cluster-autoscaler
+      namespace: kube-system
+    ---
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: ClusterRole
+    metadata:
+      name: cluster-autoscaler
+      labels:
+        k8s-addon: cluster-autoscaler.addons.k8s.io
+        k8s-app: cluster-autoscaler
+    rules:
+    - apiGroups: [""]
+      resources: ["events", "endpoints"]
+      verbs: ["create", "patch"]
+    - apiGroups: [""]
+      resources: ["pods/eviction"]
+      verbs: ["create"]
+    - apiGroups: [""]
+      resources: ["pods/status"]
+      verbs: ["update"]
+    - apiGroups: [""]
+      resources: ["endpoints"]
+      resourceNames: ["cluster-autoscaler"]
+      verbs: ["get", "update"]
+    - apiGroups: [""]
+      resources: ["nodes"]
+      verbs: ["watch", "list", "get", "update"]
+    - apiGroups: [""]
+      resources: ["namespaces", "pods", "services", "replicationcontrollers", "persistentvolumeclaims", "persistentvolumes"]
+      verbs: ["watch", "list", "get"]
+    - apiGroups: ["extensions"]
+      resources: ["replicasets", "daemonsets"]
+      verbs: ["watch", "list", "get"]
+    - apiGroups: ["policy"]
+      resources: ["poddisruptionbudgets"]
+      verbs: ["watch", "list"]
+    - apiGroups: ["apps"]
+      resources: ["statefulsets", "replicasets", "daemonsets"]
+      verbs: ["watch", "list", "get"]
+    - apiGroups: ["storage.k8s.io"]
+      resources: ["storageclasses", "csinodes", "csidrivers", "csistoragecapacities"]
+      verbs: ["watch", "list", "get"]
+    - apiGroups: ["batch", "extensions"]
+      resources: ["jobs"]
+      verbs: ["get", "list", "watch", "patch"]
+    - apiGroups: ["coordination.k8s.io"]
+      resources: ["leases"]
+      verbs: ["create"]
+    - apiGroups: ["coordination.k8s.io"]
+      resourceNames: ["cluster-autoscaler"]
+      resources: ["leases"]
+      verbs: ["get", "update"]
+    ---
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: Role
+    metadata:
+      name: cluster-autoscaler
+      namespace: kube-system
+      labels:
+        k8s-addon: cluster-autoscaler.addons.k8s.io
+        k8s-app: cluster-autoscaler
+    rules:
+    - apiGroups: [""]
+      resources: ["configmaps"]
+      verbs: ["create","list","watch"]
+    - apiGroups: [""]
+      resources: ["configmaps"]
+      resourceNames: ["cluster-autoscaler-status", "cluster-autoscaler-priority-expander"]
+      verbs: ["delete", "get", "update", "watch"]
+    ---
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: ClusterRoleBinding
+    metadata:
+      name: cluster-autoscaler
+      labels:
+        k8s-addon: cluster-autoscaler.addons.k8s.io
+        k8s-app: cluster-autoscaler
+    roleRef:
+      apiGroup: rbac.authorization.k8s.io
+      kind: ClusterRole
+      name: cluster-autoscaler
+    subjects:
+    - kind: ServiceAccount
+      name: cluster-autoscaler
+      namespace: kube-system
+    ---
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: RoleBinding
+    metadata:
+      name: cluster-autoscaler
+      namespace: kube-system
+      labels:
+        k8s-addon: cluster-autoscaler.addons.k8s.io
+        k8s-app: cluster-autoscaler
+    roleRef:
+      apiGroup: rbac.authorization.k8s.io
+      kind: Role
+      name: cluster-autoscaler
+    subjects:
+    - kind: ServiceAccount
+      name: cluster-autoscaler
+      namespace: kube-system
+    ---
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: cluster-autoscaler
+      namespace: kube-system
+      labels:
+        app: cluster-autoscaler
+    spec:
+      selector:
+        matchLabels:
+          app: cluster-autoscaler
+      template:
+        metadata:
+          labels:
+            app: cluster-autoscaler
+          annotations:
+            prometheus.io/scrape: 'true'
+            prometheus.io/port: '8085'
+        spec:
+          priorityClassName: system-cluster-critical
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            fsGroup: 65534
+          serviceAccountName: cluster-autoscaler
+          containers:
+          - image: registry.k8s.io/autoscaling/cluster-autoscaler:v1.28.2
+            name: cluster-autoscaler
+            resources:
+              limits:
+                cpu: 100m
+                memory: 600Mi
+              requests:
+                cpu: 100m
+                memory: 600Mi
+            command:
+            - ./cluster-autoscaler
+            - --v=4
+            - --stderrthreshold=info
+            - --cloud-provider=aws
+            - --skip-nodes-with-local-storage=false
+            - --expander=least-waste
+            - --node-group-auto-discovery=asg:tag=k8s.io/cluster-autoscaler/enabled,k8s.io/cluster-autoscaler/{cluster_name}
+            - --balance-similar-node-groups
+            - --skip-nodes-with-system-pods=false
+            - --scale-down-enabled=true
+            - --scale-down-delay-after-add=10m
+            - --scale-down-unneeded-time=10m
+            env:
+            - name: AWS_REGION
+              value: {region}
+            volumeMounts:
+            - name: ssl-certs
+              mountPath: /etc/ssl/certs/ca-certificates.crt
+              readOnly: true
+            imagePullPolicy: "Always"
+          volumes:
+          - name: ssl-certs
+            hostPath:
+              path: "/etc/ssl/certs/ca-bundle.crt"
+          nodeSelector:
+            kubernetes.io/os: linux
+    """
+
+                # Create temporary file with the modified YAML
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+                    f.write(autoscaler_yaml)
+                    temp_yaml_file = f.name
+        
+                try:
+                    # Apply autoscaler manifest
+                    self.print_colored(Colors.CYAN, "   🚀 Applying Cluster Autoscaler manifest...")
+                    autoscaler_cmd = ['kubectl', 'apply', '-f', temp_yaml_file]
+                    autoscaler_result = subprocess.run(autoscaler_cmd, env=env, capture_output=True, text=True, timeout=120)
+        
+                    if autoscaler_result.returncode == 0:
+                        self.print_colored(Colors.GREEN, "   ✅ Cluster Autoscaler deployed successfully")
+                        self.log_operation('INFO', f"Cluster Autoscaler deployed for {cluster_name}")
+            
+                        # Wait for pods to start
+                        self.print_colored(Colors.CYAN, "   ⏳ Waiting for Cluster Autoscaler pods to start...")
+                        time.sleep(30)  # Increased wait time
+            
+                        # Verify deployment with multiple attempts
+                        max_attempts = 3
+                        for attempt in range(max_attempts):
+                            verify_cmd = ['kubectl', 'get', 'pods', '-n', 'kube-system', '-l', 'app=cluster-autoscaler', '--no-headers']
+                            verify_result = subprocess.run(verify_cmd, env=env, capture_output=True, text=True, timeout=60)
+                
+                            if verify_result.returncode == 0 and verify_result.stdout.strip():
+                                pod_lines = [line.strip() for line in verify_result.stdout.strip().split('\n') if line.strip()]
+                                running_pods = [line for line in pod_lines if 'Running' in line]
+                                pending_pods = [line for line in pod_lines if 'Pending' in line]
+                            
+                                if running_pods:
+                                    self.print_colored(Colors.GREEN, f"   ✅ Cluster Autoscaler pods: {len(running_pods)} running")
+                                
+                                    # Show pod details
+                                    for pod_line in running_pods:
+                                        pod_parts = pod_line.split()
+                                        if len(pod_parts) >= 3:
+                                            pod_name = pod_parts[0]
+                                            pod_status = pod_parts[2]
+                                            self.print_colored(Colors.GREEN, f"      - {pod_name}: {pod_status}")
+                                
+                                    # Check deployment status
+                                    deploy_cmd = ['kubectl', 'get', 'deployment', 'cluster-autoscaler', '-n', 'kube-system']
+                                    deploy_result = subprocess.run(deploy_cmd, env=env, capture_output=True, text=True, timeout=30)
+                                    if deploy_result.returncode == 0:
+                                        self.print_colored(Colors.GREEN, f"   ✅ Deployment status verified")
+                                
+                                    return True
+                                elif pending_pods and attempt < max_attempts - 1:
+                                    self.print_colored(Colors.YELLOW, f"   ⏳ Pods still pending, waiting... (attempt {attempt + 1}/{max_attempts})")
+                                    time.sleep(20)
+                                else:
+                                    self.print_colored(Colors.YELLOW, f"   ⚠️ No running pods found on attempt {attempt + 1}")
+                            else:
+                                if attempt < max_attempts - 1:
+                                    self.print_colored(Colors.YELLOW, f"   ⏳ Checking pods... (attempt {attempt + 1}/{max_attempts})")
+                                    time.sleep(15)
+                    
+                        # Final check - look for any autoscaler pods
+                        final_check_cmd = ['kubectl', 'get', 'pods', '-n', 'kube-system', '--no-headers']
+                        final_result = subprocess.run(final_check_cmd, env=env, capture_output=True, text=True, timeout=60)
+                    
+                        if final_result.returncode == 0:
+                            all_pod_lines = [line.strip() for line in final_result.stdout.strip().split('\n') if line.strip()]
+                            autoscaler_pods = [line for line in all_pod_lines if 'autoscaler' in line.lower()]
+                        
+                            if autoscaler_pods:
+                                self.print_colored(Colors.GREEN, f"   ✅ Found autoscaler pods: {len(autoscaler_pods)}")
+                                for pod_line in autoscaler_pods:
+                                    pod_parts = pod_line.split()
+                                    if len(pod_parts) >= 3:
+                                        pod_name = pod_parts[0]
+                                        pod_status = pod_parts[2]
+                                        status_color = Colors.GREEN if 'Running' in pod_status else Colors.YELLOW
+                                        self.print_colored(status_color, f"      - {pod_name}: {pod_status}")
+                                return True
+                            else:
+                                self.print_colored(Colors.RED, f"   ❌ No autoscaler pods found after deployment")
+                            
+                                # Debug: Show deployment and replicaset status
+                                self.print_colored(Colors.CYAN, f"   🔍 Debugging deployment status...")
+                            
+                                debug_deploy_cmd = ['kubectl', 'describe', 'deployment', 'cluster-autoscaler', '-n', 'kube-system']
+                                debug_result = subprocess.run(debug_deploy_cmd, env=env, capture_output=True, text=True, timeout=30)
+                                if debug_result.returncode == 0:
+                                    self.log_operation('DEBUG', f"Deployment describe output: {debug_result.stdout}")
+                            
+                                return False
+                        else:
+                            self.print_colored(Colors.RED, f"   ❌ Could not verify pod status")
+                            return False
+                        
+                    else:
+                        self.log_operation('ERROR', f"Failed to apply Cluster Autoscaler manifest: {autoscaler_result.stderr}")
+                        self.print_colored(Colors.RED, f"❌ Failed to apply Cluster Autoscaler manifest: {autoscaler_result.stderr}")
+                        return False
+                finally:
+                    # Clean up temporary file
+                    try:
+                        os.unlink(temp_yaml_file)
+                    except:
+                        pass
+        
+            except Exception as e:
+                error_msg = str(e)
+                self.log_operation('ERROR', f"Failed to deploy Cluster Autoscaler: {error_msg}")
+                self.print_colored(Colors.RED, f"❌ Cluster Autoscaler deployment failed: {error_msg}")
+                return False
+
+        except Exception as e:
+            error_msg = str(e)
+            self.log_operation('ERROR', f"Failed to setup Cluster Autoscaler for {cluster_name}: {error_msg}")
+            self.print_colored(Colors.RED, f"❌ Cluster Autoscaler setup failed: {error_msg}")
+            return False
+
+    def setup_cluster_autoscaler_test(self, cluster_name: str, region: str, admin_access_key: str, admin_secret_key: str, account_id: str) -> bool:
         """Setup cluster autoscaler for automatic node scaling using embedded YAML"""
         try:
             self.log_operation('INFO', f"Setting up Cluster Autoscaler for cluster {cluster_name}")
@@ -906,6 +1289,8 @@ class EKSClusterManager:
             # Check deployment
             cmd = ['kubectl', 'get', 'deployment', 'cluster-autoscaler', '-n', 'kube-system', '-o', 'json']
             result = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=30)
+            print(f"Deployment output:\n{result.stdout}")
+            print(f"Deployment error:\n{result.stderr}")
             if result.returncode == 0:
                 debug_info['deployment_exists'] = True
             else:
@@ -915,16 +1300,22 @@ class EKSClusterManager:
             # Check pods
             cmd = ['kubectl', 'get', 'pods', '-n', 'kube-system', '-l', 'app=cluster-autoscaler', '-o', 'wide']
             result = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=30)
+            print(f"Pods output:\n{result.stdout}")
+            print(f"Pods error:\n{result.stderr}")
             debug_info['pods_output'] = result.stdout
         
             # Check logs if pods exist
             cmd = ['kubectl', 'logs', '-n', 'kube-system', '-l', 'app=cluster-autoscaler', '--tail=50']
             result = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=30)
+            print(f"Logs output:\n{result.stdout}")
+            print(f"Logs error:\n{result.stderr}")
             debug_info['logs'] = result.stdout
         
             # Check events
             cmd = ['kubectl', 'get', 'events', '-n', 'kube-system', '--sort-by=.lastTimestamp']
             result = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=30)
+            print(f"Events output:\n{result.stdout}") 
+            print(f"Events error:\n{result.stderr}")
             debug_info['events'] = result.stdout
         
             return debug_info
@@ -933,6 +1324,33 @@ class EKSClusterManager:
             return {"error": str(e)}
 
 ###
+    def check_container_insights_enabled(self):
+        """Check if Container Insights is already enabled"""
+        try:
+            # Check if amazon-cloudwatch namespace exists
+            result = subprocess.run(
+                ["kubectl", "get", "namespace", "amazon-cloudwatch"],
+                capture_output=True, text=True
+            )
+        
+            if result.returncode == 0:
+                # Check if cloudwatch-agent daemonset exists
+                result = subprocess.run(
+                    ["kubectl", "get", "daemonset", "cloudwatch-agent", "-n", "amazon-cloudwatch"],
+                    capture_output=True, text=True
+                )
+                return result.returncode == 0
+            return False
+        except Exception:
+            return False
+
+    def should_deploy_cloudwatch_agent(self):
+        """Determine if we should deploy our custom CloudWatch agent"""
+        if self.check_container_insights_enabled():
+            self.log_operation('INFO', 'Container Insights already enabled - skipping custom CloudWatch agent deployment')
+            return False
+        return True
+
     def setup_scheduled_scaling_multi_nodegroup(self, cluster_name: str, region: str, admin_access_key: str, admin_secret_key: str, nodegroup_names: List[str]) -> bool:
         """Setup scheduled scaling for multiple nodegroups"""
         if not nodegroup_names:
@@ -1144,13 +1562,23 @@ class EKSClusterManager:
 
     def setup_cluster_autoscaler_multi_nodegroup(self, cluster_name: str, region: str, admin_access_key: str, admin_secret_key: str, account_id: str, nodegroup_names: List[str]) -> bool:
         """Setup cluster autoscaler for multiple nodegroups"""
+        if not nodegroup_names:
+            self.log_operation('WARNING', f"No nodegroups to configure autoscaler for")
+            return False
+    
+        self.log_operation('INFO', f"Setting up Cluster Autoscaler for {len(nodegroup_names)} nodegroups: {', '.join(nodegroup_names)}")
+        self.print_colored(Colors.YELLOW, f"🔄 Setting up Cluster Autoscaler for nodegroups: {', '.join(nodegroup_names)}")
+    
         try:
-            self.log_operation('INFO', f"Setting up Cluster Autoscaler for {len(nodegroup_names)} nodegroups")
-            self.print_colored(Colors.YELLOW, f"🔄 Setting up Cluster Autoscaler for nodegroups: {', '.join(nodegroup_names)}")
+            # Set environment variables for admin access
+            env = os.environ.copy()
+            env['AWS_ACCESS_KEY_ID'] = admin_access_key
+            env['AWS_SECRET_ACCESS_KEY'] = admin_secret_key
+            env['AWS_DEFAULT_REGION'] = region
         
+            # Check if kubectl is available
             import subprocess
             import shutil
-            import tempfile
         
             kubectl_available = shutil.which('kubectl') is not None
         
@@ -1159,13 +1587,9 @@ class EKSClusterManager:
                 self.print_colored(Colors.YELLOW, f"⚠️  kubectl not found. Cluster Autoscaler deployment skipped.")
                 return False
         
-            # Set environment variables for admin access
-            env = os.environ.copy()
-            env['AWS_ACCESS_KEY_ID'] = admin_access_key
-            env['AWS_SECRET_ACCESS_KEY'] = admin_secret_key
-            env['AWS_DEFAULT_REGION'] = region
+            # Step 1: Create IAM policy for cluster autoscaler
+            self.print_colored(Colors.CYAN, "   🔐 Setting up IAM permissions for Cluster Autoscaler...")
         
-            # Create autoscaler policy (same as before)
             admin_session = boto3.Session(
                 aws_access_key_id=admin_access_key,
                 aws_secret_access_key=admin_secret_key,
@@ -1174,80 +1598,174 @@ class EKSClusterManager:
         
             iam_client = admin_session.client('iam')
         
-            # [IAM setup code same as before]
+            # Create policy for cluster autoscaler
+            autoscaler_policy = {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Effect": "Allow",
+                        "Action": [
+                            "autoscaling:DescribeAutoScalingGroups",
+                            "autoscaling:DescribeAutoScalingInstances",
+                            "autoscaling:DescribeLaunchConfigurations",
+                            "autoscaling:DescribeTags",
+                            "autoscaling:SetDesiredCapacity",
+                            "autoscaling:TerminateInstanceInAutoScalingGroup",
+                            "ec2:DescribeLaunchTemplateVersions",
+                            "ec2:DescribeInstanceTypes"
+                        ],
+                        "Resource": "*"
+                    }
+                ]
+            }
         
-            # Modified autoscaler deployment with multiple nodegroup support
-            autoscaler_yaml = f"""apiVersion: apps/v1
-    kind: Deployment
-    metadata:
-        name: cluster-autoscaler
-        namespace: kube-system
-        labels:
-        app: cluster-autoscaler
-    spec:
-        selector:
-        matchLabels:
-            app: cluster-autoscaler
-        template:
-        metadata:
-            labels:
-            app: cluster-autoscaler
-        spec:
-            priorityClassName: system-cluster-critical
-            securityContext:
-            runAsNonRoot: true
-            runAsUser: 65534
-            fsGroup: 65534
-            serviceAccountName: cluster-autoscaler
-            containers:
-            - image: registry.k8s.io/autoscaling/cluster-autoscaler:v1.28.2
-            name: cluster-autoscaler
-            resources:
-                limits:
-                cpu: 100m
-                memory: 600Mi
-                requests:
-                cpu: 100m
-                memory: 600Mi
-            command:
-            - ./cluster-autoscaler
-            - --v=4
-            - --stderrthreshold=info
-            - --cloud-provider=aws
-            - --skip-nodes-with-local-storage=false
-            - --expander=least-waste
-            - --node-group-auto-discovery=asg:tag=k8s.io/cluster-autoscaler/enabled,k8s.io/cluster-autoscaler/{cluster_name}
-            - --balance-similar-node-groups
-            - --skip-nodes-with-system-pods=false
-            - --scale-down-enabled=true
-            - --scale-down-delay-after-add=10m
-            - --scale-down-unneeded-time=10m
-            env:
-            - name: AWS_REGION
-                value: {region}
-            volumeMounts:
-            - name: ssl-certs
-                mountPath: /etc/ssl/certs/ca-certificates.crt
-                readOnly: true
-            imagePullPolicy: "Always"
-            volumes:
-            - name: ssl-certs
-            hostPath:
-                path: "/etc/ssl/certs/ca-bundle.crt"
-            nodeSelector:
-            kubernetes.io/os: linux
-    """
+            policy_name = f"ClusterAutoscaler-{cluster_name.split('-')[-1]}"
         
-            # Apply the autoscaler (same RBAC as before)
-            # [Rest of method implementation]
+            try:
+                # Create the policy
+                policy_response = iam_client.create_policy(
+                    PolicyName=policy_name,
+                    PolicyDocument=json.dumps(autoscaler_policy),
+                    Description=f"Policy for Cluster Autoscaler on {cluster_name}"
+                )
+                policy_arn = policy_response['Policy']['Arn']
+                self.log_operation('INFO', f"Created Cluster Autoscaler policy: {policy_arn}")
+            
+            except iam_client.exceptions.EntityAlreadyExistsException:
+                # Policy already exists, get its ARN
+                policy_arn = f"arn:aws:iam::{account_id}:policy/{policy_name}"
+                self.log_operation('INFO', f"Using existing Cluster Autoscaler policy: {policy_arn}")
         
-            self.print_colored(Colors.GREEN, f"   ✅ Cluster Autoscaler configured for {len(nodegroup_names)} nodegroups")
-            self.print_colored(Colors.CYAN, f"   📊 Will auto-scale: {', '.join(nodegroup_names)}")
+            # Attach policy to node instance role
+            try:
+                iam_client.attach_role_policy(
+                    RoleName="NodeInstanceRole",
+                    PolicyArn=policy_arn
+                )
+                self.print_colored(Colors.GREEN, "   ✅ IAM permissions configured")
+            except Exception as e:
+                self.log_operation('WARNING', f"Failed to attach autoscaler policy: {str(e)}")
+            
+            # Step 2: Update kubeconfig
+            self.print_colored(Colors.CYAN, "   🔄 Updating kubeconfig...")
+            update_cmd = ['aws', 'eks', 'update-kubeconfig', '--region', region, '--name', cluster_name]
+            update_result = subprocess.run(update_cmd, env=env, capture_output=True, text=True, timeout=60)
         
-            return True
+            if update_result.returncode != 0:
+                self.log_operation('ERROR', f"Failed to update kubeconfig: {update_result.stderr}")
+                self.print_colored(Colors.RED, f"❌ Failed to update kubeconfig: {update_result.stderr}")
+                return False
         
+            # Step 3: Remove existing autoscaler deployments
+            self.print_colored(Colors.CYAN, "   🗑️ Removing existing cluster autoscaler deployment...")
+            delete_commands = [
+                ['kubectl', 'delete', 'deployment', 'cluster-autoscaler', '-n', 'kube-system', '--ignore-not-found=true'],
+                ['kubectl', 'delete', 'serviceaccount', 'cluster-autoscaler', '-n', 'kube-system', '--ignore-not-found=true'],
+                ['kubectl', 'delete', 'clusterrole', 'cluster-autoscaler', '--ignore-not-found=true'],
+                ['kubectl', 'delete', 'clusterrolebinding', 'cluster-autoscaler', '--ignore-not-found=true'],
+                ['kubectl', 'delete', 'role', 'cluster-autoscaler', '-n', 'kube-system', '--ignore-not-found=true'],
+                ['kubectl', 'delete', 'rolebinding', 'cluster-autoscaler', '-n', 'kube-system', '--ignore-not-found=true']
+            ]
+        
+            for delete_cmd in delete_commands:
+                try:
+                    subprocess.run(delete_cmd, env=env, capture_output=True, text=True, timeout=30)
+                except Exception as e:
+                    self.log_operation('WARNING', f"Error during cleanup: {str(e)}")
+        
+            # Wait for cleanup to complete
+            time.sleep(10)
+        
+            # Step 4: Load and customize the autoscaler YAML, now passing AWS credentials
+            self.print_colored(Colors.CYAN, "   📦 Preparing Cluster Autoscaler manifest...")
+        
+            # Load the template file
+            manifest_dir = os.path.join(os.path.dirname(__file__), "k8s_manifests")
+            autoscaler_file = os.path.join(manifest_dir, "cluster-autoscaler.yaml")
+        
+            try:
+                with open(autoscaler_file, 'r') as f:
+                    autoscaler_yaml = f.read()
+            
+                # Replace placeholders
+                autoscaler_yaml = autoscaler_yaml.replace("${CLUSTER_NAME}", cluster_name)
+                autoscaler_yaml = autoscaler_yaml.replace("${REGION}", region)
+            
+                # Add AWS credentials to the container environment
+                # This inserts the AWS credentials directly into the deployment
+                credentials_env_vars = """
+            - name: AWS_ACCESS_KEY_ID
+              value: "{aws_access_key}"
+            - name: AWS_SECRET_ACCESS_KEY
+              value: "{aws_secret_key}"
+    """.format(aws_access_key=admin_access_key, aws_secret_key=admin_secret_key)
+            
+                # Find the location to insert the env vars - after the AWS_REGION env var
+                autoscaler_yaml = autoscaler_yaml.replace("        - name: AWS_REGION\n          value: ${REGION}", 
+                                                         "        - name: AWS_REGION\n          value: {region}{creds}".format(
+                                                             region=region, creds=credentials_env_vars))
+            
+                # Write the customized YAML to a temp file
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+                    f.write(autoscaler_yaml)
+                    temp_yaml_path = f.name
+            
+                # Step 5: Apply the autoscaler manifest
+                self.print_colored(Colors.CYAN, "   🚀 Applying Cluster Autoscaler manifest...")
+                apply_cmd = ['kubectl', 'apply', '-f', temp_yaml_path]
+                apply_result = subprocess.run(apply_cmd, env=env, capture_output=True, text=True, timeout=120)
+            
+                # Clean up the temp file
+                try:
+                    os.unlink(temp_yaml_path)
+                except:
+                    pass
+            
+                if apply_result.returncode == 0:
+                    self.print_colored(Colors.GREEN, "   ✅ Cluster Autoscaler deployed successfully")
+                
+                    # Wait for pods to start initializing
+                    self.print_colored(Colors.CYAN, "   ⏳ Waiting for Cluster Autoscaler pods to initialize...")
+                    time.sleep(30)  # Give more time for pods to start
+                
+                    # Verify deployment
+                    verify_cmd = ['kubectl', 'get', 'pods', '-n', 'kube-system', '-l', 'app=cluster-autoscaler', '-o', 'wide']
+                    verify_result = subprocess.run(verify_cmd, env=env, capture_output=True, text=True, timeout=60)
+                    self.print_colored(Colors.CYAN, f"   📋 Pod details: {verify_result.stdout}")
+                
+                    if verify_result.returncode == 0:
+                        if verify_result.stdout.strip():
+                            self.print_colored(Colors.GREEN, f"   ✅ Cluster Autoscaler configured for {len(nodegroup_names)} nodegroups")
+                            self.print_colored(Colors.CYAN, f"   📊 Will auto-scale: {', '.join(nodegroup_names)}")
+                        
+                            # Get logs to verify credentials are working
+                            time.sleep(10)  # Wait a bit for logs
+                            logs_cmd = ['kubectl', 'logs', '-n', 'kube-system', '-l', 'app=cluster-autoscaler', '--tail=20']
+                            logs_result = subprocess.run(logs_cmd, env=env, capture_output=True, text=True, timeout=30)
+                            if logs_result.returncode == 0:
+                                self.print_colored(Colors.CYAN, f"   📋 Recent logs: {logs_result.stdout}")
+                        
+                            return True
+                        else:
+                            self.print_colored(Colors.YELLOW, f"   ⚠️ Autoscaler pods are still starting")
+                            # Still return true as pods may take time to appear
+                            return True
+                    else:
+                        self.print_colored(Colors.YELLOW, f"   ⚠️ Could not verify autoscaler pods: {verify_result.stderr}")
+                        return True  # Still return true as the kubectl apply succeeded
+                else:
+                    self.log_operation('ERROR', f"Failed to apply Cluster Autoscaler manifest: {apply_result.stderr}")
+                    self.print_colored(Colors.RED, f"❌ Failed to apply Cluster Autoscaler manifest: {apply_result.stderr}")
+                    return False
+                
+            except Exception as e:
+                self.log_operation('ERROR', f"Failed to deploy Cluster Autoscaler: {str(e)}")
+                self.print_colored(Colors.RED, f"❌ Cluster Autoscaler deployment failed: {str(e)}")
+                return False
+            
         except Exception as e:
             self.log_operation('ERROR', f"Failed to setup multi-nodegroup autoscaler: {str(e)}")
+            self.print_colored(Colors.RED, f"❌ Multi-nodegroup autoscaler setup failed: {str(e)}")
             return False
 
     def create_eks_control_plane(self, eks_client, cluster_name: str, eks_version: str, 
@@ -4758,7 +5276,6 @@ class EKSClusterManager:
         
                 # 2. Verify Cluster Autoscaler
                 self.print_colored(Colors.CYAN, "🔄 Verifying Cluster Autoscaler...")
-                self.debug_cluster_autoscaler(cluster_name, region, access_key, secret_key)
                 autoscaler_verified = self._verify_cluster_autoscaler(cluster_name, region, access_key, secret_key)
                 verification_results['cluster_autoscaler'] = autoscaler_verified
         
@@ -5023,12 +5540,15 @@ class EKSClusterManager:
             components_status['scheduled_scaling'] = scheduling_success
     
             # 4. Deploy CloudWatch agent
-            print("\n🔍 Step 4: Deploying CloudWatch agent...")
-            cloudwatch_agent_success = self.deploy_cloudwatch_agent_fixed(
-                cluster_name, region, access_key, secret_key, account_id
-            )
-            components_status['cloudwatch_agent'] = cloudwatch_agent_success
-    
+            # if self.should_deploy_cloudwatch_agent():
+            #     print("\n🔍 Step 4: Deploying CloudWatch agent...")
+            #     cloudwatch_agent_success = self.deploy_cloudwatch_agent_fixed(
+            #         cluster_name, region, access_key, secret_key, account_id
+            #     )
+            #     components_status['cloudwatch_agent'] = cloudwatch_agent_success
+            # else:
+            #     print("\n🔍 Step 4: Skipping CloudWatch agent deployment as per user preference.")
+            #     components_status['cloudwatch_agent'] = True
             # 5. Setup CloudWatch alarms
             print("\n🚨 Step 5: Setting up CloudWatch alarms...")
             cloudwatch_alarms_success = self.setup_cloudwatch_alarms_multi_nodegroup(
@@ -5233,96 +5753,152 @@ class EKSClusterManager:
                 return False
 
     def _verify_cluster_autoscaler(self, cluster_name: str, region: str, access_key: str, secret_key: str) -> bool:
-            """Helper method to verify Cluster Autoscaler deployment - FIXED"""
-            try:
-                import subprocess
-                import shutil
-    
-                kubectl_available = shutil.which('kubectl') is not None
-                if not kubectl_available:
-                    self.print_colored(Colors.YELLOW, f"   ⚠️ kubectl not found, skipping Cluster Autoscaler check")
-                    return False
+        """Helper method to verify Cluster Autoscaler deployment - FIXED"""
+        try:
+            # First debug the cluster autoscaler and print detailed debug info
+            self.print_colored(Colors.CYAN, "   🔍 Running cluster autoscaler diagnostics...")
+            debug_info = self.debug_cluster_autoscaler(cluster_name, region, access_key, secret_key)
         
-                env = os.environ.copy()
-                env['AWS_ACCESS_KEY_ID'] = access_key
-                env['AWS_SECRET_ACCESS_KEY'] = secret_key
-                env['AWS_DEFAULT_REGION'] = region
-    
-                # FIXED: Try multiple label selectors for Cluster Autoscaler
-                autoscaler_selectors = [
-                    'app=cluster-autoscaler',
-                    'k8s-app=cluster-autoscaler',
-                    'name=cluster-autoscaler'
-                ]
+            # Print the debug info with proper formatting
+            self.print_colored(Colors.CYAN, "   📋 Cluster Autoscaler Debug Information:")
         
-                found_autoscaler = False
-        
-                for selector in autoscaler_selectors:
-                    try:
-                        autoscaler_cmd = ['kubectl', 'get', 'pods', '-n', 'kube-system', '-l', selector, '--no-headers']
-                        autoscaler_result = subprocess.run(autoscaler_cmd, env=env, capture_output=True, text=True, timeout=60)
+            if 'error' in debug_info:
+                self.print_colored(Colors.RED, f"      ❌ Error: {debug_info['error']}")
+            else:
+                # Print deployment status
+                if debug_info.get('deployment_exists', False):
+                    self.print_colored(Colors.GREEN, f"      ✅ Autoscaler deployment exists")
+                else:
+                    self.print_colored(Colors.YELLOW, f"      ⚠️ Autoscaler deployment not found")
+                    if 'deployment_error' in debug_info:
+                        self.print_colored(Colors.YELLOW, f"         Error: {debug_info['deployment_error']}")
             
-                        if autoscaler_result.returncode == 0 and autoscaler_result.stdout.strip():
-                            pod_lines = [line.strip() for line in autoscaler_result.stdout.strip().split('\n') if line.strip()]
-                            running_pods = [line for line in pod_lines if 'Running' in line]
+                # Print pod status information
+                if debug_info.get('pods_output'):
+                    pod_lines = debug_info['pods_output'].strip().split('\n')
+                    if len(pod_lines) > 1:  # If there are pods (more than just the header)
+                        self.print_colored(Colors.GREEN, f"      ✅ Found {len(pod_lines) - 1} autoscaler pods:")
+                        for i, line in enumerate(pod_lines[:4]):  # Show first 4 lines max
+                            if i > 0:  # Skip header
+                                self.print_colored(Colors.CYAN, f"         {line}")
+                        if len(pod_lines) > 5:
+                            self.print_colored(Colors.CYAN, f"         ...(and {len(pod_lines) - 5} more)")
+                    else:
+                        self.print_colored(Colors.YELLOW, f"      ⚠️ No autoscaler pods found")
+            
+                # Print log sample if available
+                if debug_info.get('logs'):
+                    log_lines = debug_info['logs'].strip().split('\n')
+                    if log_lines and log_lines[0].strip():
+                        self.print_colored(Colors.GREEN, f"      ✅ Autoscaler logs available:")
+                        for i, line in enumerate(log_lines[:3]):  # Show first 3 log lines
+                            if line.strip():
+                                self.print_colored(Colors.CYAN, f"         {line[:100]}...")
+                        if len(log_lines) > 3:
+                            self.print_colored(Colors.CYAN, f"         ...(and {len(log_lines) - 3} more lines)")
+                    else:
+                        self.print_colored(Colors.YELLOW, f"      ⚠️ No autoscaler logs found")
+            
+                # Print recent events if available
+                if debug_info.get('events'):
+                    event_lines = debug_info['events'].strip().split('\n')
+                    if len(event_lines) > 1:  # More than just header
+                        self.print_colored(Colors.GREEN, f"      ✅ Recent cluster events:")
+                        for i, line in enumerate(event_lines[:3]):  # Show first 3 events
+                            if i > 0:  # Skip header
+                                self.print_colored(Colors.CYAN, f"         {line}")
+                        if len(event_lines) > 4:
+                            self.print_colored(Colors.CYAN, f"         ...(and {len(event_lines) - 4} more events)")
+
+            # Continue with the original verification code
+            import subprocess
+            import shutil
+
+            kubectl_available = shutil.which('kubectl') is not None
+            if not kubectl_available:
+                self.print_colored(Colors.YELLOW, f"   ⚠️ kubectl not found, skipping Cluster Autoscaler check")
+                return False
+    
+            env = os.environ.copy()
+            env['AWS_ACCESS_KEY_ID'] = access_key
+            env['AWS_SECRET_ACCESS_KEY'] = secret_key
+            env['AWS_DEFAULT_REGION'] = region
+
+            # FIXED: Try multiple label selectors for Cluster Autoscaler
+            autoscaler_selectors = [
+                'app=cluster-autoscaler',
+                'k8s-app=cluster-autoscaler',
+                'name=cluster-autoscaler'
+            ]
+    
+            found_autoscaler = False
+    
+            for selector in autoscaler_selectors:
+                try:
+                    autoscaler_cmd = ['kubectl', 'get', 'pods', '-n', 'kube-system', '-l', selector, '--no-headers']
+                    autoscaler_result = subprocess.run(autoscaler_cmd, env=env, capture_output=True, text=True, timeout=60)
+        
+                    if autoscaler_result.returncode == 0 and autoscaler_result.stdout.strip():
+                        pod_lines = [line.strip() for line in autoscaler_result.stdout.strip().split('\n') if line.strip()]
+                        running_pods = [line for line in pod_lines if 'Running' in line]
+            
+                        if running_pods:
+                            found_autoscaler = True
+                            self.print_colored(Colors.GREEN, f"   ✅ Cluster Autoscaler pods (selector: {selector}): {len(running_pods)} running")
+                    
+                            # Show pod details
+                            for pod in running_pods[:2]:  # Show first 2 pods
+                                pod_parts = pod.split()
+                                if len(pod_parts) >= 3:
+                                    pod_name = pod_parts[0]
+                                    pod_status = pod_parts[2]
+                                    self.print_colored(Colors.GREEN, f"      - {pod_name}: {pod_status}")
+                            break
+                    
+                except Exception as e:
+                    continue
+    
+            if not found_autoscaler:
+                # FIXED: Try searching by pod name pattern as fallback
+                try:
+                    all_pods_cmd = ['kubectl', 'get', 'pods', '-n', 'kube-system', '--no-headers']
+                    all_pods_result = subprocess.run(all_pods_cmd, env=env, capture_output=True, text=True, timeout=60)
+            
+                    if all_pods_result.returncode == 0:
+                        pod_lines = [line.strip() for line in all_pods_result.stdout.strip().split('\n') if line.strip()]
+                        autoscaler_pods = [line for line in pod_lines if 'autoscaler' in line.lower()]
                 
+                        if autoscaler_pods:
+                            running_pods = [line for line in autoscaler_pods if 'Running' in line]
                             if running_pods:
                                 found_autoscaler = True
-                                self.print_colored(Colors.GREEN, f"   ✅ Cluster Autoscaler pods (selector: {selector}): {len(running_pods)} running")
+                                self.print_colored(Colors.GREEN, f"   ✅ Cluster Autoscaler pods (by name): {len(running_pods)} running")
                         
-                                # Show pod details
-                                for pod in running_pods[:2]:  # Show first 2 pods
-                                    pod_parts = pod.split()
-                                    if len(pod_parts) >= 3:
-                                        pod_name = pod_parts[0]
-                                        pod_status = pod_parts[2]
-                                        self.print_colored(Colors.GREEN, f"      - {pod_name}: {pod_status}")
-                                break
-                        
-                    except Exception as e:
-                        continue
+                except Exception as e:
+                    self.print_colored(Colors.YELLOW, f"   ⚠️ Error searching for autoscaler pods: {str(e)}")
+    
+            if found_autoscaler:
+                # FIXED: Check Cluster Autoscaler service account with better error handling
+                try:
+                    sa_cmd = ['kubectl', 'get', 'serviceaccount', '-n', 'kube-system', 'cluster-autoscaler', '--no-headers']
+                    sa_result = subprocess.run(sa_cmd, env=env, capture_output=True, text=True, timeout=30)
         
-                if not found_autoscaler:
-                    # FIXED: Try searching by pod name pattern as fallback
-                    try:
-                        all_pods_cmd = ['kubectl', 'get', 'pods', '-n', 'kube-system', '--no-headers']
-                        all_pods_result = subprocess.run(all_pods_cmd, env=env, capture_output=True, text=True, timeout=60)
+                    if sa_result.returncode == 0 and sa_result.stdout.strip():
+                        self.print_colored(Colors.GREEN, f"   ✅ Cluster Autoscaler service account verified")
+                    else:
+                        self.print_colored(Colors.YELLOW, f"   ⚠️ Cluster Autoscaler service account not found (but pods are running)")
                 
-                        if all_pods_result.returncode == 0:
-                            pod_lines = [line.strip() for line in all_pods_result.stdout.strip().split('\n') if line.strip()]
-                            autoscaler_pods = [line for line in pod_lines if 'autoscaler' in line.lower()]
-                    
-                            if autoscaler_pods:
-                                running_pods = [line for line in autoscaler_pods if 'Running' in line]
-                                if running_pods:
-                                    found_autoscaler = True
-                                    self.print_colored(Colors.GREEN, f"   ✅ Cluster Autoscaler pods (by name): {len(running_pods)} running")
-                            
-                    except Exception as e:
-                        self.print_colored(Colors.YELLOW, f"   ⚠️ Error searching for autoscaler pods: {str(e)}")
-        
-                if found_autoscaler:
-                    # FIXED: Check Cluster Autoscaler service account with better error handling
-                    try:
-                        sa_cmd = ['kubectl', 'get', 'serviceaccount', '-n', 'kube-system', 'cluster-autoscaler', '--no-headers']
-                        sa_result = subprocess.run(sa_cmd, env=env, capture_output=True, text=True, timeout=30)
+                except Exception as e:
+                    self.print_colored(Colors.YELLOW, f"   ⚠️ Could not verify service account: {str(e)}")
             
-                        if sa_result.returncode == 0 and sa_result.stdout.strip():
-                            self.print_colored(Colors.GREEN, f"   ✅ Cluster Autoscaler service account verified")
-                        else:
-                            self.print_colored(Colors.YELLOW, f"   ⚠️ Cluster Autoscaler service account not found (but pods are running)")
-                    
-                    except Exception as e:
-                        self.print_colored(Colors.YELLOW, f"   ⚠️ Could not verify service account: {str(e)}")
-                
-                    return True
-                else:
-                    self.print_colored(Colors.YELLOW, f"   ⚠️ No running Cluster Autoscaler pods found")
-                    return False
-        
-            except Exception as e:
-                self.print_colored(Colors.YELLOW, f"   ⚠️ Error checking Cluster Autoscaler: {str(e)}")
+                return True
+            else:
+                self.print_colored(Colors.YELLOW, f"   ⚠️ No running Cluster Autoscaler pods found")
                 return False
+    
+        except Exception as e:
+            self.print_colored(Colors.YELLOW, f"   ⚠️ Error checking Cluster Autoscaler: {str(e)}")
+            return False
 
     def enable_container_insights(self, cluster_name: str, region: str, admin_access_key: str, admin_secret_key: str) -> bool:
             """Enable CloudWatch Container Insights for the cluster with FIXED deployment"""
