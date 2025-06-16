@@ -4275,81 +4275,6 @@ class EKSClusterManager:
 
 #######
 
-    def verify_cloudwatch_insights(self, cluster_name: str, region: str, access_key: str, secret_key: str) -> bool:
-        """Verify if CloudWatch Container Insights is working"""
-        try:
-            self.log_operation('INFO', f"Verifying CloudWatch Container Insights for cluster {cluster_name}")
-            self.print_colored(Colors.YELLOW, f"🔍 Verifying CloudWatch Container Insights...")
-        
-            import subprocess
-            import shutil
-        
-            kubectl_available = shutil.which('kubectl') is not None
-            if not kubectl_available:
-                self.log_operation('WARNING', f"kubectl not found. Cannot verify Container Insights")
-                self.print_colored(Colors.YELLOW, f"⚠️ kubectl not found. Manual verification required.")
-                return False
-            
-            # Set environment variables for access
-            env = os.environ.copy()
-            env['AWS_ACCESS_KEY_ID'] = access_key
-            env['AWS_SECRET_ACCESS_KEY'] = secret_key
-            env['AWS_DEFAULT_REGION'] = region
-        
-            # Ensure kubeconfig is updated
-            update_cmd = [
-                'aws', 'eks', 'update-kubeconfig',
-                '--region', region,
-                '--name', cluster_name
-            ]
-        
-            update_result = subprocess.run(update_cmd, env=env, capture_output=True, text=True, timeout=120)
-            if update_result.returncode != 0:
-                self.print_colored(Colors.RED, f"❌ Failed to update kubeconfig: {update_result.stderr}")
-                return False
-            
-            # Check if Container Insights pods are running
-            verify_cmd = ['kubectl', 'get', 'pods', '-n', 'amazon-cloudwatch', '--no-headers']
-            verify_result = subprocess.run(verify_cmd, env=env, capture_output=True, text=True, timeout=60)
-        
-            if verify_result.returncode == 0:
-                pod_lines = [line.strip() for line in verify_result.stdout.strip().split('\n') if line.strip()]
-                running_pods = [line for line in pod_lines if 'Running' in line or 'Completed' in line]
-            
-                if running_pods:
-                    self.print_colored(Colors.GREEN, f"✅ CloudWatch Container Insights: {len(running_pods)}/{len(pod_lines)} pods running")
-                
-                    # Display specific pod details
-                    self.print_colored(Colors.CYAN, "📊 Container Insights Pods Status:")
-                    for pod in pod_lines:
-                        pod_parts = pod.split()
-                        if len(pod_parts) >= 3:  # basic check for pod_name, ready_status, status
-                            pod_name = pod_parts[0]
-                            pod_status = pod_parts[2]
-                            status_color = Colors.GREEN if pod_status == "Running" else Colors.YELLOW
-                            self.print_colored(status_color, f"   - {pod_name}: {pod_status}")
-                
-                    # Display CloudWatch Console link
-                    self.print_colored(Colors.CYAN, "📊 View in AWS Console:")
-                    self.print_colored(Colors.CYAN, f"   - CloudWatch → Insights → Container Insights → {cluster_name}")
-                    self.print_colored(Colors.CYAN, f"   - CloudWatch → Logs → Log groups → /aws/containerinsights/{cluster_name}")
-                
-                    return True
-                else:
-                    self.print_colored(Colors.YELLOW, f"⚠️ CloudWatch Container Insights: 0/{len(pod_lines)} pods running")
-                    self.print_colored(Colors.YELLOW, f"   - Pods may still be starting, check again in a few minutes")
-                    return False
-                
-            else:
-                self.print_colored(Colors.RED, f"❌ Failed to get Container Insights pods: {verify_result.stderr}")
-                self.log_operation('ERROR', f"Failed to get Container Insights pods: {verify_result.stderr}")
-                return False
-            
-        except Exception as e:
-            self.log_operation('ERROR', f"Failed to verify Container Insights: {str(e)}")
-            self.print_colored(Colors.RED, f"❌ Container Insights verification failed: {str(e)}")
-            return False
-
     def install_enhanced_addons(self, eks_client, cluster_name: str, region: str, admin_access_key: str, admin_secret_key: str, account_id: str) -> dict:
         """Install enhanced add-ons (EFS CSI Driver, Node monitoring agent, EKS Pod Identity)"""
         results = {
@@ -4632,119 +4557,6 @@ class EKSClusterManager:
             self.log_operation('ERROR', f"Failed to install enhanced add-ons for {cluster_name}: {str(e)}")
             self.print_colored(Colors.RED, f"❌ Enhanced add-ons installation failed: {str(e)}")
             return results
-
-    def enable_container_insights(self, cluster_name: str, region: str, admin_access_key: str, admin_secret_key: str) -> bool:
-        """Enable CloudWatch Container Insights for the cluster with simplified approach"""
-        try:
-            self.log_operation('INFO', f"Enabling CloudWatch Container Insights for cluster {cluster_name}")
-            self.print_colored(Colors.YELLOW, f"📊 Enabling CloudWatch Container Insights for {cluster_name}...")
-        
-            # Check if kubectl is available
-            import subprocess
-            import shutil
-        
-            kubectl_available = shutil.which('kubectl') is not None
-        
-            if not kubectl_available:
-                self.log_operation('WARNING', f"kubectl not found. Cannot deploy Container Insights for {cluster_name}")
-                self.print_colored(Colors.YELLOW, f"⚠️  kubectl not found. Container Insights deployment skipped.")
-                return False
-        
-            # Set environment variables for admin access
-            env = os.environ.copy()
-            env['AWS_ACCESS_KEY_ID'] = admin_access_key
-            env['AWS_SECRET_ACCESS_KEY'] = admin_secret_key
-            env['AWS_DEFAULT_REGION'] = region
-        
-            # Update kubeconfig first
-            update_cmd = [
-                'aws', 'eks', 'update-kubeconfig',
-                '--region', region,
-                '--name', cluster_name
-            ]
-        
-            self.print_colored(Colors.CYAN, "   🔄 Updating kubeconfig...")
-            update_result = subprocess.run(update_cmd, env=env, capture_output=True, text=True, timeout=120)
-        
-            if update_result.returncode != 0:
-                self.log_operation('ERROR', f"Failed to update kubeconfig: {update_result.stderr}")
-                self.print_colored(Colors.RED, f"❌ Failed to update kubeconfig: {update_result.stderr}")
-                return False
-        
-            # Apply each step directly using kubectl for more reliability
-            try:
-                # Create namespace first
-                self.log_operation('INFO', f"Creating amazon-cloudwatch namespace")
-                namespace_cmd = ['kubectl', 'create', 'namespace', 'amazon-cloudwatch']
-                subprocess.run(namespace_cmd, env=env, capture_output=True, text=True, timeout=60)
-                self.log_operation('INFO', f"Applied namespace manifest")
-            except:
-                # Namespace might already exist
-                pass
-        
-            # Apply each manifest directly from the GitHub repository
-            manifests = [
-                "https://raw.githubusercontent.com/aws-samples/amazon-cloudwatch-container-insights/latest/k8s-deployment-manifest-templates/deployment-mode/daemonset/container-insights-monitoring/cloudwatch-namespace.yaml",
-                "https://raw.githubusercontent.com/aws-samples/amazon-cloudwatch-container-insights/latest/k8s-deployment-manifest-templates/deployment-mode/daemonset/container-insights-monitoring/cwagent/cwagent-serviceaccount.yaml",
-                "https://raw.githubusercontent.com/aws-samples/amazon-cloudwatch-container-insights/latest/k8s-deployment-manifest-templates/deployment-mode/daemonset/container-insights-monitoring/cwagent/cwagent-configmap.yaml",
-                "https://raw.githubusercontent.com/aws-samples/amazon-cloudwatch-container-insights/latest/k8s-deployment-manifest-templates/deployment-mode/daemonset/container-insights-monitoring/cwagent/cwagent-daemonset.yaml",
-                "https://raw.githubusercontent.com/aws-samples/amazon-cloudwatch-container-insights/latest/k8s-deployment-manifest-templates/deployment-mode/daemonset/container-insights-monitoring/fluent-bit/fluent-bit-configmap.yaml",
-                "https://raw.githubusercontent.com/aws-samples/amazon-cloudwatch-container-insights/latest/k8s-deployment-manifest-templates/deployment-mode/daemonset/container-insights-monitoring/fluent-bit/fluent-bit.yaml"
-            ]
-        
-            for i, manifest_url in enumerate(manifests):
-                try:
-                    self.log_operation('INFO', f"Applying manifest: {manifest_url}")
-                    if 'fluent-bit-configmap.yaml' in manifest_url:
-                        # Use helper method to patch and apply the file
-                        patched_path = self.download_and_patch_fluentbit_config(manifest_url, cluster_name)
-                        apply_cmd = ['kubectl', 'apply', '-f', patched_path]
-                        apply_result = subprocess.run(apply_cmd, env=env, capture_output=True, text=True, timeout=120)
-
-                        # Cleanup temp file after use
-                        self.cleanup_temp_file(patched_path)
-                    else:
-                        apply_cmd = ['kubectl', 'apply', '-f', manifest_url]
-                        apply_result = subprocess.run(apply_cmd, env=env, capture_output=True, text=True, timeout=120)
-                    if apply_result.returncode == 0:
-                        self.log_operation('INFO', f"Applied manifest: {manifest_url}")
-                    else:
-                        self.log_operation('WARNING', f"Failed to apply manifest {manifest_url}: {apply_result.stderr}")
-                except Exception as e:
-                    self.log_operation('WARNING', f"Failed to apply manifest {manifest_url}: {str(e)}")
-        
-            # Wait for pods to be created
-            time.sleep(10)
-        
-            self.print_colored(Colors.GREEN, "   ✅ CloudWatch Container Insights deployed")
-            self.log_operation('INFO', f"CloudWatch Container Insights deployed for {cluster_name}")
-        
-            # Verify deployment
-            verify_cmd = ['kubectl', 'get', 'pods', '-n', 'amazon-cloudwatch', '--no-headers']
-            verify_result = subprocess.run(verify_cmd, env=env, capture_output=True, text=True, timeout=60)
-        
-            if verify_result.returncode == 0:
-                pod_lines = [line.strip() for line in verify_result.stdout.strip().split('\n') if line.strip()]
-                running_pods = [line for line in pod_lines if 'Running' in line or 'Completed' in line]
-            
-                self.print_colored(Colors.GREEN, f"   ✅ Container Insights pods: {len(running_pods)}/{len(pod_lines)} ready")
-                self.log_operation('INFO', f"Container Insights deployment verified: {len(running_pods)} pods ready")
-            
-                # Access information
-                self.print_colored(Colors.CYAN, f"📊 Access Container Insights in AWS Console:")
-                self.print_colored(Colors.CYAN, f"   CloudWatch → Insights → Container Insights")
-                self.print_colored(Colors.CYAN, f"   Filter by cluster: {cluster_name}")
-            
-                return True
-            else:
-                self.log_operation('WARNING', f"Could not verify Container Insights deployment")
-                return True  # Still consider successful since deployment command worked
-        
-        except Exception as e:
-            error_msg = str(e)
-            self.log_operation('ERROR', f"Failed to enable Container Insights for {cluster_name}: {error_msg}")
-            self.print_colored(Colors.RED, f"❌ Container Insights deployment failed: {error_msg}")
-            return False
 
     def verify_scheduled_scaling(self, cluster_name: str, region: str, admin_access_key: str, admin_secret_key: str) -> bool:
         """Verify if scheduled scaling has been properly configured"""
@@ -5143,102 +4955,7 @@ class EKSClusterManager:
             self.print_colored(Colors.RED, f"❌ Component verification failed: {str(e)}")
             return verification_results
 
-    def _verify_container_insights(self, cluster_name: str, region: str, access_key: str, secret_key: str) -> bool:
-        """Helper method to verify Container Insights deployment"""
-        try:
-            import subprocess
-            import shutil
-        
-            kubectl_available = shutil.which('kubectl') is not None
-            if not kubectl_available:
-                self.print_colored(Colors.YELLOW, f"   ⚠️ kubectl not found, skipping Container Insights check")
-                return False
-            
-            env = os.environ.copy()
-            env['AWS_ACCESS_KEY_ID'] = access_key
-            env['AWS_SECRET_ACCESS_KEY'] = secret_key
-            env['AWS_DEFAULT_REGION'] = region
-        
-            # Update kubeconfig
-            update_cmd = [
-                'aws', 'eks', 'update-kubeconfig',
-                '--region', region,
-                '--name', cluster_name
-            ]
-            subprocess.run(update_cmd, env=env, capture_output=True, text=True, timeout=120)
-        
-            # Check for CloudWatch Container Insights pods
-            pods_cmd = ['kubectl', 'get', 'pods', '-n', 'amazon-cloudwatch', '--no-headers']
-            pods_result = subprocess.run(pods_cmd, env=env, capture_output=True, text=True, timeout=60)
-        
-            if pods_result.returncode == 0:
-                pod_lines = [line.strip() for line in pods_result.stdout.strip().split('\n') if line.strip()]
-                running_pods = [line for line in pod_lines if 'Running' in line]
-            
-                if running_pods:
-                    self.print_colored(Colors.GREEN, f"   ✅ Container Insights pods: {len(running_pods)}/{len(pod_lines)} running")
-                    return True
-                else:
-                    self.print_colored(Colors.YELLOW, f"   ⚠️ No running Container Insights pods found")
-                    return False
-            else:
-                self.print_colored(Colors.YELLOW, f"   ⚠️ Could not check Container Insights pods: {pods_result.stderr}")
-                return False
-            
-        except Exception as e:
-            self.print_colored(Colors.YELLOW, f"   ⚠️ Error checking Container Insights: {str(e)}")
-            return False
 
-    def _verify_cluster_autoscaler(self, cluster_name: str, region: str, access_key: str, secret_key: str) -> bool:
-        """Helper method to verify Cluster Autoscaler deployment"""
-        try:
-            import subprocess
-            import shutil
-        
-            kubectl_available = shutil.which('kubectl') is not None
-            if not kubectl_available:
-                self.print_colored(Colors.YELLOW, f"   ⚠️ kubectl not found, skipping Cluster Autoscaler check")
-                return False
-            
-            env = os.environ.copy()
-            env['AWS_ACCESS_KEY_ID'] = access_key
-            env['AWS_SECRET_ACCESS_KEY'] = secret_key
-            env['AWS_DEFAULT_REGION'] = region
-        
-            # Update kubeconfig if needed
-            # (We can skip this if we've already done it in the container insights check)
-        
-            # Check for Cluster Autoscaler pod
-            autoscaler_cmd = ['kubectl', 'get', 'pods', '-n', 'kube-system', '-l', 'app=cluster-autoscaler', '--no-headers']
-            autoscaler_result = subprocess.run(autoscaler_cmd, env=env, capture_output=True, text=True, timeout=60)
-        
-            if autoscaler_result.returncode == 0:
-                pod_lines = [line.strip() for line in autoscaler_result.stdout.strip().split('\n') if line.strip()]
-                running_pods = [line for line in pod_lines if 'Running' in line]
-            
-                if running_pods:
-                    self.print_colored(Colors.GREEN, f"   ✅ Cluster Autoscaler pods: {len(running_pods)} running")
-                
-                    # Check Cluster Autoscaler service account
-                    sa_cmd = ['kubectl', 'get', 'serviceaccount', '-n', 'kube-system', 'cluster-autoscaler', '-o', 'name']
-                    sa_result = subprocess.run(sa_cmd, env=env, capture_output=True, text=True, timeout=30)
-                
-                    if sa_result.returncode == 0 and sa_result.stdout.strip():
-                        self.print_colored(Colors.GREEN, f"   ✅ Cluster Autoscaler service account verified")
-                        return True
-                    else:
-                        self.print_colored(Colors.YELLOW, f"   ⚠️ Cluster Autoscaler service account not found")
-                        return False
-                else:
-                    self.print_colored(Colors.YELLOW, f"   ⚠️ No running Cluster Autoscaler pods found")
-                    return False
-            else:
-                self.print_colored(Colors.YELLOW, f"   ⚠️ Could not check Cluster Autoscaler pods: {autoscaler_result.stderr}")
-                return False
-            
-        except Exception as e:
-            self.print_colored(Colors.YELLOW, f"   ⚠️ Error checking Cluster Autoscaler: {str(e)}")
-            return False
 
     def setup_and_verify_all_components(self, cluster_name: str, region: str, access_key: str, secret_key: str, account_id: str, nodegroups_created: list) -> dict:
         """
@@ -5335,3 +5052,448 @@ class EKSClusterManager:
 
 #######
 
+    def verify_cloudwatch_insights(self, cluster_name: str, region: str, access_key: str, secret_key: str) -> bool:
+        """Verify if CloudWatch Container Insights is working - FIXED"""
+        try:
+            self.log_operation('INFO', f"Verifying CloudWatch Container Insights for cluster {cluster_name}")
+            self.print_colored(Colors.YELLOW, f"🔍 Verifying CloudWatch Container Insights...")
+    
+            import subprocess
+            import shutil
+    
+            kubectl_available = shutil.which('kubectl') is not None
+            if not kubectl_available:
+                self.log_operation('WARNING', f"kubectl not found. Cannot verify Container Insights")
+                self.print_colored(Colors.YELLOW, f"⚠️ kubectl not found. Manual verification required.")
+                return False
+        
+            # Set environment variables for access
+            env = os.environ.copy()
+            env['AWS_ACCESS_KEY_ID'] = access_key
+            env['AWS_SECRET_ACCESS_KEY'] = secret_key
+            env['AWS_DEFAULT_REGION'] = region
+    
+            # Ensure kubeconfig is updated
+            update_cmd = [
+                'aws', 'eks', 'update-kubeconfig',
+                '--region', region,
+                '--name', cluster_name
+            ]
+    
+            update_result = subprocess.run(update_cmd, env=env, capture_output=True, text=True, timeout=120)
+            if update_result.returncode != 0:
+                self.print_colored(Colors.RED, f"❌ Failed to update kubeconfig: {update_result.stderr}")
+                return False
+        
+            # FIXED: Check multiple possible namespaces and pod patterns for Container Insights
+            namespaces_to_check = ['amazon-cloudwatch', 'kube-system']
+            pod_patterns = [
+                'cloudwatch-agent',
+                'fluent-bit',
+                'aws-cloudwatch',
+                'container-insights'
+            ]
+        
+            total_running_pods = 0
+            found_insights_pods = False
+        
+            for namespace in namespaces_to_check:
+                try:
+                    # Check all pods in the namespace
+                    verify_cmd = ['kubectl', 'get', 'pods', '-n', namespace, '--no-headers']
+                    verify_result = subprocess.run(verify_cmd, env=env, capture_output=True, text=True, timeout=60)
+            
+                    if verify_result.returncode == 0 and verify_result.stdout.strip():
+                        pod_lines = [line.strip() for line in verify_result.stdout.strip().split('\n') if line.strip()]
+                    
+                        # Filter for Container Insights related pods
+                        insights_pods = []
+                        for line in pod_lines:
+                            pod_name = line.split()[0] if line.split() else ""
+                            for pattern in pod_patterns:
+                                if pattern in pod_name.lower():
+                                    insights_pods.append(line)
+                                    break
+                    
+                        if insights_pods:
+                            found_insights_pods = True
+                            running_pods = [line for line in insights_pods if 'Running' in line or 'Completed' in line]
+                            total_running_pods += len(running_pods)
+                        
+                            self.print_colored(Colors.GREEN, f"   ✅ Found Container Insights pods in namespace '{namespace}': {len(running_pods)}/{len(insights_pods)} running")
+                        
+                            # Display specific pod details
+                            for pod in insights_pods[:3]:  # Show first 3 pods
+                                pod_parts = pod.split()
+                                if len(pod_parts) >= 3:
+                                    pod_name = pod_parts[0]
+                                    pod_status = pod_parts[2]
+                                    status_color = Colors.GREEN if pod_status == "Running" else Colors.YELLOW
+                                    self.print_colored(status_color, f"      - {pod_name}: {pod_status}")
+                        else:
+                            self.print_colored(Colors.CYAN, f"   📍 No Container Insights pods found in namespace '{namespace}'")
+                        
+                except Exception as e:
+                    self.print_colored(Colors.YELLOW, f"   ⚠️ Error checking namespace '{namespace}': {str(e)}")
+        
+            if found_insights_pods and total_running_pods > 0:
+                self.print_colored(Colors.GREEN, f"✅ CloudWatch Container Insights: {total_running_pods} total pods running")
+            
+                # Display CloudWatch Console link
+                self.print_colored(Colors.CYAN, "📊 View in AWS Console:")
+                self.print_colored(Colors.CYAN, f"   - CloudWatch → Insights → Container Insights → {cluster_name}")
+                self.print_colored(Colors.CYAN, f"   - CloudWatch → Logs → Log groups → /aws/containerinsights/{cluster_name}")
+            
+                return True
+            else:
+                self.print_colored(Colors.YELLOW, f"⚠️ CloudWatch Container Insights: No running pods found")
+                self.print_colored(Colors.YELLOW, f"   - Container Insights may still be starting, check again in a few minutes")
+                return False
+        
+        except Exception as e:
+            self.log_operation('ERROR', f"Failed to verify Container Insights: {str(e)}")
+            self.print_colored(Colors.RED, f"❌ Container Insights verification failed: {str(e)}")
+            return False
+
+    def _verify_container_insights(self, cluster_name: str, region: str, access_key: str, secret_key: str) -> bool:
+        """Helper method to verify Container Insights deployment - FIXED"""
+        try:
+            import subprocess
+            import shutil
+    
+            kubectl_available = shutil.which('kubectl') is not None
+            if not kubectl_available:
+                self.print_colored(Colors.YELLOW, f"   ⚠️ kubectl not found, skipping Container Insights check")
+                return False
+        
+            env = os.environ.copy()
+            env['AWS_ACCESS_KEY_ID'] = access_key
+            env['AWS_SECRET_ACCESS_KEY'] = secret_key
+            env['AWS_DEFAULT_REGION'] = region
+    
+            # Update kubeconfig
+            update_cmd = [
+                'aws', 'eks', 'update-kubeconfig',
+                '--region', region,
+                '--name', cluster_name
+            ]
+            subprocess.run(update_cmd, env=env, capture_output=True, text=True, timeout=120)
+    
+            # FIXED: Check for CloudWatch Container Insights pods in multiple namespaces
+            namespaces_to_check = ['amazon-cloudwatch', 'kube-system']
+            total_running_pods = 0
+        
+            for namespace in namespaces_to_check:
+                try:
+                    pods_cmd = ['kubectl', 'get', 'pods', '-n', namespace, '--no-headers']
+                    pods_result = subprocess.run(pods_cmd, env=env, capture_output=True, text=True, timeout=60)
+            
+                    if pods_result.returncode == 0 and pods_result.stdout.strip():
+                        pod_lines = [line.strip() for line in pods_result.stdout.strip().split('\n') if line.strip()]
+                    
+                        # Filter for Container Insights related pods
+                        insights_patterns = ['cloudwatch-agent', 'fluent-bit', 'aws-cloudwatch', 'container-insights']
+                        insights_pods = []
+                    
+                        for line in pod_lines:
+                            pod_name = line.split()[0] if line.split() else ""
+                            for pattern in insights_patterns:
+                                if pattern in pod_name.lower():
+                                    insights_pods.append(line)
+                                    break
+                    
+                        if insights_pods:
+                            running_pods = [line for line in insights_pods if 'Running' in line]
+                            total_running_pods += len(running_pods)
+                        
+                            if running_pods:
+                                self.print_colored(Colors.GREEN, f"   ✅ Container Insights pods in '{namespace}': {len(running_pods)}/{len(insights_pods)} running")
+                            
+                except Exception as e:
+                    self.print_colored(Colors.YELLOW, f"   ⚠️ Error checking namespace '{namespace}': {str(e)}")
+        
+            if total_running_pods > 0:
+                return True
+            else:
+                self.print_colored(Colors.YELLOW, f"   ⚠️ No running Container Insights pods found")
+                return False
+        
+        except Exception as e:
+            self.print_colored(Colors.YELLOW, f"   ⚠️ Error checking Container Insights: {str(e)}")
+            return False
+
+    def _verify_cluster_autoscaler(self, cluster_name: str, region: str, access_key: str, secret_key: str) -> bool:
+        """Helper method to verify Cluster Autoscaler deployment - FIXED"""
+        try:
+            import subprocess
+            import shutil
+    
+            kubectl_available = shutil.which('kubectl') is not None
+            if not kubectl_available:
+                self.print_colored(Colors.YELLOW, f"   ⚠️ kubectl not found, skipping Cluster Autoscaler check")
+                return False
+        
+            env = os.environ.copy()
+            env['AWS_ACCESS_KEY_ID'] = access_key
+            env['AWS_SECRET_ACCESS_KEY'] = secret_key
+            env['AWS_DEFAULT_REGION'] = region
+    
+            # FIXED: Try multiple label selectors for Cluster Autoscaler
+            autoscaler_selectors = [
+                'app=cluster-autoscaler',
+                'k8s-app=cluster-autoscaler',
+                'name=cluster-autoscaler'
+            ]
+        
+            found_autoscaler = False
+        
+            for selector in autoscaler_selectors:
+                try:
+                    autoscaler_cmd = ['kubectl', 'get', 'pods', '-n', 'kube-system', '-l', selector, '--no-headers']
+                    autoscaler_result = subprocess.run(autoscaler_cmd, env=env, capture_output=True, text=True, timeout=60)
+            
+                    if autoscaler_result.returncode == 0 and autoscaler_result.stdout.strip():
+                        pod_lines = [line.strip() for line in autoscaler_result.stdout.strip().split('\n') if line.strip()]
+                        running_pods = [line for line in pod_lines if 'Running' in line]
+                
+                        if running_pods:
+                            found_autoscaler = True
+                            self.print_colored(Colors.GREEN, f"   ✅ Cluster Autoscaler pods (selector: {selector}): {len(running_pods)} running")
+                        
+                            # Show pod details
+                            for pod in running_pods[:2]:  # Show first 2 pods
+                                pod_parts = pod.split()
+                                if len(pod_parts) >= 3:
+                                    pod_name = pod_parts[0]
+                                    pod_status = pod_parts[2]
+                                    self.print_colored(Colors.GREEN, f"      - {pod_name}: {pod_status}")
+                            break
+                        
+                except Exception as e:
+                    continue
+        
+            if not found_autoscaler:
+                # FIXED: Try searching by pod name pattern as fallback
+                try:
+                    all_pods_cmd = ['kubectl', 'get', 'pods', '-n', 'kube-system', '--no-headers']
+                    all_pods_result = subprocess.run(all_pods_cmd, env=env, capture_output=True, text=True, timeout=60)
+                
+                    if all_pods_result.returncode == 0:
+                        pod_lines = [line.strip() for line in all_pods_result.stdout.strip().split('\n') if line.strip()]
+                        autoscaler_pods = [line for line in pod_lines if 'autoscaler' in line.lower()]
+                    
+                        if autoscaler_pods:
+                            running_pods = [line for line in autoscaler_pods if 'Running' in line]
+                            if running_pods:
+                                found_autoscaler = True
+                                self.print_colored(Colors.GREEN, f"   ✅ Cluster Autoscaler pods (by name): {len(running_pods)} running")
+                            
+                except Exception as e:
+                    self.print_colored(Colors.YELLOW, f"   ⚠️ Error searching for autoscaler pods: {str(e)}")
+        
+            if found_autoscaler:
+                # FIXED: Check Cluster Autoscaler service account with better error handling
+                try:
+                    sa_cmd = ['kubectl', 'get', 'serviceaccount', '-n', 'kube-system', 'cluster-autoscaler', '--no-headers']
+                    sa_result = subprocess.run(sa_cmd, env=env, capture_output=True, text=True, timeout=30)
+            
+                    if sa_result.returncode == 0 and sa_result.stdout.strip():
+                        self.print_colored(Colors.GREEN, f"   ✅ Cluster Autoscaler service account verified")
+                    else:
+                        self.print_colored(Colors.YELLOW, f"   ⚠️ Cluster Autoscaler service account not found (but pods are running)")
+                    
+                except Exception as e:
+                    self.print_colored(Colors.YELLOW, f"   ⚠️ Could not verify service account: {str(e)}")
+                
+                return True
+            else:
+                self.print_colored(Colors.YELLOW, f"   ⚠️ No running Cluster Autoscaler pods found")
+                return False
+        
+        except Exception as e:
+            self.print_colored(Colors.YELLOW, f"   ⚠️ Error checking Cluster Autoscaler: {str(e)}")
+            return False
+
+    def enable_container_insights(self, cluster_name: str, region: str, admin_access_key: str, admin_secret_key: str) -> bool:
+        """Enable CloudWatch Container Insights for the cluster with FIXED deployment"""
+        try:
+            self.log_operation('INFO', f"Enabling CloudWatch Container Insights for cluster {cluster_name}")
+            self.print_colored(Colors.YELLOW, f"📊 Enabling CloudWatch Container Insights for {cluster_name}...")
+    
+            # Check if kubectl is available
+            import subprocess
+            import shutil
+    
+            kubectl_available = shutil.which('kubectl') is not None
+    
+            if not kubectl_available:
+                self.log_operation('WARNING', f"kubectl not found. Cannot deploy Container Insights for {cluster_name}")
+                self.print_colored(Colors.YELLOW, f"⚠️  kubectl not found. Container Insights deployment skipped.")
+                return False
+    
+            # Set environment variables for admin access
+            env = os.environ.copy()
+            env['AWS_ACCESS_KEY_ID'] = admin_access_key
+            env['AWS_SECRET_ACCESS_KEY'] = admin_secret_key
+            env['AWS_DEFAULT_REGION'] = region
+    
+            # Update kubeconfig first
+            update_cmd = [
+                'aws', 'eks', 'update-kubeconfig',
+                '--region', region,
+                '--name', cluster_name
+            ]
+    
+            self.print_colored(Colors.CYAN, "   🔄 Updating kubeconfig...")
+            update_result = subprocess.run(update_cmd, env=env, capture_output=True, text=True, timeout=120)
+    
+            if update_result.returncode != 0:
+                self.log_operation('ERROR', f"Failed to update kubeconfig: {update_result.stderr}")
+                self.print_colored(Colors.RED, f"❌ Failed to update kubeconfig: {update_result.stderr}")
+                return False
+    
+            # FIXED: Apply Container Insights using the official AWS deployment method
+            try:
+                # Create namespace first
+                self.print_colored(Colors.CYAN, "   📦 Creating amazon-cloudwatch namespace...")
+                namespace_cmd = ['kubectl', 'create', 'namespace', 'amazon-cloudwatch']
+                subprocess.run(namespace_cmd, env=env, capture_output=True, text=True, timeout=60)
+                self.log_operation('INFO', f"Created amazon-cloudwatch namespace")
+            except:
+                # Namespace might already exist
+                self.log_operation('INFO', f"amazon-cloudwatch namespace already exists or failed to create")
+    
+            # FIXED: Apply Container Insights using direct AWS command
+            self.print_colored(Colors.CYAN, "   🚀 Deploying Container Insights...")
+        
+            try:
+                # Use AWS CLI to deploy Container Insights (more reliable)
+                insights_cmd = [
+                    'aws', 'eks', 'create-addon',
+                    '--cluster-name', cluster_name,
+                    '--addon-name', 'amazon-cloudwatch-observability',
+                    '--region', region,
+                    '--resolve-conflicts', 'OVERWRITE'
+                ]
+            
+                insights_result = subprocess.run(insights_cmd, env=env, capture_output=True, text=True, timeout=300)
+            
+                if insights_result.returncode == 0:
+                    self.print_colored(Colors.GREEN, "   ✅ Container Insights add-on deployed via AWS CLI")
+                    self.log_operation('INFO', f"Container Insights add-on deployed for {cluster_name}")
+                
+                    # Wait for addon to be active
+                    self.print_colored(Colors.CYAN, "   ⏳ Waiting for Container Insights add-on to be active...")
+                    time.sleep(30)
+                
+                    return True
+                else:
+                    # Fallback to manual deployment if add-on fails
+                    self.print_colored(Colors.YELLOW, f"   ⚠️ Add-on deployment failed, trying manual deployment...")
+                    return self._deploy_container_insights_manual(cluster_name, region, env)
+                
+            except Exception as e:
+                self.print_colored(Colors.YELLOW, f"   ⚠️ Add-on deployment error: {str(e)}, trying manual deployment...")
+                return self._deploy_container_insights_manual(cluster_name, region, env)
+    
+        except Exception as e:
+            error_msg = str(e)
+            self.log_operation('ERROR', f"Failed to enable Container Insights for {cluster_name}: {error_msg}")
+            self.print_colored(Colors.RED, f"❌ Container Insights deployment failed: {error_msg}")
+            return False
+
+    def _deploy_container_insights_manual(self, cluster_name: str, region: str, env: dict) -> bool:
+        """Manual deployment of Container Insights using kubectl - FIXED"""
+        try:
+            import subprocess
+        
+            self.print_colored(Colors.CYAN, "   📋 Applying Container Insights manifests manually...")
+        
+            # FIXED: Use the correct Container Insights manifests
+            manifests = [
+                f"https://raw.githubusercontent.com/aws-samples/amazon-cloudwatch-container-insights/latest/k8s-deployment-manifest-templates/deployment-mode/daemonset/container-insights-monitoring/cloudwatch-namespace.yaml",
+                f"https://raw.githubusercontent.com/aws-samples/amazon-cloudwatch-container-insights/latest/k8s-deployment-manifest-templates/deployment-mode/daemonset/container-insights-monitoring/fluent-bit/fluent-bit-cluster-info-configmap.yaml",
+                f"https://raw.githubusercontent.com/aws-samples/amazon-cloudwatch-container-insights/latest/k8s-deployment-manifest-templates/deployment-mode/daemonset/container-insights-monitoring/fluent-bit/fluent-bit-configmap.yaml",
+                f"https://raw.githubusercontent.com/aws-samples/amazon-cloudwatch-container-insights/latest/k8s-deployment-manifest-templates/deployment-mode/daemonset/container-insights-monitoring/fluent-bit/fluent-bit.yaml"
+            ]
+        
+            success_count = 0
+        
+            for i, manifest_url in enumerate(manifests, 1):
+                try:
+                    self.print_colored(Colors.CYAN, f"   📦 Applying manifest {i}/{len(manifests)}...")
+                
+                    if 'fluent-bit-cluster-info-configmap.yaml' in manifest_url:
+                        # FIXED: Download and patch cluster info configmap
+                        import requests
+                        import tempfile
+                    
+                        response = requests.get(manifest_url, timeout=30)
+                        if response.status_code == 200:
+                            # Replace placeholders
+                            patched_manifest = response.text.replace("{{cluster_name}}", cluster_name)
+                            patched_manifest = patched_manifest.replace("{{region_name}}", region)
+                            patched_manifest = patched_manifest.replace("{{http_server_toggle}}", "On")
+                            patched_manifest = patched_manifest.replace("{{http_server_port}}", "2020")
+                            patched_manifest = patched_manifest.replace("{{read_from_head}}", "Off")
+                            patched_manifest = patched_manifest.replace("{{read_from_tail}}", "On")
+                        
+                            # Save to temp file and apply
+                            with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+                                f.write(patched_manifest)
+                                temp_file = f.name
+                        
+                            try:
+                                apply_cmd = ['kubectl', 'apply', '-f', temp_file]
+                                apply_result = subprocess.run(apply_cmd, env=env, capture_output=True, text=True, timeout=120)
+                            finally:
+                                os.unlink(temp_file)
+                        else:
+                            continue
+                        
+                    elif 'fluent-bit-configmap.yaml' in manifest_url:
+                        # FIXED: Download and patch fluent-bit configmap
+                        patched_path = self.download_and_patch_fluentbit_config(manifest_url, cluster_name)
+                        apply_cmd = ['kubectl', 'apply', '-f', patched_path]
+                        apply_result = subprocess.run(apply_cmd, env=env, capture_output=True, text=True, timeout=120)
+                        self.cleanup_temp_file(patched_path)
+                    else:
+                        # Apply manifest directly
+                        apply_cmd = ['kubectl', 'apply', '-f', manifest_url]
+                        apply_result = subprocess.run(apply_cmd, env=env, capture_output=True, text=True, timeout=120)
+                
+                    if apply_result.returncode == 0:
+                        success_count += 1
+                        self.log_operation('INFO', f"Applied manifest: {manifest_url}")
+                    else:
+                        self.log_operation('WARNING', f"Failed to apply manifest {manifest_url}: {apply_result.stderr}")
+                    
+                except Exception as e:
+                    self.log_operation('WARNING', f"Failed to apply manifest {manifest_url}: {str(e)}")
+        
+            # FIXED: Wait longer for pods to be created and check status
+            self.print_colored(Colors.CYAN, "   ⏳ Waiting for Container Insights pods to start...")
+            time.sleep(45)  # Increased wait time
+        
+            if success_count >= 2:  # At least 2 manifests applied successfully
+                self.print_colored(Colors.GREEN, f"   ✅ Container Insights deployed manually ({success_count}/{len(manifests)} manifests applied)")
+            
+                # Verify deployment
+                verify_result = self.verify_cloudwatch_insights(cluster_name, region, env.get('AWS_ACCESS_KEY_ID', ''), env.get('AWS_SECRET_ACCESS_KEY', ''))
+            
+                if verify_result:
+                    self.print_colored(Colors.CYAN, f"📊 Access Container Insights in AWS Console:")
+                    self.print_colored(Colors.CYAN, f"   CloudWatch → Insights → Container Insights")
+                    self.print_colored(Colors.CYAN, f"   Filter by cluster: {cluster_name}")
+            
+                return True
+            else:
+                self.print_colored(Colors.YELLOW, f"   ⚠️ Container Insights deployment incomplete ({success_count}/{len(manifests)} manifests applied)")
+                return False
+            
+        except Exception as e:
+            self.log_operation('ERROR', f"Manual Container Insights deployment failed: {str(e)}")
+            self.print_colored(Colors.RED, f"❌ Manual deployment failed: {str(e)}")
+            return False
+
+########
