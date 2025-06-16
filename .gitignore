@@ -138,3 +138,4 @@ aws_vpc_autofix*.json
 ./aws/*
 cache
 aws
+quota_cache*
