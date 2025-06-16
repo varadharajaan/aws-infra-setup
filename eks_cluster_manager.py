@@ -29,6 +29,7 @@ import zipfile
 import io
 import base64
 import tempfile
+import requests
 
 class Colors:
     """ANSI color codes for terminal output"""
@@ -2308,28 +2309,48 @@ class EKSClusterManager:
         except Exception:
             return 2  # Default fallback
         
+####
     def install_essential_addons(self, eks_client, cluster_name: str) -> bool:
-        """Install essential EKS add-ons"""
+        """Install essential EKS add-ons including EFS CSI driver with proper credentials"""
         try:
             self.log_operation('INFO', f"Installing essential add-ons for cluster {cluster_name}")
-    
-            # Get the EKS version to determine compatible add-on versions
+
+            # Get the EKS version and cluster info
             try:
                 cluster_info = eks_client.describe_cluster(name=cluster_name)
                 eks_version = cluster_info['cluster']['version']
+                cluster_arn = cluster_info['cluster']['arn']
+                account_id = cluster_arn.split(':')[4]
+                region = cluster_arn.split(':')[3]
+            
                 self.log_operation('INFO', f"Detected EKS version: {eks_version}")
             except Exception as e:
-                eks_version = "1.28"  # Default to latest version if we can't detect
+                eks_version = "1.28"
                 self.log_operation('WARNING', f"Could not detect EKS version, using default {eks_version}: {str(e)}")
-    
-            # Define add-ons with appropriate versions for the cluster's EKS version
+
+            # Get the session from eks_client to reuse credentials
+            # Extract session info from the eks_client
+            session = None
+            try:
+                # Try to get session from the existing eks_client
+                session = eks_client._client_config.__dict__.get('session') or boto3.Session()
+            except:
+                # Fallback: create session using the same region
+                session = boto3.Session(region_name=region)
+
+            # Create IAM client using the same session/credentials
+            iam_client = session.client('iam', region_name=region)
+        
+            # Attach CSI policies to NodeInstanceRole
+            self.attach_csi_policies_to_node_role(iam_client, account_id)
+
+            # Define add-ons including EFS CSI driver
             if eks_version.startswith('1.28'):
                 addons = [
                     {
                         'addonName': 'vpc-cni',
                         'addonVersion': 'v1.15.1-eksbuild.1',
-                        'description': 'VPC CNI for pod networking',
-                        'serviceAccountRoleArn': None  # Will set dynamically if needed
+                        'description': 'VPC CNI for pod networking'
                     },
                     {
                         'addonName': 'coredns',
@@ -2344,8 +2365,12 @@ class EKSClusterManager:
                     {
                         'addonName': 'aws-ebs-csi-driver',
                         'addonVersion': 'v1.25.0-eksbuild.1',
-                        'description': 'EBS CSI driver for persistent volumes',
-                        'serviceAccountRoleArn': None  # Will set dynamically if needed
+                        'description': 'EBS CSI driver for persistent volumes'
+                    },
+                    {
+                        'addonName': 'aws-efs-csi-driver',
+                        'addonVersion': 'v1.7.0-eksbuild.1',
+                        'description': 'EFS CSI driver for shared persistent volumes'
                     }
                 ]
             elif eks_version.startswith('1.27'):
@@ -2353,8 +2378,7 @@ class EKSClusterManager:
                     {
                         'addonName': 'vpc-cni',
                         'addonVersion': 'v1.14.0-eksbuild.3',
-                        'description': 'VPC CNI for pod networking',
-                        'serviceAccountRoleArn': None  # Will set dynamically if needed
+                        'description': 'VPC CNI for pod networking'
                     },
                     {
                         'addonName': 'coredns',
@@ -2363,25 +2387,26 @@ class EKSClusterManager:
                     },
                     {
                         'addonName': 'kube-proxy',
-                        'addonVersion': 'v1.27.4-eksbuild.2', 
+                        'addonVersion': 'v1.27.4-eksbuild.2',
                         'description': 'Kube-proxy for service discovery'
                     },
                     {
                         'addonName': 'aws-ebs-csi-driver',
                         'addonVersion': 'v1.24.0-eksbuild.1',
-                        'description': 'EBS CSI driver for persistent volumes',
-                        'serviceAccountRoleArn': None  # Will set dynamically if needed
+                        'description': 'EBS CSI driver for persistent volumes'
+                    },
+                    {
+                        'addonName': 'aws-efs-csi-driver',
+                        'addonVersion': 'v1.6.0-eksbuild.1',
+                        'description': 'EFS CSI driver for shared persistent volumes'
                     }
                 ]
             else:
-                # Default versions as fallback
-                self.log_operation('WARNING', f"Using default add-on versions for EKS {eks_version}")
                 addons = [
                     {
                         'addonName': 'vpc-cni',
                         'addonVersion': 'latest',
-                        'description': 'VPC CNI for pod networking',
-                        'serviceAccountRoleArn': None  # Will set dynamically if needed
+                        'description': 'VPC CNI for pod networking'
                     },
                     {
                         'addonName': 'coredns',
@@ -2396,34 +2421,18 @@ class EKSClusterManager:
                     {
                         'addonName': 'aws-ebs-csi-driver',
                         'addonVersion': 'latest',
-                        'description': 'EBS CSI driver for persistent volumes',
-                        'serviceAccountRoleArn': None  # Will set dynamically if needed
+                        'description': 'EBS CSI driver for persistent volumes'
+                    },
+                    {
+                        'addonName': 'aws-efs-csi-driver',
+                        'addonVersion': 'latest',
+                        'description': 'EFS CSI driver for shared persistent volumes'
                     }
                 ]
-    
-            # Try to get CSI driver role ARN for the EBS CSI driver
-            try:
-                # Get the account ID from the cluster ARN
-                account_id = cluster_info['cluster']['arn'].split(':')[4]
-                # Construct the role ARN - this role should have been created in ensure_iam_roles
-                ebs_csi_role_arn = f"arn:aws:iam::{account_id}:role/NodeInstanceRole"
-            
-                # Update the EBS CSI driver or vpc-cni addon with the role ARN
-                for addon in addons:
-                    if addon['addonName'] == 'aws-ebs-csi-driver':
-                        addon['serviceAccountRoleArn'] = ebs_csi_role_arn
-                        break
-                    elif addon['addonName'] == 'vpc-cni':
-                        addon['serviceAccountRoleArn'] = ebs_csi_role_arn
-                        break
-                    
-                self.log_operation('INFO', f"Using EBS CSI role ARN: {ebs_csi_role_arn}")
-            except Exception as e:
-                self.log_operation('WARNING', f"Could not determine EBS CSI role ARN: {str(e)}")
-    
+
             successful_addons = []
             failed_addons = []
-    
+
             for addon in addons:
                 try:
                     self.print_colored(Colors.CYAN, f"   📦 Installing {addon['addonName']} ({addon['description']})...")
@@ -2438,13 +2447,6 @@ class EKSClusterManager:
                     # Add version if specific version is provided
                     if addon['addonVersion'] != 'latest':
                         create_params['addonVersion'] = addon['addonVersion']
-                    
-                    # Add service account role ARN for EBS CSI driver if available
-                    if addon['addonName'] == 'aws-ebs-csi-driver' and addon['serviceAccountRoleArn']:
-                        create_params['serviceAccountRoleArn'] = addon['serviceAccountRoleArn']
-
-                    elif addon['addonName'] == 'vpc-cni' and addon['serviceAccountRoleArn']:
-                        create_params['serviceAccountRoleArn'] = addon['serviceAccountRoleArn']
                 
                     # Create the add-on
                     eks_client.create_addon(**create_params)
@@ -2457,21 +2459,20 @@ class EKSClusterManager:
                             addonName=addon['addonName'],
                             WaiterConfig={'Delay': 15, 'MaxAttempts': 20}
                         )
-                    
+                
                         successful_addons.append(addon['addonName'])
                         self.print_colored(Colors.GREEN, f"   ✅ {addon['addonName']} installed successfully")
                         self.log_operation('INFO', f"Add-on {addon['addonName']} installed successfully for {cluster_name}")
                     except Exception as waiter_error:
-                        # If waiter fails but addon is created, mark as warning
+                        # Check addon status
                         try:
                             addon_info = eks_client.describe_addon(
                                 clusterName=cluster_name, 
                                 addonName=addon['addonName']
                             )
-                        
+                    
                             status = addon_info['addon']['status']
-                            if status == 'DEGRADED' and addon['addonName'] == 'aws-ebs-csi-driver':
-                                # For EBS CSI driver, DEGRADED can sometimes be normal initially
+                            if status in ['DEGRADED', 'UPDATE_FAILED'] and 'csi-driver' in addon['addonName']:
                                 self.print_colored(Colors.YELLOW, f"   ⚠️ {addon['addonName']} installed but status is {status} (may work normally)")
                                 self.log_operation('WARNING', f"Add-on {addon['addonName']} installed with status {status}")
                                 successful_addons.append(addon['addonName'])
@@ -2488,17 +2489,168 @@ class EKSClusterManager:
                     failed_addons.append(addon['addonName'])
                     self.log_operation('WARNING', f"Failed to install {addon['addonName']}: {str(e)}")
                     self.print_colored(Colors.YELLOW, f"   ⚠️ Failed to install {addon['addonName']}: {str(e)}")
-        
+
             self.print_colored(Colors.GREEN, f"✅ Add-ons installation completed: {len(successful_addons)} successful, {len(failed_addons)} failed")
             self.log_operation('INFO', f"Add-ons installation completed for {cluster_name}: {successful_addons}")
-    
+
             return len(successful_addons) > 0
-    
+
         except Exception as e:
             self.log_operation('ERROR', f"Failed to install add-ons for {cluster_name}: {str(e)}")
             self.print_colored(Colors.RED, f"❌ Add-ons installation failed: {str(e)}")
+
+            return False
+    def attach_csi_policies_to_node_role(self, iam_client, account_id: str) -> bool:
+        """Attach all required CSI policies including custom aws_csi_policy.json to NodeInstanceRole"""
+        try:
+            node_role_name = "NodeInstanceRole"
+        
+            # Step 1: Create and attach custom CSI policy from aws_csi_policy.json
+            custom_policy_attached = self.create_and_attach_custom_csi_policy(iam_client, account_id, node_role_name)
+        
+            # Step 2: Attach AWS managed policies
+            aws_managed_policies = [
+                "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy",
+                "arn:aws:iam::aws:policy/service-role/AmazonEFSCSIDriverPolicy",
+                "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"  # For VPC CNI
+            ]
+        
+            managed_policies_attached = 0
+            for policy_arn in aws_managed_policies:
+                try:
+                    iam_client.attach_role_policy(
+                        RoleName=node_role_name,
+                        PolicyArn=policy_arn
+                    )
+                    policy_name = policy_arn.split('/')[-1]
+                    self.log_operation('INFO', f"Attached AWS managed policy {policy_name} to {node_role_name}")
+                    self.print_colored(Colors.GREEN, f"   ✅ Attached {policy_name} to NodeInstanceRole")
+                    managed_policies_attached += 1
+                
+                except Exception as e:
+                    # Check if policy is already attached
+                    if "attached" in str(e).lower() or "already" in str(e).lower():
+                        policy_name = policy_arn.split('/')[-1]
+                        self.log_operation('INFO', f"AWS managed policy {policy_name} already attached to {node_role_name}")
+                        self.print_colored(Colors.CYAN, f"   ℹ️  {policy_name} already attached to NodeInstanceRole")
+                        managed_policies_attached += 1
+                    else:
+                        policy_name = policy_arn.split('/')[-1]
+                        self.log_operation('WARNING', f"Failed to attach {policy_name}: {str(e)}")
+                        self.print_colored(Colors.YELLOW, f"   ⚠️ Failed to attach {policy_name}: {str(e)}")
+        
+            # Summary
+            total_policies = len(aws_managed_policies) + (1 if custom_policy_attached else 0)
+            attached_policies = managed_policies_attached + (1 if custom_policy_attached else 0)
+        
+            self.print_colored(Colors.GREEN, f"   📊 Policy attachment summary: {attached_policies}/{total_policies} policies attached")
+            self.log_operation('INFO', f"CSI policies attachment completed: {attached_policies}/{total_policies} successful")
+        
+            return attached_policies > 0
+        
+        except Exception as e:
+            self.log_operation('ERROR', f"Failed to attach CSI policies: {str(e)}")
             return False
 
+    def create_and_attach_custom_csi_policy(self, iam_client, account_id: str, node_role_name: str) -> bool:
+        """Create custom CSI policy from aws_csi_policy.json and attach to NodeInstanceRole"""
+        try:
+            custom_policy_name = "CustomAWSCSIDriverPolicy"
+            custom_policy_arn = f"arn:aws:iam::{account_id}:policy/{custom_policy_name}"
+        
+            # Step 1: Load custom policy from aws_csi_policy.json
+            policy_document = self.load_custom_csi_policy()
+            if not policy_document:
+                return False
+        
+            # Step 2: Check if custom policy already exists
+            try:
+                iam_client.get_policy(PolicyArn=custom_policy_arn)
+                self.log_operation('INFO', f"Custom CSI policy {custom_policy_name} already exists")
+                self.print_colored(Colors.CYAN, f"   ℹ️  Custom CSI policy {custom_policy_name} already exists")
+            
+            except iam_client.exceptions.NoSuchEntityException:
+                # Step 3: Create the custom policy if it doesn't exist
+                self.log_operation('INFO', f"Creating custom CSI policy {custom_policy_name}")
+                self.print_colored(Colors.CYAN, f"   🔧 Creating custom CSI policy {custom_policy_name}")
+            
+                try:
+                    policy_response = iam_client.create_policy(
+                        PolicyName=custom_policy_name,
+                        PolicyDocument=policy_document,
+                        Description="Custom AWS CSI Driver Policy from aws_csi_policy.json"
+                    )
+                    custom_policy_arn = policy_response['Policy']['Arn']
+                    self.log_operation('INFO', f"Created custom CSI policy: {custom_policy_arn}")
+                    self.print_colored(Colors.GREEN, f"   ✅ Created custom CSI policy: {custom_policy_name}")
+                
+                    # Wait for policy to be available
+                    time.sleep(5)
+                
+                except Exception as e:
+                    self.log_operation('ERROR', f"Failed to create custom CSI policy: {str(e)}")
+                    self.print_colored(Colors.RED, f"   ❌ Failed to create custom CSI policy: {str(e)}")
+                    return False
+        
+            # Step 4: Attach the custom policy to NodeInstanceRole
+            try:
+                iam_client.attach_role_policy(
+                    RoleName=node_role_name,
+                    PolicyArn=custom_policy_arn
+                )
+                self.log_operation('INFO', f"Attached custom CSI policy {custom_policy_name} to {node_role_name}")
+                self.print_colored(Colors.GREEN, f"   ✅ Attached custom CSI policy {custom_policy_name} to NodeInstanceRole")
+                return True
+            
+            except Exception as e:
+                # Check if policy is already attached
+                if "attached" in str(e).lower() or "already" in str(e).lower():
+                    self.log_operation('INFO', f"Custom CSI policy {custom_policy_name} already attached to {node_role_name}")
+                    self.print_colored(Colors.CYAN, f"   ℹ️  Custom CSI policy {custom_policy_name} already attached to NodeInstanceRole")
+                    return True
+                else:
+                    self.log_operation('ERROR', f"Failed to attach custom CSI policy to {node_role_name}: {str(e)}")
+                    self.print_colored(Colors.RED, f"   ❌ Failed to attach custom CSI policy: {str(e)}")
+                    return False
+                
+        except Exception as e:
+            self.log_operation('ERROR', f"Failed to create and attach custom CSI policy: {str(e)}")
+            self.print_colored(Colors.RED, f"   ❌ Custom CSI policy setup failed: {str(e)}")
+            return False
+
+    def load_custom_csi_policy(self) -> str:
+        """Load custom CSI policy from aws_csi_policy.json file"""
+        try:
+            policy_file = 'aws_csi_policy.json'
+        
+            # Check if file exists
+            if not os.path.exists(policy_file):
+                self.log_operation('ERROR', f"Custom CSI policy file not found: {policy_file}")
+                self.print_colored(Colors.RED, f"   ❌ Custom CSI policy file not found: {policy_file}")
+                return None
+        
+            # Load and validate JSON
+            with open(policy_file, 'r') as f:
+                policy_content = f.read().strip()
+            
+            # Validate JSON format
+            try:
+                json.loads(policy_content)  # Validate JSON syntax
+            except json.JSONDecodeError as e:
+                self.log_operation('ERROR', f"Invalid JSON in {policy_file}: {str(e)}")
+                self.print_colored(Colors.RED, f"   ❌ Invalid JSON in {policy_file}: {str(e)}")
+                return None
+        
+            self.log_operation('INFO', f"Successfully loaded custom CSI policy from {policy_file}")
+            self.print_colored(Colors.GREEN, f"   ✅ Loaded custom CSI policy from {policy_file}")
+        
+            return policy_content
+        
+        except Exception as e:
+            self.log_operation('ERROR', f"Failed to load custom CSI policy from {policy_file}: {str(e)}")
+            self.print_colored(Colors.RED, f"   ❌ Failed to load custom CSI policy: {str(e)}")
+            return None
+####
     def verify_user_access(self, cluster_name: str, region: str, username: str, access_key: str, secret_key: str) -> bool:
         """Verify user access to the cluster and check cluster endpoint configuration"""
         try:
@@ -4690,7 +4842,6 @@ class EKSClusterManager:
         Downloads the fluent-bit-configmap.yaml file, replaces {cluster_name} placeholder,
         and writes it to a temporary file. Returns the path to the modified file.
         """
-        import requests
         try:
             self.log_operation('INFO', f"Downloading and patching manifest from: {manifest_url}")
             response = requests.get(manifest_url)
