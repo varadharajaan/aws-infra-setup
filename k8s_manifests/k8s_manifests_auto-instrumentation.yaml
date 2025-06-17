@@ -1,0 +1,148 @@
+apiVersion: opentelemetry.io/v1alpha1
+kind: Instrumentation
+metadata:
+  name: application-signals-instrumentation
+  namespace: aws-application-signals-system
+  labels:
+    app: application-signals-instrumentation
+spec:
+  exporter:
+    endpoint: http://application-signals-collector.aws-application-signals-system:4318
+  
+  # Java auto-instrumentation
+  java:
+    image: public.ecr.aws/aws-observability/adot-autoinstrumentation-java:v1.32.0
+    env:
+      - name: AWS_APPLICATION_SIGNALS_ENABLED
+        value: "true"
+      - name: AWS_APPLICATION_SIGNALS_EXPORTER_ENDPOINT
+        value: "http://application-signals-collector.aws-application-signals-system:4318"
+      - name: OTEL_METRICS_EXPORTER
+        value: "none"
+      - name: OTEL_AWS_APPLICATION_SIGNALS_ENABLED
+        value: "true"
+      - name: OTEL_TRACES_EXPORTER
+        value: "otlp"
+      - name: OTEL_LOGS_EXPORTER
+        value: "otlp"
+      - name: OTEL_EXPORTER_OTLP_ENDPOINT
+        value: "http://application-signals-collector.aws-application-signals-system:4318"
+      - name: OTEL_RESOURCE_ATTRIBUTES
+        value: "service.name=aws-application-signals-auto,service.namespace=${CLUSTER_NAME},aws.application.signals.enabled=true"
+  
+  # Python auto-instrumentation
+  python:
+    image: public.ecr.aws/aws-observability/adot-autoinstrumentation-python:v0.46b0
+    env:
+      - name: AWS_APPLICATION_SIGNALS_ENABLED
+        value: "true"
+      - name: AWS_APPLICATION_SIGNALS_EXPORTER_ENDPOINT
+        value: "http://application-signals-collector.aws-application-signals-system:4318"
+      - name: OTEL_METRICS_EXPORTER
+        value: "none"
+      - name: OTEL_AWS_APPLICATION_SIGNALS_ENABLED
+        value: "true"
+      - name: OTEL_TRACES_EXPORTER
+        value: "otlp"
+      - name: OTEL_LOGS_EXPORTER
+        value: "otlp"
+      - name: OTEL_EXPORTER_OTLP_ENDPOINT
+        value: "http://application-signals-collector.aws-application-signals-system:4318"
+      - name: OTEL_RESOURCE_ATTRIBUTES
+        value: "service.name=aws-application-signals-auto,service.namespace=${CLUSTER_NAME},aws.application.signals.enabled=true"
+  
+  # Node.js auto-instrumentation
+  nodejs:
+    image: public.ecr.aws/aws-observability/adot-autoinstrumentation-node:v0.54.0
+    env:
+      - name: AWS_APPLICATION_SIGNALS_ENABLED
+        value: "true"
+      - name: AWS_APPLICATION_SIGNALS_EXPORTER_ENDPOINT
+        value: "http://application-signals-collector.aws-application-signals-system:4318"
+      - name: OTEL_METRICS_EXPORTER
+        value: "none"
+      - name: OTEL_AWS_APPLICATION_SIGNALS_ENABLED
+        value: "true"
+      - name: OTEL_TRACES_EXPORTER
+        value: "otlp"
+      - name: OTEL_LOGS_EXPORTER
+        value: "otlp"
+      - name: OTEL_EXPORTER_OTLP_ENDPOINT
+        value: "http://application-signals-collector.aws-application-signals-system:4318"
+      - name: OTEL_RESOURCE_ATTRIBUTES
+        value: "service.name=aws-application-signals-auto,service.namespace=${CLUSTER_NAME},aws.application.signals.enabled=true"
+  
+  # .NET auto-instrumentation
+  dotnet:
+    image: public.ecr.aws/aws-observability/adot-autoinstrumentation-dotnet:v1.7.0
+    env:
+      - name: AWS_APPLICATION_SIGNALS_ENABLED
+        value: "true"
+      - name: AWS_APPLICATION_SIGNALS_EXPORTER_ENDPOINT
+        value: "http://application-signals-collector.aws-application-signals-system:4318"
+      - name: OTEL_METRICS_EXPORTER
+        value: "none"
+      - name: OTEL_AWS_APPLICATION_SIGNALS_ENABLED
+        value: "true"
+      - name: OTEL_TRACES_EXPORTER
+        value: "otlp"
+      - name: OTEL_LOGS_EXPORTER
+        value: "otlp"
+      - name: OTEL_EXPORTER_OTLP_ENDPOINT
+        value: "http://application-signals-collector.aws-application-signals-system:4318"
+      - name: OTEL_RESOURCE_ATTRIBUTES
+        value: "service.name=aws-application-signals-auto,service.namespace=${CLUSTER_NAME},aws.application.signals.enabled=true"
+  
+  # Go auto-instrumentation  
+  go:
+    image: public.ecr.aws/aws-observability/adot-autoinstrumentation-go:v0.15.0-alpha
+    env:
+      - name: AWS_APPLICATION_SIGNALS_ENABLED
+        value: "true"
+      - name: AWS_APPLICATION_SIGNALS_EXPORTER_ENDPOINT
+        value: "http://application-signals-collector.aws-application-signals-system:4318"
+      - name: OTEL_METRICS_EXPORTER
+        value: "none"
+      - name: OTEL_AWS_APPLICATION_SIGNALS_ENABLED
+        value: "true"
+      - name: OTEL_TRACES_EXPORTER
+        value: "otlp"
+      - name: OTEL_LOGS_EXPORTER
+        value: "otlp"
+      - name: OTEL_EXPORTER_OTLP_ENDPOINT
+        value: "http://application-signals-collector.aws-application-signals-system:4318"
+      - name: OTEL_RESOURCE_ATTRIBUTES
+        value: "service.name=aws-application-signals-auto,service.namespace=${CLUSTER_NAME},aws.application.signals.enabled=true"
+  
+  # Resource configuration
+  resource:
+    addK8sUIDAttributes: true
+    resourceAttributes:
+      service.name: "aws-application-signals-auto"
+      service.namespace: "${CLUSTER_NAME}"
+      aws.application.signals.enabled: "true"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: application-signals-config
+  namespace: aws-application-signals-system
+  labels:
+    app: application-signals-config
+data:
+  config.yaml: |
+    auto_instrumentation:
+      enabled: true
+      supported_languages:
+        - java
+        - python
+        - nodejs
+        - dotnet
+        - go
+      default_sampling_rate: 0.1
+      trace_propagation: true
+      metrics_collection: true
+      custom_attributes:
+        cluster.name: "${CLUSTER_NAME}"
+        environment: "production"
+        aws.region: "${AWS_REGION}"

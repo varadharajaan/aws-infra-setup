@@ -145,6 +145,288 @@ class EKSClusterManager:
         """Generate nodegroup name based on strategy"""
         return f"{cluster_name}-ng-{strategy}"
    
+    def get_application_signals_operator_manifest(self, cluster_name: str, region: str, account_id: str) -> str:
+        """Load Application Signals operator manifest from YAML file"""
+        try:
+            manifest = self.load_yaml_file("application-signals-operator.yaml")
+        
+            # Replace placeholders
+            manifest = manifest.replace("${CLUSTER_NAME}", cluster_name)
+            manifest = manifest.replace("${AWS_REGION}", region)
+            manifest = manifest.replace("${ACCOUNT_ID}", account_id)
+        
+            return manifest
+        
+        except Exception as e:
+            self.log_operation('ERROR', f"Failed to load Application Signals operator manifest: {str(e)}")
+            return ""
+
+    def get_adot_collector_manifest(self, cluster_name: str, region: str, account_id: str) -> str:
+        """Load ADOT Collector manifest from YAML file"""
+        try:
+            manifest = self.load_yaml_file("adot-collector.yaml")
+        
+            # Replace placeholders
+            manifest = manifest.replace("${CLUSTER_NAME}", cluster_name)
+            manifest = manifest.replace("${AWS_REGION}", region)
+            manifest = manifest.replace("${ACCOUNT_ID}", account_id)
+        
+            return manifest
+        
+        except Exception as e:
+            self.log_operation('ERROR', f"Failed to load ADOT Collector manifest: {str(e)}")
+            return ""
+
+    def get_auto_instrumentation_manifest(self, cluster_name: str, region: str) -> str:
+        """Load auto-instrumentation manifest from YAML file"""
+        try:
+            manifest = self.load_yaml_file("auto-instrumentation.yaml")
+        
+            # Replace placeholders
+            manifest = manifest.replace("${CLUSTER_NAME}", cluster_name)
+            manifest = manifest.replace("${AWS_REGION}", region)
+        
+            return manifest
+        
+        except Exception as e:
+            self.log_operation('ERROR', f"Failed to load auto-instrumentation manifest: {str(e)}")
+            return ""
+
+    def enable_application_signals(self, cluster_name: str, region: str, admin_access_key: str, admin_secret_key: str, account_id: str) -> bool:
+        """Enable CloudWatch Application Signals for comprehensive observability"""
+        try:
+            self.log_operation('INFO', f"Enabling CloudWatch Application Signals for cluster {cluster_name}")
+            self.print_colored(Colors.YELLOW, f"📊 Enabling CloudWatch Application Signals for {cluster_name}...")
+        
+            # Check if kubectl is available
+            import subprocess
+            import shutil
+        
+            kubectl_available = shutil.which('kubectl') is not None
+        
+            if not kubectl_available:
+                self.log_operation('WARNING', f"kubectl not found. Cannot deploy Application Signals for {cluster_name}")
+                self.print_colored(Colors.YELLOW, f"⚠️  kubectl not found. Application Signals deployment skipped.")
+                return False
+        
+            # Set environment variables for admin access
+            env = os.environ.copy()
+            env['AWS_ACCESS_KEY_ID'] = admin_access_key
+            env['AWS_SECRET_ACCESS_KEY'] = admin_secret_key
+            env['AWS_DEFAULT_REGION'] = region
+        
+            # Update kubeconfig first
+            update_cmd = [
+                'aws', 'eks', 'update-kubeconfig',
+                '--region', region,
+                '--name', cluster_name
+            ]
+        
+            self.print_colored(Colors.CYAN, "   🔄 Updating kubeconfig for Application Signals...")
+            update_result = subprocess.run(update_cmd, env=env, capture_output=True, text=True, timeout=120)
+        
+            if update_result.returncode != 0:
+                self.log_operation('ERROR', f"Failed to update kubeconfig: {update_result.stderr}")
+                self.print_colored(Colors.RED, f"❌ Failed to update kubeconfig: {update_result.stderr}")
+                return False
+        
+            # Step 1: Create IAM role first
+            self.print_colored(Colors.CYAN, "   🔐 Setting up IAM role for Application Signals...")
+        
+            admin_session = boto3.Session(
+                aws_access_key_id=admin_access_key,
+                aws_secret_access_key=admin_secret_key,
+                region_name=region
+            )
+            iam_client = admin_session.client('iam')
+        
+            role_arn = self.create_application_signals_iam_role(iam_client, account_id)
+            if not role_arn:
+                self.print_colored(Colors.YELLOW, "   ⚠️  IAM role creation failed, continuing with deployment...")
+        
+            # Step 2: Enable Application Signals service
+            self.print_colored(Colors.CYAN, "   📡 Enabling Application Signals service...")
+        
+            try:
+                enable_cmd = [
+                    'aws', 'application-signals', 'start-discovery',
+                    '--region', region
+                ]
+            
+                enable_result = subprocess.run(enable_cmd, env=env, capture_output=True, text=True, timeout=120)
+            
+                if enable_result.returncode == 0:
+                    self.print_colored(Colors.GREEN, "   ✅ Application Signals service enabled")
+                    self.log_operation('INFO', f"Application Signals service enabled for {cluster_name}")
+                else:
+                    self.log_operation('WARNING', f"Application Signals service enablement failed: {enable_result.stderr}")
+                    self.print_colored(Colors.YELLOW, f"   ⚠️  Application Signals service enablement failed, continuing...")
+            except Exception as e:
+                self.print_colored(Colors.YELLOW, f"   ⚠️  Could not enable Application Signals service: {str(e)}")
+        
+            # Step 3: Deploy Application Signals operator
+            self.print_colored(Colors.CYAN, "   🚀 Deploying Application Signals operator...")
+        
+            operator_manifest = self.get_application_signals_operator_manifest(cluster_name, region, account_id)
+            if not operator_manifest:
+                self.print_colored(Colors.RED, "   ❌ Failed to load operator manifest")
+                return False
+        
+            if self.apply_kubernetes_manifest_fixed(cluster_name, region, admin_access_key, admin_secret_key, operator_manifest):
+                self.print_colored(Colors.GREEN, "   ✅ Application Signals operator deployed")
+                self.log_operation('INFO', f"Application Signals operator deployed for {cluster_name}")
+            else:
+                self.print_colored(Colors.YELLOW, "   ⚠️  Application Signals operator deployment failed")
+                return False
+        
+            # Wait for operator to be ready
+            time.sleep(30)
+        
+            # Step 4: Deploy ADOT Collector
+            self.print_colored(Colors.CYAN, "   📊 Deploying ADOT Collector for Application Signals...")
+        
+            adot_manifest = self.get_adot_collector_manifest(cluster_name, region, account_id)
+            if not adot_manifest:
+                self.print_colored(Colors.RED, "   ❌ Failed to load ADOT Collector manifest")
+                return False
+        
+            if self.apply_kubernetes_manifest_fixed(cluster_name, region, admin_access_key, admin_secret_key, adot_manifest):
+                self.print_colored(Colors.GREEN, "   ✅ ADOT Collector deployed")
+                self.log_operation('INFO', f"ADOT Collector deployed for {cluster_name}")
+            else:
+                self.print_colored(Colors.YELLOW, "   ⚠️  ADOT Collector deployment failed")
+                return False
+        
+            # Step 5: Deploy auto-instrumentation
+            self.print_colored(Colors.CYAN, "   🔍 Deploying auto-instrumentation for all supported languages...")
+        
+            auto_instrumentation_manifest = self.get_auto_instrumentation_manifest(cluster_name, region)
+            if not auto_instrumentation_manifest:
+                self.print_colored(Colors.RED, "   ❌ Failed to load auto-instrumentation manifest")
+                return False
+        
+            if self.apply_kubernetes_manifest_fixed(cluster_name, region, admin_access_key, admin_secret_key, auto_instrumentation_manifest):
+                self.print_colored(Colors.GREEN, "   ✅ Auto-instrumentation deployed")
+                self.log_operation('INFO', f"Auto-instrumentation deployed for {cluster_name}")
+            else:
+                self.print_colored(Colors.YELLOW, "   ⚠️  Auto-instrumentation deployment failed")
+                return False
+        
+            # Step 6: Verify deployment
+            self.print_colored(Colors.CYAN, "   ⏳ Verifying Application Signals deployment...")
+            time.sleep(30)
+        
+            verify_cmd = ['kubectl', 'get', 'pods', '-n', 'aws-application-signals-system', '--no-headers']
+            verify_result = subprocess.run(verify_cmd, env=env, capture_output=True, text=True, timeout=60)
+        
+            if verify_result.returncode == 0:
+                pod_lines = [line.strip() for line in verify_result.stdout.strip().split('\n') if line.strip()]
+                running_pods = [line for line in pod_lines if 'Running' in line or 'Completed' in line]
+            
+                self.print_colored(Colors.GREEN, f"   ✅ Application Signals pods: {len(running_pods)} ready out of {len(pod_lines)} total")
+                self.log_operation('INFO', f"Application Signals deployment verified: {len(running_pods)} pods ready")
+            
+                # Access information
+                self.print_colored(Colors.CYAN, f"📊 Access Application Signals in AWS Console:")
+                self.print_colored(Colors.CYAN, f"   CloudWatch → Application Signals → Services")
+                self.print_colored(Colors.CYAN, f"   Filter by cluster: {cluster_name}")
+                self.print_colored(Colors.CYAN, f"   Supported languages: Java, Python, .NET, Node.js, Go")
+                self.print_colored(Colors.CYAN, f"")
+                self.print_colored(Colors.CYAN, f"📋 To auto-instrument your applications, add this annotation:")
+                self.print_colored(Colors.CYAN, f"   instrumentation.opentelemetry.io/inject-java: 'aws-application-signals-system/application-signals-instrumentation'")
+                self.print_colored(Colors.CYAN, f"   (Replace 'java' with: python, nodejs, dotnet, or go as needed)")
+            
+                return True
+            else:
+                self.log_operation('WARNING', f"Could not verify Application Signals deployment")
+                return True  # Still consider successful since deployment commands worked
+        
+        except Exception as e:
+            error_msg = str(e)
+            self.log_operation('ERROR', f"Failed to enable Application Signals for {cluster_name}: {error_msg}")
+            self.print_colored(Colors.RED, f"❌ Application Signals deployment failed: {error_msg}")
+            return False
+
+    def create_application_signals_iam_role(self, iam_client, account_id: str) -> str:
+        """Create IAM role for Application Signals using your existing pattern"""
+        try:
+            role_name = "ApplicationSignalsRole"
+        
+            # Trust policy for Application Signals
+            trust_policy = {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Effect": "Allow",
+                        "Principal": {
+                            "Service": "application-signals.amazonaws.com"
+                        },
+                        "Action": "sts:AssumeRole"
+                    }
+                ]
+            }
+        
+            # Policy for Application Signals
+            policy_document = {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Effect": "Allow",
+                        "Action": [
+                            "application-signals:*",
+                            "cloudwatch:PutMetricData",
+                            "cloudwatch:GetMetricStatistics",
+                            "cloudwatch:ListMetrics",
+                            "logs:CreateLogGroup",
+                            "logs:CreateLogStream",
+                            "logs:PutLogEvents",
+                            "logs:DescribeLogGroups",
+                            "logs:DescribeLogStreams",
+                            "xray:PutTraceSegments",
+                            "xray:PutTelemetryRecords",
+                            "xray:GetSamplingRules",
+                            "xray:GetSamplingTargets",
+                            "xray:GetTraceGraph",
+                            "xray:GetTraceSummaries"
+                        ],
+                        "Resource": "*"
+                    }
+                ]
+            }
+        
+            try:
+                # Create role
+                role_response = iam_client.create_role(
+                    RoleName=role_name,
+                    AssumeRolePolicyDocument=json.dumps(trust_policy),
+                    Description="Role for AWS Application Signals"
+                )
+            
+                # Create and attach policy
+                policy_response = iam_client.create_policy(
+                    PolicyName="ApplicationSignalsPolicy",
+                    PolicyDocument=json.dumps(policy_document),
+                    Description="Policy for AWS Application Signals"
+                )
+            
+                iam_client.attach_role_policy(
+                    RoleName=role_name,
+                    PolicyArn=policy_response['Policy']['Arn']
+                )
+            
+                self.log_operation('INFO', f"Created Application Signals IAM role: {role_response['Role']['Arn']}")
+                return role_response['Role']['Arn']
+            
+            except iam_client.exceptions.EntityAlreadyExistsException:
+                # Role already exists
+                role_response = iam_client.get_role(RoleName=role_name)
+                self.log_operation('INFO', f"Using existing Application Signals IAM role: {role_response['Role']['Arn']}")
+                return role_response['Role']['Arn']
+            
+        except Exception as e:
+            self.log_operation('ERROR', f"Failed to create Application Signals IAM role: {str(e)}")
+            return None
+
     def create_cluster(self, cluster_config: Dict) -> bool:
             """
             Create EKS cluster with multiple configured nodegroups
@@ -304,6 +586,15 @@ class EKSClusterManager:
                    print("\n🔧Step 6.1: Ensuring addon service roles...")
                    self.ensure_addon_service_roles(eks_client, cluster_name, account_id)
 
+                print("🔧 Step 6.2: Enabling Application Signals...")
+                print("this is commented for now, will be enabled later")")
+                # self.enable_application_signals(
+                #     cluster_name,
+                #     region,
+                #     access_key,
+                #     secret_key,
+                #     account_id 
+                # )
 
                 # Step 7: Setup and verify all components (Combined step)
                 print("\n🔧 Step 7: Setting up all cluster components...")
@@ -1822,6 +2113,9 @@ class EKSClusterManager:
             print(f"AMI type: {ami_type}")
             print(f"Scaling: Min={min_size}, Desired={desired_size}, Max={max_size}")
             
+            # Generate comprehensive tags for instances
+            instance_tags = self.generate_instance_tags(cluster_name, nodegroup_name, 'On-Demand')
+            
             # Create On-Demand nodegroup
             eks_client.create_nodegroup(
                 clusterName=cluster_name,
@@ -1837,11 +2131,11 @@ class EKSClusterManager:
                 subnets=subnet_ids,
                 diskSize=20,  # Default disk size in GB
                 capacityType='ON_DEMAND',
-                tags={
-                    'Name': nodegroup_name,
-                    'CreatedBy': self.current_user,
-                    'CreatedAt': self.current_time,
-                    'Strategy': 'On-Demand'
+                tags=instance_tags,
+                labels={
+                    'nodegroup-name': nodegroup_name,
+                    'instance-type': ','.join(instance_types),
+                    'capacity-type': 'on-demand'
                 }
             )
             
@@ -1874,6 +2168,9 @@ class EKSClusterManager:
                 print(f"Instance types: {', '.join(instance_types)}")
                 print(f"AMI type: {ami_type}")
                 print(f"Scaling: Min={min_size}, Desired={desired_size}, Max={max_size}")
+                
+                # Generate comprehensive tags for instances
+                instance_tags = self.generate_instance_tags(cluster_name, nodegroup_name, 'Spot')
             
                 # Create Spot nodegroup
                 eks_client.create_nodegroup(
@@ -1890,11 +2187,11 @@ class EKSClusterManager:
                     subnets=subnet_ids,
                     diskSize=20,  # Default disk size in GB
                     capacityType='SPOT',
-                    tags={
-                        'Name': nodegroup_name,
-                        'CreatedBy': self.current_user,
-                        'CreatedAt': self.current_time,
-                        'Strategy': 'Spot'
+                    tags=instance_tags,
+                    labels={
+                        'nodegroup-name': nodegroup_name,
+                        'instance-type': ','.join(instance_types),
+                        'capacity-type': 'spot'
                     }
                 )
             
@@ -1961,6 +2258,11 @@ class EKSClusterManager:
                     print(f"\n🏗️ Creating On-Demand nodegroup: {ondemand_ng_name}")
                     print(f"   Instance Types: {', '.join(on_demand_types)}")
                     print(f"   Scaling: Min={ondemand_min}, Desired={ondemand_desired}, Max={ondemand_max}")
+                    
+                    # Generate comprehensive tags for On-Demand instances
+                    ondemand_instance_tags = self.generate_instance_tags(cluster_name, ondemand_ng_name, 'Mixed-OnDemand')
+                    ondemand_instance_tags['ParentNodegroup'] = nodegroup_name
+                    ondemand_instance_tags['OnDemandPercentage'] = str(on_demand_percentage)
             
                     try:
                         eks_client.create_nodegroup(
@@ -1977,12 +2279,12 @@ class EKSClusterManager:
                             subnets=subnet_ids,
                             diskSize=20,
                             capacityType='ON_DEMAND',  # ✅ Correct capacity type
-                            tags={
-                                'Name': ondemand_ng_name,
-                                'CreatedBy': self.current_user,
-                                'CreatedAt': self.current_time,
-                                'Strategy': 'Mixed-OnDemand',
-                                'ParentNodegroup': nodegroup_name
+                            tags=ondemand_instance_tags,
+                            labels={
+                                'nodegroup-name': ondemand_ng_name,
+                                'instance-type': ','.join(on_demand_types),
+                                'capacity-type': 'on-demand',
+                                'parent-nodegroup': nodegroup_name
                             }
                         )
                 
@@ -2006,7 +2308,12 @@ class EKSClusterManager:
                     print(f"\n🏗️ Creating Spot nodegroup: {spot_ng_name}")
                     print(f"   Instance Types: {', '.join(spot_types)}")
                     print(f"   Scaling: Min={spot_min}, Desired={spot_desired}, Max={spot_max}")
-            
+                    
+                    # Generate comprehensive tags for Spot instances
+                    spot_instance_tags = self.generate_instance_tags(cluster_name, spot_ng_name, 'Mixed-Spot')
+                    spot_instance_tags['ParentNodegroup'] = nodegroup_name
+                    spot_instance_tags['OnDemandPercentage'] = str(on_demand_percentage)
+
                     try:
                         eks_client.create_nodegroup(
                             clusterName=cluster_name,
@@ -2022,12 +2329,12 @@ class EKSClusterManager:
                             subnets=subnet_ids,
                             diskSize=20,
                             capacityType='SPOT',  # ✅ Correct capacity type
-                            tags={
-                                'Name': spot_ng_name,
-                                'CreatedBy': self.current_user,
-                                'CreatedAt': self.current_time,
-                                'Strategy': 'Mixed-Spot',
-                                'ParentNodegroup': nodegroup_name
+                            tags=spot_instance_tags,
+                            labels={
+                                'nodegroup-name': spot_ng_name,
+                                'instance-type': ','.join(spot_types),
+                                'capacity-type': 'spot',
+                                'parent-nodegroup': nodegroup_name
                             }
                         )
                 
@@ -6081,6 +6388,23 @@ class EKSClusterManager:
                 self.log_operation('ERROR', f"Manual Container Insights deployment failed: {str(e)}")
                 self.print_colored(Colors.RED, f"❌ Manual deployment failed: {str(e)}")
                 return False
+    
+    def generate_instance_tags(self, cluster_name: str, nodegroup_name: str, strategy: str) -> Dict:
+        """Generate comprehensive tags for EC2 instances in nodegroup"""
+        return {
+            'Name': f'{cluster_name}-node',
+            'kubernetes.io/cluster/' + cluster_name: 'owned',
+            'k8s.io/cluster-autoscaler/enabled': 'true',
+            'k8s.io/cluster-autoscaler/' + cluster_name: 'owned',
+            'ClusterName': cluster_name,
+            'NodegroupName': nodegroup_name,
+            'Strategy': strategy,
+            'CreatedBy': self.current_user,
+            'CreatedAt': self.current_time,
+            'Environment': 'EKS',
+            'AutoScaling': 'enabled',
+            'Project': 'EKS-Infrastructure'
+        }
 
     def log_operation(self, level: str, message: str):
         """Basic logger for EKSClusterManager"""

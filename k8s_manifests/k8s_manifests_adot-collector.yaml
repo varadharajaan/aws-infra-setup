@@ -1,0 +1,124 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: adot-collector
+  namespace: aws-application-signals-system
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::${ACCOUNT_ID}:role/ApplicationSignalsRole
+---
+apiVersion: opentelemetry.io/v1alpha1
+kind: OpenTelemetryCollector
+metadata:
+  name: application-signals-collector
+  namespace: aws-application-signals-system
+  labels:
+    app: application-signals-collector
+spec:
+  mode: daemonset
+  serviceAccount: adot-collector
+  image: public.ecr.aws/aws-observability/aws-otel-collector:v0.38.0
+  env:
+    - name: AWS_REGION
+      value: "${AWS_REGION}"
+    - name: CLUSTER_NAME
+      value: "${CLUSTER_NAME}"
+  volumeMounts:
+    - name: rootfs
+      mountPath: /rootfs
+      readOnly: true
+    - name: dockersock
+      mountPath: /var/run/docker.sock
+      readOnly: true
+    - name: varlibdocker
+      mountPath: /var/lib/docker
+      readOnly: true
+    - name: sys
+      mountPath: /sys
+      readOnly: true
+    - name: devdisk
+      mountPath: /dev/disk
+      readOnly: true
+  volumes:
+    - name: rootfs
+      hostPath:
+        path: /
+    - name: dockersock
+      hostPath:
+        path: /var/run/docker.sock
+    - name: varlibdocker
+      hostPath:
+        path: /var/lib/docker
+    - name: sys
+      hostPath:
+        path: /sys
+    - name: devdisk
+      hostPath:
+        path: /dev/disk/
+  config: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+      awscontainerinsightreceiver:
+        add_service_as_attribute: true
+        prefer_full_pod_name: false
+        add_full_pod_name_metric_label: false
+        cluster_name: ${CLUSTER_NAME}
+      
+    processors:
+      batch:
+        timeout: 1s
+        send_batch_size: 50
+      memory_limiter:
+        limit_mib: 200
+      resourcedetection:
+        detectors: [env, system]
+        timeout: 2s
+        override: false
+      
+    exporters:
+      awsemf:
+        namespace: AWS/ApplicationSignals
+        log_group_name: '/aws/application-signals/data'
+        region: ${AWS_REGION}
+        dimension_rollup_option: NoDimensionRollup
+        parse_json_encoded_attr_values: [Sources, kubernetes]
+        metric_declarations:
+          - dimensions: [[ClusterName, Namespace, PodName]]
+            metric_name_selectors:
+              - .*
+          - dimensions: [[ClusterName, Namespace, ServiceName]]
+            metric_name_selectors:
+              - .*
+      
+      awscloudwatchmetrics:
+        namespace: AWS/ApplicationSignals
+        region: ${AWS_REGION}
+        dimension_rollup_option: NoDimensionRollup
+        
+      awsxray:
+        region: ${AWS_REGION}
+        no_verify_ssl: false
+        local_mode: false
+        
+      awscloudwatchlogs:
+        region: ${AWS_REGION}
+        log_group_name: '/aws/application-signals/logs'
+        
+    service:
+      pipelines:
+        metrics:
+          receivers: [otlp, awscontainerinsightreceiver]
+          processors: [memory_limiter, resourcedetection, batch]
+          exporters: [awsemf, awscloudwatchmetrics]
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, resourcedetection, batch]
+          exporters: [awsxray]
+        logs:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [awscloudwatchlogs]
