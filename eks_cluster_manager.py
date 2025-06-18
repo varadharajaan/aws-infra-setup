@@ -31,6 +31,8 @@ import base64
 import tempfile
 import requests
 from jinja2 import Environment, FileSystemLoader
+import logging
+from logging.handlers import RotatingFileHandler
 
 class Colors:
     """ANSI color codes for terminal output"""
@@ -45,13 +47,55 @@ class Colors:
 
 class EKSClusterManager:
     def __init__(self, config_file=None, current_user='varadharajaan'):
-        """Initialize the EKS Cluster Manager"""
-        self.config_file = config_file
-        self.current_user = current_user
-        self.current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        self.execution_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.load_configuration()
+            """Initialize the EKS Cluster Manager"""
+            self.config_file = config_file
+            self.current_user = current_user
+            self.current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            self.execution_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+            # Setup logging
+            self.setup_logging()
+        
+            self.load_configuration()
     
+    def setup_logging(self):
+        """Set up proper logging with file and console handlers"""
+        # Create logs directory if it doesn't exist
+        log_dir = "logs"
+        if not os.path.exists(log_dir):
+            os.makedirs(log_dir)
+        
+        # Configure the main logger
+        self.logger = logging.getLogger("eks_cluster_manager")
+        self.logger.setLevel(logging.DEBUG)
+        
+        # Clear any existing handlers
+        if self.logger.hasHandlers():
+            self.logger.handlers.clear()
+        
+        # Create file handler which logs all messages
+        log_file = os.path.join(log_dir, f"eks_cluster_{self.execution_timestamp}.log")
+        file_handler = RotatingFileHandler(log_file, maxBytes=10485760, backupCount=5)  # 10MB max size
+        file_handler.setLevel(logging.DEBUG)
+        
+        # Create console handler with a higher log level
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(logging.INFO)
+        
+        # Create formatters and add them to the handlers
+        detailed_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        file_handler.setFormatter(detailed_formatter)
+        
+        simple_formatter = logging.Formatter('[%(levelname)s] %(message)s')
+        console_handler.setFormatter(simple_formatter)
+        
+        # Add handlers to the logger
+        self.logger.addHandler(file_handler)
+        self.logger.addHandler(console_handler)
+        
+        self.logger.info(f"EKS Cluster Manager initialized - Session ID: {self.execution_timestamp}")
+        self.logger.info(f"Log file created: {log_file}")
+
     def load_configuration(self):
         """Load configuration from JSON file"""
         try:
@@ -65,6 +109,21 @@ class EKSClusterManager:
         except Exception as e:
             print(f"⚠️  Error loading configuration: {e}")
             self.config_data = {}
+
+    def log_operation(self, level: str, message: str):
+        """Enhanced logger that writes to both console and log file with proper levels"""
+        if level == 'DEBUG':
+            self.logger.debug(message)
+        elif level == 'INFO':
+            self.logger.info(message)
+        elif level == 'WARNING':
+            self.logger.warning(message)
+        elif level == 'ERROR':
+            self.logger.error(message)
+        elif level == 'CRITICAL':
+            self.logger.critical(message)
+        else:
+            self.logger.info(message)
 
     def render_fluentbit_configmap(self, cluster_name, region_name, http_server_toggle, http_server_port, read_from_head, read_from_tail):
         """
@@ -427,456 +486,6 @@ class EKSClusterManager:
             self.log_operation('ERROR', f"Failed to create Application Signals IAM role: {str(e)}")
             return None
 
-    def create_cluster(self, cluster_config: Dict) -> bool:
-        """
-        Create EKS cluster with configured nodegroups
-
-        Args:
-            cluster_config: Dictionary with cluster configuration including:
-                - credential_info: CredentialInfo object
-                - eks_version: EKS version string
-                - ami_type: AMI type string
-                - nodegroup_configs: List of nodegroup configurations
-        """
-        try:
-            # Extract configuration
-            credential_info = cluster_config['credential_info']
-            eks_version = cluster_config['eks_version']
-            ami_type = cluster_config['ami_type']
-        
-            # Setup AWS clients
-            region = credential_info.regions[0]
-            access_key = credential_info.access_key
-            secret_key = credential_info.secret_key
-            account_id = credential_info.account_id
-        
-            session = boto3.Session(
-                aws_access_key_id=access_key,
-                aws_secret_access_key=secret_key,
-                region_name=region
-            )
-        
-            # Quick credential validation (lightweight check)
-            try:
-                sts_client = session.client('sts')
-                caller_identity = sts_client.get_caller_identity()
-                user_arn = caller_identity.get('Arn', '')
-                user_type = 'Root User' if ':root' in user_arn else 'IAM User' if ':user/' in user_arn else 'Assumed Role'
-            
-                print(f"🔐 Authenticated as: {user_type}")
-                print(f"📋 User ARN: {user_arn}")
-                print(f"🆔 Account ID: {caller_identity.get('Account', 'Unknown')}")
-            
-            except Exception as e:
-                print(f"⚠️  Warning: Could not validate credentials: {e}")
-                proceed = input("Do you want to continue anyway? (y/N): ").strip().lower()
-                if proceed not in ['y', 'yes']:
-                    return False
-        
-            eks_client = session.client('eks')
-            ec2_client = session.client('ec2')
-            iam_client = session.client('iam')
-            cloudwatch_client = session.client('cloudwatch')
-        
-            username = getattr(credential_info, 'username', credential_info.account_name.lower())
-        
-            if not username or username.lower() == 'none':
-                username = "varadharajaan"
-        
-            # Generate cluster name
-            cluster_name = self.generate_cluster_name(username, region)
-        
-            print(f"🚀 Creating EKS cluster: {cluster_name}")
-            print(f"📍 Region: {region}")
-            print(f"📋 EKS Version: {eks_version}")
-            print(f"💾 AMI Type: {ami_type}")
-            print(f"👤 Created by: {username}")
-            print(f"🕐 Creation time: 2025-06-18 05:29:51 UTC")
-        
-            # Step 1: Ensure IAM roles exist
-            print("\n🔐 Step 1: Setting up IAM roles...")
-            eks_role_arn, node_role_arn = self.ensure_iam_roles(iam_client, account_id)
-        
-            # Step 2: Get VPC and subnet information
-            print("\n🌐 Step 2: Setting up VPC resources...")
-            subnet_ids, security_group_id = self.get_or_create_vpc_resources(ec2_client, region)
-        
-            # Step 3: Create EKS cluster
-            print("\n🏭 Step 3: Creating EKS control plane...")
-            cluster_created = self.create_eks_control_plane(
-                eks_client, 
-                cluster_name, 
-                eks_version, 
-                eks_role_arn, 
-                subnet_ids, 
-                security_group_id
-            )
-        
-            if not cluster_created:
-                print("❌ Failed to create EKS control plane. Exiting.")
-                return False
-
-            # Step 4: Create nodegroups based on configuration
-            nodegroups_created = []
-
-            # Check if we're using the new format with nodegroup_configs
-            if 'nodegroup_configs' in cluster_config:
-                print(f"\n💻 Step 4: Creating {len(cluster_config['nodegroup_configs'])} nodegroups...")
-            
-                for ng_config in cluster_config['nodegroup_configs']:
-                    strategy = ng_config['strategy']
-                    instance_selections = ng_config['instance_selections']
-                    min_nodes = ng_config['min_nodes']
-                    desired_nodes = ng_config['desired_nodes']
-                    max_nodes = ng_config['max_nodes']
-                
-                    # Generate nodegroup name if not provided
-                    if 'name' in ng_config:
-                        nodegroup_name = ng_config['name']
-                    else:
-                        nodegroup_name = self.generate_nodegroup_name(cluster_name, strategy)
-                
-                    # Get subnet preference if specified
-                    subnet_preference = ng_config.get('subnet_preference', 'auto')
-                
-                    # Select subnets based on preference
-                    if subnet_preference != 'auto':
-                        selected_subnets = self.select_subnets_for_nodegroup(subnet_ids, subnet_preference, ec2_client)
-                    else:
-                        selected_subnets = subnet_ids
-                
-                    print(f"\n💻 Creating nodegroup: {nodegroup_name} with strategy: {strategy}")
-                
-                    nodegroup_created = False
-                
-                    if strategy == "on-demand":
-                        nodegroup_created = self.create_ondemand_nodegroup(
-                            eks_client,
-                            cluster_name,
-                            nodegroup_name,
-                            node_role_arn,
-                            selected_subnets,
-                            ami_type,
-                            instance_selections.get("on-demand", []),
-                            min_nodes,
-                            desired_nodes,
-                            max_nodes
-                        )
-                    elif strategy == "spot":
-                        nodegroup_created = self.create_spot_nodegroup(
-                            eks_client,
-                            cluster_name,
-                            nodegroup_name,
-                            node_role_arn,
-                            selected_subnets,
-                            ami_type,
-                            instance_selections.get("spot", []),
-                            min_nodes,
-                            desired_nodes,
-                            max_nodes
-                        )
-                    else:  # mixed strategy
-                        nodegroup_created = self.create_mixed_nodegroup(
-                            eks_client,
-                            cluster_name,
-                            nodegroup_name,
-                            node_role_arn,
-                            selected_subnets,
-                            ami_type,
-                            instance_selections,
-                            min_nodes,
-                            desired_nodes,
-                            max_nodes
-                        )
-                
-                    if nodegroup_created:
-                        nodegroups_created.append(nodegroup_name)
-                    else:
-                        print(f"❌ Failed to create nodegroup: {nodegroup_name}")
-        
-            else:
-                # Legacy single nodegroup support
-                print("\n💻 Step 4: Creating single nodegroup (legacy mode)...")
-                try:
-                    nodegroup_strategy = cluster_config.get('nodegroup_strategy', 'on-demand')
-                    instance_selections = cluster_config.get('instance_selections', {})
-                    min_nodes = cluster_config.get('min_nodes', 1)
-                    desired_nodes = cluster_config.get('desired_nodes', 1)
-                    max_nodes = cluster_config.get('max_nodes', 3)
-                
-                    nodegroup_name = self.generate_nodegroup_name(cluster_name, nodegroup_strategy)
-                
-                    print(f"\n💻 Creating nodegroup: {nodegroup_name} with strategy: {nodegroup_strategy}")
-                
-                    nodegroup_created = False
-                
-                    if nodegroup_strategy == "on-demand":
-                        nodegroup_created = self.create_ondemand_nodegroup(
-                            eks_client,
-                            cluster_name,
-                            nodegroup_name,
-                            node_role_arn,
-                            subnet_ids,
-                            ami_type,
-                            instance_selections.get("on-demand", []),
-                            min_nodes,
-                            desired_nodes,
-                            max_nodes
-                        )
-                    elif nodegroup_strategy == "spot":
-                        nodegroup_created = self.create_spot_nodegroup(
-                            eks_client,
-                            cluster_name,
-                            nodegroup_name,
-                            node_role_arn,
-                            subnet_ids,
-                            ami_type,
-                            instance_selections.get("spot", []),
-                            min_nodes,
-                            desired_nodes,
-                            max_nodes
-                        )
-                    else:  # mixed strategy
-                        nodegroup_created = self.create_mixed_nodegroup(
-                            eks_client,
-                            cluster_name,
-                            nodegroup_name,
-                            node_role_arn,
-                            subnet_ids,
-                            ami_type,
-                            instance_selections,
-                            min_nodes,
-                            desired_nodes,
-                            max_nodes
-                        )
-                
-                    if nodegroup_created:
-                        nodegroups_created.append(nodegroup_name)
-                except KeyError as e:
-                    print(f"❌ Error creating nodegroup: Missing configuration key {e}")
-                    print("Please update your code to use the new format with 'nodegroup_configs'")
-                    return False
-        
-            if not nodegroups_created:
-                print("❌ Failed to create any nodegroups. Cluster was created but without nodes.")
-                # Continue with other steps since the cluster itself is created
-        
-            # Step 5: Configure aws-auth ConfigMap for user access
-            print("\n🔐 Step 5: Configuring user access...")
-            auth_success = self.configure_aws_auth_configmap(
-                cluster_name, region, account_id, 
-                {'username': username, 'access_key_id': access_key, 'secret_access_key': secret_key},
-                access_key, secret_key
-            )
-        
-            if not auth_success:
-                print("⚠️  Failed to configure user access. You may need to manually update the aws-auth ConfigMap.")
-        
-            # Step 6: Ask user about essential addons
-            print("\n🧩 Step 6: Essential Add-ons Configuration")
-            print("Essential add-ons include: vpc-cni, coredns, kube-proxy, aws-ebs-csi-driver")
-            install_addons = input("Do you want to install essential EKS add-ons? (Y/n): ").strip().lower()
-            install_addons = install_addons in ['', 'y', 'yes']
-        
-            addons_success = False
-            if install_addons:
-                print("Installing essential add-ons...")
-                addons_success = self.install_essential_addons(eks_client, cluster_name, region, access_key, secret_key, account_id)
-            else:
-                print("⏭️  Skipping essential add-ons installation.")
-        
-            # Step 7: Ask user about Container Insights
-            print("\n📊 Step 7: CloudWatch Container Insights Configuration")
-            print("Container Insights provides detailed monitoring and logging for containers")
-            enable_insights = input("Do you want to enable CloudWatch Container Insights? (Y/n): ").strip().lower()
-            enable_insights = enable_insights in ['', 'y', 'yes']
-        
-            insights_success = False
-            if enable_insights:
-                print("Setting up CloudWatch Container Insights...")
-                insights_success = self.enable_container_insights(
-                    cluster_name, region, access_key, secret_key
-                )
-            else:
-                print("⏭️  Skipping Container Insights setup.")
-        
-            # Step 8: Setup Cluster Autoscaler (Always configured)
-            print("\n🔄 Step 8: Setting up Cluster Autoscaler (Required)...")
-            print("Cluster Autoscaler automatically adjusts the number of nodes based on workload demands")
-            autoscaler_success = self.setup_cluster_autoscaler(
-                cluster_name, region, access_key, secret_key, account_id
-            )
-        
-            # Step 9: Setup Scheduled Scaling (Always configured)
-            print("\n⏰ Step 9: Setting up Scheduled Scaling (Required)...")
-            print("Scheduled scaling automatically scales nodes based on IST business hours")
-            print("Scale up: 8:30 AM IST (3:00 AM UTC), Scale down: 6:30 PM IST (1:00 PM UTC)")
-            scheduling_success = self.setup_scheduled_scaling_multi_nodegroup(
-                cluster_name, region, access_key, secret_key, nodegroups_created
-            )
-        
-            # Step 10: Deploy CloudWatch agent (Always configured)
-            print("\n🔍 Step 10: Deploying CloudWatch agent (Required)...")
-            print("CloudWatch agent collects system and application metrics")
-            cloudwatch_agent_success = self.deploy_cloudwatch_agent_fixed(
-                cluster_name, region, access_key, secret_key, account_id
-            )
-        
-            # Step 11: Setup CloudWatch alarms (Always configured)
-            print("\n🚨 Step 11: Setting up CloudWatch alarms (Required)...")
-            print("CloudWatch alarms monitor cluster health and performance metrics")
-            cloudwatch_alarms_success = False
-            if nodegroups_created:
-                cloudwatch_alarms_success = self.setup_cloudwatch_alarms(
-                    cluster_name, region, cloudwatch_client, nodegroups_created[0], account_id
-                )
-        
-            # Step 12: Setup cost monitoring alarms (Always configured)
-            print("\n💰 Step 12: Setting up cost monitoring alarms (Required)...")
-            print("Cost monitoring alarms help track and control AWS spending")
-            cost_alarms_success = self.setup_cost_alarms(
-                cluster_name, region, cloudwatch_client, account_id
-            )
-        
-            # Step 13: Perform health check (Always configured)
-            print("\n🏥 Step 13: Performing cluster health check (Required)...")
-            health_result = self.health_check_cluster(
-                cluster_name, region, access_key, secret_key
-            )
-
-            # Final step: Verify user access to the cluster (Always configured)
-            print("\n🔐 Final Step: Verifying user access to cluster (Required)...")
-            user_access_verified = self.verify_user_access(
-                cluster_name, 
-                region, 
-                username, 
-                access_key, 
-                secret_key
-            )
-
-            if user_access_verified:
-                print("✅ User access verification successful")
-            else:
-                print("⚠️ User access verification failed or incomplete. Manual verification may be needed.")
-        
-            # Save cluster details
-            cluster_details = {
-                'auth_configured': auth_success,
-                'addons_installed': addons_success,
-                'addons_user_choice': install_addons,
-                'container_insights': insights_success,
-                'container_insights_user_choice': enable_insights,
-                'autoscaler': autoscaler_success,  # Always attempted
-                'scheduled_scaling': scheduling_success,  # Always attempted
-                'cloudwatch_agent': cloudwatch_agent_success,  # Always attempted
-                'cloudwatch_alarms': cloudwatch_alarms_success,  # Always attempted
-                'cost_alarms': cost_alarms_success,  # Always attempted
-                'health_check': health_result.get('overall_healthy', False),
-                'health_score': health_result.get('summary', {}).get('health_score', 0),
-                'access_verified': user_access_verified,
-                'created_by': username,
-                'creation_timestamp': '2025-06-18 05:29:51 UTC',
-                'nodegroups_created': nodegroups_created
-            }
-        
-            # For backward compatibility, set a nodegroup_strategy if using old format
-            nodegroup_strategy = None
-            if 'nodegroup_configs' in cluster_config and cluster_config['nodegroup_configs']:
-                nodegroup_strategy = cluster_config['nodegroup_configs'][0]['strategy']
-            elif 'nodegroup_strategy' in cluster_config:
-                nodegroup_strategy = cluster_config['nodegroup_strategy']
-            else:
-                nodegroup_strategy = "on-demand"  # default
-        
-            # Save cluster details
-            self.save_cluster_details_enhanced(
-                credential_info,
-                cluster_name,
-                region,
-                eks_version,
-                ami_type,
-                cluster_config.get('nodegroup_configs', []),
-                cluster_details
-            )
-        
-            # Generate user instructions
-            self.generate_user_instructions_enhanced(
-                credential_info,
-                cluster_name,
-                region,
-                username,
-                cluster_config.get('nodegroup_configs', [])
-            )
-        
-            # Display enhanced cluster summary with monitoring features
-            cluster_info = {
-                'cluster_name': cluster_name,
-                'region': region,
-                'eks_version': eks_version,
-                'ami_type': ami_type,
-                'nodegroup_configs': cluster_config.get('nodegroup_configs', []),
-                'nodegroups_created': nodegroups_created,
-                'addons_installed': addons_success,
-                'addons_user_choice': install_addons,
-                'container_insights_enabled': insights_success,
-                'container_insights_user_choice': enable_insights,
-                'autoscaler_enabled': autoscaler_success,
-                'scheduled_scaling_enabled': scheduling_success,
-                'cloudwatch_agent_enabled': cloudwatch_agent_success,
-                'cloudwatch_alarms_enabled': cloudwatch_alarms_success,
-                'cost_alarms_enabled': cost_alarms_success,
-                'initial_health_check': health_result,
-                'auth_configured': auth_success,
-                'access_verified': user_access_verified
-            }
-        
-            self.print_enhanced_cluster_summary_multi_nodegroup(cluster_name, cluster_info)
-        
-            # Display console access commands
-            print("\n" + "="*80)
-            print("📋 CLUSTER CREATION SUMMARY")
-            print("=" * 80)
-            print(f"✅ Cluster Name: {cluster_name}")
-            print(f"✅ Region: {region}")
-            print(f"✅ EKS Version: {eks_version}")
-            print(f"✅ AMI Type: {ami_type}")
-            print(f"✅ Nodegroups Created: {len(nodegroups_created)}")
-            for ng in nodegroups_created:
-                print(f"   - {ng}")
-            print(f"✅ Created by: {username}")
-            print(f"✅ Creation time: 2025-06-18 05:29:51 UTC")
-            print(f"✅ User Access Configured: {'Yes' if auth_success else 'No'}")
-        
-            # Optional components
-            print(f"{'✅' if addons_success else '⏭️'} Essential Add-ons: {'Installed' if addons_success else 'Skipped by user'}")
-            print(f"{'✅' if insights_success else '⏭️'} Container Insights: {'Enabled' if insights_success else 'Skipped by user'}")
-        
-            # Required components
-            print(f"✅ Cluster Autoscaler: {'Enabled' if autoscaler_success else 'Failed'} (Required)")
-            print(f"✅ Scheduled Scaling: {'Enabled' if scheduling_success else 'Failed'} (Required)")
-            print(f"✅ CloudWatch Agent: {'Deployed' if cloudwatch_agent_success else 'Failed'} (Required)")
-            print(f"✅ CloudWatch Alarms: {'Configured' if cloudwatch_alarms_success else 'Failed'} (Required)")
-            print(f"✅ Cost Monitoring: {'Enabled' if cost_alarms_success else 'Failed'} (Required)")
-            print(f"✅ Health Status: {'Healthy' if health_result.get('overall_healthy', False) else 'Needs Attention'}")
-            print(f"✅ Health Score: {health_result.get('summary', {}).get('health_score', 0)}/100")
-            print(f"✅ User Access Verified: {'Yes' if user_access_verified else 'No'}")
-        
-            print("\n🎯 Configuration Summary:")
-            print(f"   📦 Optional components configured: {('Essential Add-ons, ' if install_addons else '') + ('Container Insights' if enable_insights else 'None' if not install_addons else '')}")
-            print(f"   🔧 Required components: Autoscaler, Scheduled Scaling, CloudWatch Agent, Alarms, Cost Monitoring")
-        
-            print("\nAccess your cluster with:")
-            print(f"aws eks update-kubeconfig --region {region} --name {cluster_name}")
-            print("=" * 80)
-        
-            return True
-        
-        except Exception as e:
-            print(f"❌ Error creating EKS cluster: {e}")
-            import traceback
-            traceback.print_exc()
-            return False
-    
     #####
     def ensure_addon_service_roles(self, eks_client, cluster_name: str, account_id: str) -> None:
         """
@@ -2645,62 +2254,6 @@ class EKSClusterManager:
             print(f"❌ Error creating EKS control plane: {e}")
             return False
 
-    def create_ondemand_nodegroup(self, eks_client, cluster_name: str, nodegroup_name: str,
-                                node_role_arn: str, subnet_ids: List[str], ami_type: str,
-                                instance_types: List[str], min_size: int, desired_size: int, max_size: int) -> bool:
-        """Create On-Demand nodegroup"""
-        try:
-            if not instance_types:
-                print("⚠️  No instance types provided for on-demand nodegroup. Using default t3.medium")
-                instance_types = ["t3.medium"]
-            
-            print(f"Creating on-demand nodegroup {nodegroup_name}")
-            print(f"Instance types: {', '.join(instance_types)}")
-            print(f"AMI type: {ami_type}")
-            print(f"Scaling: Min={min_size}, Desired={desired_size}, Max={max_size}")
-            
-            # Generate comprehensive tags for instances
-            instance_tags = self.generate_instance_tags(cluster_name, nodegroup_name, 'On-Demand')
-            
-            # Create On-Demand nodegroup
-            eks_client.create_nodegroup(
-                clusterName=cluster_name,
-                nodegroupName=nodegroup_name,
-                scalingConfig={
-                    'minSize': min_size,
-                    'maxSize': max_size,
-                    'desiredSize': desired_size
-                },
-                instanceTypes=instance_types,
-                amiType=ami_type,
-                nodeRole=node_role_arn,
-                subnets=subnet_ids,
-                diskSize=20,  # Default disk size in GB
-                capacityType='ON_DEMAND',
-                tags=instance_tags,
-                labels={
-                    'nodegroup-name': nodegroup_name,
-                    'instance-type': ','.join(instance_types),
-                    'capacity-type': 'on-demand'
-                }
-            )
-            
-            # Wait for nodegroup to be active
-            print(f"⏳ Waiting for nodegroup {nodegroup_name} to be active...")
-            waiter = eks_client.get_waiter('nodegroup_active')
-            waiter.wait(
-                clusterName=cluster_name,
-                nodegroupName=nodegroup_name,
-                WaiterConfig={'Delay': 30, 'MaxAttempts': 40}
-            )
-            
-            print(f"✅ Nodegroup {nodegroup_name} is now active")
-            return True
-            
-        except Exception as e:
-            print(f"❌ Error creating on-demand nodegroup: {e}")
-            return False
-
     def _get_multi_nodegroup_lambda_template(self) -> str:
         """Get the Lambda function template for multi-nodegroup scaling"""
         return '''
@@ -2823,219 +2376,340 @@ class EKSClusterManager:
                 }})
             }}
     '''
-    def create_spot_nodegroup(self, eks_client, cluster_name: str, nodegroup_name: str,
-                                node_role_arn: str, subnet_ids: List[str], ami_type: str,
-                                instance_types: List[str], min_size: int, desired_size: int, max_size: int) -> bool:
-            """Create Spot nodegroup"""
-            try:
-                if not instance_types:
-                    print("⚠️  No instance types provided for spot nodegroup. Using defaults.")
-                    instance_types = ["t3.medium", "t3a.medium", "t3.large"]
-            
-                print(f"Creating spot nodegroup {nodegroup_name}")
-                print(f"Instance types: {', '.join(instance_types)}")
-                print(f"AMI type: {ami_type}")
-                print(f"Scaling: Min={min_size}, Desired={desired_size}, Max={max_size}")
-                
-                # Generate comprehensive tags for instances
-                instance_tags = self.generate_instance_tags(cluster_name, nodegroup_name, 'Spot')
-            
-                # Create Spot nodegroup
-                eks_client.create_nodegroup(
-                    clusterName=cluster_name,
-                    nodegroupName=nodegroup_name,
-                    scalingConfig={
-                        'minSize': min_size,
-                        'maxSize': max_size,
-                        'desiredSize': desired_size
-                    },
-                    instanceTypes=instance_types,
-                    amiType=ami_type,
-                    nodeRole=node_role_arn,
-                    subnets=subnet_ids,
-                    diskSize=20,  # Default disk size in GB
-                    capacityType='SPOT',
-                    tags=instance_tags,
-                    labels={
-                        'nodegroup-name': nodegroup_name,
-                        'instance-type': ','.join(instance_types),
-                        'capacity-type': 'spot'
-                    }
-                )
-            
-                # Wait for nodegroup to be active
-                print(f"⏳ Waiting for nodegroup {nodegroup_name} to be active...")
-                waiter = eks_client.get_waiter('nodegroup_active')
-                waiter.wait(
-                    clusterName=cluster_name,
-                    nodegroupName=nodegroup_name,
-                    WaiterConfig={'Delay': 30, 'MaxAttempts': 40}
-                )
-            
-                print(f"✅ Nodegroup {nodegroup_name} is now active")
-                return True
-            
-            except Exception as e:
-                print(f"❌ Error creating spot nodegroup: {e}")
-                return False
 
     def create_mixed_nodegroup(self, eks_client, cluster_name: str, nodegroup_name: str,
-                                 node_role_arn: str, subnet_ids: List[str], ami_type: str,
-                                 instance_selections: Dict, min_size: int, desired_size: int, max_size: int) -> bool:
-            """Create mixed strategy using two separate nodegroups with proper distribution"""
-            try:
-                on_demand_percentage = instance_selections.get('on_demand_percentage', 50)
-                on_demand_types = instance_selections.get('on-demand', [])
-                spot_types = instance_selections.get('spot', [])
+                           node_role_arn: str, subnet_ids: List[str], ami_type: str,
+                           instance_selections: Dict, min_size: int, desired_size: int, max_size: int) -> bool:
+        """Create mixed strategy using two separate nodegroups with proper validation"""
+        try:
+            # Validate required instance selections are provided
+            on_demand_percentage = instance_selections.get('on_demand_percentage', None)
+            on_demand_types = instance_selections.get('on-demand', None)
+            spot_types = instance_selections.get('spot', None)
         
-                print(f"Creating mixed strategy with {on_demand_percentage}% On-Demand, {100-on_demand_percentage}% Spot")
-        
-                # Calculate node distribution
-                total_desired = desired_size
-                total_min = min_size
-                total_max = max_size
-        
-                # Calculate On-Demand nodes (ensure at least 1 if percentage > 0)
-                if on_demand_percentage > 0:
-                    ondemand_desired = max(1, int(total_desired * on_demand_percentage / 100))
-                    ondemand_min = max(0, int(total_min * on_demand_percentage / 100))
-                    ondemand_max = max(1, int(total_max * on_demand_percentage / 100))
-                else:
-                    ondemand_desired = ondemand_min = ondemand_max = 0
-        
-                # Calculate Spot nodes (remainder)
-                spot_desired = total_desired - ondemand_desired
-                spot_min = total_min - ondemand_min
-                spot_max = total_max - ondemand_max
-        
-                # Ensure spot values are valid
-                spot_desired = max(0, spot_desired)
-                spot_min = max(0, spot_min)
-                spot_max = max(0, spot_max)
-        
-                print(f"📊 Node Distribution:")
-                print(f"   On-Demand: Min={ondemand_min}, Desired={ondemand_desired}, Max={ondemand_max}")
-                print(f"   Spot: Min={spot_min}, Desired={spot_desired}, Max={spot_max}")
-        
-                success_count = 0
-                created_nodegroups = []
-        
-                # Create On-Demand nodegroup if we have on-demand allocation
-                if on_demand_types and ondemand_max > 0:
-                    ondemand_ng_name = f"{nodegroup_name}-ondemand"
-                    print(f"\n🏗️ Creating On-Demand nodegroup: {ondemand_ng_name}")
-                    print(f"   Instance Types: {', '.join(on_demand_types)}")
-                    print(f"   Scaling: Min={ondemand_min}, Desired={ondemand_desired}, Max={ondemand_max}")
-                    
-                    # Generate comprehensive tags for On-Demand instances
-                    ondemand_instance_tags = self.generate_instance_tags(cluster_name, ondemand_ng_name, 'Mixed-OnDemand')
-                    ondemand_instance_tags['ParentNodegroup'] = nodegroup_name
-                    ondemand_instance_tags['OnDemandPercentage'] = str(on_demand_percentage)
+            # Validation checks
+            if on_demand_percentage is None:
+                self.log_operation('ERROR', f"No on_demand_percentage specified for mixed nodegroup {nodegroup_name}")
+                self.print_colored(Colors.RED, f"❌ Failed to create mixed nodegroup: on_demand_percentage not specified")
+                return False
             
-                    try:
-                        eks_client.create_nodegroup(
-                            clusterName=cluster_name,
-                            nodegroupName=ondemand_ng_name,
-                            scalingConfig={
-                                'minSize': ondemand_min,
-                                'maxSize': ondemand_max,
-                                'desiredSize': ondemand_desired
-                            },
-                            instanceTypes=on_demand_types,
-                            amiType=ami_type,
-                            nodeRole=node_role_arn,
-                            subnets=subnet_ids,
-                            diskSize=20,
-                            capacityType='ON_DEMAND',  # ✅ Correct capacity type
-                            tags=ondemand_instance_tags,
-                            labels={
-                                'nodegroup-name': ondemand_ng_name,
-                                'instance-type': ','.join(on_demand_types),
-                                'capacity-type': 'on-demand',
-                                'parent-nodegroup': nodegroup_name
-                            }
-                        )
-                
-                        print(f"⏳ Waiting for On-Demand nodegroup {ondemand_ng_name} to be active...")
-                        waiter = eks_client.get_waiter('nodegroup_active')
-                        waiter.wait(
-                            clusterName=cluster_name,
-                            nodegroupName=ondemand_ng_name,
-                            WaiterConfig={'Delay': 30, 'MaxAttempts': 40}
-                        )
-                        print(f"✅ On-Demand nodegroup {ondemand_ng_name} is now active")
-                        success_count += 1
-                        created_nodegroups.append(ondemand_ng_name)
-                
-                    except Exception as e:
-                        print(f"❌ Failed to create On-Demand nodegroup: {str(e)}")
-        
-                # Create Spot nodegroup if we have spot allocation
-                if spot_types and spot_max > 0:
-                    spot_ng_name = f"{nodegroup_name}-spot"
-                    print(f"\n🏗️ Creating Spot nodegroup: {spot_ng_name}")
-                    print(f"   Instance Types: {', '.join(spot_types)}")
-                    print(f"   Scaling: Min={spot_min}, Desired={spot_desired}, Max={spot_max}")
-                    
-                    # Generate comprehensive tags for Spot instances
-                    spot_instance_tags = self.generate_instance_tags(cluster_name, spot_ng_name, 'Mixed-Spot')
-                    spot_instance_tags['ParentNodegroup'] = nodegroup_name
-                    spot_instance_tags['OnDemandPercentage'] = str(on_demand_percentage)
-
-                    try:
-                        eks_client.create_nodegroup(
-                            clusterName=cluster_name,
-                            nodegroupName=spot_ng_name,
-                            scalingConfig={
-                                'minSize': spot_min,
-                                'maxSize': spot_max,
-                                'desiredSize': spot_desired
-                            },
-                            instanceTypes=spot_types,
-                            amiType=ami_type,
-                            nodeRole=node_role_arn,
-                            subnets=subnet_ids,
-                            diskSize=20,
-                            capacityType='SPOT',  # ✅ Correct capacity type
-                            tags=spot_instance_tags,
-                            labels={
-                                'nodegroup-name': spot_ng_name,
-                                'instance-type': ','.join(spot_types),
-                                'capacity-type': 'spot',
-                                'parent-nodegroup': nodegroup_name
-                            }
-                        )
-                
-                        print(f"⏳ Waiting for Spot nodegroup {spot_ng_name} to be active...")
-                        waiter = eks_client.get_waiter('nodegroup_active')
-                        waiter.wait(
-                            clusterName=cluster_name,
-                            nodegroupName=spot_ng_name,
-                            WaiterConfig={'Delay': 30, 'MaxAttempts': 40}
-                        )
-                        print(f"✅ Spot nodegroup {spot_ng_name} is now active")
-                        success_count += 1
-                        created_nodegroups.append(spot_ng_name)
-                
-                    except Exception as e:
-                        print(f"❌ Failed to create Spot nodegroup: {str(e)}")
-        
-                # Final result
-                if success_count > 0:
-                    print(f"\n🎉 Mixed strategy implemented successfully!")
-                    print(f"   ✅ Created {success_count} nodegroups: {', '.join(created_nodegroups)}")
-                    print(f"   📊 Distribution: {on_demand_percentage}% On-Demand, {100-on_demand_percentage}% Spot")
-                    return True
-                else:
-                    print("\n❌ Failed to create any nodegroups for mixed strategy")
-                    return False
-        
-            except Exception as e:
-                print(f"❌ Error creating mixed nodegroups: {e}")
-                import traceback
-                traceback.print_exc()
+            if not on_demand_types:
+                self.log_operation('ERROR', f"No on-demand instance types provided for mixed nodegroup {nodegroup_name}")
+                self.print_colored(Colors.RED, f"❌ Failed to create mixed nodegroup: on-demand instance types not provided")
+                return False
+            
+            if not spot_types:
+                self.log_operation('ERROR', f"No spot instance types provided for mixed nodegroup {nodegroup_name}")
+                self.print_colored(Colors.RED, f"❌ Failed to create mixed nodegroup: spot instance types not provided")
                 return False
 
+            # Make sure both instance type lists are properly formatted as lists, not comma-separated strings
+            if isinstance(on_demand_types, str):
+                on_demand_types = [t.strip() for t in on_demand_types.split(',')]
+        
+            if isinstance(spot_types, str):
+                spot_types = [t.strip() for t in spot_types.split(',')]
+        
+            # Validate lists aren't empty after processing
+            if not on_demand_types:
+                self.log_operation('ERROR', f"Empty on-demand instance types list after processing for {nodegroup_name}")
+                self.print_colored(Colors.RED, f"❌ Failed to create mixed nodegroup: Empty on-demand instance types")
+                return False
+            
+            if not spot_types:
+                self.log_operation('ERROR', f"Empty spot instance types list after processing for {nodegroup_name}")
+                self.print_colored(Colors.RED, f"❌ Failed to create mixed nodegroup: Empty spot instance types")
+                return False
+
+            self.print_colored(Colors.CYAN, f"Creating mixed strategy with {on_demand_percentage}% On-Demand, {100-on_demand_percentage}% Spot")
+
+            # Calculate node distribution
+            total_desired = desired_size
+            total_min = min_size
+            total_max = max_size
+
+            # Calculate On-Demand nodes (ensure at least 1 if percentage > 0)
+            if on_demand_percentage > 0:
+                ondemand_desired = max(1, int(total_desired * on_demand_percentage / 100))
+                ondemand_min = max(0, int(total_min * on_demand_percentage / 100))
+                ondemand_max = max(1, int(total_max * on_demand_percentage / 100))
+            else:
+                ondemand_desired = ondemand_min = ondemand_max = 0
+
+            # Calculate Spot nodes (remainder)
+            spot_desired = total_desired - ondemand_desired
+            spot_min = total_min - ondemand_min
+            spot_max = total_max - ondemand_max
+
+            # Ensure spot values are valid
+            spot_desired = max(0, spot_desired)
+            spot_min = max(0, spot_min)
+            spot_max = max(0, spot_max)
+
+            self.print_colored(Colors.CYAN, f"📊 Node Distribution:")
+            self.print_colored(Colors.CYAN, f"   On-Demand: Min={ondemand_min}, Desired={ondemand_desired}, Max={ondemand_max}")
+            self.print_colored(Colors.CYAN, f"   Spot: Min={spot_min}, Desired={spot_desired}, Max={spot_max}")
+
+            success_count = 0
+            created_nodegroups = []
+
+            # Create On-Demand nodegroup if we have on-demand allocation
+            if on_demand_types and ondemand_max > 0:
+                ondemand_ng_name = f"{nodegroup_name}-ondemand"
+                self.print_colored(Colors.CYAN, f"\n🏗️ Creating On-Demand nodegroup: {ondemand_ng_name}")
+                self.print_colored(Colors.CYAN, f"   Instance Types: {', '.join(on_demand_types)}")
+                self.print_colored(Colors.CYAN, f"   Scaling: Min={ondemand_min}, Desired={ondemand_desired}, Max={ondemand_max}")
+            
+                # Generate comprehensive tags for On-Demand instances
+                ondemand_instance_tags = self.generate_instance_tags(cluster_name, ondemand_ng_name, 'Mixed-OnDemand')
+                ondemand_instance_tags['ParentNodegroup'] = nodegroup_name
+                ondemand_instance_tags['OnDemandPercentage'] = str(on_demand_percentage)
+        
+                try:
+                    eks_client.create_nodegroup(
+                        clusterName=cluster_name,
+                        nodegroupName=ondemand_ng_name,
+                        scalingConfig={
+                            'minSize': ondemand_min,
+                            'maxSize': ondemand_max,
+                            'desiredSize': ondemand_desired
+                        },
+                        instanceTypes=on_demand_types,  # Now properly a list of strings
+                        amiType=ami_type,
+                        nodeRole=node_role_arn,
+                        subnets=subnet_ids,
+                        diskSize=20,
+                        capacityType='ON_DEMAND',
+                        tags=ondemand_instance_tags,
+                        labels={
+                            'nodegroup-name': ondemand_ng_name,
+                            'instance-type': ','.join(on_demand_types),
+                            'capacity-type': 'on-demand',
+                            'parent-nodegroup': nodegroup_name
+                        }
+                    )
+            
+                    self.print_colored(Colors.CYAN, f"⏳ Waiting for On-Demand nodegroup {ondemand_ng_name} to be active...")
+                    waiter = eks_client.get_waiter('nodegroup_active')
+                    waiter.wait(
+                        clusterName=cluster_name,
+                        nodegroupName=ondemand_ng_name,
+                        WaiterConfig={'Delay': 30, 'MaxAttempts': 40}
+                    )
+                    self.print_colored(Colors.GREEN, f"✅ On-Demand nodegroup {ondemand_ng_name} is now active")
+                    success_count += 1
+                    created_nodegroups.append(ondemand_ng_name)
+            
+                except Exception as e:
+                    self.log_operation('ERROR', f"Failed to create On-Demand nodegroup: {str(e)}")
+                    self.print_colored(Colors.RED, f"❌ Failed to create On-Demand nodegroup: {str(e)}")
+
+            # Create Spot nodegroup if we have spot allocation
+            if spot_types and spot_max > 0:
+                spot_ng_name = f"{nodegroup_name}-spot"
+                self.print_colored(Colors.CYAN, f"\n🏗️ Creating Spot nodegroup: {spot_ng_name}")
+                self.print_colored(Colors.CYAN, f"   Instance Types: {', '.join(spot_types)}")
+                self.print_colored(Colors.CYAN, f"   Scaling: Min={spot_min}, Desired={spot_desired}, Max={spot_max}")
+            
+                # Generate comprehensive tags for Spot instances
+                spot_instance_tags = self.generate_instance_tags(cluster_name, spot_ng_name, 'Mixed-Spot')
+                spot_instance_tags['ParentNodegroup'] = nodegroup_name
+                spot_instance_tags['OnDemandPercentage'] = str(on_demand_percentage)
+
+                try:
+                    eks_client.create_nodegroup(
+                        clusterName=cluster_name,
+                        nodegroupName=spot_ng_name,
+                        scalingConfig={
+                            'minSize': spot_min,
+                            'maxSize': spot_max,
+                            'desiredSize': spot_desired
+                        },
+                        instanceTypes=spot_types,  # Now properly a list of strings
+                        amiType=ami_type,
+                        nodeRole=node_role_arn,
+                        subnets=subnet_ids,
+                        diskSize=20,
+                        capacityType='SPOT',
+                        tags=spot_instance_tags,
+                        labels={
+                            'nodegroup-name': spot_ng_name,
+                            'instance-type': ','.join(spot_types),
+                            'capacity-type': 'spot',
+                            'parent-nodegroup': nodegroup_name
+                        }
+                    )
+            
+                    self.print_colored(Colors.CYAN, f"⏳ Waiting for Spot nodegroup {spot_ng_name} to be active...")
+                    waiter = eks_client.get_waiter('nodegroup_active')
+                    waiter.wait(
+                        clusterName=cluster_name,
+                        nodegroupName=spot_ng_name,
+                        WaiterConfig={'Delay': 30, 'MaxAttempts': 40}
+                    )
+                    self.print_colored(Colors.GREEN, f"✅ Spot nodegroup {spot_ng_name} is now active")
+                    success_count += 1
+                    created_nodegroups.append(spot_ng_name)
+            
+                except Exception as e:
+                    self.log_operation('ERROR', f"Failed to create Spot nodegroup: {str(e)}")
+                    self.print_colored(Colors.RED, f"❌ Failed to create Spot nodegroup: {str(e)}")
+
+            # Final result
+            if success_count > 0:
+                self.print_colored(Colors.GREEN, f"\n🎉 Mixed strategy implemented successfully!")
+                self.print_colored(Colors.GREEN, f"   ✅ Created {success_count} nodegroups: {', '.join(created_nodegroups)}")
+                self.print_colored(Colors.GREEN, f"   📊 Distribution: {on_demand_percentage}% On-Demand, {100-on_demand_percentage}% Spot")
+                return True
+            else:
+                self.print_colored(Colors.RED, f"\n❌ Failed to create any nodegroups for mixed strategy")
+                return False
+
+        except Exception as e:
+            self.log_operation('ERROR', f"Error creating mixed nodegroups: {e}")
+            self.print_colored(Colors.RED, f"❌ Error creating mixed nodegroups: {e}")
+            import traceback
+            self.log_operation('ERROR', f"Stack trace: {traceback.format_exc()}")
+            return False
+
+    def create_spot_nodegroup(self, eks_client, cluster_name: str, nodegroup_name: str,
+                          node_role_arn: str, subnet_ids: List[str], ami_type: str,
+                          instance_types: List[str], min_size: int, desired_size: int, max_size: int) -> bool:
+        """Create Spot nodegroup with strict instance type validation"""
+        try:
+            # Validate that instance types are provided
+            if not instance_types:
+                self.log_operation('ERROR', f"No instance types provided for spot nodegroup {nodegroup_name}")
+                self.print_colored(Colors.RED, f"❌ Failed to create spot nodegroup: No instance types provided")
+                return False
+        
+            # Make sure instance_types is a list of individual strings, not a comma-separated string
+            if isinstance(instance_types, str):
+                instance_types = [t.strip() for t in instance_types.split(',')]
+        
+            # Validate we have at least one instance type after processing
+            if not instance_types:
+                self.log_operation('ERROR', f"Empty instance types list after processing for spot nodegroup {nodegroup_name}")
+                self.print_colored(Colors.RED, f"❌ Failed to create spot nodegroup: Empty instance types list")
+                return False
+
+            self.print_colored(Colors.CYAN, f"Creating spot nodegroup {nodegroup_name}")
+            self.print_colored(Colors.CYAN, f"Instance types: {', '.join(instance_types)}")
+            self.print_colored(Colors.CYAN, f"AMI type: {ami_type}")
+            self.print_colored(Colors.CYAN, f"Scaling: Min={min_size}, Desired={desired_size}, Max={max_size}")
+
+            # Generate comprehensive tags for instances
+            instance_tags = self.generate_instance_tags(cluster_name, nodegroup_name, 'Spot')
+
+            # Create Spot nodegroup
+            eks_client.create_nodegroup(
+                clusterName=cluster_name,
+                nodegroupName=nodegroup_name,
+                scalingConfig={
+                    'minSize': min_size,
+                    'maxSize': max_size,
+                    'desiredSize': desired_size
+                },
+                instanceTypes=instance_types,  # This is now a list of strings
+                amiType=ami_type,
+                nodeRole=node_role_arn,
+                subnets=subnet_ids,
+                diskSize=20,  # Default disk size in GB
+                capacityType='SPOT',
+                tags=instance_tags,
+                labels={
+                    'nodegroup-name': nodegroup_name,
+                    'instance-type': '-'.join(instance_types),
+                    'capacity-type': 'spot'
+                }
+            )
+
+            # Wait for nodegroup to be active
+            self.print_colored(Colors.CYAN, f"⏳ Waiting for nodegroup {nodegroup_name} to be active...")
+            waiter = eks_client.get_waiter('nodegroup_active')
+            waiter.wait(
+                clusterName=cluster_name,
+                nodegroupName=nodegroup_name,
+                WaiterConfig={'Delay': 30, 'MaxAttempts': 40}
+            )
+
+            self.print_colored(Colors.GREEN, f"✅ Nodegroup {nodegroup_name} is now active")
+            return True
+
+        except Exception as e:
+            self.log_operation('ERROR', f"Error creating spot nodegroup: {e}")
+            self.print_colored(Colors.RED, f"❌ Error creating spot nodegroup: {e}")
+            return False
+
+    def create_ondemand_nodegroup(self, eks_client, cluster_name: str, nodegroup_name: str,
+                        node_role_arn: str, subnet_ids: List[str], ami_type: str,
+                        instance_types: List[str], min_size: int, desired_size: int, max_size: int) -> bool:
+        """Create On-Demand nodegroup with strict instance type validation"""
+        try:
+            # Validate that instance types are provided
+            if not instance_types:
+                self.log_operation('ERROR', f"No instance types provided for on-demand nodegroup {nodegroup_name}")
+                self.print_colored(Colors.RED, f"❌ Failed to create nodegroup: No instance types provided")
+                return False
+        
+            # Make sure instance_types is a list of individual strings, not a comma-separated string
+            if isinstance(instance_types, str):
+                instance_types = [t.strip() for t in instance_types.split(',')]
+        
+            # Validate we have at least one instance type after processing
+            if not instance_types:
+                self.log_operation('ERROR', f"Empty instance types list after processing for nodegroup {nodegroup_name}")
+                self.print_colored(Colors.RED, f"❌ Failed to create nodegroup: Empty instance types list")
+                return False
+
+            self.print_colored(Colors.CYAN, f"Creating on-demand nodegroup {nodegroup_name}")
+            self.print_colored(Colors.CYAN, f"Instance types: {', '.join(instance_types)}")
+            self.print_colored(Colors.CYAN, f"AMI type: {ami_type}")
+            self.print_colored(Colors.CYAN, f"Scaling: Min={min_size}, Desired={desired_size}, Max={max_size}")
+
+            # Generate comprehensive tags for instances
+            instance_tags = self.generate_instance_tags(cluster_name, nodegroup_name, 'On-Demand')
+
+            # Create On-Demand nodegroup
+            eks_client.create_nodegroup(
+                clusterName=cluster_name,
+                nodegroupName=nodegroup_name,
+                scalingConfig={
+                    'minSize': min_size,
+                    'maxSize': max_size,
+                    'desiredSize': desired_size
+                },
+                instanceTypes=instance_types,  # This is now a list of strings
+                amiType=ami_type,
+                nodeRole=node_role_arn,
+                subnets=subnet_ids,
+                diskSize=20,  # Default disk size in GB
+                capacityType='ON_DEMAND',
+                tags=instance_tags,
+                labels={
+                    'nodegroup-name': nodegroup_name,
+                    'instance-type': '-'.join(instance_types),
+                    'capacity-type': 'on-demand'
+                }
+            )
+
+            # Wait for nodegroup to be active
+            self.print_colored(Colors.CYAN, f"⏳ Waiting for nodegroup {nodegroup_name} to be active...")
+            waiter = eks_client.get_waiter('nodegroup_active')
+            waiter.wait(
+                clusterName=cluster_name,
+                nodegroupName=nodegroup_name,
+                WaiterConfig={'Delay': 30, 'MaxAttempts': 40}
+            )
+
+            self.print_colored(Colors.GREEN, f"✅ Nodegroup {nodegroup_name} is now active")
+            return True
+
+        except Exception as e:
+            self.log_operation('ERROR', f"Error creating on-demand nodegroup: {e}")
+            self.print_colored(Colors.RED, f"❌ Error creating on-demand nodegroup: {e}")
+            return False
+    
     def ensure_iam_roles(self, iam_client, account_id: str) -> Tuple[str, str]:
             """Ensure required IAM roles exist"""
             eks_role_name = "eks-service-role"
@@ -5068,9 +4742,31 @@ class EKSClusterManager:
 
     def print_colored(self, color: str, message: str) -> None:
         """Print colored message to terminal"""
-        print(f"{color}{message}{Colors.NC}")
+        if not hasattr(self, 'colors'):
+            self.colors = {
+                'RED': '\033[0;31m',
+                'GREEN': '\033[0;32m',
+                'YELLOW': '\033[1;33m',
+                'BLUE': '\033[0;34m',
+                'PURPLE': '\033[0;35m',
+                'CYAN': '\033[0;36m',
+                'WHITE': '\033[1;37m',
+                'NC': '\033[0m'  # No Color
+            }
+    
+        color_code = self.colors.get(color, self.colors['WHITE'])
+        print(f"{color_code}{message}{self.colors['NC']}")
 
-    ########
+    def debug_nodegroup_configs(self, stage: str, nodegroup_configs) -> None:
+        """Debug function to print the nodegroup_configs at various points"""
+        if nodegroup_configs is None:
+            self.print_colored('YELLOW', f"[DEBUG {stage}] nodegroup_configs is None")
+        else:
+            self.print_colored('GREEN', f"[DEBUG {stage}] nodegroup_configs is set: {len(nodegroup_configs)} configs")
+            for i, config in enumerate(nodegroup_configs):
+                self.print_colored('CYAN', f"  Config {i+1}: {config.get('name')}, strategy: {config.get('strategy')}")
+    
+ ########
 
     def get_cloudwatch_configmap_manifest_fixed(self, config: dict, cluster_name: str, region: str) -> str:
             """Get CloudWatch ConfigMap manifest with safely quoted JSON"""
@@ -7094,7 +6790,817 @@ class EKSClusterManager:
         """Basic logger for EKSClusterManager"""
         print(f"[{level}] {message}")
 
-    def print_colored(self, color: str, message: str) -> None:
-        """Print colored message to terminal"""
-        print(f"{color}{message}{Colors.NC}")
+
 ########
+
+    def create_cluster(self, config: Dict) -> bool:
+        """
+        Create EKS cluster with nodegroups based on provided configuration.
+        Prompts for add-ons, Container Insights, and nodegroup strategies before cluster creation.
+
+        Args:
+            config: Dictionary containing cluster configuration
+
+        Returns:
+            bool: True if cluster creation was successful, False otherwise
+        """
+        try:
+            # Extract configuration parameters
+            nodegroup_configs = config.get('nodegroup_configs', None)
+            self.debug_nodegroup_configs("create_cluster input", nodegroup_configs)
+            cluster_name = config.get('cluster_name')
+            region = config.get('region', 'us-east-1')
+            access_key = config.get('access_key', '')
+            secret_key = config.get('secret_key', '')
+            account_id = config.get('account_id', '')
+            account_name = config.get('account_name', '')
+            username = config.get('username', 'unknown')
+
+            # Log cluster creation start
+            self.log_operation('INFO', f"Starting creation of cluster {cluster_name} in {region}")
+            self.print_colored(Colors.YELLOW, f"\n🚀 Creating EKS cluster: {cluster_name}")
+            self.print_colored(Colors.YELLOW, f"   Region: {region}")
+            self.print_colored(Colors.YELLOW, f"   Account: {account_name} ({account_id})")
+            self.print_colored(Colors.YELLOW, f"   User: {username}")
+
+            # Check if nodegroup configuration is already provided
+            nodegroup_configs = config.get('nodegroup_configs', None)
+            self.log_operation('DEBUG', f"Received nodegroup_configs in create_cluster: {nodegroup_configs}")
+
+            # Skip interactive configuration if nodegroup_configs are already provided
+            if not nodegroup_configs:
+                # Step 1: Interactive configuration prompts
+                print("\n" + "="*60)
+                print("💻 CLUSTER CONFIGURATION")
+                print("="*60)
+    
+                # 1.1 Ask for nodegroup strategy
+                print("\n🔄 Nodegroup Strategy Selection:")
+                print("1. On-demand (reliable, consistent performance, higher cost)")
+                print("2. Spot (cheaper, but can be terminated, best for non-critical workloads)")
+                print("3. Mixed (combination of on-demand and spot for balance)")
+    
+                default_strategy = config.get('strategy', 'on-demand')
+                default_choice = "1" if default_strategy == "on-demand" else "2" if default_strategy == "spot" else "3"
+    
+                while True:
+                    strategy_choice = input(f"Select nodegroup strategy (1-3) [default: {default_choice}]: ").strip()
+                    if not strategy_choice:
+                        strategy_choice = default_choice
+        
+                    if strategy_choice == "1":
+                        strategy = "on-demand"
+                        break
+                    elif strategy_choice == "2":
+                        strategy = "spot"
+                        break
+                    elif strategy_choice == "3":
+                        strategy = "mixed"
+                        break
+                    else:
+                        print("❌ Invalid choice. Please enter 1, 2, or 3.")
+    
+                self.print_colored(Colors.GREEN, f"✅ Selected nodegroup strategy: {strategy.upper()}")
+    
+                # 1.2 Select instance type
+                instance_type = self.select_instance_type(username)
+    
+                # 1.3 Configure nodegroup sizing
+                print("\n🔢 Nodegroup Sizing:")
+                default_min = config.get('min_size', 1)
+                default_desired = config.get('desired_size', 1)
+                default_max = config.get('max_size', 3)
+    
+                try:
+                    min_size = int(input(f"Minimum nodes [default: {default_min}]: ").strip() or default_min)
+                    desired_size = int(input(f"Desired nodes [default: {default_desired}]: ").strip() or default_desired)
+                    max_size = int(input(f"Maximum nodes [default: {default_max}]: ").strip() or default_max)
+        
+                    # Validate values
+                    if min_size < 0 or desired_size < 0 or max_size < 0:
+                        print("❌ Negative values are not allowed. Using defaults.")
+                        min_size, desired_size, max_size = default_min, default_desired, default_max
+        
+                    if min_size > desired_size or desired_size > max_size:
+                        print("❌ Invalid values (should be min ≤ desired ≤ max). Adjusting...")
+                        max_size = max(max_size, desired_size, min_size)
+                        min_size = min(min_size, desired_size)
+                        desired_size = max(min_size, min(desired_size, max_size))
+        
+                except ValueError:
+                    print("❌ Invalid number format. Using defaults.")
+                    min_size, desired_size, max_size = default_min, default_desired, default_max
+    
+                self.print_colored(Colors.GREEN, f"✅ Nodegroup sizing: Min={min_size}, Desired={desired_size}, Max={max_size}")
+    
+                # 1.4 For mixed strategy, ask for on-demand percentage
+                instance_selections = {}
+                if strategy == 'mixed':
+                    print("\n📊 Mixed Strategy Configuration:")
+                    default_percentage = 30
+                    try:
+                        on_demand_percentage = int(input(f"Percentage of On-Demand capacity (0-100) [default: {default_percentage}%]: ").strip() or default_percentage)
+                        if on_demand_percentage < 0 or on_demand_percentage > 100:
+                            print("❌ Percentage must be between 0 and 100. Using default.")
+                            on_demand_percentage = default_percentage
+                    except ValueError:
+                        print("❌ Invalid number format. Using default percentage.")
+                        on_demand_percentage = default_percentage
+        
+                    # Create instance selections for mixed strategy
+                    instance_selections = {
+                        'on-demand': [instance_type],
+                        'spot': self.get_diversified_instance_types(instance_type),
+                        'on_demand_percentage': on_demand_percentage
+                    }
+        
+                    self.print_colored(Colors.GREEN, f"✅ Mixed strategy: {on_demand_percentage}% On-Demand, {100-on_demand_percentage}% Spot")
+        
+                elif strategy == 'spot':
+                    # Use diversified instance types for better spot availability
+                    instance_selections = {
+                        'spot': self.get_diversified_instance_types(instance_type)
+                    }
+                    spot_types = ', '.join(instance_selections['spot'])
+                    self.print_colored(Colors.GREEN, f"✅ Spot instance types: {spot_types}")
+        
+                elif strategy == 'on-demand':
+                    instance_selections = {
+                        'on-demand': [instance_type]
+                    }
+    
+                # 1.5 Subnet preference
+                print("\n🌐 Subnet Preference:")
+                print("1. Auto (use all available subnets)")
+                print("2. Public (prefer public subnets)")
+                print("3. Private (prefer private subnets)")
+    
+                default_subnet = "1"
+                subnet_choice = input(f"Select subnet preference (1-3) [default: {default_subnet}]: ").strip()
+                if not subnet_choice:
+                    subnet_choice = default_subnet
+        
+                if subnet_choice == "1":
+                    subnet_preference = "auto"
+                elif subnet_choice == "2":
+                    subnet_preference = "public"
+                elif subnet_choice == "3":
+                    subnet_preference = "private"
+                else:
+                    subnet_preference = "auto"
+        
+                self.print_colored(Colors.GREEN, f"✅ Subnet preference: {subnet_preference.upper()}")
+    
+                # Create a single nodegroup config
+                nodegroup_name = self.generate_nodegroup_name(cluster_name, strategy)
+                nodegroup_configs = [{
+                    'name': nodegroup_name,
+                    'strategy': strategy,
+                    'min_nodes': min_size,
+                    'desired_nodes': desired_size,
+                    'max_nodes': max_size,
+                    'instance_selections': instance_selections,
+                    'subnet_preference': subnet_preference
+                }]
+    
+                # Update config with the created nodegroup config
+                config['nodegroup_configs'] = nodegroup_configs
+                self.log_operation('DEBUG', f"Generated nodegroup_configs: {nodegroup_configs}")
+    
+                # 1.6 Ask for add-ons and Container Insights
+                if not hasattr(self, 'setup_addons') or not hasattr(self, 'setup_container_insights'):
+                    # Ask once and store for all future cluster creations
+                    print("\n" + "="*60)
+                    print("📦 CLUSTER ADD-ONS CONFIGURATION")
+                    print("="*60)
+                    self.setup_addons = input("Do you want to install essential add-ons (EFS CSI Driver, etc.)? (Y/n): ").strip().lower() != 'n'
+                    self.setup_container_insights = input("Do you want to enable CloudWatch Container Insights for monitoring? (Y/n): ").strip().lower() != 'n'
+        
+                    if self.setup_addons:
+                        self.print_colored(Colors.GREEN, "✅ Essential add-ons will be installed")
+                    else:
+                        self.print_colored(Colors.YELLOW, "⚠️ Essential add-ons will NOT be installed")
+            
+                    if self.setup_container_insights:
+                        self.print_colored(Colors.GREEN, "✅ CloudWatch Container Insights will be enabled")
+                    else:
+                        self.print_colored(Colors.YELLOW, "⚠️ CloudWatch Container Insights will NOT be enabled")
+    
+                # Display cost estimation based on selected configuration
+                for ng_config in nodegroup_configs:
+                    # Get primary instance type
+                    if ng_config['strategy'] == 'on-demand':
+                        primary_instance = ng_config['instance_selections'].get('on-demand', [instance_type])[0]
+                    elif ng_config['strategy'] == 'spot':
+                        primary_instance = ng_config['instance_selections'].get('spot', [instance_type])[0]
+                    else:
+                        primary_instance = ng_config['instance_selections'].get('on-demand', [instance_type])[0]
+        
+                    self.display_cost_estimation(primary_instance, ng_config['strategy'], ng_config['desired_nodes'])
+            else:
+                # We already have nodegroup configs (likely from multi-nodegroup workflow)
+                # Just extract the key data we need for further processing
+                self.log_operation('INFO', f"Using existing nodegroup_configs: {nodegroup_configs}")
+                strategy = nodegroup_configs[0]['strategy']  # Use the strategy from the first nodegroup
+
+            # Final confirmation
+            print("\n" + "="*60)
+            print("🚀 CLUSTER CREATION SUMMARY")
+            print("="*60)
+            print(f"Cluster Name: {cluster_name}")
+            print(f"Region: {region}")
+
+            # Display each nodegroup configuration
+            for i, ng_config in enumerate(nodegroup_configs, 1):
+                print(f"\nNodegroup {i}: {ng_config['name']}")
+                print(f"Strategy: {ng_config['strategy'].upper()}")
+                print(f"Scaling: Min={ng_config['min_nodes']}, Desired={ng_config['desired_nodes']}, Max={ng_config['max_nodes']}")
+    
+                # Display instance type information
+                if ng_config['strategy'] == 'mixed':
+                    on_demand_types = ng_config['instance_selections'].get('on-demand', ['Not specified'])
+                    spot_types = ng_config['instance_selections'].get('spot', ['Not specified'])
+                    on_demand_percentage = ng_config['instance_selections'].get('on_demand_percentage', 50)
+                    print(f"Mixed Strategy: {on_demand_percentage}% On-Demand, {100-on_demand_percentage}% Spot")
+                    print(f"Instance Types: On-Demand: {', '.join(on_demand_types)}, Spot: {', '.join(spot_types)}")
+                elif ng_config['strategy'] == 'spot':
+                    spot_types = ng_config['instance_selections'].get('spot', ['Not specified'])
+                    print(f"Spot Instance Types: {', '.join(spot_types)}")
+                else:
+                    on_demand_types = ng_config['instance_selections'].get('on-demand', ['Not specified'])
+                    print(f"On-Demand Instance Types: {', '.join(on_demand_types)}")
+    
+                print(f"Subnet Preference: {ng_config['subnet_preference'].upper()}")
+
+            confirmation = input("\nConfirm cluster creation with these settings? (Y/n): ").strip().lower()
+            if confirmation == 'n':
+                self.print_colored(Colors.YELLOW, "❌ Cluster creation cancelled by user")
+                return False
+
+            # Step 2: Create AWS session and clients
+            self.log_operation('INFO', f"Creating AWS session for region {region}")
+            session = boto3.Session(
+                aws_access_key_id=access_key,
+                aws_secret_access_key=secret_key,
+                region_name=region
+            )
+
+            eks_client = session.client('eks')
+            ec2_client = session.client('ec2')
+            iam_client = session.client('iam')
+            sts_client = session.client('sts')
+
+            # Verify account ID if not provided
+            if not account_id:
+                account_id = sts_client.get_caller_identity()['Account']
+                self.log_operation('INFO', f"Detected Account ID: {account_id}")
+
+            # Step 3: Ensure IAM roles exist
+            self.print_colored(Colors.CYAN, "   🔐 Setting up IAM roles...")
+            eks_role_arn, node_role_arn = self.ensure_iam_roles(iam_client, account_id)
+
+            # Step 4: Get or create VPC resources
+            self.print_colored(Colors.CYAN, "   🌐 Setting up networking resources...")
+            subnet_ids, security_group_id = self.get_or_create_vpc_resources(ec2_client, region)
+
+            # Step 5: Create EKS control plane
+            self.print_colored(Colors.CYAN, f"   🚀 Creating EKS control plane {cluster_name}...")
+
+            # Set default EKS version - adjust based on your requirements
+            eks_version = config.get('eks_version', '1.28')
+
+            # Create control plane with proper error handling and logging
+            try:
+                # Check if cluster already exists
+                try:
+                    eks_client.describe_cluster(name=cluster_name)
+                    cluster_exists = True
+                    self.log_operation('INFO', f"Cluster {cluster_name} already exists")
+                    self.print_colored(Colors.YELLOW, f"   ⚠️ Cluster {cluster_name} already exists, skipping creation")
+                except eks_client.exceptions.ResourceNotFoundException:
+                    cluster_exists = False
+    
+                if not cluster_exists:
+                    # Create the EKS cluster control plane
+                    self.log_operation('INFO', f"Creating EKS control plane {cluster_name} with version {eks_version}")
+        
+                    eks_client.create_cluster(
+                        name=cluster_name,
+                        version=eks_version,
+                        roleArn=eks_role_arn,
+                        resourcesVpcConfig={
+                            'subnetIds': subnet_ids,
+                            'securityGroupIds': [security_group_id],
+                            'endpointPublicAccess': True,
+                            'endpointPrivateAccess': True,
+                            'publicAccessCidrs': ['0.0.0.0/0']
+                        },
+                        logging={
+                            'clusterLogging': [
+                                {
+                                    'types': ['api', 'audit', 'authenticator', 'controllerManager', 'scheduler'],
+                                    'enabled': True
+                                }
+                            ]
+                        },
+                        tags=self.generate_instance_tags(cluster_name, "control-plane", "managed")
+                    )
+        
+                    # Wait for cluster to be active
+                    self.print_colored(Colors.CYAN, f"   ⏳ Waiting for cluster {cluster_name} to be active...")
+                    waiter = eks_client.get_waiter('cluster_active')
+                    waiter.wait(
+                        name=cluster_name,
+                        WaiterConfig={'Delay': 30, 'MaxAttempts': 40}
+                    )
+        
+                    self.print_colored(Colors.GREEN, f"   ✅ EKS control plane {cluster_name} is now active")
+                    self.log_operation('INFO', f"EKS control plane {cluster_name} created successfully")
+
+            except Exception as e:
+                self.log_operation('ERROR', f"Failed to create EKS control plane {cluster_name}: {str(e)}")
+                self.print_colored(Colors.RED, f"❌ Failed to create EKS control plane: {str(e)}")
+                return False
+
+            # Step 6: Create nodegroups based on strategy
+            self.print_colored(Colors.CYAN, f"   🚀 Creating nodegroups with {strategy} strategy...")
+
+            # Generate nodegroup name
+            nodegroup_name = self.generate_nodegroup_name(cluster_name, strategy)
+            ami_type = config.get('ami_type', 'AL2_x86_64')  # Amazon Linux 2 x86_64
+
+            # Create nodegroup(s) based on strategy
+            nodegroups_created = []
+            try:
+                for ng_config in nodegroup_configs:
+                    self.log_operation('INFO', f"Creating nodegroup with config: {ng_config}")
+            
+                    strategy = ng_config['strategy']
+                    nodegroup_name = ng_config['name']
+                    min_size = ng_config['min_nodes']
+                    desired_size = ng_config['desired_nodes']
+                    max_size = ng_config['max_nodes']
+                    instance_selections = ng_config['instance_selections']
+            
+                    # Select subnet IDs based on preference
+                    subnet_preference = ng_config.get('subnet_preference', 'auto')
+                    selected_subnets = self.select_subnets_for_nodegroup(subnet_ids, subnet_preference, ec2_client)
+            
+                    self.log_operation('INFO', f"Creating nodegroup {nodegroup_name} with strategy {strategy}")
+            
+                    if strategy == 'on-demand':
+                        success = self.create_ondemand_nodegroup(
+                            eks_client, cluster_name, nodegroup_name, node_role_arn, selected_subnets,
+                            ami_type, instance_selections.get('on-demand', [instance_type]), min_size, desired_size, max_size
+                        )
+                        if success:
+                            nodegroups_created.append(nodegroup_name)
+                
+                    elif strategy == 'spot':
+                        success = self.create_spot_nodegroup(
+                            eks_client, cluster_name, nodegroup_name, node_role_arn, selected_subnets,
+                            ami_type, instance_selections.get('spot', self.get_diversified_instance_types(instance_type)), 
+                            min_size, desired_size, max_size
+                        )
+                        if success:
+                            nodegroups_created.append(nodegroup_name)
+                
+                    elif strategy == 'mixed':
+                        success = self.create_mixed_nodegroup(
+                            eks_client, cluster_name, nodegroup_name, node_role_arn, selected_subnets,
+                            ami_type, instance_selections, min_size, desired_size, max_size
+                        )
+                        if success:
+                            # For mixed strategy, we'll have two nodegroups
+                            nodegroups_created.append(f"{nodegroup_name}-ondemand")
+                            nodegroups_created.append(f"{nodegroup_name}-spot")
+        
+                if not nodegroups_created:
+                    self.log_operation('ERROR', f"Failed to create nodegroups for cluster {cluster_name}")
+                    self.print_colored(Colors.RED, f"❌ Nodegroup creation failed")
+                    return False
+        
+                self.log_operation('INFO', f"Successfully created nodegroups: {', '.join(nodegroups_created)}")
+    
+            except Exception as e:
+                self.log_operation('ERROR', f"Failed to create nodegroups: {str(e)}")
+                self.print_colored(Colors.RED, f"❌ Failed to create nodegroups: {str(e)}")
+                return False
+
+            # Step 7: Install essential add-ons if confirmed by user
+            if self.setup_addons:
+                self.print_colored(Colors.CYAN, "   📦 Installing essential add-ons...")
+                addons_installed = self.install_essential_addons(
+                    eks_client, cluster_name, region, access_key, secret_key, account_id
+                )
+                self.log_operation('INFO', f"Essential add-ons installation {'successful' if addons_installed else 'failed'}")
+            else:
+                addons_installed = False
+                self.log_operation('INFO', "Essential add-ons installation skipped by user")
+
+            # Step 8: Set up and verify all components
+            components_status = self.setup_and_verify_all_components(
+                cluster_name, region, access_key, secret_key, account_id, nodegroups_created
+            )
+
+            # Step 9: Configure Auth ConfigMap for user access
+            self.print_colored(Colors.CYAN, "   🔑 Configuring user access...")
+            auth_configured = self.configure_aws_auth_configmap(
+                cluster_name, region, account_id, config, access_key, secret_key
+            )
+
+            # Step 10: Verify user access to the cluster
+            self.print_colored(Colors.CYAN, "   🔍 Verifying user access...")
+            access_verified = self.verify_user_access(
+                cluster_name, region, username, access_key, secret_key
+            )
+
+            # Step 11: Perform health check
+            self.print_colored(Colors.CYAN, "   🏥 Running health check...")
+            initial_health_check = self.health_check_cluster(
+                cluster_name, region, access_key, secret_key
+            )
+
+            # Save cluster details for future use
+            features_status = {
+                'eks_version': eks_version,
+                'ami_type': ami_type,
+                'nodegroups_created': nodegroups_created,
+                'nodegroup_configs': nodegroup_configs,  # Store full nodegroup configs
+                'addons_installed': addons_installed,
+                'container_insights_enabled': components_status.get('container_insights', False),
+                'autoscaler_enabled': components_status.get('cluster_autoscaler', False),
+                'scheduled_scaling_enabled': components_status.get('scheduled_scaling', False),
+                'cloudwatch_agent_enabled': components_status.get('cloudwatch_agent', False),
+                'cloudwatch_alarms_enabled': components_status.get('cloudwatch_alarms', False),
+                'cost_alarms_enabled': components_status.get('cost_alarms', False),
+                'auth_configured': auth_configured,
+                'access_verified': access_verified,
+                'initial_health_check': initial_health_check
+            }
+
+            # Create credential info for saving cluster details
+            credential_info = CredentialInfo(
+                account_name=account_name,
+                account_id=account_id,
+                email=config.get('email', 'unknown'),
+                access_key=access_key,
+                secret_key=secret_key,
+                credential_type='unknown',
+                regions=[region],
+                username=username
+            )
+
+            # Save cluster details to file
+            self.save_cluster_details_enhanced(
+                credential_info, cluster_name, region, eks_version, ami_type, nodegroup_configs, features_status
+            )
+
+            # Generate user instructions
+            self.generate_user_instructions_enhanced(
+                credential_info, cluster_name, region, username, nodegroup_configs
+            )
+
+            # Print enhanced cluster summary
+            self.print_enhanced_cluster_summary_multi_nodegroup(cluster_name, features_status)
+
+            # Log successful cluster creation
+            self.log_operation('INFO', f"Successfully created and configured cluster {cluster_name}")
+            return True
+
+        except Exception as e:
+            error_msg = str(e)
+            self.log_operation('ERROR', f"Failed to create cluster {config.get('cluster_name', 'unknown')}: {error_msg}")
+            self.print_colored(Colors.RED, f"❌ Cluster creation failed: {error_msg}")
+
+            # Get full stack trace for debugging
+            import traceback
+            self.log_operation('ERROR', f"Stack trace: {traceback.format_exc()}")
+            return False
+
+    def create_multiple_clusters(self, cluster_configs: List[Dict]) -> bool:
+        """Create multiple clusters with shared configuration and enhanced error handling"""
+        if not cluster_configs:
+            self.logger.warning("No clusters configured to create")
+            return False
+    
+        # Initialize tracking structures
+        created_clusters = []
+        failed_clusters = []
+        error_details = {}  # Store detailed error info for each failed cluster
+    
+        # Get shared configuration once
+        self.logger.info(f"Starting batch creation of {len(cluster_configs)} clusters")
+    
+        # Show summary before proceeding
+        self.logger.info("Cluster creation summary:")
+        for i, config in enumerate(cluster_configs, 1):
+            cluster_name = config.get('cluster_name', 'unnamed')
+            username = config.get('username', 'unknown')
+            region = config.get('region', 'unknown')
+            self.logger.info(f"  {i}. {cluster_name} - Region: {region}, User: {username}")
+    
+        # Create all clusters with shared configuration
+        total_clusters = len(cluster_configs)
+        print(f"\n🚀 Starting creation of {total_clusters} clusters...")
+    
+        for i, config in enumerate(cluster_configs, 1):
+            cluster_name = config.get('cluster_name', 'unnamed')
+            username = config.get('username', 'unknown')
+            region = config.get('region', 'unknown')
+        
+            self.logger.info(f"[{i}/{total_clusters}] Creating cluster {cluster_name} for {username} in {region}")
+            print(f"\n[{i}/{total_clusters}] 🚀 Creating cluster {cluster_name} for {username}...")
+        
+            try:
+                # Create structured log entry for start of cluster creation
+                self.logger.info(json.dumps({
+                    "event": "cluster_creation_start", 
+                    "cluster_name": cluster_name,
+                    "username": username,
+                    "region": region,
+                    "strategy": config.get('strategy', 'unknown'),
+                    "min_size": config.get('min_size', 0),
+                    "desired_size": config.get('desired_size', 0),
+                    "max_size": config.get('max_size', 0)
+                }))
+            
+                # Call existing create_cluster method
+                result = self.create_cluster(config)
+            
+                if result:
+                    created_clusters.append(cluster_name)
+                    self.logger.info(json.dumps({
+                        "event": "cluster_creation_success", 
+                        "cluster_name": cluster_name,
+                        "username": username
+                    }))
+                else:
+                    failed_clusters.append(cluster_name)
+                    error_message = "Create cluster method returned False"
+                    error_details[cluster_name] = error_message
+                    self.logger.error(json.dumps({
+                        "event": "cluster_creation_failure", 
+                        "cluster_name": cluster_name,
+                        "username": username,
+                        "error": error_message
+                    }))
+                
+            except Exception as e:
+                failed_clusters.append(cluster_name)
+                error_msg = str(e)
+                error_details[cluster_name] = error_msg
+            
+                # Log the full stack trace for debugging
+                import traceback
+                stack_trace = traceback.format_exc()
+                self.logger.error(json.dumps({
+                    "event": "cluster_creation_exception", 
+                    "cluster_name": cluster_name,
+                    "username": username,
+                    "error": error_msg,
+                    "stack_trace": stack_trace
+                }))
+            
+                self.print_colored(Colors.RED, f"❌ Error creating cluster {cluster_name}: {error_msg}")
+            
+                # Ask if user wants to continue with remaining clusters
+                if i < total_clusters:
+                    continue_choice = input(f"\n⚠️ Failed to create cluster {cluster_name}. Continue with remaining {total_clusters - i} clusters? (y/N): ").strip().lower()
+                    if continue_choice not in ['y', 'yes']:
+                        self.logger.warning(f"Batch creation aborted by user after failure of {cluster_name}")
+                        break
+    
+        # Generate and log final summary
+        success_rate = len(created_clusters) / total_clusters * 100 if total_clusters > 0 else 0
+    
+        summary = {
+            "event": "batch_creation_summary",
+            "total_clusters": total_clusters,
+            "successful": len(created_clusters),
+            "failed": len(failed_clusters),
+            "success_rate_percent": round(success_rate, 2),
+            "created_clusters": created_clusters,
+            "failed_clusters": {cluster: error_details.get(cluster, "Unknown error") for cluster in failed_clusters}
+        }
+    
+        self.logger.info(json.dumps(summary))
+    
+        # Print final summary
+        print("\n" + "=" * 60)
+        print("📋 BATCH CREATION SUMMARY")
+        print("=" * 60)
+        print(f"Total clusters: {total_clusters}")
+        print(f"Successfully created: {len(created_clusters)} ({success_rate:.1f}%)")
+        print(f"Failed: {len(failed_clusters)} ({100-success_rate:.1f}%)")
+    
+        if created_clusters:
+            self.print_colored(Colors.GREEN, "\n✅ Successfully created clusters:")
+            for cluster in created_clusters:
+                print(f"   - {cluster}")
+    
+        if failed_clusters:
+            self.print_colored(Colors.RED, "\n❌ Failed clusters:")
+            for cluster in failed_clusters:
+                error = error_details.get(cluster, "Unknown error")
+                print(f"   - {cluster}: {error}")
+    
+        # Save error details to a report file
+        if failed_clusters:
+            try:
+                report_file = f"cluster_creation_errors_{self.execution_timestamp}.json"
+                error_report = {
+                    "timestamp": datetime.now().isoformat(),
+                    "total_clusters": total_clusters,
+                    "failed_clusters": len(failed_clusters),
+                    "errors": {cluster: error_details.get(cluster, "Unknown error") for cluster in failed_clusters}
+                }
+            
+                with open(report_file, 'w') as f:
+                    json.dump(error_report, f, indent=2)
+                
+                self.print_colored(Colors.YELLOW, f"\n📝 Error details saved to: {report_file}")
+                self.logger.info(f"Error report written to {report_file}")
+            except Exception as e:
+                self.print_colored(Colors.YELLOW, f"\n⚠️ Could not save error report: {str(e)}")
+                self.logger.error(f"Failed to write error report: {str(e)}")
+    
+        return len(created_clusters) > 0
+
+    def process_single_user(self, user_data: Dict) -> bool:
+        """
+        Process a single IAM user for cluster creation
+    
+        Args:
+            user_data: Dictionary containing the user data including username, credentials, and preferences
+        
+        Returns:
+            bool: True if cluster creation was successful, False otherwise
+        """
+        try:
+            self.logger.info(f"Processing single user: {user_data.get('username', 'unknown')}")
+        
+            username = user_data.get('username', 'unknown')
+            region = user_data.get('region', 'us-east-1')
+            account_id = user_data.get('account_id', '')
+            account_name = user_data.get('account_name', '')
+        
+            # Generate cluster name if not provided
+            cluster_name = user_data.get('cluster_name', self.generate_cluster_name(username, region))
+        
+            # Create structured log entry for start of cluster creation
+            self.logger.info(json.dumps({
+                "event": "cluster_creation_start", 
+                "cluster_name": cluster_name,
+                "username": username,
+                "region": region,
+                "strategy": user_data.get('strategy', 'unknown'),
+                "account_id": account_id,
+                "account_name": account_name
+            }))
+
+            
+            # Explicitly check and log if nodegroup_configs exists in user_data
+            if 'nodegroup_configs' in user_data and user_data['nodegroup_configs']:
+                self.logger.info(f"Found nodegroup_configs in user_data: {user_data['nodegroup_configs']}")
+            else:
+                self.logger.warning(f"No nodegroup_configs found in user_data for {username}")
+        
+            # Call existing create_cluster method
+            config = {
+                'cluster_name': cluster_name,
+                'username': username,
+                'region': region,
+                'account_id': account_id,
+                'account_name': account_name,
+                'access_key': user_data.get('access_key', ''),
+                'secret_key': user_data.get('secret_key', ''),
+                # Add any other required configuration parameters
+                'strategy': user_data.get('strategy', 'on-demand'),
+                'min_size': user_data.get('min_size', 1),
+                'desired_size': user_data.get('desired_size', 1),
+                'max_size': user_data.get('max_size', 3),
+                'instance_selections': user_data.get('instance_selections', {}),
+                'subnet_preference': user_data.get('subnet_preference', 'auto')
+            }
+
+                # Explicitly add nodegroup_configs if it exists
+            if 'nodegroup_configs' in user_data:
+                config['nodegroup_configs'] = user_data['nodegroup_configs']
+    
+        
+            # Add additional configs from user_data if they exist
+            for key, value in user_data.items():
+                if key not in config:
+                    config[key] = value
+        
+            result = self.create_cluster(config)
+        
+            if result:
+                self.logger.info(json.dumps({
+                    "event": "cluster_creation_success",
+                    "cluster_name": cluster_name,
+                    "username": username,
+                    "region": region
+                }))
+                self.print_colored(Colors.GREEN, f"✅ Successfully created cluster {cluster_name} for {username}")
+            else:
+                self.logger.error(json.dumps({
+                    "event": "cluster_creation_failure",
+                    "cluster_name": cluster_name,
+                    "username": username,
+                    "region": region,
+                    "error": "create_cluster method returned False"
+                }))
+                self.print_colored(Colors.RED, f"❌ Failed to create cluster {cluster_name} for {username}")
+        
+            return result
+        
+        except Exception as e:
+            error_msg = str(e)
+        
+            # Get the stack trace for detailed logging
+            import traceback
+            stack_trace = traceback.format_exc()
+        
+            self.logger.error(json.dumps({
+                "event": "cluster_creation_exception",
+                "username": user_data.get('username', 'unknown'),
+                "error": error_msg,
+                "stack_trace": stack_trace
+            }))
+        
+            self.print_colored(Colors.RED, f"❌ Error creating cluster for {user_data.get('username', 'unknown')}: {error_msg}")
+            return False
+
+    def process_multiple_user_selection(self, selected_users: List[Dict]) -> bool:
+        """
+        Process the selection of multiple IAM users for cluster creation
+    
+        Args:
+            selected_users: List of dictionaries containing user data
+        
+        Returns:
+            bool: True if at least one cluster was created successfully, False otherwise
+        """
+        if not selected_users or len(selected_users) == 0:
+            self.logger.error("No users selected for cluster creation")
+            return False
+    
+        # If only one user is selected, use the standard workflow
+        if len(selected_users) == 1:
+            self.logger.info("Single user selected, using standard workflow")
+            return self.process_single_user(selected_users[0])
+    
+        # Multiple users selected - create cluster configurations
+        cluster_configs = []
+    
+        self.logger.info(f"Selected {len(selected_users)} users for cluster creation")
+        print(f"\n👥 Selected {len(selected_users)} users for cluster creation")
+    
+        # Generate cluster config for each selected user
+        for user in selected_users:
+            user_config = {
+                'username': user.get('username', 'unknown'),
+                'cluster_name': self.generate_cluster_name(
+                    user.get('username', 'unknown'), 
+                    user.get('region', 'us-east-1')
+                ),
+                'region': user.get('region', 'us-east-1'),
+                'account_id': user.get('account_id', ''),
+                'account_name': user.get('account_name', ''),
+                'access_key': user.get('access_key', ''),
+                'secret_key': user.get('secret_key', ''),
+                # Add common configuration settings
+                'strategy': user.get('strategy', 'on-demand'),
+                'instance_selections': user.get('instance_selections', {}),
+                'min_size': user.get('min_size', 1),
+                'desired_size': user.get('desired_size', 1),
+                'max_size': user.get('max_size', 3),
+                'subnet_preference': user.get('subnet_preference', 'auto')
+            }
+        
+            # Explicitly add nodegroup_configs if it exists and is not None
+            if 'nodegroup_configs' in user and user['nodegroup_configs'] is not None:
+                user_config['nodegroup_configs'] = user['nodegroup_configs']
+                self.logger.info(f"Added nodegroup_configs for user {user['username']}: {user['nodegroup_configs']}")
+            else:
+                self.logger.warning(f"No nodegroup_configs for user {user['username']}")
+    
+            # Add any additional config parameters
+            for key, value in user.items():
+                if key not in user_config:
+                    user_config[key] = value
+        
+            cluster_configs.append(user_config)
+
+            
+        # Log the final cluster_configs to verify nodegroup_configs are preserved
+        for i, config in enumerate(cluster_configs):
+            has_nodegroup_configs = 'nodegroup_configs' in config and config['nodegroup_configs'] is not None
+            self.logger.info(f"Cluster config {i+1} has nodegroup_configs: {has_nodegroup_configs}")
+    
+        # Create clusters with shared configuration
+        return self.create_multiple_clusters(cluster_configs)
+
+#####

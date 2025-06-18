@@ -89,139 +89,454 @@ class EKSAutomation:
             "default_version": "1.27",
             "ami_type": "AL2_x86_64"
         })
-    
+
     def run_automation(self):
-        """Main automation flow with enhanced nodegroup configuration"""
+        """Main automation flow with enhanced account and user selection"""
         try:
             # Step 1: Get credentials (Root or IAM)
-            print("\n🔑 STEP 1: CREDENTIAL SELECTION")
-            credentials = self.credential_manager.get_credentials()
+            print("\n🔑 STEP 1: CREDENTIAL TYPE SELECTION")
+        
+            # Ask user to choose between Root or IAM credentials
+            print("\n👤 USER TYPE SELECTION")
+            print("=" * 60)
+            print("1. Root Credentials - Use AWS account root credentials")
+            print("2. IAM Credentials - Use IAM user credentials")
+        
+            while True:
+                user_type_choice = input("\nSelect credential type (1/2): ").strip()
+                if user_type_choice == '1':
+                    user_type = 'root'
+                    print(f"✅ Using Root credentials for cluster creation")
+                    break
+                elif user_type_choice == '2':
+                    user_type = 'iam'
+                    print(f"✅ Using IAM user credentials for cluster creation")
+                    break
+                else:
+                    print(f"❌ Invalid choice. Please enter 1 or 2.")
 
-            # Step 2: Validate credentials
-            if not self.credential_manager.validate_credentials(credentials):
-                print("❌ Credential validation failed. Exiting...")
+            # Step 2: Process based on credential type choice
+            all_selected_users = []
+        
+            if user_type == 'root':
+                # ROOT CREDENTIALS: Get from aws_accounts_config.json
+                print("\n🔑 ROOT CREDENTIALS COLLECTION FROM CONFIG")
+                print("-" * 60)
+            
+                # Load aws_accounts_config.json
+                if not os.path.exists('aws_accounts_config.json'):
+                    print("❌ aws_accounts_config.json not found. Cannot proceed with root credentials.")
+                    return False
+            
+                try:
+                    with open('aws_accounts_config.json', 'r') as f:
+                        root_config = json.load(f)
+                        root_accounts = root_config.get('accounts', {})
+                        # Get available regions from user_settings
+                        available_regions = root_config.get('user_settings', {}).get('user_regions', ["us-east-1"])
+                    
+                    if not root_accounts:
+                        print("❌ No accounts found in aws_accounts_config.json")
+                        return False
+                    
+                    print(f"✅ Found {len(root_accounts)} accounts in config file")
+                
+                    # Display available accounts
+                    print("\n🏦 AVAILABLE ROOT ACCOUNTS:")
+                    print("-" * 60)
+                    for i, (account_name, account_info) in enumerate(root_accounts.items(), 1):
+                        print(f"{i}. {account_name} ({account_info.get('account_id', 'Unknown ID')})")
+                        print(f"   📧 Email: {account_info.get('email', 'Not specified')}")
+                        print(f"   🔑 Credentials: {'✅ Available' if 'access_key' in account_info and 'secret_key' in account_info else '❌ Missing'}")
+                        print()
+                
+                    # Account selection options
+                    print("\nAccount Selection:")
+                    print("  • Single account: Enter the number (e.g., 1)")
+                    print("  • Multiple accounts: Comma-separated numbers (e.g., 1,3)")
+                    print("  • All accounts: 'all' or press Enter")
+                    print("  • Cancel: 'cancel' or 'quit'")
+                
+                    # Get user's account selection
+                    selection = input("\n🔢 Select accounts: ").strip().lower()
+                
+                    if selection in ['cancel', 'quit']:
+                        print("❌ Operation cancelled")
+                        return False
+                
+                    # Process account selection
+                    selected_accounts = []
+                    if not selection or selection == 'all':
+                        selected_accounts = [(acct_name, acct_info) for acct_name, acct_info in root_accounts.items() 
+                                             if 'access_key' in acct_info and 'secret_key' in acct_info]
+                        print(f"✅ Selected all accounts with credentials: {len(selected_accounts)}")
+                    else:
+                        try:
+                            # Handle comma-separated values
+                            if ',' in selection:
+                                indices = [int(idx.strip()) for idx in selection.split(',') if idx.strip()]
+                            # Handle single number
+                            else:
+                                indices = [int(selection)]
+                        
+                            # Get the selected accounts
+                            account_items = list(root_accounts.items())
+                            for idx in indices:
+                                if 1 <= idx <= len(account_items):
+                                    acct_name, acct_info = account_items[idx-1]
+                                    if 'access_key' in acct_info and 'secret_key' in acct_info:
+                                        selected_accounts.append((acct_name, acct_info))
+                                    else:
+                                        print(f"⚠️ Account {acct_name} skipped - no credentials")
+                                else:
+                                    print(f"⚠️ Invalid index: {idx} - skipped")
+                        
+                            if not selected_accounts:
+                                print("❌ No valid accounts selected with credentials")
+                                return False
+                        
+                            print(f"✅ Selected {len(selected_accounts)} accounts: " + 
+                                  ", ".join([acct[0] for acct in selected_accounts]))
+                        except ValueError:
+                            print(f"❌ Invalid selection format. Please use numbers separated by commas.")
+                            return False
+                
+                    # Display available regions for selection
+                    print("\n🌍 AVAILABLE REGIONS:")
+                    print("-" * 60)
+                    for i, region in enumerate(available_regions, 1):
+                        print(f"{i}. {region}")
+                
+                    # Set default region
+                    default_region = "us-east-1"
+                    if default_region in available_regions:
+                        default_idx = available_regions.index(default_region) + 1
+                        print(f"\nDefault region: {default_region} (option {default_idx})")
+                
+                    # Ask user to select a region
+                    region_selection = input(f"\n🔢 Select region (1-{len(available_regions)}) [default: {default_region}]: ").strip()
+                
+                    selected_region = default_region
+                    if region_selection:
+                        try:
+                            region_idx = int(region_selection) - 1
+                            if 0 <= region_idx < len(available_regions):
+                                selected_region = available_regions[region_idx]
+                            else:
+                                print(f"❌ Invalid selection. Using default region: {default_region}")
+                        except ValueError:
+                            print(f"❌ Invalid input. Using default region: {default_region}")
+                
+                    print(f"✅ Using region: {selected_region}")
+                    
+                    # Build root user objects from selected accounts
+                    print("\n⏳ Loading root user information...")
+                    for acct_name, acct_info in selected_accounts:
+                        # Create a user object for the root account with selected region
+                        root_user = {
+                            'username': f"root-{acct_name}",
+                            'full_name': f"Root User ({acct_name})",
+                            'role': 'root',
+                            'location': 'N/A',
+                            'email': acct_info.get('email', f"root@{acct_name}"),
+                            'region': selected_region,  # Use the selected region
+                            'access_key': acct_info['access_key'],
+                            'secret_key': acct_info['secret_key'],
+                            'account_id': acct_info.get('account_id', ''),
+                            'account_name': acct_name
+                        }
+                    
+                        all_selected_users.append(root_user)
+                        print(f"✅ Root credentials added for {acct_name} in region {selected_region}")
+                
+                except Exception as e:
+                    print(f"❌ Error processing root credentials: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    return False
+            
+            else:
+                # IAM CREDENTIALS: List and select from aws/iam/iam_users_credentials_{timestamp}.json files
+                print("\n🔑 IAM CREDENTIALS SELECTION")
+                print("-" * 60)
+            
+                try:
+                    # Find all IAM credential files
+                    iam_cred_files = []
+                    iam_dir = 'aws/iam'
+                
+                    if not os.path.exists(iam_dir):
+                        print(f"❌ Directory {iam_dir} not found. Cannot find IAM credential files.")
+                        return False
+                
+                    # Find all iam_users_credentials_{timestamp}.json files
+                    for file in os.listdir(iam_dir):
+                        if file.startswith('iam_users_credentials_') and file.endswith('.json'):
+                            file_path = os.path.join(iam_dir, file)
+                            timestamp_str = file.replace('iam_users_credentials_', '').replace('.json', '')
+                            try:
+                                # Try to parse the timestamp from the filename
+                                timestamp = datetime.strptime(timestamp_str, "%Y%m%d_%H%M%S")
+                                file_time = timestamp.strftime("%Y-%m-%d %H:%M:%S")
+                            except:
+                                # If parsing fails, use file modification time
+                                file_time = datetime.fromtimestamp(os.path.getmtime(file_path)).strftime("%Y-%m-%d %H:%M:%S")
+                        
+                            iam_cred_files.append({
+                                'path': file_path,
+                                'name': file,
+                                'timestamp_str': timestamp_str,
+                                'time': file_time,
+                                'mtime': os.path.getmtime(file_path)
+                            })
+                
+                    if not iam_cred_files:
+                        print(f"❌ No IAM credential files found in {iam_dir}")
+                        print("Run create_iam_users_logging.py first to generate credentials.")
+                        return False
+                
+                    # Sort files by modification time (newest first)
+                    iam_cred_files.sort(key=lambda x: x['mtime'], reverse=True)
+                
+                    # Display files
+                    print("\n📂 AVAILABLE IAM CREDENTIAL FILES:")
+                    print("-" * 60)
+                    for i, file_info in enumerate(iam_cred_files, 1):
+                        print(f"{i}. {file_info['name']}")
+                        print(f"   ⏰ Created: {file_info['time']}")
+                        print()
+                
+                    # Latest file is selected by default
+                    default_file = iam_cred_files[0]
+                    print(f"Latest file (default): {default_file['name']} ({default_file['time']})")
+                
+                    # Ask user to select a file
+                    file_choice = input("\nSelect file (press Enter for latest): ").strip()
+                
+                    selected_file_info = None
+                    if not file_choice:
+                        selected_file_info = default_file
+                        print(f"✅ Using default latest file: {selected_file_info['name']}")
+                    else:
+                        try:
+                            file_idx = int(file_choice) - 1
+                            if 0 <= file_idx < len(iam_cred_files):
+                                selected_file_info = iam_cred_files[file_idx]
+                                print(f"✅ Selected file: {selected_file_info['name']}")
+                            else:
+                                print(f"❌ Invalid selection. Using default latest file: {default_file['name']}")
+                                selected_file_info = default_file
+                        except ValueError:
+                            print(f"❌ Invalid input. Using default latest file: {default_file['name']}")
+                            selected_file_info = default_file
+                
+                    # Load selected credential file
+                    with open(selected_file_info['path'], 'r') as f:
+                        iam_cred_data = json.load(f)
+                
+                    # Display accounts in the file
+                    account_data = iam_cred_data.get('accounts', {})
+                    if not account_data:
+                        print("❌ No account data found in the selected file")
+                        return False
+                
+                    print(f"\n🏦 ACCOUNTS IN CREDENTIAL FILE:")
+                    print("-" * 60)
+                
+                    for i, (acct_name, acct_info) in enumerate(account_data.items(), 1):
+                        users_count = len(acct_info.get('users', []))
+                        print(f"{i}. {acct_name} ({acct_info.get('account_id', 'Unknown')})")
+                        print(f"   👥 Users: {users_count}")
+                        print()
+                
+                    # Account selection options
+                    print("\nAccount Selection:")
+                    print("  • Single account: Enter the number (e.g., 1)")
+                    print("  • Multiple accounts: Comma-separated numbers (e.g., 1,3)")
+                    print("  • All accounts: 'all' or press Enter")
+                    print("  • Cancel: 'cancel' or 'quit'")
+                
+                    # Get user's account selection
+                    selection = input("\n🔢 Select accounts: ").strip().lower()
+                
+                    if selection in ['cancel', 'quit']:
+                        print("❌ Operation cancelled")
+                        return False
+                
+                    # Process account selection
+                    selected_accounts = []
+                    if not selection or selection == 'all':
+                        selected_accounts = list(account_data.items())
+                        print(f"✅ Selected all accounts: {len(selected_accounts)}")
+                    else:
+                        try:
+                            # Handle comma-separated values
+                            if ',' in selection:
+                                indices = [int(idx.strip()) for idx in selection.split(',') if idx.strip()]
+                            # Handle single number
+                            else:
+                                indices = [int(selection)]
+                        
+                            # Get the selected accounts
+                            account_items = list(account_data.items())
+                            for idx in indices:
+                                if 1 <= idx <= len(account_items):
+                                    selected_accounts.append(account_items[idx-1])
+                                else:
+                                    print(f"⚠️ Invalid index: {idx} - skipped")
+                        
+                            if not selected_accounts:
+                                print("❌ No valid accounts selected")
+                                return False
+                        
+                            print(f"✅ Selected {len(selected_accounts)} accounts: " + 
+                                  ", ".join([acct[0] for acct in selected_accounts]))
+                        except ValueError:
+                            print(f"❌ Invalid selection format. Please use numbers separated by commas.")
+                            return False
+                
+                    # Process each selected account - get users
+                    for acct_name, acct_info in selected_accounts:
+                        users = acct_info.get('users', [])
+                        if not users:
+                            print(f"⚠️ No users found for account: {acct_name}")
+                            continue
+                    
+                        print(f"\n👥 USERS IN {acct_name.upper()}:")
+                        print("-" * 60)
+                        for i, user in enumerate(users, 1):
+                            username = user.get('username', 'Unknown')
+                            real_user = user.get('real_user', {})
+                            full_name = real_user.get('full_name', 'Unknown User')
+                            region = user.get('region', 'us-east-1')
+                            print(f"{i}. {username} - {full_name} - Region: {region}")
+                    
+                        # User selection options
+                        print("\nUser Selection Options:")
+                        print("  • Single user: Enter the number (e.g., 1)")
+                        print("  • Multiple users: Comma-separated numbers (e.g., 1,3,5)")
+                        print("  • All users: 'all' or press Enter")
+                        print("  • Skip this account: 'skip'")
+                    
+                        # Get user selection
+                        user_selection = input(f"\n🔢 Select users from {acct_name}: ").strip().lower()
+                    
+                        if user_selection == 'skip':
+                            print(f"⏭️ Skipping {acct_name}")
+                            continue
+                    
+                        # Process user selection
+                        selected_users = []
+                        if not user_selection or user_selection == 'all':
+                            selected_users = users
+                            print(f"✅ Selected all {len(users)} users from {acct_name}")
+                        else:
+                            try:
+                                # Handle comma-separated values
+                                if ',' in user_selection:
+                                    indices = [int(idx.strip()) for idx in user_selection.split(',') if idx.strip()]
+                                # Handle single number
+                                else:
+                                    indices = [int(user_selection)]
+                            
+                                for idx in indices:
+                                    if 1 <= idx <= len(users):
+                                        selected_users.append(users[idx-1])
+                                    else:
+                                        print(f"⚠️ Invalid index: {idx} - skipped")
+                            
+                                if not selected_users:
+                                    print(f"⚠️ No valid users selected from {acct_name}")
+                                    continue
+                            
+                                print(f"✅ Selected {len(selected_users)} users from {acct_name}")
+                            except ValueError:
+                                print(f"⚠️ Invalid selection format for {acct_name} - skipped")
+                                continue
+                    
+                        # Add selected users to master list with account information
+                        for user in selected_users:
+                            user_obj = {
+                                'username': user.get('username', 'unknown'),
+                                'full_name': user.get('real_user', {}).get('full_name', 'Unknown User'),
+                                'role': 'iam',
+                                'location': 'N/A',
+                                'email': user.get('real_user', {}).get('email', ''),
+                                'region': user.get('region', 'us-east-1'),
+                                'access_key': user.get('access_key_id', ''),
+                                'secret_key': user.get('secret_access_key', ''),
+                                'account_id': acct_info.get('account_id', ''),
+                                'account_name': acct_name
+                            }
+                            all_selected_users.append(user_obj)
+                            print(f"✅ Added user: {user_obj['username']} - {user_obj['full_name']}")
+                
+                except Exception as e:
+                    print(f"❌ Error processing IAM credentials: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    return False
+
+            # Final check - make sure we have users selected
+            if not all_selected_users:
+                print("❌ No users selected from any account. Exiting...")
                 return False
-    
-            # Initialize EKS Manager with validated credentials
+        
+            print(f"\n✅ Selected {len(all_selected_users)} users across accounts")
+
+            # Initialize EKS Manager with validated credentials and user type
             self.eks_manager = EKSClusterManager(config_file=None)
-    
-            # Step 3: Configure EKS Cluster Settings
-            print("\n🔧 STEP 2: EKS CLUSTER CONFIGURATION")
-    
-            # Get EKS configuration from mapping file
+        
+            # Store the user_type in the EKS manager
+            self.eks_manager.user_type = user_type
+        
+            # Step 3: Nodegroup Configuration Prompts
+            # Convert first user to CredentialInfo for configuration methods
+            first_user = all_selected_users[0]
+            credential_info = CredentialInfo(
+                account_name=first_user['account_name'],
+                account_id=first_user['account_id'],
+                email=first_user['email'],
+                access_key=first_user['access_key'],
+                secret_key=first_user['secret_key'],
+                credential_type=user_type,
+                regions=[first_user['region']],
+                username=first_user['username']
+            )
+        
+            # Configure nodegroups interactively
+            nodegroup_configs = self.configure_multiple_nodegroups(credential_info)
+        
+            # Display configuration summary
+            self.display_common_nodegroup_summary(nodegroup_configs)
+        
+            # Confirmation
+            confirmation = input("\nProceed with cluster creation using these configurations? (Y/n): ").strip().lower()
+            if confirmation == 'n':
+                print("❌ Operation cancelled by user")
+                return False
+            
+            # Step 4: Get EKS configuration
             eks_config = self.get_eks_config()
-            default_version = eks_config.get("default_version", "1.27")
-            ami_type = eks_config.get("ami_type", "AL2_x86_64")
-    
-            print(f"📋 EKS Default Settings:")
-            print(f"   🔸 Default Version: {default_version}")
-            print(f"   🔸 Default AMI Type: {ami_type}")
-    
-            # Ask for EKS version
-            print("\nEKS Version Selection:")
-            print("1. Use default version: " + default_version)
-            print("2. Use latest version (1.32)")
-            print("3. Specify custom version")
-    
-            while True:
-                version_choice = input("Select option (1-3): ").strip()
+            eks_version = eks_config.get('default_version', '1.28')
+            ami_type = eks_config.get('ami_type', 'AL2_x86_64')
         
-                if version_choice == '1':
-                    eks_version = default_version
-                    break
-                elif version_choice == '2':
-                    eks_version = "1.32"
-                    break
-                elif version_choice == '3':
-                    custom_version = input("Enter EKS version (e.g., 1.28): ").strip()
-                    if custom_version:
-                        eks_version = custom_version
-                        break
-                    else:
-                        print("❌ Please enter a valid version")
-                else:
-                    print("❌ Invalid choice. Please select 1, 2, or 3")
+            # Display overall creation summary
+            self.display_cluster_creation_summary(credential_info, eks_version, ami_type, nodegroup_configs)
+            
+            # Apply this configuration to all user selections
+            for user in all_selected_users:
+                user['nodegroup_configs'] = nodegroup_configs
+            print("Nodegroup configs assigned to all selected users:", all_selected_users[0]['nodegroup_configs'])
     
-            # Ask for AMI type
-            print("\nAMI Type Selection:")
-            print("1. Use default AMI type: " + ami_type)
-            print("2. Use AL2023_x86_64_STANDARD (newer)")
-            print("3. Specify custom AMI type")
-    
-            while True:
-                ami_choice = input("Select option (1-3): ").strip()
-        
-                if ami_choice == '1':
-                    selected_ami_type = ami_type
-                    break
-                elif ami_choice == '2':
-                    selected_ami_type = "AL2023_x86_64_STANDARD"
-                    break
-                elif ami_choice == '3':
-                    custom_ami = input("Enter AMI type: ").strip()
-                    if custom_ami:
-                        selected_ami_type = custom_ami
-                        break
-                    else:
-                        print("❌ Please enter a valid AMI type")
-                else:
-                    print("❌ Invalid choice. Please select 1, 2, or 3")
-
-            # Ask for essential add-ons installation preference before cluster creation
-            print("\n🧩 Essential Add-ons Configuration")
-            print("Essential add-ons include: vpc-cni, coredns, kube-proxy, aws-ebs-csi-driver")
-            install_addons = input("Do you want to install essential EKS add-ons? (Y/n): ").strip().lower()
-            install_addons = install_addons in ['', 'y', 'yes']
-        
-            # Ask for Container Insights preference before cluster creation
-            print("\n📊 CloudWatch Container Insights Configuration")
-            print("Container Insights provides detailed monitoring and logging for containers")
-            enable_insights = input("Do you want to enable CloudWatch Container Insights? (Y/n): ").strip().lower()
-            enable_insights = enable_insights in ['', 'y', 'yes']
-    
-            print(f"\n✅ Selected EKS Version: {eks_version}")
-            print(f"✅ Selected AMI Type: {selected_ami_type}")
-            print(f"✅ Install Essential Add-ons: {'Yes' if install_addons else 'No'}")
-            print(f"✅ Enable Container Insights: {'Yes' if enable_insights else 'No'}")
-    
-            # Step 4: NEW ENHANCED NODEGROUP CONFIGURATION
-            print("\n🔧 STEP 3: NODEGROUP CONFIGURATION")
-            nodegroup_configs = self.configure_multiple_nodegroups(credentials)
-    
-            if not nodegroup_configs:
-                print("❌ No nodegroups configured. Exiting...")
-                return False
-    
-            # Step 5: Create EKS Cluster
-            print("\n🚀 STEP 4: EKS CLUSTER CREATION")
-    
-            # Set up cluster configuration
-            cluster_config = {
-                'credential_info': credentials,
-                'eks_version': eks_version,
-                'ami_type': selected_ami_type,
-                'nodegroup_configs': nodegroup_configs,  # Changed from old format
-                'install_addons': install_addons,        # Add preference to configuration
-                'enable_insights': enable_insights       # Add preference to configuration
-            }
-    
-            # Confirm before proceeding
-            self.display_cluster_creation_summary(credentials, eks_version, selected_ami_type, nodegroup_configs)
-    
-            # Ask for confirmation
-            confirm = input("\nDo you want to proceed with cluster creation? (y/n): ").strip().lower()
-            if confirm != 'y':
-                print("❌ Cluster creation cancelled")
-                return False
-    
-            # Create EKS cluster with nodegroups
-            result = self.eks_manager.create_cluster(cluster_config)
+            # Call process_multiple_user_selection with all selected users and nodegroup configs
+            result = self.eks_manager.process_multiple_user_selection(all_selected_users)
     
             if result:
-                print("\n✅ EKS Cluster created successfully!")
+                print("\n✅ EKS Clusters created successfully!")
                 return True
             else:
-                print("\n❌ EKS Cluster creation failed")
+                print("\n⚠️ Some EKS Cluster creations may have failed")
                 return False
     
         except Exception as e:
@@ -229,6 +544,19 @@ class EKSAutomation:
             import traceback
             traceback.print_exc()
             return False
+    
+    def display_common_nodegroup_summary(self, nodegroup_configs: List[Dict]):
+        """Display a summary of the common nodegroup configuration"""
+        print("\nCommon Nodegroup Configurations:")
+        print("-" * 60)
+    
+        for i, config in enumerate(nodegroup_configs, 1):
+            print(f"{i}. {config['name']} ({config['strategy'].upper()})")
+            print(f"   Scaling: Min={config['min_nodes']}, Desired={config['desired_nodes']}, Max={config['max_nodes']}")
+            print(f"   Instance Types: {self.format_instance_types_summary(config['instance_selections'])}")
+            print(f"   Subnet Preference: {config['subnet_preference']}")
+            if i < len(nodegroup_configs):
+                print()
 
     def configure_multiple_nodegroups(self, credentials: CredentialInfo) -> List[Dict]:
         """Configure multiple nodegroups with individual settings"""
