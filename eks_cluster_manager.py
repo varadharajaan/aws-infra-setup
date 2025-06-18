@@ -2254,6 +2254,13 @@ class EKSClusterManager:
             print(f"❌ Error creating EKS control plane: {e}")
             return False
 
+    def sanitize_label_value(value: str) -> str:
+        # Replace any invalid character with '-'
+        import re
+        value = re.sub(r'[^A-Za-z0-9\-_.]', '-', value)
+        # Truncate to 63 chars (K8s label max)
+        return value[:63]
+
     def _get_multi_nodegroup_lambda_template(self) -> str:
         """Get the Lambda function template for multi-nodegroup scaling"""
         return '''
@@ -2483,7 +2490,7 @@ class EKSClusterManager:
                         tags=ondemand_instance_tags,
                         labels={
                             'nodegroup-name': ondemand_ng_name,
-                            'instance-type': ','.join(on_demand_types),
+                            'instance-type': self.sanitize_label_value('-'.join(on_demand_types)),
                             'capacity-type': 'on-demand',
                             'parent-nodegroup': nodegroup_name
                         }
@@ -2534,7 +2541,7 @@ class EKSClusterManager:
                         tags=spot_instance_tags,
                         labels={
                             'nodegroup-name': spot_ng_name,
-                            'instance-type': ','.join(spot_types),
+                            'instance-type': self.sanitize_label_value('-'.join(spot_types)),
                             'capacity-type': 'spot',
                             'parent-nodegroup': nodegroup_name
                         }
@@ -2619,7 +2626,7 @@ class EKSClusterManager:
                 tags=instance_tags,
                 labels={
                     'nodegroup-name': nodegroup_name,
-                    'instance-type': '-'.join(instance_types),
+                    'instance-type': self.sanitize_label_value('-'.join(instance_types)),
                     'capacity-type': 'spot'
                 }
             )
@@ -2688,7 +2695,7 @@ class EKSClusterManager:
                 tags=instance_tags,
                 labels={
                     'nodegroup-name': nodegroup_name,
-                    'instance-type': '-'.join(instance_types),
+                    'instance-type': self.sanitize_label_value('-'.join(instance_types)),
                     'capacity-type': 'on-demand'
                 }
             )
