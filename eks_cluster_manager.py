@@ -1,4 +1,3 @@
-# Databricks notebook source
 #!/usr/bin/env python3
 """
 EKS Cluster Manager - Enhanced for Phase 2
@@ -429,305 +428,455 @@ class EKSClusterManager:
             return None
 
     def create_cluster(self, cluster_config: Dict) -> bool:
-            """
-            Create EKS cluster with multiple configured nodegroups
-            Enhanced with proper error handling and fixed YAML formatting
-            """
+        """
+        Create EKS cluster with configured nodegroups
+
+        Args:
+            cluster_config: Dictionary with cluster configuration including:
+                - credential_info: CredentialInfo object
+                - eks_version: EKS version string
+                - ami_type: AMI type string
+                - nodegroup_configs: List of nodegroup configurations
+        """
+        try:
+            # Extract configuration
+            credential_info = cluster_config['credential_info']
+            eks_version = cluster_config['eks_version']
+            ami_type = cluster_config['ami_type']
+        
+            # Setup AWS clients
+            region = credential_info.regions[0]
+            access_key = credential_info.access_key
+            secret_key = credential_info.secret_key
+            account_id = credential_info.account_id
+        
+            session = boto3.Session(
+                aws_access_key_id=access_key,
+                aws_secret_access_key=secret_key,
+                region_name=region
+            )
+        
+            # Quick credential validation (lightweight check)
             try:
-                # Extract configuration
-                credential_info = cluster_config['credential_info']
-                eks_version = cluster_config['eks_version']
-                ami_type = cluster_config['ami_type']
-                nodegroup_configs = cluster_config['nodegroup_configs']  # New format
-
-                # Setup AWS clients
-                region = credential_info.regions[0]
-                access_key = credential_info.access_key
-                secret_key = credential_info.secret_key
-                account_id = credential_info.account_id
-
-                # Create session and clients
-                session = boto3.Session(
-                    aws_access_key_id=access_key,
-                    aws_secret_access_key=secret_key,
-                    region_name=region
-                )
-
-                eks_client = session.client('eks')
-                ec2_client = session.client('ec2')
-                iam_client = session.client('iam')
-                cloudwatch_client = session.client('cloudwatch')
-
-                username = getattr(credential_info, 'username', credential_info.account_name.lower())
-
-                if not username or username.lower() == 'none':
-                    username = "root" 
-                # Generate cluster name
-                cluster_name = self.generate_cluster_name(username, region)
-
-                print(f"🚀 Creating EKS cluster: {cluster_name}")
-                print(f"📍 Region: {region}")
-                print(f"📋 EKS Version: {eks_version}")
-                print(f"💾 AMI Type: {ami_type}")
-                print(f"🏗️  Nodegroups: {len(nodegroup_configs)}")
-
-                # Step 1: Ensure IAM roles exist
-                print("\n🔐 Step 1: Setting up IAM roles...")
-                eks_role_arn, node_role_arn = self.ensure_iam_roles(iam_client, account_id)
-
-                # Step 2: Get VPC and subnet information
-                print("\n🌐 Step 2: Setting up VPC resources...")
-                subnet_ids, security_group_id = self.get_or_create_vpc_resources(ec2_client, region)
-
-                # Step 3: Create EKS cluster
-                print("\n🏭 Step 3: Creating EKS control plane...")
-                cluster_created = self.create_eks_control_plane(
-                    eks_client, 
-                    cluster_name, 
-                    eks_version, 
-                    eks_role_arn, 
-                    subnet_ids, 
-                    security_group_id
-                )
-
-                if not cluster_created:
-                    print("❌ Failed to create EKS control plane. Exiting.")
+                sts_client = session.client('sts')
+                caller_identity = sts_client.get_caller_identity()
+                user_arn = caller_identity.get('Arn', '')
+                user_type = 'Root User' if ':root' in user_arn else 'IAM User' if ':user/' in user_arn else 'Assumed Role'
+            
+                print(f"🔐 Authenticated as: {user_type}")
+                print(f"📋 User ARN: {user_arn}")
+                print(f"🆔 Account ID: {caller_identity.get('Account', 'Unknown')}")
+            
+            except Exception as e:
+                print(f"⚠️  Warning: Could not validate credentials: {e}")
+                proceed = input("Do you want to continue anyway? (y/N): ").strip().lower()
+                if proceed not in ['y', 'yes']:
                     return False
+        
+            eks_client = session.client('eks')
+            ec2_client = session.client('ec2')
+            iam_client = session.client('iam')
+            cloudwatch_client = session.client('cloudwatch')
+        
+            username = getattr(credential_info, 'username', credential_info.account_name.lower())
+        
+            if not username or username.lower() == 'none':
+                username = "varadharajaan"
+        
+            # Generate cluster name
+            cluster_name = self.generate_cluster_name(username, region)
+        
+            print(f"🚀 Creating EKS cluster: {cluster_name}")
+            print(f"📍 Region: {region}")
+            print(f"📋 EKS Version: {eks_version}")
+            print(f"💾 AMI Type: {ami_type}")
+            print(f"👤 Created by: {username}")
+            print(f"🕐 Creation time: 2025-06-18 05:29:51 UTC")
+        
+            # Step 1: Ensure IAM roles exist
+            print("\n🔐 Step 1: Setting up IAM roles...")
+            eks_role_arn, node_role_arn = self.ensure_iam_roles(iam_client, account_id)
+        
+            # Step 2: Get VPC and subnet information
+            print("\n🌐 Step 2: Setting up VPC resources...")
+            subnet_ids, security_group_id = self.get_or_create_vpc_resources(ec2_client, region)
+        
+            # Step 3: Create EKS cluster
+            print("\n🏭 Step 3: Creating EKS control plane...")
+            cluster_created = self.create_eks_control_plane(
+                eks_client, 
+                cluster_name, 
+                eks_version, 
+                eks_role_arn, 
+                subnet_ids, 
+                security_group_id
+            )
+        
+            if not cluster_created:
+                print("❌ Failed to create EKS control plane. Exiting.")
+                return False
 
-                # Step 4: Create multiple nodegroups based on configurations
-                print(f"\n💻 Step 4: Creating {len(nodegroup_configs)} nodegroups...")
-                nodegroups_created = []
+            # Step 4: Create nodegroups based on configuration
+            nodegroups_created = []
 
-                for i, nodegroup_config in enumerate(nodegroup_configs, 1):
-                    print(f"\n--- Creating Nodegroup {i}/{len(nodegroup_configs)}: {nodegroup_config['name']} ---")
-    
+            # Check if we're using the new format with nodegroup_configs
+            if 'nodegroup_configs' in cluster_config:
+                print(f"\n💻 Step 4: Creating {len(cluster_config['nodegroup_configs'])} nodegroups...")
+            
+                for ng_config in cluster_config['nodegroup_configs']:
+                    strategy = ng_config['strategy']
+                    instance_selections = ng_config['instance_selections']
+                    min_nodes = ng_config['min_nodes']
+                    desired_nodes = ng_config['desired_nodes']
+                    max_nodes = ng_config['max_nodes']
+                
+                    # Generate nodegroup name if not provided
+                    if 'name' in ng_config:
+                        nodegroup_name = ng_config['name']
+                    else:
+                        nodegroup_name = self.generate_nodegroup_name(cluster_name, strategy)
+                
+                    # Get subnet preference if specified
+                    subnet_preference = ng_config.get('subnet_preference', 'auto')
+                
                     # Select subnets based on preference
-                    selected_subnets = self.select_subnets_for_nodegroup(
-                        subnet_ids, nodegroup_config['subnet_preference'], ec2_client
-                    )
-    
-                    # Create nodegroup based on strategy
+                    if subnet_preference != 'auto':
+                        selected_subnets = self.select_subnets_for_nodegroup(subnet_ids, subnet_preference, ec2_client)
+                    else:
+                        selected_subnets = subnet_ids
+                
+                    print(f"\n💻 Creating nodegroup: {nodegroup_name} with strategy: {strategy}")
+                
                     nodegroup_created = False
-                    strategy = nodegroup_config['strategy']
-    
+                
                     if strategy == "on-demand":
                         nodegroup_created = self.create_ondemand_nodegroup(
                             eks_client,
                             cluster_name,
-                            nodegroup_config['name'],
+                            nodegroup_name,
                             node_role_arn,
                             selected_subnets,
                             ami_type,
-                            nodegroup_config['instance_selections'].get("on-demand", []),
-                            nodegroup_config['min_nodes'],
-                            nodegroup_config['desired_nodes'],
-                            nodegroup_config['max_nodes']
+                            instance_selections.get("on-demand", []),
+                            min_nodes,
+                            desired_nodes,
+                            max_nodes
                         )
                     elif strategy == "spot":
                         nodegroup_created = self.create_spot_nodegroup(
                             eks_client,
                             cluster_name,
-                            nodegroup_config['name'],
+                            nodegroup_name,
                             node_role_arn,
                             selected_subnets,
                             ami_type,
-                            nodegroup_config['instance_selections'].get("spot", []),
-                            nodegroup_config['min_nodes'],
-                            nodegroup_config['desired_nodes'],
-                            nodegroup_config['max_nodes']
+                            instance_selections.get("spot", []),
+                            min_nodes,
+                            desired_nodes,
+                            max_nodes
                         )
                     else:  # mixed strategy
                         nodegroup_created = self.create_mixed_nodegroup(
                             eks_client,
                             cluster_name,
-                            nodegroup_config['name'],
+                            nodegroup_name,
                             node_role_arn,
                             selected_subnets,
                             ami_type,
-                            nodegroup_config['instance_selections'],
-                            nodegroup_config['min_nodes'],
-                            nodegroup_config['desired_nodes'],
-                            nodegroup_config['max_nodes']
+                            instance_selections,
+                            min_nodes,
+                            desired_nodes,
+                            max_nodes
                         )
-    
+                
                     if nodegroup_created:
-                        nodegroups_created.append(nodegroup_config['name'])
-                        print(f"✅ Nodegroup {nodegroup_config['name']} created successfully")
+                        nodegroups_created.append(nodegroup_name)
                     else:
-                        print(f"❌ Failed to create nodegroup {nodegroup_config['name']}")
-
-                if not nodegroups_created:
-                    print("❌ Failed to create any nodegroups. Cluster was created but without nodes.")
-                    # Continue with other steps since cluster exists
-                else:
-                    print(f"\n✅ Successfully created {len(nodegroups_created)} nodegroups:")
-                    for ng_name in nodegroups_created:
-                        print(f"   - {ng_name}")
-
-                # Step 5: Configure aws-auth ConfigMap for user access
-                print("\n🔐 Step 5: Configuring user access...")
-                auth_success = self.configure_aws_auth_configmap(
-                    cluster_name, region, account_id, 
-                    {'username': username, 'access_key_id': access_key, 'secret_access_key': secret_key},
-                    access_key, secret_key
-                )
-
-                if not auth_success:
-                    print("⚠️  Failed to configure user access. You may need to manually update the aws-auth ConfigMap.")
-
-                # Step 6: Install essential addons
-                print("\n🧩 Step 6: Installing essential add-ons...")
-                addons_success = self.install_essential_addons(eks_client, cluster_name, access_key, secret_key)
-                enchanced_addons_success = self.install_enhanced_addons(
-                    eks_client, cluster_name, region, access_key, secret_key, account_id
-                )
-
-                if addons_success:
-                   print("✅ Essential add-ons installed successfully")
-                   print("\n🔧Step 6.1: Ensuring addon service roles...")
-                   self.ensure_addon_service_roles(eks_client, cluster_name, account_id)
-
-                print("🔧 Step 6.2: Enabling Application Signals...")
-                print("this is commented for now, will be enabled later")")
-                # self.enable_application_signals(
-                #     cluster_name,
-                #     region,
-                #     access_key,
-                #     secret_key,
-                #     account_id 
-                # )
-
-                # Step 7: Setup and verify all components (Combined step)
-                print("\n🔧 Step 7: Setting up all cluster components...")
-                components_status = self.setup_and_verify_all_components(
-                    cluster_name, 
-                    region, 
-                    access_key, 
-                    secret_key, 
-                    account_id, 
-                    nodegroups_created
-                )
-
-                # Step 8: Perform health check
-                print("\n🏥 Step 8: Performing cluster health check...")
-                health_result = self.health_check_cluster(
+                        print(f"❌ Failed to create nodegroup: {nodegroup_name}")
+        
+            else:
+                # Legacy single nodegroup support
+                print("\n💻 Step 4: Creating single nodegroup (legacy mode)...")
+                try:
+                    nodegroup_strategy = cluster_config.get('nodegroup_strategy', 'on-demand')
+                    instance_selections = cluster_config.get('instance_selections', {})
+                    min_nodes = cluster_config.get('min_nodes', 1)
+                    desired_nodes = cluster_config.get('desired_nodes', 1)
+                    max_nodes = cluster_config.get('max_nodes', 3)
+                
+                    nodegroup_name = self.generate_nodegroup_name(cluster_name, nodegroup_strategy)
+                
+                    print(f"\n💻 Creating nodegroup: {nodegroup_name} with strategy: {nodegroup_strategy}")
+                
+                    nodegroup_created = False
+                
+                    if nodegroup_strategy == "on-demand":
+                        nodegroup_created = self.create_ondemand_nodegroup(
+                            eks_client,
+                            cluster_name,
+                            nodegroup_name,
+                            node_role_arn,
+                            subnet_ids,
+                            ami_type,
+                            instance_selections.get("on-demand", []),
+                            min_nodes,
+                            desired_nodes,
+                            max_nodes
+                        )
+                    elif nodegroup_strategy == "spot":
+                        nodegroup_created = self.create_spot_nodegroup(
+                            eks_client,
+                            cluster_name,
+                            nodegroup_name,
+                            node_role_arn,
+                            subnet_ids,
+                            ami_type,
+                            instance_selections.get("spot", []),
+                            min_nodes,
+                            desired_nodes,
+                            max_nodes
+                        )
+                    else:  # mixed strategy
+                        nodegroup_created = self.create_mixed_nodegroup(
+                            eks_client,
+                            cluster_name,
+                            nodegroup_name,
+                            node_role_arn,
+                            subnet_ids,
+                            ami_type,
+                            instance_selections,
+                            min_nodes,
+                            desired_nodes,
+                            max_nodes
+                        )
+                
+                    if nodegroup_created:
+                        nodegroups_created.append(nodegroup_name)
+                except KeyError as e:
+                    print(f"❌ Error creating nodegroup: Missing configuration key {e}")
+                    print("Please update your code to use the new format with 'nodegroup_configs'")
+                    return False
+        
+            if not nodegroups_created:
+                print("❌ Failed to create any nodegroups. Cluster was created but without nodes.")
+                # Continue with other steps since the cluster itself is created
+        
+            # Step 5: Configure aws-auth ConfigMap for user access
+            print("\n🔐 Step 5: Configuring user access...")
+            auth_success = self.configure_aws_auth_configmap(
+                cluster_name, region, account_id, 
+                {'username': username, 'access_key_id': access_key, 'secret_access_key': secret_key},
+                access_key, secret_key
+            )
+        
+            if not auth_success:
+                print("⚠️  Failed to configure user access. You may need to manually update the aws-auth ConfigMap.")
+        
+            # Step 6: Ask user about essential addons
+            print("\n🧩 Step 6: Essential Add-ons Configuration")
+            print("Essential add-ons include: vpc-cni, coredns, kube-proxy, aws-ebs-csi-driver")
+            install_addons = input("Do you want to install essential EKS add-ons? (Y/n): ").strip().lower()
+            install_addons = install_addons in ['', 'y', 'yes']
+        
+            addons_success = False
+            if install_addons:
+                print("Installing essential add-ons...")
+                addons_success = self.install_essential_addons(eks_client, cluster_name, region, access_key, secret_key, account_id)
+            else:
+                print("⏭️  Skipping essential add-ons installation.")
+        
+            # Step 7: Ask user about Container Insights
+            print("\n📊 Step 7: CloudWatch Container Insights Configuration")
+            print("Container Insights provides detailed monitoring and logging for containers")
+            enable_insights = input("Do you want to enable CloudWatch Container Insights? (Y/n): ").strip().lower()
+            enable_insights = enable_insights in ['', 'y', 'yes']
+        
+            insights_success = False
+            if enable_insights:
+                print("Setting up CloudWatch Container Insights...")
+                insights_success = self.enable_container_insights(
                     cluster_name, region, access_key, secret_key
                 )
-
-                # Final step: Verify user access to the cluster
-                print("\n🔐 Final Step: Verifying user access to cluster...")
-                user_access_verified = self.verify_user_access(
-                    cluster_name, 
-                    region, 
-                    username, 
-                    access_key, 
-                    secret_key
+            else:
+                print("⏭️  Skipping Container Insights setup.")
+        
+            # Step 8: Setup Cluster Autoscaler (Always configured)
+            print("\n🔄 Step 8: Setting up Cluster Autoscaler (Required)...")
+            print("Cluster Autoscaler automatically adjusts the number of nodes based on workload demands")
+            autoscaler_success = self.setup_cluster_autoscaler(
+                cluster_name, region, access_key, secret_key, account_id
+            )
+        
+            # Step 9: Setup Scheduled Scaling (Always configured)
+            print("\n⏰ Step 9: Setting up Scheduled Scaling (Required)...")
+            print("Scheduled scaling automatically scales nodes based on IST business hours")
+            print("Scale up: 8:30 AM IST (3:00 AM UTC), Scale down: 6:30 PM IST (1:00 PM UTC)")
+            scheduling_success = self.setup_scheduled_scaling_multi_nodegroup(
+                cluster_name, region, access_key, secret_key, nodegroups_created
+            )
+        
+            # Step 10: Deploy CloudWatch agent (Always configured)
+            print("\n🔍 Step 10: Deploying CloudWatch agent (Required)...")
+            print("CloudWatch agent collects system and application metrics")
+            cloudwatch_agent_success = self.deploy_cloudwatch_agent_fixed(
+                cluster_name, region, access_key, secret_key, account_id
+            )
+        
+            # Step 11: Setup CloudWatch alarms (Always configured)
+            print("\n🚨 Step 11: Setting up CloudWatch alarms (Required)...")
+            print("CloudWatch alarms monitor cluster health and performance metrics")
+            cloudwatch_alarms_success = False
+            if nodegroups_created:
+                cloudwatch_alarms_success = self.setup_cloudwatch_alarms(
+                    cluster_name, region, cloudwatch_client, nodegroups_created[0], account_id
                 )
+        
+            # Step 12: Setup cost monitoring alarms (Always configured)
+            print("\n💰 Step 12: Setting up cost monitoring alarms (Required)...")
+            print("Cost monitoring alarms help track and control AWS spending")
+            cost_alarms_success = self.setup_cost_alarms(
+                cluster_name, region, cloudwatch_client, account_id
+            )
+        
+            # Step 13: Perform health check (Always configured)
+            print("\n🏥 Step 13: Performing cluster health check (Required)...")
+            health_result = self.health_check_cluster(
+                cluster_name, region, access_key, secret_key
+            )
 
-                if user_access_verified:
-                    print("✅ User access verification successful")
-                else:
-                    print("⚠️ User access verification failed or incomplete. Manual verification may be needed.")
+            # Final step: Verify user access to the cluster (Always configured)
+            print("\n🔐 Final Step: Verifying user access to cluster (Required)...")
+            user_access_verified = self.verify_user_access(
+                cluster_name, 
+                region, 
+                username, 
+                access_key, 
+                secret_key
+            )
 
-                # Save cluster details with nodegroup information
-                cluster_details = {
-                    'auth_configured': auth_success,
-                    'addons_installed': addons_success,
-                    'enhanced_addons_installed': enchanced_addons_success,
-                    'container_insights': components_status['container_insights'],
-                    'autoscaler': components_status['cluster_autoscaler'],
-                    'scheduled_scaling': components_status['scheduled_scaling'],
-                    'cloudwatch_agent': components_status['cloudwatch_agent'],
-                    'cloudwatch_alarms': components_status['cloudwatch_alarms'],
-                    'cost_alarms': components_status['cost_alarms'],
-                    'health_check': health_result.get('overall_healthy', False),
-                    'health_score': health_result.get('summary', {}).get('health_score', 0),
-                    'access_verified': user_access_verified,
-                    'nodegroups_created': nodegroups_created,
-                    'total_nodegroups': len(nodegroup_configs),
-                    'nodegroup_configs': nodegroup_configs
-                }
-
-                self.save_cluster_details_enhanced(
-                    credential_info,
-                    cluster_name,
-                    region,
-                    eks_version,
-                    ami_type,
-                    nodegroup_configs,
-                    cluster_details
-                )
-
-                # Generate user instructions
-                self.generate_user_instructions_enhanced(
-                    credential_info,
-                    cluster_name,
-                    region,
-                    username,
-                    nodegroup_configs
-                )
-
-                # Display enhanced cluster summary with nodegroup information
-                cluster_info = {
-                    'cluster_name': cluster_name,
-                    'region': region,
-                    'eks_version': eks_version,
-                    'ami_type': ami_type,
-                    'nodegroup_configs': nodegroup_configs,
-                    'nodegroups_created': nodegroups_created,
-                    'addons_installed': addons_success,
-                    'enhanced_addons_installed': enchanced_addons_success,
-                    'container_insights_enabled': components_status['container_insights'],
-                    'autoscaler_enabled': components_status['cluster_autoscaler'],
-                    'scheduled_scaling_enabled': components_status['scheduled_scaling'],
-                    'cloudwatch_agent_enabled': components_status['cloudwatch_agent'],
-                    'cloudwatch_alarms_enabled': components_status['cloudwatch_alarms'],
-                    'cost_alarms_enabled': components_status['cost_alarms'],
-                    'initial_health_check': health_result,
-                    'auth_configured': auth_success,
-                    'access_verified': user_access_verified
-                }
-
-                self.print_enhanced_cluster_summary_multi_nodegroup(cluster_name, cluster_info)
-
-                # Display console access commands
-                print("\n" + "="*80)
-                print("📋 CLUSTER CREATION SUMMARY")
-                print("=" * 80)
-                print(f"✅ Cluster Name: {cluster_name}")
-                print(f"✅ Region: {region}")
-                print(f"✅ EKS Version: {eks_version}")
-                print(f"✅ AMI Type: {ami_type}")
-                print(f"✅ Nodegroups Created: {len(nodegroups_created)}/{len(nodegroup_configs)}")
-
-                # Display nodegroup details
-                for i, config in enumerate(nodegroup_configs, 1):
-                    status = "✅" if config['name'] in nodegroups_created else "❌"
-                    print(f"   {status} {config['name']}: {config['strategy'].upper()} "
-                          f"(Min={config['min_nodes']}, Desired={config['desired_nodes']}, Max={config['max_nodes']})")
-
-                print(f"✅ User Access Configured: {'Yes' if auth_success else 'No'}")
-                print(f"✅ Essential Add-ons: {'Installed' if addons_success else 'Failed'}")
-                print(f"✅ Container Insights: {'Enabled' if components_status['container_insights'] else 'Failed'}")
-                print(f"✅ Cluster Autoscaler: {'Enabled' if components_status['cluster_autoscaler'] else 'Failed'}")
-                print(f"✅ Scheduled Scaling: {'Enabled' if components_status['scheduled_scaling'] else 'Failed'}")
-                print(f"✅ CloudWatch Agent: {'Deployed' if components_status['cloudwatch_agent'] else 'Failed'}")
-                print(f"✅ CloudWatch Alarms: {'Configured' if components_status['cloudwatch_alarms'] else 'Failed'}")
-                print(f"✅ Cost Monitoring: {'Enabled' if components_status['cost_alarms'] else 'Failed'}")
-                print(f"✅ Health Status: {'Healthy' if health_result.get('overall_healthy', False) else 'Needs Attention'}")
-                print(f"✅ Health Score: {health_result.get('summary', {}).get('health_score', 0)}/100")
-                print("\nAccess your cluster with:")
-                print(f"aws eks update-kubeconfig --region {region} --name {cluster_name}")
-                print("=" * 80)
-
-                return True
-
-            except Exception as e:
-                print(f"❌ Error creating EKS cluster: {e}")
-                import traceback
-                traceback.print_exc()
-                return False
-
+            if user_access_verified:
+                print("✅ User access verification successful")
+            else:
+                print("⚠️ User access verification failed or incomplete. Manual verification may be needed.")
+        
+            # Save cluster details
+            cluster_details = {
+                'auth_configured': auth_success,
+                'addons_installed': addons_success,
+                'addons_user_choice': install_addons,
+                'container_insights': insights_success,
+                'container_insights_user_choice': enable_insights,
+                'autoscaler': autoscaler_success,  # Always attempted
+                'scheduled_scaling': scheduling_success,  # Always attempted
+                'cloudwatch_agent': cloudwatch_agent_success,  # Always attempted
+                'cloudwatch_alarms': cloudwatch_alarms_success,  # Always attempted
+                'cost_alarms': cost_alarms_success,  # Always attempted
+                'health_check': health_result.get('overall_healthy', False),
+                'health_score': health_result.get('summary', {}).get('health_score', 0),
+                'access_verified': user_access_verified,
+                'created_by': username,
+                'creation_timestamp': '2025-06-18 05:29:51 UTC',
+                'nodegroups_created': nodegroups_created
+            }
+        
+            # For backward compatibility, set a nodegroup_strategy if using old format
+            nodegroup_strategy = None
+            if 'nodegroup_configs' in cluster_config and cluster_config['nodegroup_configs']:
+                nodegroup_strategy = cluster_config['nodegroup_configs'][0]['strategy']
+            elif 'nodegroup_strategy' in cluster_config:
+                nodegroup_strategy = cluster_config['nodegroup_strategy']
+            else:
+                nodegroup_strategy = "on-demand"  # default
+        
+            # Save cluster details
+            self.save_cluster_details_enhanced(
+                credential_info,
+                cluster_name,
+                region,
+                eks_version,
+                ami_type,
+                cluster_config.get('nodegroup_configs', []),
+                cluster_details
+            )
+        
+            # Generate user instructions
+            self.generate_user_instructions_enhanced(
+                credential_info,
+                cluster_name,
+                region,
+                username,
+                cluster_config.get('nodegroup_configs', [])
+            )
+        
+            # Display enhanced cluster summary with monitoring features
+            cluster_info = {
+                'cluster_name': cluster_name,
+                'region': region,
+                'eks_version': eks_version,
+                'ami_type': ami_type,
+                'nodegroup_configs': cluster_config.get('nodegroup_configs', []),
+                'nodegroups_created': nodegroups_created,
+                'addons_installed': addons_success,
+                'addons_user_choice': install_addons,
+                'container_insights_enabled': insights_success,
+                'container_insights_user_choice': enable_insights,
+                'autoscaler_enabled': autoscaler_success,
+                'scheduled_scaling_enabled': scheduling_success,
+                'cloudwatch_agent_enabled': cloudwatch_agent_success,
+                'cloudwatch_alarms_enabled': cloudwatch_alarms_success,
+                'cost_alarms_enabled': cost_alarms_success,
+                'initial_health_check': health_result,
+                'auth_configured': auth_success,
+                'access_verified': user_access_verified
+            }
+        
+            self.print_enhanced_cluster_summary_multi_nodegroup(cluster_name, cluster_info)
+        
+            # Display console access commands
+            print("\n" + "="*80)
+            print("📋 CLUSTER CREATION SUMMARY")
+            print("=" * 80)
+            print(f"✅ Cluster Name: {cluster_name}")
+            print(f"✅ Region: {region}")
+            print(f"✅ EKS Version: {eks_version}")
+            print(f"✅ AMI Type: {ami_type}")
+            print(f"✅ Nodegroups Created: {len(nodegroups_created)}")
+            for ng in nodegroups_created:
+                print(f"   - {ng}")
+            print(f"✅ Created by: {username}")
+            print(f"✅ Creation time: 2025-06-18 05:29:51 UTC")
+            print(f"✅ User Access Configured: {'Yes' if auth_success else 'No'}")
+        
+            # Optional components
+            print(f"{'✅' if addons_success else '⏭️'} Essential Add-ons: {'Installed' if addons_success else 'Skipped by user'}")
+            print(f"{'✅' if insights_success else '⏭️'} Container Insights: {'Enabled' if insights_success else 'Skipped by user'}")
+        
+            # Required components
+            print(f"✅ Cluster Autoscaler: {'Enabled' if autoscaler_success else 'Failed'} (Required)")
+            print(f"✅ Scheduled Scaling: {'Enabled' if scheduling_success else 'Failed'} (Required)")
+            print(f"✅ CloudWatch Agent: {'Deployed' if cloudwatch_agent_success else 'Failed'} (Required)")
+            print(f"✅ CloudWatch Alarms: {'Configured' if cloudwatch_alarms_success else 'Failed'} (Required)")
+            print(f"✅ Cost Monitoring: {'Enabled' if cost_alarms_success else 'Failed'} (Required)")
+            print(f"✅ Health Status: {'Healthy' if health_result.get('overall_healthy', False) else 'Needs Attention'}")
+            print(f"✅ Health Score: {health_result.get('summary', {}).get('health_score', 0)}/100")
+            print(f"✅ User Access Verified: {'Yes' if user_access_verified else 'No'}")
+        
+            print("\n🎯 Configuration Summary:")
+            print(f"   📦 Optional components configured: {('Essential Add-ons, ' if install_addons else '') + ('Container Insights' if enable_insights else 'None' if not install_addons else '')}")
+            print(f"   🔧 Required components: Autoscaler, Scheduled Scaling, CloudWatch Agent, Alarms, Cost Monitoring")
+        
+            print("\nAccess your cluster with:")
+            print(f"aws eks update-kubeconfig --region {region} --name {cluster_name}")
+            print("=" * 80)
+        
+            return True
+        
+        except Exception as e:
+            print(f"❌ Error creating EKS cluster: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+    
     #####
     def ensure_addon_service_roles(self, eks_client, cluster_name: str, account_id: str) -> None:
         """
@@ -1070,7 +1219,7 @@ class EKSClusterManager:
             fsGroup: 65534
           serviceAccountName: cluster-autoscaler
           containers:
-          - image: registry.k8s.io/autoscaling/cluster-autoscaler:v1.28.2
+          - image: registry.k8s.io/autoscaling/cluster-autoscaler:v1.32.0
             name: cluster-autoscaler
             resources:
               limits:
@@ -1644,13 +1793,401 @@ class EKSClusterManager:
         return True
 
     def setup_scheduled_scaling_multi_nodegroup(self, cluster_name: str, region: str, admin_access_key: str, admin_secret_key: str, nodegroup_names: List[str]) -> bool:
-        """Setup scheduled scaling for multiple nodegroups"""
-        if not nodegroup_names:
-            self.log_operation('WARNING', f"No nodegroups to configure scheduled scaling for")
-            return False
+        """Setup scheduled scaling for multiple nodegroups using a single Lambda function with user-defined parameters"""
+        try:
+            if not nodegroup_names:
+                self.log_operation('WARNING', f"No nodegroups to configure scheduled scaling for")
+                return False
     
-        self.log_operation('INFO', f"Setting up Scheduled Scaling for {len(nodegroup_names)} nodegroups: {', '.join(nodegroup_names)}")
-        return self.setup_scheduled_scaling(cluster_name, region, admin_access_key, admin_secret_key)
+            self.log_operation('INFO', f"Setting up scheduled scaling for {len(nodegroup_names)} nodegroups: {', '.join(nodegroup_names)}")
+            self.print_colored(Colors.YELLOW, f"⏰ Setting up scheduled scaling for {len(nodegroup_names)} nodegroups...")
+        
+            # Create admin session
+            admin_session = boto3.Session(
+                aws_access_key_id=admin_access_key,
+                aws_secret_access_key=admin_secret_key,
+                region_name=region
+            )
+        
+            # Create clients
+            eks_client = admin_session.client('eks')
+            events_client = admin_session.client('events')
+            lambda_client = admin_session.client('lambda')
+            iam_client = admin_session.client('iam')
+            sts_client = admin_session.client('sts')
+            account_id = sts_client.get_caller_identity()['Account']
+        
+            # Get current nodegroup configurations
+            nodegroup_configs = {}
+            for ng_name in nodegroup_names:
+                try:
+                    ng_info = eks_client.describe_nodegroup(clusterName=cluster_name, nodegroupName=ng_name)
+                    scaling_config = ng_info['nodegroup'].get('scalingConfig', {})
+                    nodegroup_configs[ng_name] = {
+                        'current_min': scaling_config.get('minSize', 0),
+                        'current_desired': scaling_config.get('desiredSize', 0),
+                        'current_max': scaling_config.get('maxSize', 0)
+                    }
+                    self.print_colored(Colors.CYAN, f"   ℹ️  Current {ng_name} scaling: min={scaling_config.get('minSize', 0)}, desired={scaling_config.get('desiredSize', 0)}, max={scaling_config.get('maxSize', 0)}")
+                except Exception as e:
+                    self.log_operation('WARNING', f"Could not get current scaling config for {ng_name}: {str(e)}")
+                    nodegroup_configs[ng_name] = {'current_min': 0, 'current_desired': 0, 'current_max': 0}
+        
+            # Step 1: Get user input for scale up/down times
+            self.print_colored(Colors.CYAN, "\n   🕒 Set scheduled scaling times (IST timezone):")
+            print("   Default scale-up: 8:30 AM IST (3:00 AM UTC)")
+            print("   Default scale-down: 6:30 PM IST (1:00 PM UTC)")
+        
+            change_times = input("   Change default scaling times? (y/N): ").strip().lower() in ['y', 'yes']
+        
+            if change_times:
+                while True:
+                    scale_up_time = input("   Enter scale-up time (format: HH:MM AM/PM IST): ").strip()
+                    if not scale_up_time:
+                        scale_up_time = "8:30 AM IST"
+                        scale_up_cron = "0 3 * * ? *"  # 3:00 AM UTC = 8:30 AM IST
+                        break
+                
+                    try:
+                        # Parse user input and convert to UTC
+                        time_format = "%I:%M %p IST"
+                        time_obj = datetime.strptime(scale_up_time, time_format)
+                        # IST is UTC+5:30, subtract to get UTC
+                        utc_hour = (time_obj.hour - 5) % 24
+                        utc_minute = (time_obj.minute - 30) % 60
+                        if time_obj.minute < 30:  # Handle minute underflow
+                            utc_hour = (utc_hour - 1) % 24
+                    
+                        scale_up_cron = f"{utc_minute} {utc_hour} * * ? *"
+                        break
+                    except ValueError:
+                        self.print_colored(Colors.YELLOW, "   ⚠️  Invalid time format. Please use format like '8:30 AM IST'")
+            
+                while True:
+                    scale_down_time = input("   Enter scale-down time (format: HH:MM AM/PM IST): ").strip()
+                    if not scale_down_time:
+                        scale_down_time = "6:30 PM IST"
+                        scale_down_cron = "0 13 * * ? *"  # 1:00 PM UTC = 6:30 PM IST
+                        break
+                
+                    try:
+                        # Parse user input and convert to UTC
+                        time_format = "%I:%M %p IST"
+                        time_obj = datetime.strptime(scale_down_time, time_format)
+                        # IST is UTC+5:30, subtract to get UTC
+                        utc_hour = (time_obj.hour - 5) % 24
+                        utc_minute = (time_obj.minute - 30) % 60
+                        if time_obj.minute < 30:  # Handle minute underflow
+                            utc_hour = (utc_hour - 1) % 24
+                    
+                        scale_down_cron = f"{utc_minute} {utc_hour} * * ? *"
+                        break
+                    except ValueError:
+                        self.print_colored(Colors.YELLOW, "   ⚠️  Invalid time format. Please use format like '6:30 PM IST'")
+            else:
+                scale_up_time = "8:30 AM IST"
+                scale_up_cron = "0 3 * * ? *"  # 3:00 AM UTC = 8:30 AM IST
+                scale_down_time = "6:30 PM IST"
+                scale_down_cron = "0 13 * * ? *"  # 1:00 PM UTC = 6:30 PM IST
+        
+            # Step 2: Get user input for scaling sizes
+            self.print_colored(Colors.CYAN, "\n   💻 Set node scaling parameters:")
+            print("   Default scale-up: min=1, desired=1, max=3")
+            print("   Default scale-down: min=0, desired=0, max=3")
+        
+            change_sizes = input("   Change default scaling sizes? (y/N): ").strip().lower() in ['y', 'yes']
+        
+            if change_sizes:
+                try:
+                    scale_up_min = int(input("   Scale-up minimum nodes (default: 1): ").strip() or "1")
+                    scale_up_desired = int(input("   Scale-up desired nodes (default: 1): ").strip() or "1")
+                    scale_up_max = int(input("   Scale-up maximum nodes (default: 3): ").strip() or "3")
+                
+                    scale_down_min = int(input("   Scale-down minimum nodes (default: 0): ").strip() or "0")
+                    scale_down_desired = int(input("   Scale-down desired nodes (default: 0): ").strip() or "0")
+                    scale_down_max = int(input("   Scale-down maximum nodes (default: 3): ").strip() or "3")
+                
+                    # Validate input
+                    if scale_up_min < 0 or scale_up_desired < 0 or scale_up_max < 0 or scale_down_min < 0 or scale_down_desired < 0 or scale_down_max < 0:
+                        self.print_colored(Colors.YELLOW, "   ⚠️  Negative values not allowed, using defaults.")
+                        scale_up_min, scale_up_desired, scale_up_max = 1, 1, 3
+                        scale_down_min, scale_down_desired, scale_down_max = 0, 0, 3
+                
+                    if scale_up_min > scale_up_desired or scale_up_desired > scale_up_max:
+                        self.print_colored(Colors.YELLOW, "   ⚠️  Invalid scale-up values (should be min ≤ desired ≤ max), adjusting...")
+                        scale_up_max = max(scale_up_max, scale_up_desired, scale_up_min)
+                        scale_up_min = min(scale_up_min, scale_up_desired)
+                        scale_up_desired = max(scale_up_min, min(scale_up_desired, scale_up_max))
+                
+                    if scale_down_min > scale_down_desired or scale_down_desired > scale_down_max:
+                        self.print_colored(Colors.YELLOW, "   ⚠️  Invalid scale-down values (should be min ≤ desired ≤ max), adjusting...")
+                        scale_down_max = max(scale_down_max, scale_down_desired, scale_down_min)
+                        scale_down_min = min(scale_down_min, scale_down_desired)
+                        scale_down_desired = max(scale_down_min, min(scale_down_desired, scale_down_max))
+                
+                except ValueError:
+                    self.print_colored(Colors.YELLOW, "   ⚠️  Invalid number format, using defaults.")
+                    scale_up_min, scale_up_desired, scale_up_max = 1, 1, 3
+                    scale_down_min, scale_down_desired, scale_down_max = 0, 0, 3
+            else:
+                scale_up_min, scale_up_desired, scale_up_max = 1, 1, 3
+                scale_down_min, scale_down_desired, scale_down_max = 0, 0, 3
+        
+            # Check if any nodegroup current size is greater than new scale down size
+            size_reduction_detected = False
+            for ng_name, config in nodegroup_configs.items():
+                if config['current_desired'] > scale_down_desired:
+                    size_reduction_detected = True
+                    break
+        
+            if size_reduction_detected:
+                self.print_colored(Colors.YELLOW, "\n   ⚠️  Warning: Some nodegroups currently have more nodes than the scale-down size.")
+                self.print_colored(Colors.YELLOW, "      This will cause nodes to be terminated during scale-down.")
+                confirm = input("   Continue with these settings? (y/N): ").strip().lower()
+                if confirm not in ['y', 'yes']:
+                    self.print_colored(Colors.YELLOW, "   ⚠️  Scheduled scaling setup canceled.")
+                    return False
+        
+            # Step 3: Create IAM role for Lambda function - with shorter name
+            self.print_colored(Colors.CYAN, "   🔐 Creating IAM role for scheduled scaling...")
+        
+            # Use a shorter name - EKS-{cluster_suffix}-ScaleRole
+            short_cluster_suffix = cluster_name.split('-')[-1]  # Just take the random suffix
+            lambda_role_name = f"EKS-{short_cluster_suffix}-ScaleRole"
+        
+            lambda_trust_policy = {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Effect": "Allow",
+                        "Principal": {
+                            "Service": "lambda.amazonaws.com"
+                        },
+                        "Action": "sts:AssumeRole"
+                    }
+                ]
+            }
+        
+            lambda_policy = {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Effect": "Allow",
+                        "Action": [
+                            "eks:DescribeCluster",
+                            "eks:DescribeNodegroup",
+                            "eks:ListNodegroups",
+                            "eks:UpdateNodegroupConfig",
+                            "logs:CreateLogGroup",
+                            "logs:CreateLogStream",
+                            "logs:PutLogEvents"
+                        ],
+                        "Resource": "*"
+                    }
+                ]
+            }
+        
+            try:
+                # Create Lambda execution role
+                role_response = iam_client.create_role(
+                    RoleName=lambda_role_name,
+                    AssumeRolePolicyDocument=json.dumps(lambda_trust_policy),
+                    Description=f"Role for scheduled scaling of EKS cluster {cluster_name}"
+                )
+                lambda_role_arn = role_response['Role']['Arn']
+            
+                # Create and attach policy - also with shorter name
+                policy_name = f"EKS-{short_cluster_suffix}-ScalePolicy"
+                policy_response = iam_client.create_policy(
+                    PolicyName=policy_name,
+                    PolicyDocument=json.dumps(lambda_policy),
+                    Description=f"Policy for scheduled scaling of EKS cluster {cluster_name}"
+                )
+            
+                iam_client.attach_role_policy(
+                    RoleName=lambda_role_name,
+                    PolicyArn=policy_response['Policy']['Arn']
+                )
+            
+                self.log_operation('INFO', f"Created Lambda role for scheduled scaling: {lambda_role_arn}")
+            
+            except iam_client.exceptions.EntityAlreadyExistsException:
+                # Role already exists
+                role_response = iam_client.get_role(RoleName=lambda_role_name)
+                lambda_role_arn = role_response['Role']['Arn']
+                self.log_operation('INFO', f"Using existing Lambda role: {lambda_role_arn}")
+        
+            # Step 4: Create a multi-nodegroup Lambda function
+            self.print_colored(Colors.CYAN, "   🔧 Creating Lambda function for multi-nodegroup scaling...")
+        
+            # Load lambda code from template file if it exists, otherwise use embedded template
+            try:
+                template_file = os.path.join(os.path.dirname(__file__), 'lambda_eks_scaling_template.py')
+            
+                # If template file doesn't exist in same directory, try current directory
+                if not os.path.exists(template_file):
+                    template_file = 'lambda_eks_scaling_template.py'
+            
+                # If still not found, create it
+                if not os.path.exists(template_file):
+                    self.log_operation('INFO', f"Creating lambda template file: {template_file}")
+                    with open(template_file, 'w') as f:
+                        f.write(self._get_multi_nodegroup_lambda_template())
+            
+                # Read the template
+                with open(template_file, 'r') as f:
+                    lambda_template = f.read()
+            
+                # Replace placeholders
+                lambda_code = lambda_template.format(
+                    region=region,
+                    cluster_name=cluster_name
+                )
+            
+                self.log_operation('INFO', f"Loaded Lambda template from file: {template_file}")
+            
+            except Exception as e:
+                self.log_operation('WARNING', f"Failed to load lambda template file: {str(e)}. Using embedded template.")
+                # Fall back to embedded template
+                lambda_code = self._get_multi_nodegroup_lambda_template().format(
+                    region=region,
+                    cluster_name=cluster_name
+                )
+        
+            function_name = f"eks-scale-{short_cluster_suffix}"
+        
+            try:
+                # Wait for role to be available
+                time.sleep(10)
+            
+                # Create Lambda function
+                lambda_response = lambda_client.create_function(
+                    FunctionName=function_name,
+                    Runtime='python3.9',
+                    Role=lambda_role_arn,
+                    Handler='index.lambda_handler',
+                    Code={'ZipFile': lambda_code.encode('utf-8')},
+                    Description=f'Scheduled scaling for EKS cluster {cluster_name} nodegroups',
+                    Timeout=60
+                )
+            
+                function_arn = lambda_response['FunctionArn']
+                self.log_operation('INFO', f"Created Lambda function: {function_arn}")
+            
+            except lambda_client.exceptions.ResourceConflictException:
+                # Function already exists - update the code
+                lambda_client.update_function_code(
+                    FunctionName=function_name,
+                    ZipFile=lambda_code.encode('utf-8')
+                )
+                function_response = lambda_client.get_function(FunctionName=function_name)
+                function_arn = function_response['Configuration']['FunctionArn']
+                self.log_operation('INFO', f"Updated existing Lambda function: {function_arn}")
+        
+            # Step 5: Create EventBridge rules for scaling
+            self.print_colored(Colors.CYAN, f"   📅 Creating scheduled scaling rules (IST timezone):")
+            self.print_colored(Colors.CYAN, f"      - Scale up: {scale_up_time} → {scale_up_desired} node(s)")
+            self.print_colored(Colors.CYAN, f"      - Scale down: {scale_down_time} → {scale_down_desired} node(s)")
+        
+            # Scale down rule
+            scale_down_rule = f"eks-down-{short_cluster_suffix}"
+            events_client.put_rule(
+                Name=scale_down_rule,
+                ScheduleExpression=f'cron({scale_down_cron})',
+                Description=f'Scale down EKS cluster {cluster_name} at {scale_down_time} (after hours)',
+                State='ENABLED'
+            )
+        
+            # Scale up rule
+            scale_up_rule = f"eks-up-{short_cluster_suffix}"
+            events_client.put_rule(
+                Name=scale_up_rule,
+                ScheduleExpression=f'cron({scale_up_cron})',
+                Description=f'Scale up EKS cluster {cluster_name} at {scale_up_time} (business hours)',
+                State='ENABLED'
+            )
+        
+            # Add Lambda permissions for EventBridge
+            try:
+                lambda_client.add_permission(
+                    FunctionName=function_name,
+                    StatementId=f'allow-eventbridge-down-{short_cluster_suffix}',
+                    Action='lambda:InvokeFunction',
+                    Principal='events.amazonaws.com',
+                    SourceArn=f'arn:aws:events:{region}:{account_id}:rule/{scale_down_rule}'
+                )
+            
+                lambda_client.add_permission(
+                    FunctionName=function_name,
+                    StatementId=f'allow-eventbridge-up-{short_cluster_suffix}',
+                    Action='lambda:InvokeFunction',
+                    Principal='events.amazonaws.com',
+                    SourceArn=f'arn:aws:events:{region}:{account_id}:rule/{scale_up_rule}'
+                )
+            except lambda_client.exceptions.ResourceConflictException:
+                # Permissions already exist
+                pass
+        
+            # Add targets to rules with nodegroup-aware configuration
+            # Scale down configuration includes all nodegroups to scale to configured size
+            events_client.put_targets(
+                Rule=scale_down_rule,
+                Targets=[
+                    {
+                        'Id': '1',
+                        'Arn': function_arn,
+                        'Input': json.dumps({
+                            'action': 'scale_down',
+                            'ist_time': scale_down_time,
+                            'nodegroups': [
+                                {
+                                    'name': nodegroup,
+                                    'desired_size': scale_down_desired,
+                                    'min_size': scale_down_min,
+                                    'max_size': scale_down_max
+                                } for nodegroup in nodegroup_names
+                            ]
+                        })
+                    }
+                ]
+            )
+        
+            # Scale up configuration includes all nodegroups to scale to configured size
+            events_client.put_targets(
+                Rule=scale_up_rule,
+                Targets=[
+                    {
+                        'Id': '1',
+                        'Arn': function_arn,
+                        'Input': json.dumps({
+                            'action': 'scale_up',
+                            'ist_time': scale_up_time,
+                            'nodegroups': [
+                                {
+                                    'name': nodegroup,
+                                    'desired_size': scale_up_desired,
+                                    'min_size': scale_up_min,
+                                    'max_size': scale_up_max
+                                } for nodegroup in nodegroup_names
+                            ]
+                        })
+                    }
+                ]
+            )
+        
+            self.print_colored(Colors.GREEN, "   ✅ Scheduled scaling configured")
+            self.print_colored(Colors.CYAN, f"   📅 Scale up: {scale_up_time} → {scale_up_desired} node(s) per nodegroup")
+            self.print_colored(Colors.CYAN, f"   📅 Scale down: {scale_down_time} → {scale_down_desired} node(s) per nodegroup")
+            self.print_colored(Colors.CYAN, f"   🌏 Timezone: Indian Standard Time (UTC+5:30)")
+        
+            return True
+        
+        except Exception as e:
+            error_msg = str(e)
+            self.log_operation('ERROR', f"Failed to setup multi-nodegroup scheduled scaling: {error_msg}")
+            self.print_colored(Colors.RED, f"❌ Scheduled scaling setup failed: {error_msg}")
+            return False
+
 
     def setup_cloudwatch_alarms_multi_nodegroup(self, cluster_name: str, region: str, cloudwatch_client, nodegroup_names: List[str], account_id: str) -> bool:
         """Setup CloudWatch alarms for multiple nodegroups"""
@@ -2064,6 +2601,14 @@ class EKSClusterManager:
                                 eks_role_arn: str, subnet_ids: List[str], security_group_id: str) -> bool:
         """Create EKS control plane with CloudWatch logging enabled"""
         try:
+            supported_versions = ["1.26", "1.27", "1.28", "1.29", "1.30", "1.31", "1.32"]
+            if not any(eks_version.startswith(v) for v in supported_versions):
+                print(f"⚠️ Warning: EKS version {eks_version} may not be fully supported")
+                proceed = input(f"Proceed with version {eks_version}? (y/N): ").strip().lower()
+                if proceed not in ['y', 'yes']:
+                    print("❌ EKS creation canceled due to unsupported version")
+                    return False
+
             print(f"Creating EKS cluster {cluster_name} with version {eks_version}")
             
             cluster_config = {
@@ -2156,6 +2701,128 @@ class EKSClusterManager:
             print(f"❌ Error creating on-demand nodegroup: {e}")
             return False
 
+    def _get_multi_nodegroup_lambda_template(self) -> str:
+        """Get the Lambda function template for multi-nodegroup scaling"""
+        return '''
+    import boto3
+    import json
+    import logging
+    from datetime import datetime
+
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+
+    def lambda_handler(event, context):
+        try:
+            eks_client = boto3.client('eks', region_name='{region}')
+            cluster_name = '{cluster_name}'
+        
+            # Get the list of nodegroups to scale from the event
+            nodegroups_config = event.get('nodegroups', [])
+            if not nodegroups_config:
+                logger.warning(f"No nodegroups specified in event for cluster {{cluster_name}}")
+                return {{'statusCode': 400, 'body': 'No nodegroups specified'}}
+        
+            # Current time for logging
+            current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            action = event.get('action', 'unknown')
+            ist_time = event.get('ist_time', 'unknown')
+        
+            logger.info(f"Scaling {{len(nodegroups_config)}} nodegroups in cluster {{cluster_name}} - Action: {{action}}, IST Time: {{ist_time}}")
+        
+            results = []
+            success_count = 0
+        
+            # Process each nodegroup
+            for ng_config in nodegroups_config:
+                nodegroup_name = ng_config.get('name')
+                desired_size = ng_config.get('desired_size', 1)
+                min_size = ng_config.get('min_size', 0) 
+                max_size = ng_config.get('max_size', 3)
+            
+                if not nodegroup_name:
+                    logger.warning("Nodegroup name missing in configuration item, skipping")
+                    continue
+            
+                try:
+                    # Get current nodegroup configuration first
+                    current_ng = eks_client.describe_nodegroup(
+                        clusterName=cluster_name,
+                        nodegroupName=nodegroup_name
+                    )
+                
+                    current_scaling = current_ng['nodegroup'].get('scalingConfig', {})
+                    current_desired = current_scaling.get('desiredSize', 0)
+                    current_min = current_scaling.get('minSize', 0)
+                    current_max = current_scaling.get('maxSize', 0)
+                
+                    logger.info(f"Nodegroup {{nodegroup_name}} - Current: desired={{current_desired}}, min={{current_min}}, max={{current_max}}")
+                    logger.info(f"Nodegroup {{nodegroup_name}} - Target: desired={{desired_size}}, min={{min_size}}, max={{max_size}}")
+                
+                    # Update nodegroup scaling configuration
+                    response = eks_client.update_nodegroup_config(
+                        clusterName=cluster_name,
+                        nodegroupName=nodegroup_name,
+                        scalingConfig={{
+                            'minSize': min_size,
+                            'maxSize': max_size,
+                            'desiredSize': desired_size
+                        }}
+                    )
+                
+                    results.append({{
+                        'nodegroup': nodegroup_name,
+                        'update_id': response['update']['id'],
+                        'status': 'success',
+                        'previous_desired': current_desired,
+                        'new_desired': desired_size,
+                        'previous_min': current_min,
+                        'new_min': min_size,
+                        'previous_max': current_max,
+                        'new_max': max_size
+                    }})
+                
+                    success_count += 1
+                    logger.info(f"Successfully initiated scaling for {{nodegroup_name}} from {{current_desired}} to {{desired_size}} nodes")
+                
+                except Exception as e:
+                    error_msg = str(e)
+                    logger.error(f"Error scaling nodegroup {{nodegroup_name}}: {{error_msg}}")
+                
+                    results.append({{
+                        'nodegroup': nodegroup_name,
+                        'status': 'error',
+                        'error': error_msg
+                    }})
+        
+            # Return summary of scaling operations
+            summary = {{
+                'cluster': cluster_name,
+                'action': action,
+                'ist_time': ist_time,
+                'timestamp': current_time,
+                'success_count': success_count,
+                'total': len(nodegroups_config),
+                'results': results
+            }}
+        
+            logger.info(f"Scaling summary: {{success_count}}/{{len(nodegroups_config)}} nodegroups scaled successfully")
+            return {{
+                'statusCode': 200 if success_count > 0 else 500,
+                'body': json.dumps(summary)
+            }}
+        
+        except Exception as e:
+            error_msg = str(e)
+            logger.error(f"Scaling operation failed: {{error_msg}}")
+            return {{
+                'statusCode': 500,
+                'body': json.dumps({{
+                    'error': error_msg,
+                    'cluster': '{cluster_name}'
+                }})
+            }}
+    '''
     def create_spot_nodegroup(self, eks_client, cluster_name: str, nodegroup_name: str,
                                 node_role_arn: str, subnet_ids: List[str], ami_type: str,
                                 instance_types: List[str], min_size: int, desired_size: int, max_size: int) -> bool:
@@ -3580,7 +4247,7 @@ class EKSClusterManager:
             return 2  # Default fallback
         
     ####
-    def install_essential_addons(self, eks_client, cluster_name: str, admin_access_key: str, admin_secret_key: str) -> bool:
+    def install_essential_addons(self, eks_client, cluster_name: str, region:str, admin_access_key: str, admin_secret_key: str, account_id:str ) -> bool:
         """Install essential EKS add-ons including EFS CSI driver with proper credentials"""
         try:
             self.log_operation('INFO', f"Installing essential add-ons for cluster {cluster_name}")
@@ -3610,26 +4277,26 @@ class EKSClusterManager:
             self.attach_csi_policies_to_node_role(iam_client, account_id)
 
             # Define add-ons including EFS CSI driver
-            if eks_version.startswith('1.28'):
+            if eks_version.startswith('1.32'):
                 addons = [
                     {
                         'addonName': 'vpc-cni',
-                        'addonVersion': 'v1.15.1-eksbuild.1',
+                        'addonVersion': 'v1.16.2-eksbuild.1',
                         'description': 'VPC CNI for pod networking'
                     },
                     {
                         'addonName': 'coredns',
-                        'addonVersion': 'v1.10.1-eksbuild.5',
+                        'addonVersion': 'v1.11.1-eksbuild.4',
                         'description': 'CoreDNS for cluster DNS'
                     },
                     {
                         'addonName': 'kube-proxy',
-                        'addonVersion': 'v1.28.2-eksbuild.2',
+                        'addonVersion': 'v1.32.0-eksbuild.1',
                         'description': 'Kube-proxy for service discovery'
                     },
                     {
                         'addonName': 'aws-ebs-csi-driver',
-                        'addonVersion': 'v1.25.0-eksbuild.1',
+                        'addonVersion': 'v1.28.0-eksbuild.1',
                         'description': 'EBS CSI driver for persistent volumes'
                     },
                     {
@@ -4802,314 +5469,315 @@ class EKSClusterManager:
 
     ########
     def setup_scheduled_scaling(self, cluster_name: str, region: str, admin_access_key: str, admin_secret_key: str) -> bool:
-    """Setup scheduled scaling for cost optimization using IST times"""
-    try:
-        self.log_operation('INFO', f"Setting up scheduled scaling for cluster {cluster_name}")
-        self.print_colored(Colors.YELLOW, f"⏰ Setting up scheduled scaling for {cluster_name}...")
-    
-        # Create admin session
-        admin_session = boto3.Session(
-            aws_access_key_id=admin_access_key,
-            aws_secret_access_key=admin_secret_key,
-            region_name=region
-        )
-    
-        # Create EventBridge and Lambda clients
-        events_client = admin_session.client('events')
-        lambda_client = admin_session.client('lambda')
-        iam_client = admin_session.client('iam')
-        sts_client = admin_session.client('sts')
-        account_id = sts_client.get_caller_identity()['Account']
-    
-        # Step 1: Create IAM role for Lambda function - with shorter name
-        self.print_colored(Colors.CYAN, "   🔐 Creating IAM role for scheduled scaling...")
-    
-        # Use a shorter name - EKS-{cluster_suffix}-ScaleRole
-        short_cluster_suffix = cluster_name.split('-')[-1]  # Just take the random suffix
-        lambda_role_name = f"EKS-{short_cluster_suffix}-ScaleRole"
-    
-        lambda_trust_policy = {
-            "Version": "2012-10-17",
-            "Statement": [
-                {
-                    "Effect": "Allow",
-                    "Principal": {
-                        "Service": "lambda.amazonaws.com"
-                    },
-                    "Action": "sts:AssumeRole"
-                }
-            ]
-        }
-    
-        lambda_policy = {
-            "Version": "2012-10-17",
-            "Statement": [
-                {
-                    "Effect": "Allow",
-                    "Action": [
-                        "eks:DescribeCluster",
-                        "eks:DescribeNodegroup",
-                        "eks:ListNodegroups",  # Added this permission
-                        "eks:UpdateNodegroupConfig",
-                        "logs:CreateLogGroup",
-                        "logs:CreateLogStream",
-                        "logs:PutLogEvents"
-                    ],
-                    "Resource": "*"
-                }
-            ]
-        }
-    
+        """Setup scheduled scaling for cost optimization using IST times"""
         try:
-            # Create Lambda execution role
-            role_response = iam_client.create_role(
-                RoleName=lambda_role_name,
-                AssumeRolePolicyDocument=json.dumps(lambda_trust_policy),
-                Description=f"Role for scheduled scaling of EKS cluster {cluster_name}"
-            )
-            lambda_role_arn = role_response['Role']['Arn']
+            self.log_operation('INFO', f"Setting up scheduled scaling for cluster {cluster_name}")
+            self.print_colored(Colors.YELLOW, f"⏰ Setting up scheduled scaling for {cluster_name}...")
         
-            # Create and attach policy - also with shorter name
-            policy_name = f"EKS-{short_cluster_suffix}-ScalePolicy"
-            policy_response = iam_client.create_policy(
-                PolicyName=policy_name,
-                PolicyDocument=json.dumps(lambda_policy),
-                Description=f"Policy for scheduled scaling of EKS cluster {cluster_name}"
+            # Create admin session
+            admin_session = boto3.Session(
+                aws_access_key_id=admin_access_key,
+                aws_secret_access_key=admin_secret_key,
+                region_name=region
             )
         
-            iam_client.attach_role_policy(
-                RoleName=lambda_role_name,
-                PolicyArn=policy_response['Policy']['Arn']
+            # Create EventBridge and Lambda clients
+            events_client = admin_session.client('events')
+            lambda_client = admin_session.client('lambda')
+            iam_client = admin_session.client('iam')
+            sts_client = admin_session.client('sts')
+            account_id = sts_client.get_caller_identity()['Account']
+        
+            # Step 1: Create IAM role for Lambda function - with shorter name
+            self.print_colored(Colors.CYAN, "   🔐 Creating IAM role for scheduled scaling...")
+        
+            # Use a shorter name - EKS-{cluster_suffix}-ScaleRole
+            short_cluster_suffix = cluster_name.split('-')[-1]  # Just take the random suffix
+            lambda_role_name = f"EKS-{short_cluster_suffix}-ScaleRole"
+        
+            lambda_trust_policy = {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Effect": "Allow",
+                        "Principal": {
+                            "Service": "lambda.amazonaws.com"
+                        },
+                        "Action": "sts:AssumeRole"
+                    }
+                ]
+            }
+        
+            lambda_policy = {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Effect": "Allow",
+                        "Action": [
+                            "eks:DescribeCluster",
+                            "eks:DescribeNodegroup",
+                            "eks:ListNodegroups",  # Added this permission
+                            "eks:UpdateNodegroupConfig",
+                            "logs:CreateLogGroup",
+                            "logs:CreateLogStream",
+                            "logs:PutLogEvents"
+                        ],
+                        "Resource": "*"
+                    }
+                ]
+            }
+        
+            try:
+                # Create Lambda execution role
+                role_response = iam_client.create_role(
+                    RoleName=lambda_role_name,
+                    AssumeRolePolicyDocument=json.dumps(lambda_trust_policy),
+                    Description=f"Role for scheduled scaling of EKS cluster {cluster_name}"
+                )
+                lambda_role_arn = role_response['Role']['Arn']
+            
+                # Create and attach policy - also with shorter name
+                policy_name = f"EKS-{short_cluster_suffix}-ScalePolicy"
+                policy_response = iam_client.create_policy(
+                    PolicyName=policy_name,
+                    PolicyDocument=json.dumps(lambda_policy),
+                    Description=f"Policy for scheduled scaling of EKS cluster {cluster_name}"
+                )
+            
+                iam_client.attach_role_policy(
+                    RoleName=lambda_role_name,
+                    PolicyArn=policy_response['Policy']['Arn']
+                )
+            
+                self.log_operation('INFO', f"Created Lambda role for scheduled scaling: {lambda_role_arn}")
+            
+            except iam_client.exceptions.EntityAlreadyExistsException:
+                # Role already exists
+                role_response = iam_client.get_role(RoleName=lambda_role_name)
+                lambda_role_arn = role_response['Role']['Arn']
+                self.log_operation('INFO', f"Using existing Lambda role: {lambda_role_arn}")
+        
+            # Step 2: Create Lambda function for scaling - with shorter name
+            self.print_colored(Colors.CYAN, "   🔧 Creating Lambda function for scaling...")
+        
+            # Load lambda code from template file
+            try:
+                template_file = os.path.join(os.path.dirname(__file__), 'lambda_eks_scaling_template.py')
+                
+                # If template file doesn't exist in same directory, try current directory
+                if not os.path.exists(template_file):
+                    template_file = 'lambda_eks_scaling_template.py'
+                
+                # If still not found, create it
+                if not os.path.exists(template_file):
+                    self.log_operation('INFO', f"Creating lambda template file: {template_file}")
+                    with open(template_file, 'w') as f:
+                        f.write(self.get_lambda_scaling_template())
+                
+                # Read the template
+                with open(template_file, 'r') as f:
+                    lambda_template = f.read()
+                
+                # Replace placeholders
+                lambda_code = lambda_template.format(
+                    region=region,
+                    cluster_name=cluster_name
+                )
+                
+            except Exception as e:
+                self.log_operation('WARNING', f"Failed to load lambda template: {str(e)}. Using embedded code.")
+                # Fall back to embedded template
+                lambda_code = self.get_lambda_scaling_template().format(
+                    region=region,
+                    cluster_name=cluster_name
+                )
+        
+            function_name = f"eks-scale-{short_cluster_suffix}"
+        
+            try:
+                # Wait for role to be available
+                time.sleep(10)
+            
+                # Create Lambda function
+                lambda_response = lambda_client.create_function(
+                    FunctionName=function_name,
+                    Runtime='python3.9',
+                    Role=lambda_role_arn,
+                    Handler='index.lambda_handler',
+                    Code={'ZipFile': lambda_code.encode('utf-8')},
+                    Description=f'Scheduled scaling for EKS cluster {cluster_name}',
+                    Timeout=60
+                )
+            
+                function_arn = lambda_response['FunctionArn']
+                self.log_operation('INFO', f"Created Lambda function: {function_arn}")
+            
+            except lambda_client.exceptions.ResourceConflictException:
+                # Function already exists
+                function_response = lambda_client.get_function(FunctionName=function_name)
+                function_arn = function_response['Configuration']['FunctionArn']
+                self.log_operation('INFO', f"Using existing Lambda function: {function_arn}")
+        
+            # Step 3: Create EventBridge rules for scaling - with shorter names
+            self.print_colored(Colors.CYAN, "   📅 Creating scheduled scaling rules (IST timezone)...")
+        
+            # Scale down at 6:30 PM IST (1:00 PM UTC)
+            scale_down_rule = f"eks-down-{short_cluster_suffix}"
+            events_client.put_rule(
+                Name=scale_down_rule,
+                ScheduleExpression='cron(0 13 * * ? *)',  # 1:00 PM UTC = 6:30 PM IST
+                Description=f'Scale down EKS cluster {cluster_name} at 6:30 PM IST (after hours)',
+                State='ENABLED'
             )
         
-            self.log_operation('INFO', f"Created Lambda role for scheduled scaling: {lambda_role_arn}")
-        
-        except iam_client.exceptions.EntityAlreadyExistsException:
-            # Role already exists
-            role_response = iam_client.get_role(RoleName=lambda_role_name)
-            lambda_role_arn = role_response['Role']['Arn']
-            self.log_operation('INFO', f"Using existing Lambda role: {lambda_role_arn}")
-    
-        # Step 2: Create Lambda function for scaling - with shorter name
-        self.print_colored(Colors.CYAN, "   🔧 Creating Lambda function for scaling...")
-    
-        # Load lambda code from template file
-        try:
-            template_file = os.path.join(os.path.dirname(__file__), 'lambda_scaling_template.py')
-            
-            # If template file doesn't exist in same directory, try current directory
-            if not os.path.exists(template_file):
-                template_file = 'lambda_scaling_template.py'
-            
-            # If still not found, create it
-            if not os.path.exists(template_file):
-                self.log_operation('INFO', f"Creating lambda template file: {template_file}")
-                with open(template_file, 'w') as f:
-                    f.write(self.get_lambda_scaling_template())
-            
-            # Read the template
-            with open(template_file, 'r') as f:
-                lambda_template = f.read()
-            
-            # Replace placeholders
-            lambda_code = lambda_template.format(
-                region=region,
-                cluster_name=cluster_name
+            # Scale up at 8:30 AM IST (3:00 AM UTC)
+            scale_up_rule = f"eks-up-{short_cluster_suffix}"
+            events_client.put_rule(
+                Name=scale_up_rule,
+                ScheduleExpression='cron(0 3 * * ? *)',  # 3:00 AM UTC = 8:30 AM IST
+                Description=f'Scale up EKS cluster {cluster_name} at 8:30 AM IST (business hours)',
+                State='ENABLED'
             )
+        
+            # Add Lambda permissions for EventBridge
+            try:
+                lambda_client.add_permission(
+                    FunctionName=function_name,
+                    StatementId=f'allow-eventbridge-down-{short_cluster_suffix}',
+                    Action='lambda:InvokeFunction',
+                    Principal='events.amazonaws.com',
+                    SourceArn=f'arn:aws:events:{region}:{account_id}:rule/{scale_down_rule}'
+                )
             
+                lambda_client.add_permission(
+                    FunctionName=function_name,
+                    StatementId=f'allow-eventbridge-up-{short_cluster_suffix}',
+                    Action='lambda:InvokeFunction',
+                    Principal='events.amazonaws.com',
+                    SourceArn=f'arn:aws:events:{region}:{account_id}:rule/{scale_up_rule}'
+                )
+            except lambda_client.exceptions.ResourceConflictException:
+                # Permissions already exist
+                pass
+        
+            # Add targets to rules
+            events_client.put_targets(
+                Rule=scale_down_rule,
+                Targets=[
+                    {
+                        'Id': '1',
+                        'Arn': function_arn,
+                        'Input': json.dumps({
+                            'desired_size': 0,
+                            'min_size': 0,
+                            'max_size': 3,
+                            'action': 'scale_down',
+                            'ist_time': '6:30 PM IST'
+                        })
+                    }
+                ]
+            )
+        
+            events_client.put_targets(
+                Rule=scale_up_rule,
+                Targets=[
+                    {
+                        'Id': '1',
+                        'Arn': function_arn,
+                        'Input': json.dumps({
+                            'desired_size': 1,
+                            'min_size': 1,
+                            'max_size': 3,
+                            'action': 'scale_up',
+                            'ist_time': '8:30 AM IST'
+                        })
+                    }
+                ]
+            )
+        
+            self.print_colored(Colors.GREEN, "   ✅ Scheduled scaling configured")
+            self.print_colored(Colors.CYAN, f"   📅 Scale up: 8:30 AM IST (3:00 AM UTC) → 1 node")
+            self.print_colored(Colors.CYAN, f"   📅 Scale down: 6:30 PM IST (1:00 PM UTC) → 0 nodes")
+            self.print_colored(Colors.CYAN, f"   🌏 Timezone: Indian Standard Time (UTC+5:30)")
+        
+            self.log_operation('INFO', f"Scheduled scaling configured for {cluster_name}")
+            self.log_operation('INFO', f"Scale up: 8:30 AM IST (3:00 AM UTC), Scale down: 6:30 PM IST (1:00 PM UTC)")
+            return True
+        
         except Exception as e:
-            self.log_operation('WARNING', f"Failed to load lambda template: {str(e)}. Using embedded code.")
-            # Fall back to embedded template
-            lambda_code = self.get_lambda_scaling_template().format(
-                region=region,
-                cluster_name=cluster_name
-            )
-    
-        function_name = f"eks-scale-{short_cluster_suffix}"
-    
+            error_msg = str(e)
+            self.log_operation('ERROR', f"Failed to setup scheduled scaling for {cluster_name}: {error_msg}")
+            self.print_colored(Colors.RED, f"❌ Scheduled scaling setup failed: {error_msg}")
+            self.print_colored(Colors.YELLOW, f"⚠️ Continuing with cluster setup despite scheduled scaling issues")
+            return False
+
+    def get_lambda_scaling_template(self) -> str:
+        """Get the Lambda function template code as a string"""
+        return '''
+    import boto3
+    import json
+    import logging
+    from datetime import datetime
+
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+
+    def lambda_handler(event, context):
         try:
-            # Wait for role to be available
-            time.sleep(10)
+            eks_client = boto3.client('eks', region_name='{region}')
         
-            # Create Lambda function
-            lambda_response = lambda_client.create_function(
-                FunctionName=function_name,
-                Runtime='python3.9',
-                Role=lambda_role_arn,
-                Handler='index.lambda_handler',
-                Code={'ZipFile': lambda_code.encode('utf-8')},
-                Description=f'Scheduled scaling for EKS cluster {cluster_name}',
-                Timeout=60
+            cluster_name = '{cluster_name}'
+        
+            # Get nodegroup name from cluster
+            nodegroups = eks_client.list_nodegroups(clusterName=cluster_name)['nodegroups']
+            if not nodegroups:
+                logger.error(f"No nodegroups found for cluster {{cluster_name}}")
+                return {{'statusCode': 500, 'body': 'No nodegroups found'}}
+        
+            # Use the first nodegroup found
+            nodegroup_name = nodegroups[0]
+        
+            # Get the desired size from the event
+            desired_size = event.get('desired_size', 1)
+            min_size = event.get('min_size', 0)
+            max_size = event.get('max_size', 3)
+        
+            # Log current time
+            current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
+            logger.info(f"Scaling nodegroup {{nodegroup_name}} to desired={{desired_size}}, min={{min_size}}, max={{max_size}} at {{current_time}}")
+        
+            # Update nodegroup scaling configuration
+            response = eks_client.update_nodegroup_config(
+                clusterName=cluster_name,
+                nodegroupName=nodegroup_name,
+                scalingConfig={{
+                    'minSize': min_size,
+                    'maxSize': max_size,
+                    'desiredSize': desired_size
+                }}
             )
         
-            function_arn = lambda_response['FunctionArn']
-            self.log_operation('INFO', f"Created Lambda function: {function_arn}")
+            logger.info(f"Scaling update initiated: {{response['update']['id']}} at {{current_time}}")
         
-        except lambda_client.exceptions.ResourceConflictException:
-            # Function already exists
-            function_response = lambda_client.get_function(FunctionName=function_name)
-            function_arn = function_response['Configuration']['FunctionArn']
-            self.log_operation('INFO', f"Using existing Lambda function: {function_arn}")
-    
-        # Step 3: Create EventBridge rules for scaling - with shorter names
-        self.print_colored(Colors.CYAN, "   📅 Creating scheduled scaling rules (IST timezone)...")
-    
-        # Scale down at 6:30 PM IST (1:00 PM UTC)
-        scale_down_rule = f"eks-down-{short_cluster_suffix}"
-        events_client.put_rule(
-            Name=scale_down_rule,
-            ScheduleExpression='cron(0 13 * * ? *)',  # 1:00 PM UTC = 6:30 PM IST
-            Description=f'Scale down EKS cluster {cluster_name} at 6:30 PM IST (after hours)',
-            State='ENABLED'
-        )
-    
-        # Scale up at 8:30 AM IST (3:00 AM UTC)
-        scale_up_rule = f"eks-up-{short_cluster_suffix}"
-        events_client.put_rule(
-            Name=scale_up_rule,
-            ScheduleExpression='cron(0 3 * * ? *)',  # 3:00 AM UTC = 8:30 AM IST
-            Description=f'Scale up EKS cluster {cluster_name} at 8:30 AM IST (business hours)',
-            State='ENABLED'
-        )
-    
-        # Add Lambda permissions for EventBridge
-        try:
-            lambda_client.add_permission(
-                FunctionName=function_name,
-                StatementId=f'allow-eventbridge-down-{short_cluster_suffix}',
-                Action='lambda:InvokeFunction',
-                Principal='events.amazonaws.com',
-                SourceArn=f'arn:aws:events:{region}:{account_id}:rule/{scale_down_rule}'
-            )
-        
-            lambda_client.add_permission(
-                FunctionName=function_name,
-                StatementId=f'allow-eventbridge-up-{short_cluster_suffix}',
-                Action='lambda:InvokeFunction',
-                Principal='events.amazonaws.com',
-                SourceArn=f'arn:aws:events:{region}:{account_id}:rule/{scale_up_rule}'
-            )
-        except lambda_client.exceptions.ResourceConflictException:
-            # Permissions already exist
-            pass
-    
-        # Add targets to rules
-        events_client.put_targets(
-            Rule=scale_down_rule,
-            Targets=[
-                {
-                    'Id': '1',
-                    'Arn': function_arn,
-                    'Input': json.dumps({
-                        'desired_size': 0,
-                        'min_size': 0,
-                        'max_size': 3,
-                        'action': 'scale_down',
-                        'ist_time': '6:30 PM IST'
-                    })
-                }
-            ]
-        )
-    
-        events_client.put_targets(
-            Rule=scale_up_rule,
-            Targets=[
-                {
-                    'Id': '1',
-                    'Arn': function_arn,
-                    'Input': json.dumps({
-                        'desired_size': 1,
-                        'min_size': 1,
-                        'max_size': 3,
-                        'action': 'scale_up',
-                        'ist_time': '8:30 AM IST'
-                    })
-                }
-            ]
-        )
-    
-        self.print_colored(Colors.GREEN, "   ✅ Scheduled scaling configured")
-        self.print_colored(Colors.CYAN, f"   📅 Scale up: 8:30 AM IST (3:00 AM UTC) → 1 node")
-        self.print_colored(Colors.CYAN, f"   📅 Scale down: 6:30 PM IST (1:00 PM UTC) → 0 nodes")
-        self.print_colored(Colors.CYAN, f"   🌏 Timezone: Indian Standard Time (UTC+5:30)")
-    
-        self.log_operation('INFO', f"Scheduled scaling configured for {cluster_name}")
-        self.log_operation('INFO', f"Scale up: 8:30 AM IST (3:00 AM UTC), Scale down: 6:30 PM IST (1:00 PM UTC)")
-        return True
-    
-    except Exception as e:
-        error_msg = str(e)
-        self.log_operation('ERROR', f"Failed to setup scheduled scaling for {cluster_name}: {error_msg}")
-        self.print_colored(Colors.RED, f"❌ Scheduled scaling setup failed: {error_msg}")
-        self.print_colored(Colors.YELLOW, f"⚠️ Continuing with cluster setup despite scheduled scaling issues")
-        return False
-
-def get_lambda_scaling_template(self) -> str:
-    """Get the Lambda function template code as a string"""
-    return '''import boto3
-import json
-import logging
-from datetime import datetime
-
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
-
-def lambda_handler(event, context):
-    try:
-        eks_client = boto3.client('eks', region_name='{region}')
-        
-        cluster_name = '{cluster_name}'
-        
-        # Get nodegroup name from cluster
-        nodegroups = eks_client.list_nodegroups(clusterName=cluster_name)['nodegroups']
-        if not nodegroups:
-            logger.error(f"No nodegroups found for cluster {{cluster_name}}")
-            return {{'statusCode': 500, 'body': 'No nodegroups found'}}
-        
-        # Use the first nodegroup found
-        nodegroup_name = nodegroups[0]
-        
-        # Get the desired size from the event
-        desired_size = event.get('desired_size', 1)
-        min_size = event.get('min_size', 0)
-        max_size = event.get('max_size', 3)
-        
-        # Log current time
-        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        
-        logger.info(f"Scaling nodegroup {{nodegroup_name}} to desired={{desired_size}}, min={{min_size}}, max={{max_size}} at {{current_time}}")
-        
-        # Update nodegroup scaling configuration
-        response = eks_client.update_nodegroup_config(
-            clusterName=cluster_name,
-            nodegroupName=nodegroup_name,
-            scalingConfig={{
-                'minSize': min_size,
-                'maxSize': max_size,
-                'desiredSize': desired_size
+            return {{
+                'statusCode': 200,
+                'body': json.dumps({{
+                    'message': f'Scaling update initiated for {{nodegroup_name}} at {{current_time}}',
+                    'update_id': response['update']['id'],
+                    'timestamp': current_time
+                }})
             }}
-        )
         
-        logger.info(f"Scaling update initiated: {{response['update']['id']}} at {{current_time}}")
-        
-        return {{
-            'statusCode': 200,
-            'body': json.dumps({{
-                'message': f'Scaling update initiated for {{nodegroup_name}} at {{current_time}}',
-                'update_id': response['update']['id'],
-                'timestamp': current_time
-            }})
-        }}
-        
-    except Exception as e:
-        logger.error(f"Error scaling nodegroup: {{str(e)}}")
-        return {{
-            'statusCode': 500,
-            'body': json.dumps({{
-                'error': str(e)
-            }})
-        }}
-'''
+        except Exception as e:
+            logger.error(f"Error scaling nodegroup: {{str(e)}}")
+            return {{
+                'statusCode': 500,
+                'body': json.dumps({{
+                    'error': str(e)
+                }})
+            }}
+    '''
     def cleanup_temp_file(self, file_path: str) -> None:
             """
             Deletes the temporary file at the given path if it exists.
@@ -5149,6 +5817,8 @@ def lambda_handler(event, context):
                 self.print_colored(Colors.CYAN, f"   📦 Installing Amazon EFS CSI Driver...")
             
                 # Get appropriate addon version based on EKS version
+                if eks_version.startswith('1.32'):
+                    addon_version = 'v1.8.0-eksbuild.1'
                 if eks_version.startswith('1.28'):
                     addon_version = 'v1.7.0-eksbuild.1'
                 elif eks_version.startswith('1.27'):
@@ -5358,6 +6028,8 @@ def lambda_handler(event, context):
                 self.print_colored(Colors.CYAN, f"   📦 Installing Amazon EKS Pod Identity Agent...")
             
                 # Get appropriate addon version based on EKS version
+                if eks_version.startswith('1.32'):
+                    identity_version = 'v1.2.0-eksbuild.1'
                 if eks_version.startswith('1.28'):
                     identity_version = 'v1.1.0-eksbuild.1'
                 else:

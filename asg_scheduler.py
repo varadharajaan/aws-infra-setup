@@ -177,7 +177,7 @@ class ASGScheduler:
             print(f"   ❌ Error creating IAM role: {e}")
             raise
     
-    def _create_scale_lambda_function(self, lambda_client, asg_name: str, 
+    def _create_scale_lambda_function_fixed(self, lambda_client, asg_name: str, 
                                     direction: str, role_arn: str, region: str) -> str:
         """Create Lambda function for scaling ASG up or down"""
         function_name = f"asg-scheduler-{asg_name}-scale-{direction}"
@@ -269,6 +269,121 @@ def lambda_handler(event, context):
             print(f"   ❌ Error creating Lambda function: {e}")
             raise
     
+    #if this method not works then switch to _fixed above method. 
+    def _create_scale_lambda_function(self, lambda_client, asg_name: str, 
+                                    direction: str, role_arn: str, region: str) -> str:
+        """Create Lambda function for scaling ASG up or down"""
+        function_name = f"asg-scheduler-{asg_name}-scale-{direction}"
+    
+        try:
+            # Check if function already exists
+            try:
+                response = lambda_client.get_function(FunctionName=function_name)
+                print(f"   📋 Using existing Lambda function: {function_name}")
+                return response['Configuration']['FunctionArn']
+            except lambda_client.exceptions.ResourceNotFoundException:
+                pass
+        
+            # Load the lambda template file
+            lambda_code = self._get_lambda_template_code(asg_name, direction)
+        
+            # Create Lambda function
+            response = lambda_client.create_function(
+                FunctionName=function_name,
+                Runtime='python3.9',
+                Role=role_arn,
+                Handler='index.lambda_handler',
+                Code={
+                    'ZipFile': lambda_code.encode('utf-8')
+                },
+                Description=f'ASG Scheduler - Scale {direction} for {asg_name}',
+                Timeout=60,
+                Tags={
+                    'ASGName': asg_name,
+                    'Direction': direction,
+                    'CreatedBy': self.current_user,
+                    'Service': 'ASGScheduler'
+                }
+            )
+        
+            print(f"   ✅ Created Lambda function: {function_name}")
+            return response['FunctionArn']
+        
+        except Exception as e:
+            print(f"   ❌ Error creating Lambda function: {e}")
+            raise
+
+    def _get_lambda_template_code(self, asg_name: str, direction: str) -> str:
+        """Get the Lambda code from template file with proper variable substitution"""
+        try:
+            # Try to load the template file
+            template_path = "lambda_asg_scaling_template.py"
+            with open(template_path, "r") as file:
+                template_content = file.read()
+        
+            # Replace placeholders with actual values
+            lambda_code = template_content.replace('${ASG_NAME}', asg_name)
+            lambda_code = lambda_code.replace('${DIRECTION}', direction)
+        
+            return lambda_code
+        except FileNotFoundError:
+            # Fallback to embedded code if template file doesn't exist
+            print(f"   ⚠️ Template file not found. Using embedded code.")
+            return self._get_embedded_lambda_code(asg_name, direction)
+
+    def _get_embedded_lambda_code(self, asg_name: str, direction: str) -> str:
+        """Generate embedded lambda code as fallback"""
+        return f'''
+    import json
+    import boto3
+
+    def lambda_handler(event, context):
+        asg_client = boto3.client('autoscaling')
+        asg_name = '{asg_name}'
+    
+        try:
+            # Get current ASG configuration
+            response = asg_client.describe_auto_scaling_groups(
+                AutoScalingGroupNames=[asg_name]
+            )
+        
+            if not response['AutoScalingGroups']:
+                return {{
+                    'statusCode': 404,
+                    'body': json.dumps(f'ASG {{asg_name}} not found')
+                }}
+        
+            asg = response['AutoScalingGroups'][0]
+        
+            if '{direction}' == 'up':
+                # Scale up to desired capacity (or at least min size)
+                new_desired = max(asg['MinSize'], 1)
+                action = 'scaled up'
+            else:
+                # Scale down to 0
+                new_desired = 0
+                action = 'scaled down'
+        
+            # Update desired capacity
+            asg_client.set_desired_capacity(
+                AutoScalingGroupName=asg_name,
+                DesiredCapacity=new_desired,
+                HonorCooldown=False
+            )
+        
+            return {{
+                'statusCode': 200,
+                'body': json.dumps(f'ASG {{asg_name}} {{action}} to {{new_desired}} instances')
+            }}
+        
+        except Exception as e:
+            print(f'Error: {{str(e)}}')
+            return {{
+                'statusCode': 500,
+                'body': json.dumps(f'Error scaling ASG: {{str(e)}}')
+            }}
+    '''
+
     def _create_eventbridge_rule(self, events_client, asg_name: str, 
                                direction: str, time: str) -> Dict:
         """Create EventBridge rule for scheduling"""

@@ -96,41 +96,41 @@ class EKSAutomation:
             # Step 1: Get credentials (Root or IAM)
             print("\n🔑 STEP 1: CREDENTIAL SELECTION")
             credentials = self.credential_manager.get_credentials()
-    
+
             # Step 2: Validate credentials
             if not self.credential_manager.validate_credentials(credentials):
                 print("❌ Credential validation failed. Exiting...")
                 return False
-        
+    
             # Initialize EKS Manager with validated credentials
             self.eks_manager = EKSClusterManager(config_file=None)
-        
+    
             # Step 3: Configure EKS Cluster Settings
             print("\n🔧 STEP 2: EKS CLUSTER CONFIGURATION")
-        
+    
             # Get EKS configuration from mapping file
             eks_config = self.get_eks_config()
             default_version = eks_config.get("default_version", "1.27")
             ami_type = eks_config.get("ami_type", "AL2_x86_64")
-        
+    
             print(f"📋 EKS Default Settings:")
             print(f"   🔸 Default Version: {default_version}")
             print(f"   🔸 Default AMI Type: {ami_type}")
-        
+    
             # Ask for EKS version
             print("\nEKS Version Selection:")
             print("1. Use default version: " + default_version)
-            print("2. Use latest version (1.28)")
+            print("2. Use latest version (1.32)")
             print("3. Specify custom version")
-        
+    
             while True:
                 version_choice = input("Select option (1-3): ").strip()
-            
+        
                 if version_choice == '1':
                     eks_version = default_version
                     break
                 elif version_choice == '2':
-                    eks_version = "1.28"
+                    eks_version = "1.32"
                     break
                 elif version_choice == '3':
                     custom_version = input("Enter EKS version (e.g., 1.28): ").strip()
@@ -141,16 +141,16 @@ class EKSAutomation:
                         print("❌ Please enter a valid version")
                 else:
                     print("❌ Invalid choice. Please select 1, 2, or 3")
-        
+    
             # Ask for AMI type
             print("\nAMI Type Selection:")
             print("1. Use default AMI type: " + ami_type)
             print("2. Use AL2023_x86_64_STANDARD (newer)")
             print("3. Specify custom AMI type")
-        
+    
             while True:
                 ami_choice = input("Select option (1-3): ").strip()
-            
+        
                 if ami_choice == '1':
                     selected_ami_type = ami_type
                     break
@@ -166,48 +166,64 @@ class EKSAutomation:
                         print("❌ Please enter a valid AMI type")
                 else:
                     print("❌ Invalid choice. Please select 1, 2, or 3")
+
+            # Ask for essential add-ons installation preference before cluster creation
+            print("\n🧩 Essential Add-ons Configuration")
+            print("Essential add-ons include: vpc-cni, coredns, kube-proxy, aws-ebs-csi-driver")
+            install_addons = input("Do you want to install essential EKS add-ons? (Y/n): ").strip().lower()
+            install_addons = install_addons in ['', 'y', 'yes']
         
+            # Ask for Container Insights preference before cluster creation
+            print("\n📊 CloudWatch Container Insights Configuration")
+            print("Container Insights provides detailed monitoring and logging for containers")
+            enable_insights = input("Do you want to enable CloudWatch Container Insights? (Y/n): ").strip().lower()
+            enable_insights = enable_insights in ['', 'y', 'yes']
+    
             print(f"\n✅ Selected EKS Version: {eks_version}")
             print(f"✅ Selected AMI Type: {selected_ami_type}")
-        
+            print(f"✅ Install Essential Add-ons: {'Yes' if install_addons else 'No'}")
+            print(f"✅ Enable Container Insights: {'Yes' if enable_insights else 'No'}")
+    
             # Step 4: NEW ENHANCED NODEGROUP CONFIGURATION
             print("\n🔧 STEP 3: NODEGROUP CONFIGURATION")
             nodegroup_configs = self.configure_multiple_nodegroups(credentials)
-        
+    
             if not nodegroup_configs:
                 print("❌ No nodegroups configured. Exiting...")
                 return False
-        
+    
             # Step 5: Create EKS Cluster
             print("\n🚀 STEP 4: EKS CLUSTER CREATION")
-        
+    
             # Set up cluster configuration
             cluster_config = {
                 'credential_info': credentials,
                 'eks_version': eks_version,
                 'ami_type': selected_ami_type,
-                'nodegroup_configs': nodegroup_configs  # Changed from old format
+                'nodegroup_configs': nodegroup_configs,  # Changed from old format
+                'install_addons': install_addons,        # Add preference to configuration
+                'enable_insights': enable_insights       # Add preference to configuration
             }
-        
+    
             # Confirm before proceeding
             self.display_cluster_creation_summary(credentials, eks_version, selected_ami_type, nodegroup_configs)
-        
+    
             # Ask for confirmation
             confirm = input("\nDo you want to proceed with cluster creation? (y/n): ").strip().lower()
             if confirm != 'y':
                 print("❌ Cluster creation cancelled")
                 return False
-        
+    
             # Create EKS cluster with nodegroups
             result = self.eks_manager.create_cluster(cluster_config)
-        
+    
             if result:
                 print("\n✅ EKS Cluster created successfully!")
                 return True
             else:
                 print("\n❌ EKS Cluster creation failed")
                 return False
-        
+    
         except Exception as e:
             print(f"\n❌ Error during automation: {e}")
             import traceback

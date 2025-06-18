@@ -240,30 +240,35 @@ class UltraEKSCleanupManager:
                 aws_secret_access_key=secret_key,
                 region_name=region
             )
-            
+        
             deleted_roles = []
             deleted_policies = []
-            
+        
             # Get all IAM roles
             paginator = iam_client.get_paginator('list_roles')
-            
+        
             for page in paginator.paginate():
                 for role in page['Roles']:
                     role_name = role['RoleName']
-                    
+                
+                    # Skip AWS service-linked roles
+                    if role_name.startswith('AWSServiceRoleFor'):
+                        self.log_operation('INFO', f"Skipping AWS service-linked role {role_name}")
+                        continue
+                
                     # Check if role is related to EKS cluster
                     is_cluster_related = False
-                    
+                
                     if (cluster_name.lower() in role_name.lower() or 
                         'eks' in role_name.lower() or
                         'nodegroup' in role_name.lower()):
                         is_cluster_related = True
-                    
+                
                     # Also check role tags
                     try:
                         tags_response = iam_client.list_role_tags(RoleName=role_name)
                         tags = tags_response.get('Tags', [])
-                        
+                    
                         for tag in tags:
                             if (cluster_name.lower() in str(tag.get('Value', '')).lower() or
                                 tag.get('Key', '').lower() in ['kubernetes.io/cluster', 'alpha.eksctl.io/cluster-name']):
@@ -271,36 +276,36 @@ class UltraEKSCleanupManager:
                                 break
                     except Exception as tag_error:
                         self.log_operation('WARNING', f"Could not check tags for IAM role {role_name}: {tag_error}")
-                    
+                
                     if is_cluster_related:
                         try:
                             # Detach managed policies first
                             attached_policies = iam_client.list_attached_role_policies(RoleName=role_name)
                             for policy in attached_policies['AttachedPolicies']:
                                 iam_client.detach_role_policy(RoleName=role_name, PolicyArn=policy['PolicyArn'])
-                            
+                        
                             # Delete inline policies
                             inline_policies = iam_client.list_role_policies(RoleName=role_name)
                             for policy_name in inline_policies['PolicyNames']:
                                 iam_client.delete_role_policy(RoleName=role_name, PolicyName=policy_name)
-                            
+                        
                             # Delete the role
                             self.log_operation('INFO', f"🗑️  Deleting IAM role {role_name} related to cluster {cluster_name}")
                             iam_client.delete_role(RoleName=role_name)
                             deleted_roles.append(role_name)
                             self.log_operation('INFO', f"✅ Deleted IAM role {role_name}")
-                            
+                        
                         except Exception as delete_error:
                             self.log_operation('ERROR', f"Failed to delete IAM role {role_name}: {delete_error}")
-            
+        
             # Delete customer-managed policies related to the cluster
             policy_paginator = iam_client.get_paginator('list_policies')
-            
+        
             for page in policy_paginator.paginate(Scope='Local'):  # Only customer-managed policies
                 for policy in page['Policies']:
                     policy_name = policy['PolicyName']
                     policy_arn = policy['Arn']
-                    
+                
                     if (cluster_name.lower() in policy_name.lower() or 
                         'eks' in policy_name.lower()):
                         try:
@@ -312,23 +317,23 @@ class UltraEKSCleanupManager:
                                         PolicyArn=policy_arn, 
                                         VersionId=version['VersionId']
                                     )
-                            
+                        
                             # Delete the policy
                             self.log_operation('INFO', f"🗑️  Deleting IAM policy {policy_name} related to cluster {cluster_name}")
                             iam_client.delete_policy(PolicyArn=policy_arn)
                             deleted_policies.append(policy_name)
                             self.log_operation('INFO', f"✅ Deleted IAM policy {policy_name}")
-                            
+                        
                         except Exception as delete_error:
                             self.log_operation('ERROR', f"Failed to delete IAM policy {policy_name}: {delete_error}")
-            
+        
             if deleted_roles or deleted_policies:
                 self.log_operation('INFO', f"Deleted {len(deleted_roles)} IAM roles and {len(deleted_policies)} policies for cluster {cluster_name}")
             else:
                 self.log_operation('INFO', f"No IAM roles/policies found related to cluster {cluster_name}")
-                
-            return True
             
+            return True
+        
         except Exception as e:
             self.log_operation('ERROR', f"Failed to delete IAM resources for cluster {cluster_name}: {e}")
             return False
@@ -691,7 +696,7 @@ class UltraEKSCleanupManager:
             # STEP 3: Delete Lambda functions related to this cluster
             self.delete_all_lambda_functions(
                 access_key,
-                .secret_key,
+                secret_key,
                 region,
                 cluster_name
             )
