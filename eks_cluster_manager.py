@@ -1,4 +1,5 @@
-﻿#!/usr/bin/env python3
+# Databricks notebook source
+#!/usr/bin/env python3
 """
 EKS Cluster Manager - Enhanced for Phase 2
 Handles EKS cluster creation with on-demand, spot, and mixed nodegroup strategies
@@ -4801,303 +4802,314 @@ class EKSClusterManager:
 
     ########
     def setup_scheduled_scaling(self, cluster_name: str, region: str, admin_access_key: str, admin_secret_key: str) -> bool:
-            """Setup scheduled scaling for cost optimization using IST times"""
-            try:
-                self.log_operation('INFO', f"Setting up scheduled scaling for cluster {cluster_name}")
-                self.print_colored(Colors.YELLOW, f"⏰ Setting up scheduled scaling for {cluster_name}...")
-        
-                # Create admin session
-                admin_session = boto3.Session(
-                    aws_access_key_id=admin_access_key,
-                    aws_secret_access_key=admin_secret_key,
-                    region_name=region
-                )
-        
-                # Create EventBridge and Lambda clients
-                events_client = admin_session.client('events')
-                lambda_client = admin_session.client('lambda')
-                iam_client = admin_session.client('iam')
-                sts_client = admin_session.client('sts')
-                account_id = sts_client.get_caller_identity()['Account']
-        
-                # Step 1: Create IAM role for Lambda function - with shorter name
-                self.print_colored(Colors.CYAN, "   🔐 Creating IAM role for scheduled scaling...")
-        
-                # Use a shorter name
-                short_cluster_suffix = cluster_name.split('-')[-1]
-                lambda_role_name = f"EKS-{short_cluster_suffix}-ScaleRole"
-        
-                lambda_trust_policy = {
-                    "Version": "2012-10-17",
-                    "Statement": [
-                        {
-                            "Effect": "Allow",
-                            "Principal": {
-                                "Service": "lambda.amazonaws.com"
-                            },
-                            "Action": "sts:AssumeRole"
-                        }
-                    ]
+    """Setup scheduled scaling for cost optimization using IST times"""
+    try:
+        self.log_operation('INFO', f"Setting up scheduled scaling for cluster {cluster_name}")
+        self.print_colored(Colors.YELLOW, f"⏰ Setting up scheduled scaling for {cluster_name}...")
+    
+        # Create admin session
+        admin_session = boto3.Session(
+            aws_access_key_id=admin_access_key,
+            aws_secret_access_key=admin_secret_key,
+            region_name=region
+        )
+    
+        # Create EventBridge and Lambda clients
+        events_client = admin_session.client('events')
+        lambda_client = admin_session.client('lambda')
+        iam_client = admin_session.client('iam')
+        sts_client = admin_session.client('sts')
+        account_id = sts_client.get_caller_identity()['Account']
+    
+        # Step 1: Create IAM role for Lambda function - with shorter name
+        self.print_colored(Colors.CYAN, "   🔐 Creating IAM role for scheduled scaling...")
+    
+        # Use a shorter name - EKS-{cluster_suffix}-ScaleRole
+        short_cluster_suffix = cluster_name.split('-')[-1]  # Just take the random suffix
+        lambda_role_name = f"EKS-{short_cluster_suffix}-ScaleRole"
+    
+        lambda_trust_policy = {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Principal": {
+                        "Service": "lambda.amazonaws.com"
+                    },
+                    "Action": "sts:AssumeRole"
                 }
-        
-                lambda_policy = {
-                    "Version": "2012-10-17",
-                    "Statement": [
-                        {
-                            "Effect": "Allow",
-                            "Action": [
-                                "eks:DescribeCluster",
-                                "eks:DescribeNodegroup",
-                                "eks:UpdateNodegroupConfig",
-                                "logs:CreateLogGroup",
-                                "logs:CreateLogStream",
-                                "logs:PutLogEvents"
-                            ],
-                            "Resource": "*"
-                        }
-                    ]
+            ]
+        }
+    
+        lambda_policy = {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Action": [
+                        "eks:DescribeCluster",
+                        "eks:DescribeNodegroup",
+                        "eks:ListNodegroups",  # Added this permission
+                        "eks:UpdateNodegroupConfig",
+                        "logs:CreateLogGroup",
+                        "logs:CreateLogStream",
+                        "logs:PutLogEvents"
+                    ],
+                    "Resource": "*"
                 }
+            ]
+        }
+    
+        try:
+            # Create Lambda execution role
+            role_response = iam_client.create_role(
+                RoleName=lambda_role_name,
+                AssumeRolePolicyDocument=json.dumps(lambda_trust_policy),
+                Description=f"Role for scheduled scaling of EKS cluster {cluster_name}"
+            )
+            lambda_role_arn = role_response['Role']['Arn']
         
-                try:
-                    # Create Lambda execution role
-                    role_response = iam_client.create_role(
-                        RoleName=lambda_role_name,
-                        AssumeRolePolicyDocument=json.dumps(lambda_trust_policy),
-                        Description=f"Role for scheduled scaling of EKS cluster {cluster_name}"
-                    )
-                    lambda_role_arn = role_response['Role']['Arn']
-            
-                    # Create and attach policy
-                    policy_name = f"EKS-{short_cluster_suffix}-ScalePolicy"
-                    policy_response = iam_client.create_policy(
-                        PolicyName=policy_name,
-                        PolicyDocument=json.dumps(lambda_policy),
-                        Description=f"Policy for scheduled scaling of EKS cluster {cluster_name}"
-                    )
-            
-                    iam_client.attach_role_policy(
-                        RoleName=lambda_role_name,
-                        PolicyArn=policy_response['Policy']['Arn']
-                    )
-            
-                    self.log_operation('INFO', f"Created Lambda role for scheduled scaling: {lambda_role_arn}")
-            
-                except iam_client.exceptions.EntityAlreadyExistsException:
-                    # Role already exists
-                    role_response = iam_client.get_role(RoleName=lambda_role_name)
-                    lambda_role_arn = role_response['Role']['Arn']
-                    self.log_operation('INFO', f"Using existing Lambda role: {lambda_role_arn}")
+            # Create and attach policy - also with shorter name
+            policy_name = f"EKS-{short_cluster_suffix}-ScalePolicy"
+            policy_response = iam_client.create_policy(
+                PolicyName=policy_name,
+                PolicyDocument=json.dumps(lambda_policy),
+                Description=f"Policy for scheduled scaling of EKS cluster {cluster_name}"
+            )
         
-                # Step 2: Create Lambda function for scaling - FIXED Windows file lock issue
-                self.print_colored(Colors.CYAN, "   🔧 Creating Lambda function for scaling...")
+            iam_client.attach_role_policy(
+                RoleName=lambda_role_name,
+                PolicyArn=policy_response['Policy']['Arn']
+            )
         
-                # FIXED: Properly formatted Lambda code with correct string handling
-                lambda_code = f'''import boto3
-        import json
-        import logging
-        from datetime import datetime
+            self.log_operation('INFO', f"Created Lambda role for scheduled scaling: {lambda_role_arn}")
+        
+        except iam_client.exceptions.EntityAlreadyExistsException:
+            # Role already exists
+            role_response = iam_client.get_role(RoleName=lambda_role_name)
+            lambda_role_arn = role_response['Role']['Arn']
+            self.log_operation('INFO', f"Using existing Lambda role: {lambda_role_arn}")
+    
+        # Step 2: Create Lambda function for scaling - with shorter name
+        self.print_colored(Colors.CYAN, "   🔧 Creating Lambda function for scaling...")
+    
+        # Load lambda code from template file
+        try:
+            template_file = os.path.join(os.path.dirname(__file__), 'lambda_scaling_template.py')
+            
+            # If template file doesn't exist in same directory, try current directory
+            if not os.path.exists(template_file):
+                template_file = 'lambda_scaling_template.py'
+            
+            # If still not found, create it
+            if not os.path.exists(template_file):
+                self.log_operation('INFO', f"Creating lambda template file: {template_file}")
+                with open(template_file, 'w') as f:
+                    f.write(self.get_lambda_scaling_template())
+            
+            # Read the template
+            with open(template_file, 'r') as f:
+                lambda_template = f.read()
+            
+            # Replace placeholders
+            lambda_code = lambda_template.format(
+                region=region,
+                cluster_name=cluster_name
+            )
+            
+        except Exception as e:
+            self.log_operation('WARNING', f"Failed to load lambda template: {str(e)}. Using embedded code.")
+            # Fall back to embedded template
+            lambda_code = self.get_lambda_scaling_template().format(
+                region=region,
+                cluster_name=cluster_name
+            )
+    
+        function_name = f"eks-scale-{short_cluster_suffix}"
+    
+        try:
+            # Wait for role to be available
+            time.sleep(10)
+        
+            # Create Lambda function
+            lambda_response = lambda_client.create_function(
+                FunctionName=function_name,
+                Runtime='python3.9',
+                Role=lambda_role_arn,
+                Handler='index.lambda_handler',
+                Code={'ZipFile': lambda_code.encode('utf-8')},
+                Description=f'Scheduled scaling for EKS cluster {cluster_name}',
+                Timeout=60
+            )
+        
+            function_arn = lambda_response['FunctionArn']
+            self.log_operation('INFO', f"Created Lambda function: {function_arn}")
+        
+        except lambda_client.exceptions.ResourceConflictException:
+            # Function already exists
+            function_response = lambda_client.get_function(FunctionName=function_name)
+            function_arn = function_response['Configuration']['FunctionArn']
+            self.log_operation('INFO', f"Using existing Lambda function: {function_arn}")
+    
+        # Step 3: Create EventBridge rules for scaling - with shorter names
+        self.print_colored(Colors.CYAN, "   📅 Creating scheduled scaling rules (IST timezone)...")
+    
+        # Scale down at 6:30 PM IST (1:00 PM UTC)
+        scale_down_rule = f"eks-down-{short_cluster_suffix}"
+        events_client.put_rule(
+            Name=scale_down_rule,
+            ScheduleExpression='cron(0 13 * * ? *)',  # 1:00 PM UTC = 6:30 PM IST
+            Description=f'Scale down EKS cluster {cluster_name} at 6:30 PM IST (after hours)',
+            State='ENABLED'
+        )
+    
+        # Scale up at 8:30 AM IST (3:00 AM UTC)
+        scale_up_rule = f"eks-up-{short_cluster_suffix}"
+        events_client.put_rule(
+            Name=scale_up_rule,
+            ScheduleExpression='cron(0 3 * * ? *)',  # 3:00 AM UTC = 8:30 AM IST
+            Description=f'Scale up EKS cluster {cluster_name} at 8:30 AM IST (business hours)',
+            State='ENABLED'
+        )
+    
+        # Add Lambda permissions for EventBridge
+        try:
+            lambda_client.add_permission(
+                FunctionName=function_name,
+                StatementId=f'allow-eventbridge-down-{short_cluster_suffix}',
+                Action='lambda:InvokeFunction',
+                Principal='events.amazonaws.com',
+                SourceArn=f'arn:aws:events:{region}:{account_id}:rule/{scale_down_rule}'
+            )
+        
+            lambda_client.add_permission(
+                FunctionName=function_name,
+                StatementId=f'allow-eventbridge-up-{short_cluster_suffix}',
+                Action='lambda:InvokeFunction',
+                Principal='events.amazonaws.com',
+                SourceArn=f'arn:aws:events:{region}:{account_id}:rule/{scale_up_rule}'
+            )
+        except lambda_client.exceptions.ResourceConflictException:
+            # Permissions already exist
+            pass
+    
+        # Add targets to rules
+        events_client.put_targets(
+            Rule=scale_down_rule,
+            Targets=[
+                {
+                    'Id': '1',
+                    'Arn': function_arn,
+                    'Input': json.dumps({
+                        'desired_size': 0,
+                        'min_size': 0,
+                        'max_size': 3,
+                        'action': 'scale_down',
+                        'ist_time': '6:30 PM IST'
+                    })
+                }
+            ]
+        )
+    
+        events_client.put_targets(
+            Rule=scale_up_rule,
+            Targets=[
+                {
+                    'Id': '1',
+                    'Arn': function_arn,
+                    'Input': json.dumps({
+                        'desired_size': 1,
+                        'min_size': 1,
+                        'max_size': 3,
+                        'action': 'scale_up',
+                        'ist_time': '8:30 AM IST'
+                    })
+                }
+            ]
+        )
+    
+        self.print_colored(Colors.GREEN, "   ✅ Scheduled scaling configured")
+        self.print_colored(Colors.CYAN, f"   📅 Scale up: 8:30 AM IST (3:00 AM UTC) → 1 node")
+        self.print_colored(Colors.CYAN, f"   📅 Scale down: 6:30 PM IST (1:00 PM UTC) → 0 nodes")
+        self.print_colored(Colors.CYAN, f"   🌏 Timezone: Indian Standard Time (UTC+5:30)")
+    
+        self.log_operation('INFO', f"Scheduled scaling configured for {cluster_name}")
+        self.log_operation('INFO', f"Scale up: 8:30 AM IST (3:00 AM UTC), Scale down: 6:30 PM IST (1:00 PM UTC)")
+        return True
+    
+    except Exception as e:
+        error_msg = str(e)
+        self.log_operation('ERROR', f"Failed to setup scheduled scaling for {cluster_name}: {error_msg}")
+        self.print_colored(Colors.RED, f"❌ Scheduled scaling setup failed: {error_msg}")
+        self.print_colored(Colors.YELLOW, f"⚠️ Continuing with cluster setup despite scheduled scaling issues")
+        return False
 
-        logger = logging.getLogger()
-        logger.setLevel(logging.INFO)
+def get_lambda_scaling_template(self) -> str:
+    """Get the Lambda function template code as a string"""
+    return '''import boto3
+import json
+import logging
+from datetime import datetime
 
-        def lambda_handler(event, context):
-            try:
-                eks_client = boto3.client('eks', region_name='{region}')
-        
-                cluster_name = '{cluster_name}'
-        
-                # Get nodegroup name from cluster
-                nodegroups = eks_client.list_nodegroups(clusterName=cluster_name)['nodegroups']
-                if not nodegroups:
-                    logger.error(f"No nodegroups found for cluster {{cluster_name}}")
-                    return {{'statusCode': 500, 'body': 'No nodegroups found'}}
-        
-                # Use the first nodegroup found
-                nodegroup_name = nodegroups[0]
-        
-                # Get the desired size from the event
-                desired_size = event.get('desired_size', 1)
-                min_size = event.get('min_size', 0)
-                max_size = event.get('max_size', 3)
-        
-                # Log current time
-                current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        
-                logger.info(f"Scaling nodegroup {{nodegroup_name}} to desired={{desired_size}}, min={{min_size}}, max={{max_size}} at {{current_time}}")
-        
-                # Update nodegroup scaling configuration
-                response = eks_client.update_nodegroup_config(
-                    clusterName=cluster_name,
-                    nodegroupName=nodegroup_name,
-                    scalingConfig={{
-                        'minSize': min_size,
-                        'maxSize': max_size,
-                        'desiredSize': desired_size
-                    }}
-                )
-        
-                logger.info(f"Scaling update initiated: {{response['update']['id']}} at {{current_time}}")
-        
-                return {{
-                    'statusCode': 200,
-                    'body': json.dumps({{
-                        'message': f'Scaling update initiated for {{nodegroup_name}} at {{current_time}}',
-                        'update_id': response['update']['id'],
-                        'timestamp': current_time
-                    }})
-                }}
-        
-            except Exception as e:
-                logger.error(f"Error scaling nodegroup: {{str(e)}}")
-                return {{
-                    'statusCode': 500,
-                    'body': json.dumps({{
-                        'error': str(e)
-                    }})
-                }}
-        '''
-        
-                function_name = f"eks-scale-{short_cluster_suffix}"
-        
-                try:
-                    # Wait for role to be available
-                    time.sleep(10)
-            
-                    # FIXED: Create zip file for Lambda function with proper Windows file handling
-                    import zipfile
-                    import tempfile
-                    import os
-            
-                    # Create temp file with proper cleanup
-                    zip_fd, zip_path = tempfile.mkstemp(suffix='.zip')
-            
-                    try:
-                        with zipfile.ZipFile(zip_path, 'w') as zf:
-                            zf.writestr('lambda_function.py', lambda_code)
-                
-                        # Read the zip file content
-                        with open(zip_path, 'rb') as f:
-                            zip_content = f.read()
-                
-                    finally:
-                        # Close file descriptor first, then remove
-                        os.close(zip_fd)
-                        try:
-                            os.unlink(zip_path)
-                        except:
-                            pass  # Ignore if already deleted
-            
-                    # Create Lambda function
-                    lambda_response = lambda_client.create_function(
-                        FunctionName=function_name,
-                        Runtime='python3.9',
-                        Role=lambda_role_arn,
-                        Handler='lambda_function.lambda_handler',
-                        Code={'ZipFile': zip_content},
-                        Description=f'Scheduled scaling for EKS cluster {cluster_name}',
-                        Timeout=60
-                    )
-            
-                    function_arn = lambda_response['FunctionArn']
-                    self.log_operation('INFO', f"Created Lambda function: {function_arn}")
-            
-                except lambda_client.exceptions.ResourceConflictException:
-                    # Function already exists
-                    function_response = lambda_client.get_function(FunctionName=function_name)
-                    function_arn = function_response['Configuration']['FunctionArn']
-                    self.log_operation('INFO', f"Using existing Lambda function: {function_arn}")
-        
-                # Step 3: Create EventBridge rules for scaling
-                self.print_colored(Colors.CYAN, "   📅 Creating scheduled scaling rules (IST timezone)...")
-        
-                # Scale down at 6:30 PM IST (1:00 PM UTC)
-                scale_down_rule = f"eks-down-{short_cluster_suffix}"
-                events_client.put_rule(
-                    Name=scale_down_rule,
-                    ScheduleExpression='cron(0 13 * * ? *)',  # 1:00 PM UTC = 6:30 PM IST
-                    Description=f'Scale down EKS cluster {cluster_name} at 6:30 PM IST (after hours)',
-                    State='ENABLED'
-                )
-        
-                # Scale up at 8:30 AM IST (3:00 AM UTC)
-                scale_up_rule = f"eks-up-{short_cluster_suffix}"
-                events_client.put_rule(
-                    Name=scale_up_rule,
-                    ScheduleExpression='cron(0 3 * * ? *)',  # 3:00 AM UTC = 8:30 AM IST
-                    Description=f'Scale up EKS cluster {cluster_name} at 8:30 AM IST (business hours)',
-                    State='ENABLED'
-                )
-        
-                # Add Lambda permissions for EventBridge
-                try:
-                    lambda_client.add_permission(
-                        FunctionName=function_name,
-                        StatementId=f'allow-eventbridge-down-{short_cluster_suffix}',
-                        Action='lambda:InvokeFunction',
-                        Principal='events.amazonaws.com',
-                        SourceArn=f'arn:aws:events:{region}:{account_id}:rule/{scale_down_rule}'
-                    )
-            
-                    lambda_client.add_permission(
-                        FunctionName=function_name,
-                        StatementId=f'allow-eventbridge-up-{short_cluster_suffix}',
-                        Action='lambda:InvokeFunction',
-                        Principal='events.amazonaws.com',
-                        SourceArn=f'arn:aws:events:{region}:{account_id}:rule/{scale_up_rule}'
-                    )
-                except lambda_client.exceptions.ResourceConflictException:
-                    # Permissions already exist
-                    pass
-        
-                # Add targets to rules
-                events_client.put_targets(
-                    Rule=scale_down_rule,
-                    Targets=[
-                        {
-                            'Id': '1',
-                            'Arn': function_arn,
-                            'Input': json.dumps({
-                                'desired_size': 0,
-                                'min_size': 0,
-                                'max_size': 3,
-                                'action': 'scale_down',
-                                'ist_time': '6:30 PM IST'
-                            })
-                        }
-                    ]
-                )
-        
-                events_client.put_targets(
-                    Rule=scale_up_rule,
-                    Targets=[
-                        {
-                            'Id': '1',
-                            'Arn': function_arn,
-                            'Input': json.dumps({
-                                'desired_size': 1,
-                                'min_size': 1,
-                                'max_size': 3,
-                                'action': 'scale_up',
-                                'ist_time': '8:30 AM IST'
-                            })
-                        }
-                    ]
-                )
-        
-                self.print_colored(Colors.GREEN, "   ✅ Scheduled scaling configured")
-                self.print_colored(Colors.CYAN, f"   📅 Scale up: 8:30 AM IST (3:00 AM UTC) → 1 node")
-                self.print_colored(Colors.CYAN, f"   📅 Scale down: 6:30 PM IST (1:00 PM UTC) → 0 nodes")
-                self.print_colored(Colors.CYAN, f"   🌏 Timezone: Indian Standard Time (UTC+5:30)")
-        
-                self.log_operation('INFO', f"Scheduled scaling configured for {cluster_name}")
-                return True
-        
-            except Exception as e:
-                error_msg = str(e)
-                self.log_operation('ERROR', f"Failed to setup scheduled scaling for {cluster_name}: {error_msg}")
-                self.print_colored(Colors.RED, f"❌ Scheduled scaling setup failed: {error_msg}")
-                return False
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
+def lambda_handler(event, context):
+    try:
+        eks_client = boto3.client('eks', region_name='{region}')
+        
+        cluster_name = '{cluster_name}'
+        
+        # Get nodegroup name from cluster
+        nodegroups = eks_client.list_nodegroups(clusterName=cluster_name)['nodegroups']
+        if not nodegroups:
+            logger.error(f"No nodegroups found for cluster {{cluster_name}}")
+            return {{'statusCode': 500, 'body': 'No nodegroups found'}}
+        
+        # Use the first nodegroup found
+        nodegroup_name = nodegroups[0]
+        
+        # Get the desired size from the event
+        desired_size = event.get('desired_size', 1)
+        min_size = event.get('min_size', 0)
+        max_size = event.get('max_size', 3)
+        
+        # Log current time
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
+        logger.info(f"Scaling nodegroup {{nodegroup_name}} to desired={{desired_size}}, min={{min_size}}, max={{max_size}} at {{current_time}}")
+        
+        # Update nodegroup scaling configuration
+        response = eks_client.update_nodegroup_config(
+            clusterName=cluster_name,
+            nodegroupName=nodegroup_name,
+            scalingConfig={{
+                'minSize': min_size,
+                'maxSize': max_size,
+                'desiredSize': desired_size
+            }}
+        )
+        
+        logger.info(f"Scaling update initiated: {{response['update']['id']}} at {{current_time}}")
+        
+        return {{
+            'statusCode': 200,
+            'body': json.dumps({{
+                'message': f'Scaling update initiated for {{nodegroup_name}} at {{current_time}}',
+                'update_id': response['update']['id'],
+                'timestamp': current_time
+            }})
+        }}
+        
+    except Exception as e:
+        logger.error(f"Error scaling nodegroup: {{str(e)}}")
+        return {{
+            'statusCode': 500,
+            'body': json.dumps({{
+                'error': str(e)
+            }})
+        }}
+'''
     def cleanup_temp_file(self, file_path: str) -> None:
             """
             Deletes the temporary file at the given path if it exists.
