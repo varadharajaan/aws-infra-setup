@@ -43,17 +43,28 @@ class TestEKSClusterManager(unittest.TestCase):
         
         # Mock cluster configuration
         self.cluster_config = {
-            'credential_info': self.credential_info,
+            'cluster_name': 'test-cluster',
+            'username': 'test-user',
+            'region': 'us-west-2',
+            'account_id': '123456789012',
+            'account_name': 'test-account',
+            'access_key': 'test-access-key',
+            'secret_key': 'test-secret-key',
+            'email': 'test@example.com',
             'eks_version': "1.28",
             'ami_type': "AL2023_x86_64_STANDARD",
-            'nodegroup_strategy': "spot",
-            'instance_selections': {
-                'spot': ['c6a.large', 'c5a.large'],
-                'on-demand': ['c6a.large']
-            },
-            'min_nodes': 1,
-            'desired_nodes': 1,
-            'max_nodes': 3
+            'strategy': "spot",
+            'nodegroup_configs': [{
+                'name': 'test-nodegroup',
+                'strategy': 'spot',
+                'min_nodes': 1,
+                'desired_nodes': 1,
+                'max_nodes': 3,
+                'instance_selections': {
+                    'spot': ['c6a.large', 'c5a.large']
+                },
+                'subnet_preference': 'auto'
+            }]
         }
     
     def tearDown(self):
@@ -61,30 +72,7 @@ class TestEKSClusterManager(unittest.TestCase):
         if os.path.exists(self.config_file):
             os.remove(self.config_file)
     
-    @patch('boto3.Session')
-    def test_create_eks_control_plane(self, mock_session):
-        """Test creation of EKS control plane"""
-        # Mock EKS client
-        mock_eks_client = MagicMock()
-        mock_session.return_value.client.return_value = mock_eks_client
-        
-        # Test successful creation
-        mock_eks_client.create_cluster.return_value = {"cluster": {"name": "test-cluster"}}
-        mock_eks_client.get_waiter.return_value.wait.return_value = None
-        
-        result = self.manager.create_eks_control_plane(
-            mock_eks_client,
-            "test-cluster",
-            "1.28",
-            "arn:aws:iam::123456789012:role/eks-service-role",
-            ["subnet-1", "subnet-2"],
-            "sg-12345"
-        )
-        
-        self.assertTrue(result)
-        mock_eks_client.create_cluster.assert_called_once()
-        mock_eks_client.get_waiter.assert_called_once_with('cluster_active')
-    
+
     @patch('boto3.Session')
     def test_create_nodegroup(self, mock_session):
         """Test creation of nodegroup"""
@@ -171,7 +159,6 @@ class TestEKSClusterManager(unittest.TestCase):
         self.assertEqual(mock_cloudwatch_client.put_metric_alarm.call_count, 4)
     
     @patch('boto3.Session')
-    @patch.object(EKSClusterManager, 'create_eks_control_plane', return_value=True)
     @patch.object(EKSClusterManager, 'ensure_iam_roles', return_value=('role1', 'role2'))
     @patch.object(EKSClusterManager, 'get_or_create_vpc_resources', return_value=(['subnet1', 'subnet2'], 'sg1'))
     @patch.object(EKSClusterManager, 'create_spot_nodegroup', return_value=True)
@@ -200,10 +187,14 @@ class TestEKSClusterManager(unittest.TestCase):
             mock.assert_called()
     
     @patch('boto3.Session')
-    @patch.object(EKSClusterManager, 'create_eks_control_plane', return_value=False)
-    def test_create_cluster_failure(self, mock_create_control_plane, mock_session):
+    def test_create_cluster_failure(self, mock_session):
         """Test cluster creation failure"""
-        # Call the create_cluster method with a failing control plane creation
+        # Mock EKS client to raise an exception
+        mock_eks_client = MagicMock()
+        mock_session.return_value.client.return_value = mock_eks_client
+        mock_eks_client.create_cluster.side_effect = Exception("Test exception")
+        
+        # Call the create_cluster method with a failing cluster creation
         result = self.manager.create_cluster(self.cluster_config)
         
         # Verify the result

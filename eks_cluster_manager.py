@@ -739,57 +739,6 @@ class EKSClusterManager:
             self.log_operation('ERROR', f"Failed to create AWS credentials secret: {str(e)}")
             return False
 
-    def debug_cluster_autoscaler(self, cluster_name: str, region: str, access_key: str, secret_key: str) -> dict:
-        """Debug cluster autoscaler deployment and return detailed status"""
-        try:
-            import subprocess
-            import shutil
-        
-            kubectl_available = shutil.which('kubectl') is not None
-            if not kubectl_available:
-                return {"error": "kubectl not available"}
-        
-            env = os.environ.copy()
-            env['AWS_ACCESS_KEY_ID'] = access_key
-            env['AWS_SECRET_ACCESS_KEY'] = secret_key
-            env['AWS_DEFAULT_REGION'] = region
-        
-            debug_info = {}
-        
-            # Check deployment
-            cmd = ['kubectl', 'get', 'deployment', 'cluster-autoscaler', '-n', 'kube-system', '-o', 'json']
-            result = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=30)
-            print(f"Deployment error:\n{result.stderr}")
-            if result.returncode == 0:
-                debug_info['deployment_exists'] = True
-            else:
-                debug_info['deployment_exists'] = False
-                debug_info['deployment_error'] = result.stderr
-        
-            # Check pods
-            cmd = ['kubectl', 'get', 'pods', '-n', 'kube-system', '-l', 'app=cluster-autoscaler', '-o', 'wide']
-            result = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=30)
-            print(f"Pods output:\n{result.stdout}")
-            print(f"Pods error:\n{result.stderr}")
-            debug_info['pods_output'] = result.stdout
-        
-            # Check logs if pods exist
-            cmd = ['kubectl', 'logs', '-n', 'kube-system', '-l', 'app=cluster-autoscaler', '--tail=50']
-            result = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=30)
-            print(f"Logs output:\n{result.stdout}")
-            print(f"Logs error:\n{result.stderr}")
-            debug_info['logs'] = result.stdout
-        
-            # Check events
-            cmd = ['kubectl', 'get', 'events', '-n', 'kube-system', '--sort-by=.lastTimestamp']
-            result = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=30)
-            print(f"Events error:\n{result.stderr}")
-            debug_info['events'] = result.stdout
-        
-            return debug_info
-        
-        except Exception as e:
-            return {"error": str(e)}
 
 
 ###
@@ -3959,64 +3908,9 @@ class EKSClusterManager:
             }
         }
 
-    def display_cost_estimation(self, instance_type: str, capacity_type: str, node_count: int = 1):
-        """Display estimated cost information"""
-        # This is a simplified estimation - you'd want to use actual AWS pricing API
-        base_costs = {
-            't3.micro': 0.0104,
-            't3.small': 0.0208,
-            't3.medium': 0.0416,
-            'c6a.large': 0.0864,
-            'c6a.xlarge': 0.1728
-        }
-    
-        base_cost = base_costs.get(instance_type, 0.05)  # Default fallback
-    
-        if capacity_type.lower() in ['spot', 'SPOT']:
-            estimated_cost = base_cost * 0.3  # Spot instances are typically 70% cheaper
-            savings = base_cost * 0.7
-            print(f"\n💰 Estimated Cost (per hour):")
-            print(f"   On-Demand: ${base_cost:.4f}")
-            print(f"   Spot: ${estimated_cost:.4f}")
-            print(f"   Savings: ${savings:.4f} ({70}%)")
-            print(f"   Monthly (730 hrs): ${estimated_cost * 730 * node_count:.2f}")
-        else:
-            print(f"\n💰 Estimated Cost (per hour):")
-            print(f"   On-Demand: ${base_cost:.4f}")
-            print(f"   Monthly (730 hrs): ${base_cost * 730 * node_count:.2f}")
 
-    def show_cluster_summary(self, cluster_configs) -> bool:
-        """Show summary of selected clusters and confirm creation"""
-        if not cluster_configs:
-            self.print_colored(Colors.YELLOW, "No clusters configured!")
-            return False
-    
-        print(f"\n🚀 EKS Cluster Creation Summary")
-        print(f"Selected {len(cluster_configs)} clusters to create:")
-    
-        print("\n" + "="*100)
-        for i, cluster in enumerate(cluster_configs, 1):
-            user = cluster['user']
-            real_user = user.get('real_user', {})
-            full_name = real_user.get('full_name', user.get('username', 'Unknown'))
-            instance_type = cluster.get('instance_type', 'c6a.large')
-        
-            print(f"{i}. Cluster: {cluster['cluster_name']}")
-            print(f"   🏦 Account: {cluster['account_key']} ({cluster['account_id']})")
-            print(f"   👤 User: {user.get('username', 'unknown')} ({full_name})")
-            print(f"   🌍 Region: {user.get('region', 'unknown')}")
-            print(f"   💻 Instance Type: {instance_type}")
-            print(f"   📊 Default Nodes: 1")
-            print(f"   🔢 Max Nodes: {cluster['max_nodes']}")
-            print("-" * 100)
-    
-        print(f"📊 Total clusters: {len(cluster_configs)}")
-        print(f"💻 Instance types: {', '.join(set(cluster.get('instance_type', 'c6a.large') for cluster in cluster_configs))}")
-        print(f"📊 All clusters starting with: 1 node")
-        print("=" * 100)
-    
-        confirm = input("\nDo you want to proceed with cluster creation? (y/N): ").lower().strip()
-        return confirm in ['y', 'yes']
+
+
 
     def setup_cost_alarms(self, cluster_name: str, region: str, cloudwatch_client, account_id: str) -> bool:
         """Setup cost monitoring alarms for EKS cluster"""
@@ -5040,16 +4934,7 @@ class EKSClusterManager:
         color_code = self.colors.get(color, self.colors['WHITE'])
         print(f"{color_code}{message}{self.colors['NC']}")
 
-    def debug_nodegroup_configs(self, stage: str, nodegroup_configs) -> None:
-        """Debug function to print the nodegroup_configs at various points"""
-        if nodegroup_configs is None:
-            self.print_colored('YELLOW', f"[DEBUG {stage}] nodegroup_configs is None")
-        else:
-            self.print_colored('GREEN', f"[DEBUG {stage}] nodegroup_configs is set: {len(nodegroup_configs)} configs")
-            for i, config in enumerate(nodegroup_configs):
-                self.print_colored('CYAN', f"  Config {i+1}: {config.get('name')}, strategy: {config.get('strategy')}")
-    
- ########
+
 
     def get_cloudwatch_configmap_manifest_fixed(self, config: dict, cluster_name: str, region: str) -> str:
             """Get CloudWatch ConfigMap manifest with safely quoted JSON"""
@@ -6890,61 +6775,6 @@ class EKSClusterManager:
     def _verify_cluster_autoscaler(self, cluster_name: str, region: str, access_key: str, secret_key: str) -> bool:
         """Helper method to verify Cluster Autoscaler deployment - FIXED"""
         try:
-            # First debug the cluster autoscaler and print detailed debug info
-            self.print_colored(Colors.CYAN, "   🔍 Running cluster autoscaler diagnostics...")
-            debug_info = self.debug_cluster_autoscaler(cluster_name, region, access_key, secret_key)
-        
-            # Print the debug info with proper formatting
-            self.print_colored(Colors.CYAN, "   📋 Cluster Autoscaler Debug Information:")
-        
-            if 'error' in debug_info:
-                self.print_colored(Colors.RED, f"      ❌ Error: {debug_info['error']}")
-            else:
-                # Print deployment status
-                if debug_info.get('deployment_exists', False):
-                    self.print_colored(Colors.GREEN, f"      ✅ Autoscaler deployment exists")
-                else:
-                    self.print_colored(Colors.YELLOW, f"      ⚠️ Autoscaler deployment not found")
-                    if 'deployment_error' in debug_info:
-                        self.print_colored(Colors.YELLOW, f"         Error: {debug_info['deployment_error']}")
-            
-                # Print pod status information
-                if debug_info.get('pods_output'):
-                    pod_lines = debug_info['pods_output'].strip().split('\n')
-                    if len(pod_lines) > 1:  # If there are pods (more than just the header)
-                        self.print_colored(Colors.GREEN, f"      ✅ Found {len(pod_lines) - 1} autoscaler pods:")
-                        for i, line in enumerate(pod_lines[:4]):  # Show first 4 lines max
-                            if i > 0:  # Skip header
-                                self.print_colored(Colors.CYAN, f"         {line}")
-                        if len(pod_lines) > 5:
-                            self.print_colored(Colors.CYAN, f"         ...(and {len(pod_lines) - 5} more)")
-                    else:
-                        self.print_colored(Colors.YELLOW, f"      ⚠️ No autoscaler pods found")
-            
-                # Print log sample if available
-                if debug_info.get('logs'):
-                    log_lines = debug_info['logs'].strip().split('\n')
-                    if log_lines and log_lines[0].strip():
-                        self.print_colored(Colors.GREEN, f"      ✅ Autoscaler logs available:")
-                        for i, line in enumerate(log_lines[:3]):  # Show first 3 log lines
-                            if line.strip():
-                                self.print_colored(Colors.CYAN, f"         {line[:100]}...")
-                        if len(log_lines) > 3:
-                            self.print_colored(Colors.CYAN, f"         ...(and {len(log_lines) - 3} more lines)")
-                    else:
-                        self.print_colored(Colors.YELLOW, f"      ⚠️ No autoscaler logs found")
-            
-                # Print recent events if available
-                if debug_info.get('events'):
-                    event_lines = debug_info['events'].strip().split('\n')
-                    if len(event_lines) > 1:  # More than just header
-                        self.print_colored(Colors.GREEN, f"      ✅ Recent cluster events:")
-                        for i, line in enumerate(event_lines[:3]):  # Show first 3 events
-                            if i > 0:  # Skip header
-                                self.print_colored(Colors.CYAN, f"         {line}")
-                        if len(event_lines) > 4:
-                            self.print_colored(Colors.CYAN, f"         ...(and {len(event_lines) - 4} more events)")
-
             # Continue with the original verification code
             import subprocess
             import shutil
@@ -7255,7 +7085,6 @@ class EKSClusterManager:
         try:
             # Extract configuration parameters
             nodegroup_configs = config.get('nodegroup_configs', None)
-            self.debug_nodegroup_configs("create_cluster input", nodegroup_configs)
             cluster_name = config.get('cluster_name')
             region = config.get('region', 'us-east-1')
             access_key = config.get('access_key', '')
@@ -7438,7 +7267,7 @@ class EKSClusterManager:
     
                 # Display cost estimation based on selected configuration
                 for ng_config in nodegroup_configs:
-                    # Get primary instance type
+                    # Get primary instance type  
                     if ng_config['strategy'] == 'on-demand':
                         primary_instance = ng_config['instance_selections'].get('on-demand', [instance_type])[0]
                     elif ng_config['strategy'] == 'spot':
@@ -7446,7 +7275,7 @@ class EKSClusterManager:
                     else:
                         primary_instance = ng_config['instance_selections'].get('on-demand', [instance_type])[0]
         
-                    self.display_cost_estimation(primary_instance, ng_config['strategy'], ng_config['desired_nodes'])
+                    # Cost estimation is no longer displayed - functionality integrated into main workflow
             else:
                 # We already have nodegroup configs (likely from multi-nodegroup workflow)
                 # Just extract the key data we need for further processing
