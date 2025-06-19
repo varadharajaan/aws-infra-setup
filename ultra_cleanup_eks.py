@@ -52,7 +52,7 @@ class UltraEKSCleanupManager:
     def setup_detailed_logging(self):
         """Setup detailed logging to file"""
         try:
-            log_dir = "aws/eks"
+            log_dir = "logs/eks"
             os.makedirs(log_dir, exist_ok=True)
         
             # Save log file in the aws/eks directory
@@ -118,7 +118,7 @@ class UltraEKSCleanupManager:
             print(f"[{level.upper()}] {message}")
 
     def delete_all_lambda_functions(self, access_key, secret_key, region, cluster_name):
-        """Delete all Lambda functions that might be related to the EKS cluster."""
+        """Delete Lambda functions related to the EKS cluster with improved safety checks."""
         try:
             lambda_client = boto3.client(
                 'lambda',
@@ -126,58 +126,81 @@ class UltraEKSCleanupManager:
                 aws_secret_access_key=secret_key,
                 region_name=region
             )
-            
+        
             # Get all Lambda functions
             paginator = lambda_client.get_paginator('list_functions')
-            
+        
             deleted_functions = []
-            
+            skipped_functions = []
+        
             # Extract meaningful parts from cluster name for better matching
             cluster_parts = self.extract_cluster_identifiers(cluster_name)
-            
+            cluster_suffix = cluster_name.split('-')[-1]
+        
             for page in paginator.paginate():
                 for function in page['Functions']:
                     function_name = function['FunctionName']
-                    
-                    # Check if function is related to EKS cluster
+                
+                    # Skip common/shared Lambda functions
+                    if any(pattern in function_name.lower() for pattern in [
+                        'common-', 'shared-', 'global-', 'admin-', 'monitoring-',
+                        'centrallogging', 'security', 'costoptimization'
+                    ]):
+                        self.log_operation('INFO', f"⚠️ Skipping shared Lambda function: {function_name}")
+                        skipped_functions.append(function_name)
+                        self.cleanup_results['skipped_resources'].append({
+                            'resource_type': 'Lambda function',
+                            'resource_id': function_name,
+                            'reason': 'Appears to be a shared resource'
+                        })
+                        continue
+                
+                    # Check if function is related to EKS cluster - require STRONG matching
                     is_cluster_related = False
-                    
-                    # Method 1: Direct cluster name match (original logic)
+                
+                    # Method 1: Direct cluster name match 
                     if cluster_name.lower() in function_name.lower():
                         is_cluster_related = True
-                    
-                    # Method 2: Check if function name parts match cluster parts
-                    if not is_cluster_related:
-                        is_cluster_related = self.check_name_similarity(function_name, cluster_parts)
-                    
-                    # Method 3: Check for common EKS patterns
-                    if not is_cluster_related:
-                        eks_patterns = ['eks-scale', 'eks-autoscale', 'eks-node', 'eks-pod', 'eks-function']
-                        for pattern in eks_patterns:
-                            if pattern in function_name.lower():
-                                # If it's an EKS-related function, check for shared identifiers
-                                if any(part in function_name.lower() for part in cluster_parts if len(part) >= 4):
-                                    is_cluster_related = True
-                                    break
-                    
-                    # Method 4: Check function tags (existing logic)
+                
+                    # Method 2: Check if function has specific cluster suffix
+                    # Only delete if the function has the EXACT cluster suffix - make this stricter
+                    if not is_cluster_related and len(cluster_suffix) >= 4:
+                        if f"-{cluster_suffix}" in function_name or f"_{cluster_suffix}" in function_name:
+                            is_cluster_related = True
+                
+                    # Method 3: Check function tags for direct relation to this cluster
                     if not is_cluster_related:
                         try:
                             tags_response = lambda_client.list_tags(Resource=function['FunctionArn'])
                             tags = tags_response.get('Tags', {})
-                            
-                            # Check for EKS-related tags
+                        
+                            # Only delete if tags DIRECTLY reference THIS cluster
                             for key, value in tags.items():
-                                if (cluster_name.lower() in str(value).lower() or 
-                                    any(part in str(value).lower() for part in cluster_parts if len(part) >= 4) or
-                                    'eks' in key.lower() or 
-                                    key.lower() in ['kubernetes.io/cluster', 'alpha.eksctl.io/cluster-name']):
+                                if (key.lower() in ['cluster', 'clustername', 'eks-cluster'] and 
+                                    value.lower() == cluster_name.lower()):
+                                    is_cluster_related = True
+                                    break
+                            
+                                # Match for kubernetes.io/cluster/EXACT-CLUSTER-NAME tag
+                                if key.lower() == f'kubernetes.io/cluster/{cluster_name.lower()}':
                                     is_cluster_related = True
                                     break
                         except Exception as tag_error:
                             self.log_operation('WARNING', f"Could not check tags for Lambda function {function_name}: {tag_error}")
-                    
+                
                     if is_cluster_related:
+                        # Final safety check - don't delete functions with "all" in their name
+                        # as they might be used by multiple clusters
+                        if 'all' in function_name.lower() or 'multi' in function_name.lower():
+                            self.log_operation('INFO', f"⚠️ Skipping potential multi-cluster Lambda function: {function_name}")
+                            skipped_functions.append(function_name)
+                            self.cleanup_results['skipped_resources'].append({
+                                'resource_type': 'Lambda function',
+                                'resource_id': function_name,
+                                'reason': 'Potential multi-cluster resource'
+                            })
+                            continue
+                        
                         try:
                             self.log_operation('INFO', f"🗑️  Deleting Lambda function {function_name} related to cluster {cluster_name}")
                             lambda_client.delete_function(FunctionName=function_name)
@@ -185,14 +208,17 @@ class UltraEKSCleanupManager:
                             self.log_operation('INFO', f"✅ Deleted Lambda function {function_name}")
                         except Exception as delete_error:
                             self.log_operation('ERROR', f"Failed to delete Lambda function {function_name}: {delete_error}")
-            
+        
             if deleted_functions:
                 self.log_operation('INFO', f"Deleted {len(deleted_functions)} Lambda functions for cluster {cluster_name}")
-            else:
+            if skipped_functions:
+                self.log_operation('INFO', f"Skipped {len(skipped_functions)} Lambda functions that appear to be shared resources")
+        
+            if not deleted_functions and not skipped_functions:
                 self.log_operation('INFO', f"No Lambda functions found related to cluster {cluster_name}")
-                
-            return True
             
+            return True
+        
         except Exception as e:
             self.log_operation('ERROR', f"Failed to delete Lambda functions for cluster {cluster_name}: {e}")
             return False
@@ -232,7 +258,7 @@ class UltraEKSCleanupManager:
         return False
 
     def delete_all_iam_roles_policies(self, access_key, secret_key, region, cluster_name):
-        """Delete IAM roles and policies related to the EKS cluster."""
+        """Delete IAM roles and policies related to the EKS cluster with improved safety checks."""
         try:
             iam_client = boto3.client(
                 'iam',
@@ -240,74 +266,161 @@ class UltraEKSCleanupManager:
                 aws_secret_access_key=secret_key,
                 region_name=region
             )
-        
+    
             deleted_roles = []
             deleted_policies = []
-        
+            skipped_roles = []
+            skipped_policies = []
+    
             # Get all IAM roles
             paginator = iam_client.get_paginator('list_roles')
-        
+    
             for page in paginator.paginate():
                 for role in page['Roles']:
                     role_name = role['RoleName']
-                
+            
                     # Skip AWS service-linked roles
                     if role_name.startswith('AWSServiceRoleFor'):
                         self.log_operation('INFO', f"Skipping AWS service-linked role {role_name}")
                         continue
-                
-                    # Check if role is related to EKS cluster
+
+                    # Expanded list of critical roles to skip
+                    critical_role_patterns = [
+                        'eks_service_role', 
+                        'nodeinstancerole',
+                        'eks-service-role',
+                        'nodeinstance-role',
+                        'node-instance-role',
+                        'cluster-autoscaler',
+                        'ClusterAutoscaler',
+                        'karpenter',
+                        'alb-ingress',
+                        'external-dns',
+                        'ebs-csi-controller',
+                        'loadbalancer-controller',
+                        'eks-admin',
+                        'master-role',
+                        'iam-controller',
+                        'shared-',
+                        'common-',
+                        'global-',
+                        'admin-role',
+                        'bastion-role',
+                        'terraform-role',
+                        'ci-cd-',
+                        'jenkins-',
+                        'ArgoCD',
+                        'ADOT-',
+                        'monitoring-role'
+                    ]
+
+                    # Skip critical EKS roles
+                    if any(pattern.lower() in role_name.lower() for pattern in critical_role_patterns):
+                        self.log_operation('INFO', f"⚠️ Skipping critical or shared role {role_name}")
+                        skipped_roles.append(role_name)
+                        self.cleanup_results['skipped_resources'].append({
+                            'resource_type': 'IAM role',
+                            'resource_id': role_name,
+                            'reason': 'Critical EKS service role or shared resource - preserved for cluster management'
+                        })
+                        continue
+            
+                    # Check if role is related to THIS specific EKS cluster
                     is_cluster_related = False
-                
-                    if (cluster_name.lower() in role_name.lower() or 
-                        'eks' in role_name.lower() or
-                        'nodegroup' in role_name.lower()):
+                    cluster_suffix = cluster_name.split('-')[-1]
+            
+                    # Only delete if name contains EXACT cluster name or specific suffix identifier
+                    if cluster_name.lower() in role_name.lower() or f"-{cluster_suffix}" in role_name.lower():
                         is_cluster_related = True
                 
-                    # Also check role tags
+                    # Check role tags for direct cluster reference
                     try:
                         tags_response = iam_client.list_role_tags(RoleName=role_name)
                         tags = tags_response.get('Tags', [])
-                    
+                
                         for tag in tags:
-                            if (cluster_name.lower() in str(tag.get('Value', '')).lower() or
-                                tag.get('Key', '').lower() in ['kubernetes.io/cluster', 'alpha.eksctl.io/cluster-name']):
+                            tag_key = tag.get('Key', '').lower()
+                            tag_value = tag.get('Value', '').lower()
+                        
+                            # Only match tags that explicitly identify THIS cluster
+                            if ((tag_key in ['cluster', 'eks-cluster', 'clustername'] and tag_value == cluster_name.lower()) or
+                                tag_key == f'kubernetes.io/cluster/{cluster_name.lower()}'):
                                 is_cluster_related = True
                                 break
                     except Exception as tag_error:
                         self.log_operation('WARNING', f"Could not check tags for IAM role {role_name}: {tag_error}")
-                
+            
                     if is_cluster_related:
                         try:
+                            # Analyze role's policies to see if it might be shared
+                            might_be_shared = False
+                        
+                            # Check if role has policies that suggest it's shared
+                            try:
+                                attached_policies = iam_client.list_attached_role_policies(RoleName=role_name)
+                                for policy in attached_policies['AttachedPolicies']:
+                                    policy_name = policy['PolicyName']
+                                    if any(shared_term in policy_name.lower() for shared_term in [
+                                        'common', 'shared', 'global', 'all', 'clusters', 'multi'
+                                    ]):
+                                        might_be_shared = True
+                                        break
+                            except Exception:
+                                pass
+                        
+                            if might_be_shared:
+                                self.log_operation('INFO', f"⚠️ Skipping potentially shared role {role_name}")
+                                skipped_roles.append(role_name)
+                                self.cleanup_results['skipped_resources'].append({
+                                    'resource_type': 'IAM role',
+                                    'resource_id': role_name,
+                                    'reason': 'Appears to be shared across clusters based on attached policies'
+                                })
+                                continue
+                            
                             # Detach managed policies first
                             attached_policies = iam_client.list_attached_role_policies(RoleName=role_name)
                             for policy in attached_policies['AttachedPolicies']:
                                 iam_client.detach_role_policy(RoleName=role_name, PolicyArn=policy['PolicyArn'])
-                        
+                    
                             # Delete inline policies
                             inline_policies = iam_client.list_role_policies(RoleName=role_name)
                             for policy_name in inline_policies['PolicyNames']:
                                 iam_client.delete_role_policy(RoleName=role_name, PolicyName=policy_name)
-                        
+                    
                             # Delete the role
                             self.log_operation('INFO', f"🗑️  Deleting IAM role {role_name} related to cluster {cluster_name}")
                             iam_client.delete_role(RoleName=role_name)
                             deleted_roles.append(role_name)
                             self.log_operation('INFO', f"✅ Deleted IAM role {role_name}")
-                        
+                    
                         except Exception as delete_error:
                             self.log_operation('ERROR', f"Failed to delete IAM role {role_name}: {delete_error}")
-        
-            # Delete customer-managed policies related to the cluster
+    
+            # Delete customer-managed policies related to the cluster - use more cautious matching
             policy_paginator = iam_client.get_paginator('list_policies')
-        
+    
             for page in policy_paginator.paginate(Scope='Local'):  # Only customer-managed policies
                 for policy in page['Policies']:
                     policy_name = policy['PolicyName']
                     policy_arn = policy['Arn']
                 
-                    if (cluster_name.lower() in policy_name.lower() or 
-                        'eks' in policy_name.lower()):
+                    # Skip shared/common policies
+                    if any(pattern in policy_name.lower() for pattern in [
+                        'common-', 'shared-', 'global-', 'admin-', 'all-', 'multi-'
+                    ]):
+                        self.log_operation('INFO', f"⚠️ Skipping shared policy: {policy_name}")
+                        skipped_policies.append(policy_name)
+                        self.cleanup_results['skipped_resources'].append({
+                            'resource_type': 'IAM policy',
+                            'resource_id': policy_name,
+                            'reason': 'Appears to be a shared resource'
+                        })
+                        continue
+            
+                    # Only delete if policy explicitly references THIS cluster
+                    cluster_suffix = cluster_name.split('-')[-1]
+                    if cluster_name.lower() in policy_name.lower() or f"-{cluster_suffix}" in policy_name.lower():
                         try:
                             # Get all policy versions and delete non-default versions first
                             versions = iam_client.list_policy_versions(PolicyArn=policy_arn)['Versions']
@@ -317,29 +430,34 @@ class UltraEKSCleanupManager:
                                         PolicyArn=policy_arn, 
                                         VersionId=version['VersionId']
                                     )
-                        
+                    
                             # Delete the policy
                             self.log_operation('INFO', f"🗑️  Deleting IAM policy {policy_name} related to cluster {cluster_name}")
                             iam_client.delete_policy(PolicyArn=policy_arn)
                             deleted_policies.append(policy_name)
                             self.log_operation('INFO', f"✅ Deleted IAM policy {policy_name}")
-                        
+                    
                         except Exception as delete_error:
                             self.log_operation('ERROR', f"Failed to delete IAM policy {policy_name}: {delete_error}")
-        
+    
             if deleted_roles or deleted_policies:
                 self.log_operation('INFO', f"Deleted {len(deleted_roles)} IAM roles and {len(deleted_policies)} policies for cluster {cluster_name}")
-            else:
-                self.log_operation('INFO', f"No IAM roles/policies found related to cluster {cluster_name}")
-            
-            return True
         
+            if skipped_roles or skipped_policies:
+                self.log_operation('INFO', f"Skipped {len(skipped_roles)} IAM roles and {len(skipped_policies)} policies")
+                print(f"   ⚠️ Skipped {len(skipped_roles)} IAM roles and {len(skipped_policies)} policies that appear to be shared")
+        
+            if not deleted_roles and not deleted_policies and not skipped_roles and not skipped_policies:
+                self.log_operation('INFO', f"No IAM roles/policies found related to cluster {cluster_name}")
+        
+            return True
+    
         except Exception as e:
             self.log_operation('ERROR', f"Failed to delete IAM resources for cluster {cluster_name}: {e}")
             return False
 
     def delete_all_security_groups(self, access_key, secret_key, region, cluster_name, vpc_id):
-        """Delete security groups related to the EKS cluster."""
+        """Delete security groups related to the EKS cluster with improved safety checks."""
         try:
             ec2_client = boto3.client(
                 'ec2',
@@ -347,58 +465,112 @@ class UltraEKSCleanupManager:
                 aws_secret_access_key=secret_key,
                 region_name=region
             )
-            
+        
             deleted_sgs = []
-            
+            skipped_sgs = []
+        
             # Get all security groups in the VPC
             response = ec2_client.describe_security_groups(
                 Filters=[
                     {'Name': 'vpc-id', 'Values': [vpc_id]}
                 ]
             )
-            
+        
             for sg in response['SecurityGroups']:
                 sg_id = sg['GroupId']
                 sg_name = sg['GroupName']
-                
+            
                 # Skip default security group
                 if sg_name == 'default':
                     continue
-                
-                # Check if security group is related to EKS cluster
+            
+                # Skip commonly shared security groups
+                if any(pattern in sg_name.lower() for pattern in [
+                    'common-', 'shared-', 'bastion', 'jumpbox', 'admin', 
+                    'master', 'gitlab', 'jenkins', 'cicd', 'global-',
+                    'monitoring', 'prometheus', 'grafana', 'elasticsearch', 
+                    'database', 'redis', 'memcached', 'mq-'
+                ]):
+                    self.log_operation('INFO', f"⚠️ Skipping potentially shared security group: {sg_name}")
+                    skipped_sgs.append(sg_name)
+                    self.cleanup_results['skipped_resources'].append({
+                        'resource_type': 'Security group',
+                        'resource_id': sg_id,
+                        'reason': 'Appears to be a shared resource'
+                    })
+                    continue
+            
+                # Check if security group is directly related to THIS EKS cluster
                 is_cluster_related = False
-                
-                # Check security group name and description
-                if (cluster_name.lower() in sg_name.lower() or
-                    cluster_name.lower() in sg.get('Description', '').lower() or
-                    'eks' in sg_name.lower() or
-                    'eks' in sg.get('Description', '').lower()):
+                cluster_suffix = cluster_name.split('-')[-1]
+            
+                # Check security group name - require strong match
+                if (cluster_name.lower() in sg_name.lower() or 
+                    f"-{cluster_suffix}" in sg_name.lower()):
                     is_cluster_related = True
-                
-                # Check security group tags
-                for tag in sg.get('Tags', []):
-                    if (cluster_name.lower() in str(tag.get('Value', '')).lower() or
-                        tag.get('Key', '').lower() in ['kubernetes.io/cluster', 'alpha.eksctl.io/cluster-name']):
+            
+                # Check description - require strong match
+                if not is_cluster_related:
+                    description = sg.get('Description', '').lower()
+                    if (cluster_name.lower() in description or 
+                        f"cluster {cluster_suffix}" in description or
+                        f"eks {cluster_suffix}" in description):
                         is_cluster_related = True
-                        break
-                
+            
+                # Check security group tags
+                if not is_cluster_related:
+                    for tag in sg.get('Tags', []):
+                        tag_key = tag.get('Key', '').lower()
+                        tag_value = tag.get('Value', '').lower()
+                    
+                        # Only match tags that explicitly identify THIS cluster
+                        if ((tag_key in ['cluster', 'eks-cluster', 'clustername'] and tag_value == cluster_name.lower()) or
+                            tag_key == f'kubernetes.io/cluster/{cluster_name.lower()}'):
+                            is_cluster_related = True
+                            break
+            
                 if is_cluster_related:
+                    # Additional check: See if it's used by multiple resources
+                    try:
+                        # Check if SG is referenced by other resources
+                        references = ec2_client.describe_network_interfaces(
+                            Filters=[{'Name': 'group-id', 'Values': [sg_id]}]
+                        )
+                    
+                        # If multiple interfaces use this SG, consider skipping
+                        if len(references['NetworkInterfaces']) > 5:  # Heuristic - if used by many resources, might be shared
+                            self.log_operation('INFO', f"⚠️ Skipping security group {sg_name} ({sg_id}) - used by {len(references['NetworkInterfaces'])} resources")
+                            skipped_sgs.append(sg_name)
+                            self.cleanup_results['skipped_resources'].append({
+                                'resource_type': 'Security group',
+                                'resource_id': sg_id,
+                                'reason': f'Used by multiple ({len(references["NetworkInterfaces"])}) resources'
+                            })
+                            continue
+                    except Exception:
+                        pass
+                
                     try:
                         self.log_operation('INFO', f"🗑️  Deleting security group {sg_id} ({sg_name}) related to cluster {cluster_name}")
                         ec2_client.delete_security_group(GroupId=sg_id)
                         deleted_sgs.append(sg_name)
                         self.log_operation('INFO', f"✅ Deleted security group {sg_id} ({sg_name})")
-                        
+                    
                     except Exception as delete_error:
                         self.log_operation('ERROR', f"Failed to delete security group {sg_id}: {delete_error}")
-            
+        
             if deleted_sgs:
                 self.log_operation('INFO', f"Deleted {len(deleted_sgs)} security groups for cluster {cluster_name}")
-            else:
-                self.log_operation('INFO', f"No security groups found related to cluster {cluster_name}")
-                
-            return True
+        
+            if skipped_sgs:
+                self.log_operation('INFO', f"Skipped {len(skipped_sgs)} security groups that appear to be shared")
+                print(f"   ⚠️ Skipped {len(skipped_sgs)} security groups that may be shared resources")
             
+            if not deleted_sgs and not skipped_sgs:
+                self.log_operation('INFO', f"No security groups found related to cluster {cluster_name}")
+            
+            return True
+        
         except Exception as e:
             self.log_operation('ERROR', f"Failed to delete security groups for cluster {cluster_name}: {e}")
             return False

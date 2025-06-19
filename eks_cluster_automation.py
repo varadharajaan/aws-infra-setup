@@ -481,16 +481,93 @@ class EKSAutomation:
             if not all_selected_users:
                 print("❌ No users selected from any account. Exiting...")
                 return False
-        
+    
             print(f"\n✅ Selected {len(all_selected_users)} users across accounts")
+
+            # Step 3: Configure EKS Cluster Settings
+            print("\n🔧 STEP 2: EKS CLUSTER CONFIGURATION")
+    
+            # Get EKS configuration from mapping file
+            eks_config = self.get_eks_config()
+            default_version = eks_config.get("default_version", "1.27")
+            default_ami_type = eks_config.get("ami_type", "AL2_x86_64")
+    
+            print(f"📋 EKS Default Settings:")
+            print(f"   🔸 Default Version: {default_version}")
+            print(f"   🔸 Default AMI Type: {default_ami_type}")
+    
+            # Ask for EKS version
+            print("\nEKS Version Selection:")
+            print("1. Use default version: " + default_version)
+            print("2. Use latest version (1.32)")
+            print("3. Specify custom version")
+    
+            while True:
+                version_choice = input("Select option (1-3): ").strip()
+        
+                if version_choice == '1':
+                    eks_version = default_version
+                    break
+                elif version_choice == '2':
+                    eks_version = "1.32"
+                    break
+                elif version_choice == '3':
+                    custom_version = input("Enter EKS version (e.g., 1.28): ").strip()
+                    if custom_version:
+                        eks_version = custom_version
+                        break
+                    else:
+                        print("❌ Please enter a valid version")
+                else:
+                    print("❌ Invalid choice. Please select 1, 2, or 3")
+    
+            # Ask for AMI type
+            print("\nAMI Type Selection:")
+            print("1. Use default AMI type: " + default_ami_type)
+            print("2. Use AL2023_x86_64_STANDARD (newer)")
+            print("3. Specify custom AMI type")
+    
+            while True:
+                ami_choice = input("Select option (1-3): ").strip()
+        
+                if ami_choice == '1':
+                    selected_ami_type = default_ami_type
+                    break
+                elif ami_choice == '2':
+                    selected_ami_type = "AL2023_x86_64_STANDARD"
+                    break
+                elif ami_choice == '3':
+                    custom_ami = input("Enter AMI type: ").strip()
+                    if custom_ami:
+                        selected_ami_type = custom_ami
+                        break
+                    else:
+                        print("❌ Please enter a valid AMI type")
+                else:
+                    print("❌ Invalid choice. Please select 1, 2, or 3")
+    
+            print(f"\n✅ Selected EKS Version: {eks_version}")
+            print(f"✅ Selected AMI Type: {selected_ami_type}")
+
+            # Step 4: Configure add-ons and features
+            install_addons = input("Install essential EKS add-ons (EBS/EFS/VPC CNI)? (y/N): ").strip().lower() in ['y', 'yes']
+            enable_container_insights = input("Enable Container Insights? (y/N): ").strip().lower() in ['y', 'yes']
+
+            # Store these in a config or pass as arguments
+            automation_options = {
+                "install_addons": install_addons,
+                "enable_container_insights": enable_container_insights,
+                "eks_version": eks_version,  # Add selected EKS version
+                "ami_type": selected_ami_type  # Add selected AMI type
+            }
 
             # Initialize EKS Manager with validated credentials and user type
             self.eks_manager = EKSClusterManager(config_file=None)
-        
+    
             # Store the user_type in the EKS manager
             self.eks_manager.user_type = user_type
-        
-            # Step 3: Nodegroup Configuration Prompts
+    
+            # Step 5: Nodegroup Configuration Prompts
             # Convert first user to CredentialInfo for configuration methods
             first_user = all_selected_users[0]
             credential_info = CredentialInfo(
@@ -503,42 +580,41 @@ class EKSAutomation:
                 regions=[first_user['region']],
                 username=first_user['username']
             )
-        
+    
             # Configure nodegroups interactively
             nodegroup_configs = self.configure_multiple_nodegroups(credential_info)
-        
+    
             # Display configuration summary
             self.display_common_nodegroup_summary(nodegroup_configs)
-        
+    
             # Confirmation
             confirmation = input("\nProceed with cluster creation using these configurations? (Y/n): ").strip().lower()
             if confirmation == 'n':
                 print("❌ Operation cancelled by user")
                 return False
-            
-            # Step 4: Get EKS configuration
-            eks_config = self.get_eks_config()
-            eks_version = eks_config.get('default_version', '1.28')
-            ami_type = eks_config.get('ami_type', 'AL2_x86_64')
         
-            # Display overall creation summary
-            self.display_cluster_creation_summary(credential_info, eks_version, ami_type, nodegroup_configs)
-            
+            # Display overall creation summary with selected values
+            self.display_cluster_creation_summary(credential_info, eks_version, selected_ami_type, nodegroup_configs)
+        
             # Apply this configuration to all user selections
             for user in all_selected_users:
                 user['nodegroup_configs'] = nodegroup_configs
+                # Add version and AMI type to each user
+                user['eks_version'] = eks_version
+                user['ami_type'] = selected_ami_type
+            
             print("Nodegroup configs assigned to all selected users:", all_selected_users[0]['nodegroup_configs'])
-    
-            # Call process_multiple_user_selection with all selected users and nodegroup configs
-            result = self.eks_manager.process_multiple_user_selection(all_selected_users)
-    
+
+            # Call process_multiple_user_selection with all selected users and automation options
+            result = self.eks_manager.process_multiple_user_selection(all_selected_users, automation_options)
+
             if result:
                 print("\n✅ EKS Clusters created successfully!")
                 return True
             else:
                 print("\n⚠️ Some EKS Cluster creations may have failed")
                 return False
-    
+
         except Exception as e:
             print(f"\n❌ Error during automation: {e}")
             import traceback

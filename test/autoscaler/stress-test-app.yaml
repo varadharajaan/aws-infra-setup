@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stress-test
+  labels:
+    app: stress-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: stress-test
+  template:
+    metadata:
+      labels:
+        app: stress-test
+    spec:
+      containers:
+      - name: stress
+        image: polinux/stress
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+        command: ["stress"]
+        args: ["--cpu", "1", "--timeout", "3600s"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: stress-test-service
+spec:
+  selector:
+    app: stress-test
+  ports:
+  - port: 80
+    targetPort: 8080
+  type: ClusterIP

@@ -9,47 +9,38 @@ import boto3
 import json
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Any, Optional
 
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
+def lambda_handler(event, context):
     """
     Lambda handler for EKS nodegroup scaling
-    
-    Event structure expected:
-    {
-        "action": "scale_up" or "scale_down",
-        "ist_time": "8:30 AM IST",  # For logging purposes
-        "nodegroups": [
-            {
-                "name": "nodegroup-name",
-                "desired_size": 1,
-                "min_size": 1,
-                "max_size": 3
-            },
-            {
-                "name": "another-nodegroup",
-                "desired_size": 1,
-                "min_size": 1,
-                "max_size": 3
-            }
-        ]
-    }
     """
     try:
-        cluster_name = '{cluster_name}'
-        region = '{region}'
+        cluster_name = '{{cluster_name}}'
+        region = '{{region}}'
         
         # Create EKS client
         eks_client = boto3.client('eks', region_name=region)
         
         # Process the event
         action = event.get('action', 'unknown')
-        ist_time = event.get('ist_time', 'unknown time')
+        
+        # Get IST time - if not provided, calculate current IST time
+        ist_time = event.get('ist_time')
+        if not ist_time or ist_time == 'unknown time':
+            # Calculate current IST time (UTC + 5:30)
+            ist_timezone = timezone(timedelta(hours=5, minutes=30))
+            
+            # Get current time in IST
+            current_ist = datetime.now(ist_timezone)
+            ist_time = current_ist.strftime('%I:%M %p IST')
+            logger.info(f"IST time not provided in event, using current IST time: {ist_time}")
+        
         nodegroups_config = event.get('nodegroups', [])
         
         # Validate the input
@@ -192,8 +183,8 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             'statusCode': 500,
             'body': json.dumps({
                 'error': error_msg,
-                'cluster': '{cluster_name}',
-                'region': '{region}'
+                'cluster': '{{cluster_name}}',
+                'region': '{{region}}'
             })
         }
 
