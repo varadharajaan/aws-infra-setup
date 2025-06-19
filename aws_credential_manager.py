@@ -426,3 +426,138 @@ class AWSCredentialManager:
         except Exception as e:
             print(f"❌ Credential validation failed: {e}")
             return False
+
+
+    def get_account_users(self, account_name: str) -> List[Dict]:
+        """
+        Get list of users for a specific account based on user_mapping.json
+    
+        Args:
+            account_name: Name of the account to get users for (e.g., 'account01')
+        
+        Returns:
+            List of user dictionaries with username, details, etc.
+        """
+        users = []
+    
+        try:
+            # Check if we have user mappings loaded
+            if not hasattr(self, 'user_mappings') or not self.user_mappings:
+                print(f"⚠️ No user mappings available")
+                return []
+        
+            # Filter users that match the account prefix
+            prefix = f"{account_name}_"
+            matching_users = {}
+        
+            # Find all users that belong to this account
+            for username, user_data in self.user_mappings.items():
+                if username.startswith(prefix):
+                    matching_users[username] = user_data
+        
+            if not matching_users:
+                print(f"⚠️ No users found for account {account_name} in user mapping")
+                return []
+        
+            # Get account data if available
+            account_data = self.aws_accounts.get(account_name, {})
+        
+            # Create user entries for each matching user
+            for username, user_data in matching_users.items():
+                # Extract region from user settings or use a default
+                # Determine the user number to cycle through regions
+                # e.g., account01_clouduser03 -> user number 3
+                match = re.search(r'clouduser(\d+)', username)
+                user_number = int(match.group(1)) if match else 1
+            
+                # Get available regions and select one based on user number
+                regions = self.user_settings.get('user_regions', ['us-east-1'])
+                region = regions[(user_number - 1) % len(regions)]
+            
+                users.append({
+                    'username': username,
+                    'access_key': account_data.get('access_key', ''),  # Use account credentials
+                    'secret_key': account_data.get('secret_key', ''),  # Use account credentials
+                    'account_id': account_data.get('account_id', 'Unknown'),
+                    'region': region,
+                    'email': user_data.get('email', ''),
+                    'full_name': user_data.get('full_name', ''),
+                    'first_name': user_data.get('first_name', ''),
+                    'last_name': user_data.get('last_name', ''),
+                    'role': user_data.get('role', 'User'),
+                    'location': user_data.get('location', 'Unknown'),
+                    'account_name': account_name
+                })
+        
+        except Exception as e:
+            print(f"⚠️ Error getting users for account {account_name}: {e}")
+    
+        return users
+
+    def get_available_accounts(self) -> List[Dict]:
+        """
+        Get a list of all available AWS accounts based on account_distribution in user_mapping.json
+    
+        Returns:
+            List of account dictionaries with name, description, etc.
+        """
+        accounts = []
+    
+        try:
+            # First try to load account information from user_mapping.json
+            if os.path.exists(self.mapping_file):
+                with open(self.mapping_file, 'r') as f:
+                    mapping_data = json.load(f)
+            
+                if 'account_distribution' in mapping_data:
+                    # Get account details from the account_distribution section
+                    for account_name, account_info in mapping_data['account_distribution'].items():
+                        # Look up the account in aws_accounts_config.json to get credentials if available
+                        account_data = self.aws_accounts.get(account_name, {})
+                    
+                        accounts.append({
+                            'name': account_name,
+                            'account_id': account_data.get('account_id', 'Unknown'),
+                            'email': account_data.get('email', 'Unknown'),
+                            'description': account_info.get('description', ''),
+                            'users_count': account_info.get('users', 0),
+                            'roles': account_info.get('roles', []),
+                            'has_credentials': bool(account_data.get('access_key') and account_data.get('secret_key'))
+                        })
+        
+            # If no accounts found in user_mapping.json, fall back to using aws_accounts_config.json
+            if not accounts and hasattr(self, 'aws_accounts'):
+                for account_name, account_data in self.aws_accounts.items():
+                    accounts.append({
+                        'name': account_name,
+                        'account_id': account_data.get('account_id', 'Unknown'),
+                        'email': account_data.get('email', 'Unknown'),
+                        'description': 'From AWS config',
+                        'has_credentials': bool(account_data.get('access_key') and account_data.get('secret_key'))
+                    })
+        
+        except Exception as e:
+            print(f"⚠️ Error retrieving accounts: {e}")
+    
+        return accounts
+
+    def create_credential_info(self, user: Dict) -> CredentialInfo:
+        """
+        Create a CredentialInfo object from a user dictionary
+    
+        Args:
+            user: Dictionary containing user information
+        
+        Returns:
+            CredentialInfo object
+        """
+        return CredentialInfo(
+            credential_type='IAM',
+            current_user=self.current_user,
+            access_key=user.get('access_key', ''),
+            secret_key=user.get('secret_key', ''),
+            account_id=user.get('account_id', ''),
+            email=user.get('email', ''),
+            account_name=user.get('account_name', ''),
+            regions=[user.get('region', 'us-east-1')]
+        )
