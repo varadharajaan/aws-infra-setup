@@ -640,12 +640,12 @@ spec:
     
     def print_success_summary(self, cluster_name: str, region: str, tagged_asgs: List[str]):
         """Print deployment success summary"""
-        self.print_header("🎉 DEPLOYMENT SUCCESSFUL! 🎉")
+        self.print_header("🎉 AUTOSCALER DEPLOYMENT SUCCESSFUL! 🎉")
         
         elapsed_time = time.time() - self.deployment_start_time
         
-        self.print_colored(self.colors.GREEN, "✅ DEPLOYMENT COMPLETED SUCCESSFULLY!")
-        self.print_colored(self.colors.CYAN, f"📊 Deployment Summary:")
+        self.print_colored(self.colors.GREEN, "✅ AUTOSCALER DEPLOYMENT COMPLETED SUCCESSFULLY!")
+        self.print_colored(self.colors.CYAN, f"📊 AUTOSCALER Deployment Summary:")
         self.print_colored(self.colors.WHITE, f"   • Cluster: {cluster_name}", 1)
         self.print_colored(self.colors.WHITE, f"   • Region: {region}", 1)
         self.print_colored(self.colors.WHITE, f"   • Tagged ASGs: {len(tagged_asgs)}", 1)
