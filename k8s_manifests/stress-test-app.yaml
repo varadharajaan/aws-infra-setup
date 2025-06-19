@@ -1,0 +1,34 @@
+# Test application for autoscaler validation
+# Current time: 2025-06-19 06:59:56 UTC
+# User: varadharajaan
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stress-test
+  labels:
+    app: stress-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: stress-test
+  template:
+    metadata:
+      labels:
+        app: stress-test
+    spec:
+      containers:
+      - name: stress-test
+        image: polinux/stress
+        resources:
+          requests:
+            memory: "500Mi"
+            cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+        command: ["stress"]
+        args: ["--vm", "1", "--vm-bytes", "150M", "--vm-hang", "1", "--verbose"]
+      nodeSelector:
+        kubernetes.io/os: linux

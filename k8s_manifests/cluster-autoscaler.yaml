@@ -1,3 +1,8 @@
+# FIXED: Complete AWS endpoint configuration for cluster autoscaler
+# Current time: 2025-06-19 07:25:08 UTC
+# User: varadharajaan
+# Fix: Added comprehensive AWS configuration to resolve MissingEndpoint error
+
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -149,15 +154,35 @@ spec:
         - --cloud-provider=aws
         - --skip-nodes-with-local-storage=false
         - --expander=least-waste
-        - --node-group-auto-discovery=asg:tag=k8s.io/cluster-autoscaler/enabled,k8s.io/cluster-autoscaler/${CLUSTER_NAME}
+        - --node-group-auto-discovery=asg:tag=k8s.io/cluster-autoscaler/enabled,k8s.io/cluster-autoscaler/{{CLUSTER_NAME}}
         - --balance-similar-node-groups
         - --skip-nodes-with-system-pods=false
         - --scale-down-enabled=true
         - --scale-down-delay-after-add=10m
         - --scale-down-unneeded-time=10m
+        - --aws-use-static-instance-list=false
         env:
+        # FIXED: Comprehensive AWS configuration to resolve MissingEndpoint error
         - name: AWS_REGION
-          value: ${REGION}
+          value: "{{AWS_REGION}}"
+        - name: AWS_DEFAULT_REGION
+          value: "{{AWS_REGION}}"
+        - name: AWS_SDK_LOAD_CONFIG
+          value: "1"
+        - name: AWS_EC2_ENDPOINT
+          value: "https://ec2.{{AWS_REGION}}.amazonaws.com"
+        - name: AWS_AUTOSCALING_ENDPOINT
+          value: "https://autoscaling.{{AWS_REGION}}.amazonaws.com"
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: cluster-autoscaler-aws-credentials
+              key: AWS_ACCESS_KEY_ID
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: cluster-autoscaler-aws-credentials
+              key: AWS_SECRET_ACCESS_KEY
         volumeMounts:
         - name: ssl-certs
           mountPath: /etc/ssl/certs/ca-certificates.crt

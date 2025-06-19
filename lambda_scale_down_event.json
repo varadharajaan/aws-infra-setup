@@ -1,0 +1,17 @@
+{
+  "action": "scale_down",
+  "nodegroups": [
+    {
+      "name": "nodegroup-1",
+      "desired_size": 0,
+      "min_size": 0,
+      "max_size": 3
+    },
+    {
+      "name": "nodegroup-2",
+      "desired_size": 0,
+      "min_size": 0,
+      "max_size": 3
+    }
+  ]
+}
