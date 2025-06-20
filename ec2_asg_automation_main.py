@@ -686,63 +686,8 @@ class EC2ASGAutomation:
             # - Schedule based on IST timezone
             pass
     
-    def display_cache_options(self):
-        """Display options for cache management"""
-        print("\n" + "="*50)
-        print("💾 CACHE MANAGEMENT OPTIONS")
-        print("="*50)
-        print("1. Use cached data (if available)")
-        print("2. Force refresh all data")
-        print("3. Clear cache and refresh")
-        
-        while True:
-            choice = input("Select option (1-3): ").strip()
-            if choice == '1':
-                return False  # Don't force refresh
-            elif choice == '2':
-                return True   # Force refresh
-            elif choice == '3':
-                # Clear cache
-                if os.path.exists(self.spot_analyzer.cache_file):
-                    os.remove(self.spot_analyzer.cache_file)
-                    print("🗑️ Cache cleared")
-                return True   # Force refresh
-            else:
-                print("❌ Invalid choice. Please enter 1, 2, or 3.")
 
-    def setup_unicode_support_bk(self):
-        """Setup Unicode support for Windows terminals"""
-        if sys.platform.startswith('win'):
-            try:
-                # Try to enable UTF-8 mode
-                sys.stdout.reconfigure(encoding='utf-8')
-                sys.stderr.reconfigure(encoding='utf-8')
-            except (AttributeError, UnicodeError):
-                try:
-                    import codecs
-                    # Use UTF-8 codec with error handling
-                    sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'replace')
-                    sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, 'replace')
-                except Exception:
-                    try:
-                        # Last resort: use Windows console encoding
-                        import locale
-                        encoding = locale.getpreferredencoding()
-                        sys.stdout = codecs.getwriter(encoding)(sys.stdout.buffer, 'replace')
-                        sys.stderr = codecs.getwriter(encoding)(sys.stderr.buffer, 'replace')
-                    except Exception:
-                        # Final fallback
-                        os.environ['PYTHONIOENCODING'] = 'utf-8:replace'
-                        print("Warning: Using fallback encoding method")
-        else:
-            # For non-Windows systems, ensure UTF-8
-            try:
-                if sys.stdout.encoding.lower() != 'utf-8':
-                    import codecs
-                    sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'replace')
-                    sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, 'replace')
-            except Exception:
-                os.environ['PYTHONIOENCODING'] = 'utf-8:replace'
+
 
     def setup_unicode_support(self):
         """Setup Unicode support for Windows terminals"""

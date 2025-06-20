@@ -242,7 +242,7 @@ class AWSCostCalculator:
         multiplier = regional_multipliers.get(region, 1.0)
         return base_rate * multiplier
     
-    def format_creation_time_readable(self, timestamp_str):
+    def format_timestamp_time_only(self, timestamp_str):
         """Format creation timestamp to show only hours and minutes"""
         try:
             # Parse the timestamp (handles both string and datetime objects)
