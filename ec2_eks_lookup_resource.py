@@ -242,46 +242,7 @@ class AWSCostCalculator:
         multiplier = regional_multipliers.get(region, 1.0)
         return base_rate * multiplier
     
-    def format_creation_time_readable(self, timestamp_str):
-        """Format creation timestamp to show only hours and minutes"""
-        try:
-            # Parse the timestamp (handles both string and datetime objects)
-            if isinstance(timestamp_str, str):
-                # Handle different formats
-                if '+05:30' in timestamp_str or 'IST' in timestamp_str:
-                    # Remove timezone info for parsing
-                    clean_time = timestamp_str.replace('+05:30', '').replace(' IST', '').strip()
-                    dt = datetime.fromisoformat(clean_time)
-                    # Add IST timezone
-                    ist_tz = timezone(timedelta(hours=5, minutes=30))
-                    dt = dt.replace(tzinfo=ist_tz)
-                else:
-                    dt = datetime.fromisoformat(timestamp_str)
-            else:
-                dt = timestamp_str
-            
-            # Convert to IST if needed
-            if dt.tzinfo != timezone(timedelta(hours=5, minutes=30)):
-                ist_tz = timezone(timedelta(hours=5, minutes=30))
-                dt = dt.astimezone(ist_tz)
-            
-            # Format options:
-            
-            # Option 1: 12:01 PM IST (12-hour format)
-            return dt.strftime('%I:%M %p IST')
-            
-            # Option 2: 12:01 IST (12-hour without AM/PM)
-            # return dt.strftime('%I:%M IST')
-            
-            # Option 3: 12:01 (24-hour format, no timezone)
-            # return dt.strftime('%H:%M')
-            
-            # Option 4: 12:01 PM (12-hour, no timezone)
-            # return dt.strftime('%I:%M %p')
-            
-        except Exception as e:
-            return "Unknown time"
-        
+
     def calculate_live_eks_cost(self, cluster_data, live_cluster_data=None):
         """Calculate EKS cost with proper timezone handling and live AWS data"""
         

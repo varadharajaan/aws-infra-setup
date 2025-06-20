@@ -686,29 +686,7 @@ class EC2ASGAutomation:
             # - Schedule based on IST timezone
             pass
     
-    def display_cache_options(self):
-        """Display options for cache management"""
-        print("\n" + "="*50)
-        print("💾 CACHE MANAGEMENT OPTIONS")
-        print("="*50)
-        print("1. Use cached data (if available)")
-        print("2. Force refresh all data")
-        print("3. Clear cache and refresh")
-        
-        while True:
-            choice = input("Select option (1-3): ").strip()
-            if choice == '1':
-                return False  # Don't force refresh
-            elif choice == '2':
-                return True   # Force refresh
-            elif choice == '3':
-                # Clear cache
-                if os.path.exists(self.spot_analyzer.cache_file):
-                    os.remove(self.spot_analyzer.cache_file)
-                    print("🗑️ Cache cleared")
-                return True   # Force refresh
-            else:
-                print("❌ Invalid choice. Please enter 1, 2, or 3.")
+
 
 
     def setup_unicode_support(self):
