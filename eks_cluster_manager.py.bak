@@ -5168,6 +5168,96 @@ class EKSClusterManager:
                 self.log_operation('ERROR', f"Failed to wait for DaemonSet: {str(e)}")
                 return False
 
+    def deploy_cloudwatch_agent_fixed_bk(self, cluster_name: str, region: str, access_key: str, secret_key: str, account_id: str) -> bool:
+            """Deploy CloudWatch agent as DaemonSet with proper handling of existing resources"""
+            try:
+                self.log_operation('INFO', f"Deploying CloudWatch agent for cluster {cluster_name}")
+        
+                # Check if kubectl is available
+                import subprocess
+                import shutil
+        
+                kubectl_available = shutil.which('kubectl') is not None
+        
+                if not kubectl_available:
+                    self.log_operation('WARNING', f"kubectl not found. Cannot deploy CloudWatch agent for {cluster_name}")
+                    self.print_colored(Colors.YELLOW, f"⚠️  kubectl not found. CloudWatch agent deployment skipped.")
+                    return False
+        
+                # Set environment variables for admin access
+                env = os.environ.copy()
+                env['AWS_ACCESS_KEY_ID'] = access_key
+                env['AWS_SECRET_ACCESS_KEY'] = secret_key
+                env['AWS_DEFAULT_REGION'] = region
+        
+                # Update kubeconfig first
+                update_cmd = [
+                    'aws', 'eks', 'update-kubeconfig',
+                    '--region', region,
+                    '--name', cluster_name
+                ]
+        
+                update_result = subprocess.run(update_cmd, env=env, capture_output=True, text=True, timeout=120)
+        
+                if update_result.returncode != 0:
+                    self.log_operation('ERROR', f"Failed to update kubeconfig: {update_result.stderr}")
+                    return False
+        
+                # Create CloudWatch agent configuration
+                cloudwatch_config = self.get_cloudwatch_agent_config(cluster_name, region)
+        
+                # Create Kubernetes manifests
+                namespace_manifest = self.get_cloudwatch_namespace_manifest_fixed()
+                service_account_manifest = self.get_cloudwatch_service_account_manifest_fixed()
+                configmap_manifest = self.get_cloudwatch_configmap_manifest_fixed(cloudwatch_config, cluster_name, region)
+                daemonset_manifest = self.get_cloudwatch_daemonset_manifest_fixed(cluster_name, region, account_id)
+        
+                # Apply manifests using kubectl
+                try:
+                    # 1. Create namespace if it doesn't exist
+                    self.apply_kubernetes_manifest_fixed(cluster_name, region, access_key, secret_key, namespace_manifest)
+                    self.log_operation('INFO', f"Applied CloudWatch namespace manifest")
+            
+                    # 2. Apply service account
+                    self.apply_kubernetes_manifest_fixed(cluster_name, region, access_key, secret_key, service_account_manifest)
+                    self.log_operation('INFO', f"Applied CloudWatch service account manifest")
+            
+                    # 3. Apply configmap 
+                    self.apply_kubernetes_manifest_fixed(cluster_name, region, access_key, secret_key, configmap_manifest)
+                    self.log_operation('INFO', f"Applied CloudWatch configmap manifest")
+            
+                    # 4. Check for existing DaemonSet and delete it if it exists
+                    delete_cmd = ['kubectl', 'delete', 'daemonset', 'cloudwatch-agent', '-n', 'amazon-cloudwatch', '--ignore-not-found']
+                    subprocess.run(delete_cmd, env=env, capture_output=True, text=True, timeout=60)
+                    self.log_operation('INFO', f"Removed existing CloudWatch DaemonSet if present")
+            
+                    # 5. Apply DaemonSet manifest
+                    self.apply_kubernetes_manifest_fixed(cluster_name, region, access_key, secret_key, daemonset_manifest)
+                    self.log_operation('INFO', f"Applied CloudWatch daemonset manifest")
+            
+                    # 6. Also apply Fluent Bit components for log collection
+                    fluentbit_yaml = self.render_fluentbit_configmap(
+                        cluster_name=cluster_name,
+                        region_name=region,
+                        http_server_toggle="On",
+                        http_server_port="2020",
+                        read_from_head="false",  # Use strings instead of booleans
+                        read_from_tail="true"    # Use strings instead of booleans
+                    )
+            
+                    self.apply_kubernetes_manifest_fixed(cluster_name, region, access_key, secret_key, fluentbit_yaml)
+                    self.log_operation('INFO', f"Applied Fluent Bit cluster info configmap")
+            
+                    return True
+            
+                except Exception as e:
+                    self.log_operation('ERROR', f"Failed to apply CloudWatch manifests: {str(e)}")
+                    return False
+            
+            except Exception as e:
+                self.log_operation('ERROR', f"Failed to deploy CloudWatch agent: {str(e)}")
+                return False
+
     def deploy_cloudwatch_agent_fixed(self, cluster_name: str, region: str, access_key: str, secret_key: str, account_id: str) -> bool:
             """Deploy CloudWatch agent as DaemonSet with proper handling of existing resources"""
             try:
@@ -5765,6 +5855,73 @@ class EKSClusterManager:
             self.print_colored(Colors.RED, f"❌ Scheduled scaling setup failed: {error_msg}")
             return False
 
+    def get_lambda_scaling_template(self) -> str:
+        """Get the Lambda function template code as a string"""
+        return '''
+    import boto3
+    import json
+    import logging
+    from datetime import datetime
+
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+
+    def lambda_handler(event, context):
+        try:
+            eks_client = boto3.client('eks', region_name='{region}')
+        
+            cluster_name = '{cluster_name}'
+        
+            # Get nodegroup name from cluster
+            nodegroups = eks_client.list_nodegroups(clusterName=cluster_name)['nodegroups']
+            if not nodegroups:
+                logger.error(f"No nodegroups found for cluster {{cluster_name}}")
+                return {{'statusCode': 500, 'body': 'No nodegroups found'}}
+        
+            # Use the first nodegroup found
+            nodegroup_name = nodegroups[0]
+        
+            # Get the desired size from the event
+            desired_size = event.get('desired_size', 1)
+            min_size = event.get('min_size', 0)
+            max_size = event.get('max_size', 3)
+        
+            # Log current time
+            current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
+            logger.info(f"Scaling nodegroup {{nodegroup_name}} to desired={{desired_size}}, min={{min_size}}, max={{max_size}} at {{current_time}}")
+        
+            # Update nodegroup scaling configuration
+            response = eks_client.update_nodegroup_config(
+                clusterName=cluster_name,
+                nodegroupName=nodegroup_name,
+                scalingConfig={{
+                    'minSize': min_size,
+                    'maxSize': max_size,
+                    'desiredSize': desired_size
+                }}
+            )
+        
+            logger.info(f"Scaling update initiated: {{response['update']['id']}} at {{current_time}}")
+        
+            return {{
+                'statusCode': 200,
+                'body': json.dumps({{
+                    'message': f'Scaling update initiated for {{nodegroup_name}} at {{current_time}}',
+                    'update_id': response['update']['id'],
+                    'timestamp': current_time
+                }})
+            }}
+        
+        except Exception as e:
+            logger.error(f"Error scaling nodegroup: {{str(e)}}")
+            return {{
+                'statusCode': 500,
+                'body': json.dumps({{
+                    'error': str(e)
+                }})
+            }}
+    '''
     def cleanup_temp_file(self, file_path: str) -> None:
             """
             Deletes the temporary file at the given path if it exists.
