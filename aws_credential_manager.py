@@ -541,23 +541,3 @@ class AWSCredentialManager:
     
         return accounts
 
-    def create_credential_info(self, user: Dict) -> CredentialInfo:
-        """
-        Create a CredentialInfo object from a user dictionary
-    
-        Args:
-            user: Dictionary containing user information
-        
-        Returns:
-            CredentialInfo object
-        """
-        return CredentialInfo(
-            credential_type='IAM',
-            current_user=self.current_user,
-            access_key=user.get('access_key', ''),
-            secret_key=user.get('secret_key', ''),
-            account_id=user.get('account_id', ''),
-            email=user.get('email', ''),
-            account_name=user.get('account_name', ''),
-            regions=[user.get('region', 'us-east-1')]
-        )

@@ -5,7 +5,6 @@ Handles EC2 instance creation with automatic ASG attachment
 
 import json
 import os
-from tkinter import SE
 import boto3
 from typing import Dict, List, Optional, Tuple, Set
 from dataclasses import dataclass
@@ -119,21 +118,7 @@ class EC2InstanceManager:
             print(f"Error loading user data script: {e}")
             sys.exit(1)
 
-    def load_userdata_script_bk(self):
-        """Load userdata script from file"""
-        try:
-            userdata_file = 'userdata_allsupport.sh'
-            if os.path.exists(userdata_file):
-                with open(userdata_file, 'r') as f:
-                    self.userdata_script = f.read()
-                print(f"✅ Userdata script loaded from: {userdata_file}")
-            else:
-                print(f"⚠️ Userdata script not found: {userdata_file}")
-                self.userdata_script = "#!/bin/bash\necho 'Default userdata script'"
-        except Exception as e:
-            print(f"❌ Error loading userdata script: {e}")
-            self.userdata_script = "#!/bin/bash\necho 'Default userdata script'"
-    
+
     def get_allowed_instance_types(self, region: str = None) -> List[str]:
         """Get allowed instance types for region"""
         # First check region-specific types

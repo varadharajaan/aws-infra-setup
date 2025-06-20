@@ -710,39 +710,6 @@ class EC2ASGAutomation:
             else:
                 print("❌ Invalid choice. Please enter 1, 2, or 3.")
 
-    def setup_unicode_support_bk(self):
-        """Setup Unicode support for Windows terminals"""
-        if sys.platform.startswith('win'):
-            try:
-                # Try to enable UTF-8 mode
-                sys.stdout.reconfigure(encoding='utf-8')
-                sys.stderr.reconfigure(encoding='utf-8')
-            except (AttributeError, UnicodeError):
-                try:
-                    import codecs
-                    # Use UTF-8 codec with error handling
-                    sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'replace')
-                    sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, 'replace')
-                except Exception:
-                    try:
-                        # Last resort: use Windows console encoding
-                        import locale
-                        encoding = locale.getpreferredencoding()
-                        sys.stdout = codecs.getwriter(encoding)(sys.stdout.buffer, 'replace')
-                        sys.stderr = codecs.getwriter(encoding)(sys.stderr.buffer, 'replace')
-                    except Exception:
-                        # Final fallback
-                        os.environ['PYTHONIOENCODING'] = 'utf-8:replace'
-                        print("Warning: Using fallback encoding method")
-        else:
-            # For non-Windows systems, ensure UTF-8
-            try:
-                if sys.stdout.encoding.lower() != 'utf-8':
-                    import codecs
-                    sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'replace')
-                    sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, 'replace')
-            except Exception:
-                os.environ['PYTHONIOENCODING'] = 'utf-8:replace'
 
     def setup_unicode_support(self):
         """Setup Unicode support for Windows terminals"""
