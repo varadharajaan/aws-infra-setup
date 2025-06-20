@@ -161,47 +161,6 @@ class IAMUserManager:
                 
         return users_regions
 
-    def create_restriction_policy(self, region):
-        """Create a policy that restricts access to the specified region"""
-        return {
-            "Version": "2012-10-17",
-            "Statement": [
-                {
-                    "Sid": "DenyIfNotInRegion",
-                    "Effect": "Deny",
-                    "Action": "*",
-                    "Resource": "*",
-                    "Condition": {
-                        "StringNotEquals": {
-                            "aws:RequestedRegion": region
-                        }
-                    }
-                },
-                {
-                "Sid": "AllowCreateLaunchTemplate",
-                "Effect": "Allow",
-                "Action": [
-                    "ec2:CreateLaunchTemplate",
-                    "ec2:CreateLaunchTemplateVersion"
-                ],
-                "Resource": "*"
-                },
-                {
-                    "Sid": "DenyIfDisallowedInstanceType",
-                    "Effect": "Deny",
-                    "Action": [
-                        "ec2:RunInstances"
-                    ],
-                    "Resource": "*",
-                    "Condition": {
-                        "StringNotEqualsIfExists": {
-                            "ec2:InstanceType": self.user_settings['allowed_instance_types']
-                        }
-                    }
-                }
-            ]
-        }
-
     def create_or_get_group(self, iam_client, account_name):
         """Create or get an IAM group for the account and attach required policies"""
         group_name = f"{account_name}-group"
@@ -256,8 +215,9 @@ class IAMUserManager:
             self.logger.error(f"Error checking policies for group {group_name}: {e}")
             raise
 
-    def create_restriction_policy_for_user(self, region):
-        """Create a policy that restricts access to a specific region for a user"""
+
+    def create_restriction_policy(self, region):
+        """Create a policy that restricts access to the specified region"""
         return {
             "Version": "2012-10-17",
             "Statement": [
@@ -287,15 +247,99 @@ class IAMUserManager:
                     "Action": [
                         "ec2:RunInstances"
                     ],
-                    "Resource": "*",
+                    "Resource": "arn:aws:ec2:*:*:instance/*",
                     "Condition": {
-                        "StringNotEqualsIfExists": {
+                        "StringNotEquals": {
                             "ec2:InstanceType": self.user_settings['allowed_instance_types']
                         }
                     }
                 }
             ]
         }
+
+    def create_restriction_policy_for_user(self, region):
+        """Create a policy that restricts access to a specific region for a user,
+        always including us-east-1 as allowed."""
+
+        # Always include 'us-east-1' as allowed
+        allowed_regions = set()
+
+        if isinstance(region, str):
+            allowed_regions.add(region)
+        elif isinstance(region, list):
+            allowed_regions.update(region)
+
+        # allowed_regions.add("us-east-1")  # Ensure us-east-1 is always allowed
+
+        # Convert to sorted list for consistency
+        allowed_regions = sorted(allowed_regions)
+
+        policy = {
+            "Version": "2012-10-17",
+            "Statement": []
+        }
+
+        # Deny if requested region is not one of the allowed
+        policy["Statement"].append({
+            "Sid": "DenyIfNotInRegion",
+            "Effect": "Deny",
+            "Action": [
+                "ec2:*",
+                "eks:*",
+                "lambda:*",
+                "rds:*",
+                "dynamodb:*",
+                "sagemaker:*",
+                "elasticloadbalancing:*",
+                "autoscaling:*",
+                "events:*",
+                "sns:*",
+                "sqs:*",
+                "athena:*",
+                "glue:*",
+                "redshift:*",
+                "elasticmapreduce:*",
+                "elasticbeanstalk:*",
+                "apprunner:*",
+                "cloudwatch:PutMetricAlarm",
+                "budgets:*",
+                "ce:*"
+            ],
+            "Resource": "*",
+            "Condition": {
+                "StringNotEquals": {
+                    "aws:RequestedRegion": allowed_regions
+                }
+            }
+        })
+
+        # Always allow launch template creation
+        policy["Statement"].append({
+            "Sid": "AllowCreateLaunchTemplate",
+            "Effect": "Allow",
+            "Action": [
+                "ec2:CreateLaunchTemplate",
+                "ec2:CreateLaunchTemplateVersion"
+            ],
+            "Resource": "*"
+        })
+
+        # Deny disallowed instance types
+        policy["Statement"].append({
+            "Sid": "DenyIfDisallowedInstanceType",
+            "Effect": "Deny",
+            "Action": [
+                "ec2:RunInstances"
+            ],
+            "Resource": "arn:aws:ec2:*:*:instance/*",
+            "Condition": {
+                "StringNotEquals": {
+                    "ec2:InstanceType": self.user_settings['allowed_instance_types']
+                }
+            }
+        })
+
+        return policy
 
     def create_single_user(self, iam_client, username, region, account_config, group_name):
         """Create a single IAM user and add to group, with user-specific region restriction"""
@@ -329,7 +373,7 @@ class IAMUserManager:
         
             iam_client.put_user_policy(
                 UserName=username,
-                PolicyName="Restrict-Region-And-EC2Types",
+                PolicyName="Restrict-Region-And-EC2-Managed-Types",
                 PolicyDocument=json.dumps(restriction_policy)
             )
             self.logger.log_user_action(username, "CREATE_RESTRICTION_POLICY", "SUCCESS", f"Region: {region}")
@@ -370,7 +414,7 @@ class IAMUserManager:
             try:
                 policy_response = iam_client.get_user_policy(
                     UserName=username,
-                    PolicyName="Restrict-Region-And-EC2Types"
+                    PolicyName="Restrict-Region-And-EC2-Managed-Types"
                 )
                 self.logger.debug(f"User {username} has region restriction policy")
             

@@ -2006,6 +2006,12 @@ class EKSClusterManager:
 
             self.log_operation('INFO', f"Enhanced user instructions saved to: {instruction_file}")
             self.print_colored(Colors.GREEN, f"📄 Enhanced user instructions saved to: {instruction_file}")
+            
+            # Also generate a copy in the current directory for immediate access
+            current_dir_file = f"user_instructions_{account_name}_{username}_{cluster_name}_{timestamp}.txt"
+            import shutil
+            shutil.copy(instruction_file, current_dir_file)
+            print(f"📄 User instructions also available at: {current_dir_file}")
 
         except Exception as e:
             error_msg = f"Could not create enhanced user instruction file: {e}"

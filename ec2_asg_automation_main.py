@@ -223,6 +223,9 @@ class EC2ASGAutomation:
                             else:
                                 print("❌ Please enter a valid instance type")
             
+                #selected type
+                print(f"\nSelected Instance Type: {selected_type}")
+                print("\n" + "="*60)
                 # Create instance with the selected type and strategy
                 instance_details = self.ec2_manager.create_ec2_instance(
                     credentials, 
