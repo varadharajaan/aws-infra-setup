@@ -62,7 +62,11 @@ class CompleteAutoscalerDeployer:
         self.print_colored(self.colors.BOLD, "=" * 80)
         self.print_colored(self.colors.BOLD, f"    {title}")
         self.print_colored(self.colors.BOLD, "=" * 80)
-        self.print_colored(self.colors.CYAN, f"    Time: 2025-06-19 07:40:20 UTC")
+        from datetime import datetime
+        self.print_colored(
+            self.colors.CYAN,
+            f"    Current Date and Time (UTC): {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}"
+        )
         self.print_colored(self.colors.CYAN, f"    User: varadharajaan")
         self.print_colored(self.colors.BOLD, "=" * 80)
     

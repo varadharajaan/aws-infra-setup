@@ -1,661 +1,585 @@
 """
 EC2 + ASG Automation Main Orchestrator
-Enhanced with Root/IAM credential support and multiple ASG strategies
+Enhanced with Root/IAM credential support and multiple user processing
 """
 
 import os
 import sys
 from datetime import datetime
-from aws_credential_manager import AWSCredentialManager, CredentialInfo
+from enhanced_aws_credential_manager import EnhancedAWSCredentialManager, MultiUserCredentials, CredentialInfo
 from ec2_instance_manager import EC2InstanceManager
 from auto_scaling_group_manager import AutoScalingGroupManager
 from spot_instance_analyzer import SpotInstanceAnalyzer
 import random
 import string
+import concurrent.futures
+import time
 
 class EC2ASGAutomation:
     def __init__(self):
         self.current_user = 'varadharajaan'
-        self.current_time = '2025-06-13 05:13:24'
-        self.credential_manager = AWSCredentialManager()
+        self.current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        self.credential_manager = EnhancedAWSCredentialManager()
         self.ec2_manager = EC2InstanceManager()
         self.asg_manager = AutoScalingGroupManager(self.current_user, self.current_time)
         self.spot_analyzer = SpotInstanceAnalyzer()
-        
-        print("🚀 EC2 + ASG Automation Tool")
+
+        print("🚀 EC2 + ASG Multi-User Automation Tool")
         print(f"👤 User: {self.current_user}")
         print(f"🕒 Time: {self.current_time}")
         print("="*60)
-        
+
     @staticmethod
     def generate_random_suffix(length=4):
         """Generate a random alphanumeric suffix of specified length"""
         return ''.join(random.choices(string.ascii_lowercase + string.digits, k=length))
-    
-    def run_automation(self):
-        """Main automation flow"""
-        try:
-            # Step 1: Get credentials (Root or IAM)
-            print("\n🔑 STEP 1: CREDENTIAL SELECTION")
-            credentials = self.credential_manager.get_credentials()
-        
-            # Step 2: Validate credentials
-            if not self.credential_manager.validate_credentials(credentials):
-                print("❌ Credential validation failed. Exiting...")
-                return False
-        
-            # Step 3: Create EC2 instance or use launch template
-            print("\n💻 STEP 2: EC2 INSTANCE CREATION")
-            create_ec2 = input("Create new EC2 instance? (y/n): ").strip().lower()
-        
-            instance_details = None
-            launch_template_id = None
-        
-            if create_ec2 == 'y':
-                # Ask for instance strategy (on-demand vs spot)
-                print("\n" + "="*60)
-                print("🚀 EC2 INSTANCE STRATEGY SELECTION")
-                print("="*60)
-                print("Choose your EC2 strategy:")
-                print("1. On-Demand (Reliable, Higher Cost)")
-                print("2. Spot (Cost-Effective, Higher Risk)")
-            
-                ec2_strategy = None
-                while True:
-                    choice = input("Enter your choice (1-2): ").strip()
-                    if choice == '1':
-                        ec2_strategy = 'on-demand'
-                        break
-                    elif choice == '2':
-                        ec2_strategy = 'spot'
-                        break
-                    else:
-                        print("❌ Invalid choice. Please enter 1 or 2.")
-            
-                # Get allowed instance types for the region
-                allowed_types = self.ec2_manager.get_allowed_instance_types(credentials.regions[0])
-            
-                # Select instance type based on strategy
-                selected_type = None
-            
-                if ec2_strategy == 'on-demand':
-                    # For on-demand, perform service quota analysis
-                    print("\n" + "="*60)
-                    print("💰 ON-DEMAND INSTANCE SELECTION")
-                    print("="*60)
-                    print("Analyzing service quotas for instance families...")
-                
-                    # Get quota information
-                    quota_info = self.spot_analyzer.analyze_service_quotas(credentials, allowed_types)
-                    
-                    # Create a list with instance types and their availability for sorting
-                    instance_availability = []
-                    for instance_type in allowed_types:
-                        family = instance_type.split('.')[0]
-                        if family in quota_info:
-                            quota = quota_info[family]
-                            available = quota.available_capacity
-                            used = f"{quota.current_usage}/{quota.quota_limit}"
-                        else:
-                            available = 32  # Default
-                            used = "Unknown"
-        
-                        instance_availability.append({
-                            'type': instance_type,
-                            'available': available,
-                            'used': used
-                        })
-    
-                    # Sort by available capacity (highest first)
-                    sorted_instances = sorted(instance_availability, key=lambda x: -x['available'])
 
-                    # Display all instance types with quota info
-                    print("\n📊 Available On-Demand Instances (Sorted by Availability):")
-                    print("-" * 70)
-                    print(f"{'#':<3} {'Type':<12} {'Available Quota':<15} {'Used':<10}")
-                    print("-" * 70)
+    def get_global_automation_preferences(self, first_credential: CredentialInfo) -> dict:
+        """Get global preferences that will apply to all users"""
+        print("\n⚙️ STEP 2: GLOBAL AUTOMATION PREFERENCES")
+        print("These preferences will apply to ALL selected users/accounts")
+        print("="*60)
 
-                    for i, instance in enumerate(sorted_instances, 1):
-                        print(f"{i:<3} {instance['type']:<12} {instance['available']:<15} {instance['used']:<10}")
+        global_config = {}
 
-                    # Option to enter custom instance type
-                    print("\n" + "-"*50)
-                    print("Options:")
-                    print("1. Select from the list")
-                    print("2. Enter custom instance type")
-                
-                    selection_mode = input("Your choice (1-2): ").strip()
-                
-                    if selection_mode == '1':
-                        while True:
-                            try:
-                                choice = int(input(f"\nSelect instance type (1-{len(allowed_types)}): ").strip())
-                                if 1 <= choice <= len(allowed_types):
-                                    selected_type = allowed_types[choice-1]
-                                    break
-                                else:
-                                    print(f"❌ Please enter a number between 1 and {len(allowed_types)}")
-                            except ValueError:
-                                print("❌ Please enter a valid number")
+        # EC2 Creation preference
+        print("\n💻 EC2 INSTANCE CONFIGURATION")
+        print("-" * 40)
+        create_ec2 = input("Create EC2 instances for all users? (y/n): ").strip().lower() == 'y'
+        global_config['create_ec2'] = create_ec2
+
+        if create_ec2:
+            # EC2 Strategy
+            print("\n🚀 EC2 INSTANCE STRATEGY (for all users)")
+            print("-" * 40)
+            print("Choose EC2 strategy for all users:")
+            print("1. On-Demand (Reliable, Higher Cost)")
+            print("2. Spot (Cost-Effective, Higher Risk)")
+
+            while True:
+                choice = input("Enter your choice (1-2): ").strip()
+                if choice == '1':
+                    global_config['ec2_strategy'] = 'on-demand'
+                    break
+                elif choice == '2':
+                    global_config['ec2_strategy'] = 'spot'
+                    break
+                else:
+                    print("❌ Invalid choice. Please enter 1 or 2.")
+
+            # Instance Type Selection (using first user's region for analysis)
+            instance_type = self.select_global_instance_type(first_credential, global_config['ec2_strategy'])
+            global_config['instance_type'] = instance_type
+
+        # ASG Creation preference
+        print("\n🚀 AUTO SCALING GROUP CONFIGURATION")
+        print("-" * 40)
+        create_asg = input("Create Auto Scaling Groups for all users? (y/n): ").strip().lower() == 'y'
+        global_config['create_asg'] = create_asg
+
+        if create_asg:
+            # ASG Strategy
+            asg_strategy = self.asg_manager.prompt_asg_strategy()
+            global_config['asg_strategy'] = asg_strategy
+
+            # Instance selections for ASG
+            instance_selections = self.get_global_asg_instance_selections(asg_strategy, first_credential)
+            global_config['asg_instance_selections'] = instance_selections
+
+            # Scheduled scaling
+            enable_scheduled = input("Enable scheduled scaling for all ASGs? (y/n): ").strip().lower() == 'y'
+            global_config['enable_scheduled_scaling'] = enable_scheduled
+
+        return global_config
+
+    def select_global_instance_type(self, credential: CredentialInfo, ec2_strategy: str) -> str:
+        """Select instance type for EC2 creation across all users"""
+        print("\n📊 GLOBAL EC2 INSTANCE TYPE SELECTION")
+        print("This instance type will be used for all users")
+        print("-" * 50)
+
+        # Get allowed types from first user's region
+        allowed_types = self.ec2_manager.get_allowed_instance_types(credential.regions[0])
+
+        if ec2_strategy == 'on-demand':
+            # Show quota analysis for reference
+            print("📊 Analyzing service quotas for reference...")
+            quota_info = self.spot_analyzer.analyze_service_quotas(credential, allowed_types)
+
+            print("\nAvailable Instance Types (with quota info):")
+            for i, instance_type in enumerate(allowed_types, 1):
+                family = instance_type.split('.')[0]
+                if family in quota_info:
+                    quota = quota_info[family]
+                    available = quota.available_capacity
+                    status = "✅" if available > 0 else "❌"
+                else:
+                    available = "Unknown"
+                    status = "⚠️"
+                print(f"  {i:2}. {instance_type} {status} (Available: {available})")
+        else:
+            # Show spot analysis for reference
+            print("📊 Analyzing spot instances for reference...")
+            spot_analyses = self.spot_analyzer.analyze_spot_instances(credential, allowed_types, False)
+
+            # Get best spots
+            best_spots = {}
+            for analysis in spot_analyses:
+                instance_type = analysis.instance_type
+                if (instance_type not in best_spots or
+                    analysis.score > best_spots[instance_type].score):
+                    best_spots[instance_type] = analysis
+
+            print("\nAvailable Instance Types (with spot info):")
+            for i, instance_type in enumerate(allowed_types, 1):
+                if instance_type in best_spots:
+                    spot_info = best_spots[instance_type]
+                    print(f"  {i:2}. {instance_type} - ${spot_info.current_price:.4f} (Score: {spot_info.score:.1f})")
+                else:
+                    print(f"  {i:2}. {instance_type} - No spot data")
+
+        print(f"\n{len(allowed_types) + 1:2}. Custom instance type")
+
+        while True:
+            try:
+                choice = input(f"Select instance type (1-{len(allowed_types) + 1}): ").strip()
+                choice_num = int(choice)
+
+                if 1 <= choice_num <= len(allowed_types):
+                    selected_type = allowed_types[choice_num - 1]
+                    print(f"✅ Selected: {selected_type} for all users")
+                    return selected_type
+                elif choice_num == len(allowed_types) + 1:
+                    custom_type = input("Enter custom instance type: ").strip()
+                    if custom_type:
+                        print(f"✅ Selected custom type: {custom_type} for all users")
+                        return custom_type
                     else:
-                        while True:
-                            custom_type = input("\nEnter custom instance type (e.g., 't3.large'): ").strip()
-                            if custom_type:
-                                print(f"⚠️ Warning: Custom instance type '{custom_type}' selected. Ensure it's available in {credentials.regions[0]}.")
-                                confirm = input("Confirm this selection? (y/n): ").strip().lower()
-                                if confirm == 'y':
-                                    selected_type = custom_type
-                                    break
-                            else:
-                                print("❌ Please enter a valid instance type")
-                
-                else:  # spot strategy
-                    # For spot, perform full spot analysis
-                    print("\n" + "="*60)
-                    print("📈 SPOT INSTANCE SELECTION")
-                    print("="*60)
-                    print("Analyzing spot instance availability and pricing...")
-                
-                    # Ask for refresh preference
-                    refresh_choice = input("Use cached spot data if available? (y/n): ").strip().lower()
-                    force_refresh = refresh_choice == 'n'
-                
-                    # Get spot analysis and quotas
-                    spot_analyses = self.spot_analyzer.analyze_spot_instances(credentials, allowed_types, force_refresh)
-                
-                    # Group by instance type and choose best AZ for each
-                    best_spots = {}
-                    for analysis in spot_analyses:
-                        instance_type = analysis.instance_type
-                        if (instance_type not in best_spots or 
-                            analysis.score > best_spots[instance_type].score):
-                            best_spots[instance_type] = analysis
-                
-                    # Sort by score (descending)
-                    sorted_spots = sorted(best_spots.values(), key=lambda x: x.score, reverse=True)
-                
-                    # Display all spot options
-                    print("\n" + "="*80)
-                    print("📊 SPOT INSTANCE AVAILABILITY")
-                    print("="*80)
-                
-                    print(f"{'#':<3} {'Type':<10} {'Zone':<15} {'Price':<8} {'Score':<6} {'Interrupt':<15}")
-                    print("-" * 80)
-                
-                    # Display all sorted spot instances, not just the first 10
-                    for i, analysis in enumerate(sorted_spots, 1):
-                        print(f"{i:<3} {analysis.instance_type:<10} {analysis.availability_zone:<15} "
-                              f"${analysis.current_price:<7.4f} {analysis.score:<6.1f} "
-                              f"{analysis.interruption_rate}")
-                
-                    # Option to enter custom instance type
-                    print("\n" + "-"*50)
-                    print("Options:")
-                    print("1. Select from the list")
-                    print("2. Enter custom instance type")
-                
-                    selection_mode = input("Your choice (1-2): ").strip()
-                
-                    if selection_mode == '1':
-                        while True:
-                            try:
-                                spot_choice = int(input(f"\nSelect spot instance (1-{len(sorted_spots)}): ").strip())
-                                if 1 <= spot_choice <= len(sorted_spots):
-                                    selected_spot = sorted_spots[spot_choice-1]
-                                    selected_type = selected_spot.instance_type
-                                    # Store AZ for potential use
-                                    selected_az = selected_spot.availability_zone
-                                    break
-                                else:
-                                    print(f"❌ Please enter a number between 1 and {len(sorted_spots)}")
-                            except ValueError:
-                                print("❌ Please enter a valid number")
-                    else:
-                        while True:
-                            custom_type = input("\nEnter custom instance type (e.g., 't3.large'): ").strip()
-                            if custom_type:
-                                print(f"⚠️ Warning: Custom spot instance type '{custom_type}' selected. Ensure it's available in {credentials.regions[0]}.")
-                                confirm = input("Confirm this selection? (y/n): ").strip().lower()
-                                if confirm == 'y':
-                                    selected_type = custom_type
-                                    # For custom spot types, we don't have AZ information
-                                    break
-                            else:
-                                print("❌ Please enter a valid instance type")
-            
-                #selected type
-                print(f"\nSelected Instance Type: {selected_type}")
-                print("\n" + "="*60)
-                # Create instance with the selected type and strategy
-                instance_details = self.ec2_manager.create_ec2_instance(
-                    credentials, 
-                    instance_type=selected_type
-                )
-            
-                launch_template_id = instance_details.get('launch_template_id')
-                print(f"✅ EC2 instance created: {instance_details['instance_id']}")
-                if ec2_strategy == 'spot':
-                    print(f"   💡 Using spot pricing (strategy: {ec2_strategy})")
-                
-                # Invalidate service quota cache after creating an instance
-                print("🔄 Updating service quota data after instance creation...")
-                # Find and remove any quota cache files
-                self.invalidate_quota_cache()
+                        print("❌ Please enter a valid instance type")
+                else:
+                    print(f"❌ Please enter a number between 1 and {len(allowed_types) + 1}")
+            except ValueError:
+                print("❌ Please enter a valid number")
+
+    def get_global_asg_instance_selections(self, strategy: str, credential: CredentialInfo) -> dict:
+        """Get ASG instance selections that will apply to all users"""
+        print(f"\n📊 GLOBAL ASG INSTANCE SELECTION ({strategy.upper()} STRATEGY)")
+        print("These instance types will be used for ASG across all users")
+        print("-" * 60)
+
+        allowed_types = self.ec2_manager.get_allowed_instance_types(credential.regions[0])
+
+        if strategy == 'on-demand':
+            return self.select_global_ondemand_instances(credential, allowed_types)
+        elif strategy == 'spot':
+            return self.select_global_spot_instances(credential, allowed_types)
+        else:  # mixed
+            return self.select_global_mixed_instances(credential, allowed_types)
+
+    def select_global_ondemand_instances(self, credential: CredentialInfo, allowed_types: list) -> dict:
+        """Select on-demand instances for global use"""
+        print("📊 On-Demand Instance Analysis (for reference)...")
+        quota_info = self.spot_analyzer.analyze_service_quotas(credential, allowed_types)
+
+        # Sort by availability
+        instance_data = []
+        for instance_type in allowed_types:
+            family = instance_type.split('.')[0]
+            if family in quota_info:
+                quota = quota_info[family]
+                available = quota.available_capacity
             else:
-                # Ask for existing launch template
-                launch_template_id = self.ec2_manager.select_existing_launch_template(credentials)
-                if not launch_template_id:
-                    # Create launch template without instance
-                    from ec2_instance_manager import InstanceConfig
-                
-                    # Get allowed instance types
-                    allowed_types = self.ec2_manager.get_allowed_instance_types(credentials.regions[0])
-                
-                    # Display all available instance types
-                    print("\n📊 Available Instance Types:")
-                    print("-" * 50)
-                    for i, instance_type in enumerate(allowed_types, 1):
-                        print(f"{i:<3} {instance_type}")
-                
-                    # Option for custom instance type
-                    print("\n" + "-"*50)
-                    print("Options:")
-                    print("1. Select from the list")
-                    print("2. Enter custom instance type")
-                
-                    selection_mode = input("Your choice (1-2): ").strip()
-                
-                    if selection_mode == '1':
-                        while True:
-                            try:
-                                choice = int(input(f"\nSelect instance type (1-{len(allowed_types)}): ").strip())
-                                if 1 <= choice <= len(allowed_types):
-                                    selected_type = allowed_types[choice-1]
-                                    break
-                                else:
-                                    print(f"❌ Please enter a number between 1 and {len(allowed_types)}")
-                            except ValueError:
-                                print("❌ Please enter a valid number")
-                    else:
-                        while True:
-                            custom_type = input("\nEnter custom instance type (e.g., 't3.large'): ").strip()
-                            if custom_type:
-                                print(f"⚠️ Warning: Custom instance type '{custom_type}' selected. Ensure it's available in {credentials.regions[0]}.")
-                                confirm = input("Confirm this selection? (y/n): ").strip().lower()
-                                if confirm == 'y':
-                                    selected_type = custom_type
-                                    break
-                            else:
-                                print("❌ Please enter a valid instance type")
-                
-                    # Get AMI
-                    ami_mapping = self.ec2_manager.ami_config.get('region_ami_mapping', {})
-                    ami_id = ami_mapping.get(credentials.regions[0])
-                
-                    if not ami_id:
-                        print(f"❌ No AMI found for region: {credentials.regions[0]}")
-                        return False
-                
-                    enhanced_userdata = self.ec2_manager.prepare_userdata_with_aws_config(
-                        self.ec2_manager.userdata_script,
-                        credentials.access_key,
-                        credentials.secret_key,
-                        credentials.regions[0]
+                available = 32
+
+            instance_data.append({
+                'type': instance_type,
+                'available': available
+            })
+
+        sorted_instances = sorted(instance_data, key=lambda x: -x['available'])
+
+        print(f"{'#':<3} {'Type':<12} {'Available':<10}")
+        print("-" * 30)
+        for i, instance in enumerate(sorted_instances, 1):
+            print(f"{i:<3} {instance['type']:<12} {instance['available']:<10}")
+
+        # For simplicity, select top 3 for global use
+        print("\nFor multi-user automation, selecting top 3 most available instances...")
+        selected_types = [inst['type'] for inst in sorted_instances[:3]]
+        print(f"✅ Selected: {', '.join(selected_types)}")
+
+        return {'on-demand': selected_types}
+
+    def select_global_spot_instances(self, credential: CredentialInfo, allowed_types: list) -> dict:
+        """Select spot instances for global use"""
+        print("📊 Spot Instance Analysis (for reference)...")
+        spot_analyses = self.spot_analyzer.analyze_spot_instances(credential, allowed_types, False)
+
+        # Get best spots
+        best_spots = {}
+        for analysis in spot_analyses:
+            instance_type = analysis.instance_type
+            if (instance_type not in best_spots or
+                analysis.score > best_spots[instance_type].score):
+                best_spots[instance_type] = analysis
+
+        sorted_spots = sorted(best_spots.values(), key=lambda x: x.score, reverse=True)
+
+        print(f"{'#':<3} {'Type':<10} {'Score':<6} {'Price':<8}")
+        print("-" * 30)
+        for i, analysis in enumerate(sorted_spots[:5], 1):
+            print(f"{i:<3} {analysis.instance_type:<10} {analysis.score:<6.1f} ${analysis.current_price:<7.4f}")
+
+        # Select top 3 for global use
+        print("\nFor multi-user automation, selecting top 3 best spot instances...")
+        selected_types = [analysis.instance_type for analysis in sorted_spots[:3]]
+        print(f"✅ Selected: {', '.join(selected_types)}")
+
+        return {'spot': selected_types}
+
+    def select_global_mixed_instances(self, credential: CredentialInfo, allowed_types: list) -> dict:
+        """Select mixed instances for global use"""
+        print("📊 Mixed Strategy Analysis...")
+
+        ondemand_selection = self.select_global_ondemand_instances(credential, allowed_types)
+        spot_selection = self.select_global_spot_instances(credential, allowed_types)
+
+        # Default 50-50 split
+        percentage = 50
+        print(f"\nUsing default 50% On-Demand, 50% Spot for all users")
+
+        return {
+            'on-demand': ondemand_selection['on-demand'][:2],
+            'spot': spot_selection['spot'][:2],
+            'on_demand_percentage': percentage
+        }
+
+    def process_single_user(self, credential: CredentialInfo, global_config: dict, user_index: int, total_users: int) -> dict:
+        """Process EC2 and ASG creation for a single user"""
+        try:
+            account_name = credential.account_name
+            username = credential.username if credential.username else "ROOT"
+
+            print(f"\n🔄 Processing User {user_index}/{total_users}: {account_name} - {username}")
+            print("-" * 50)
+
+            result = {
+                'user_index': user_index,
+                'account': account_name,
+                'username': username,
+                'region': credential.regions[0],
+                'credential_type': credential.credential_type,
+                'status': 'success',
+                'ec2_instance': None,
+                'asg': None,
+                'errors': []
+            }
+
+            # EC2 Instance Creation
+            if global_config.get('create_ec2', False):
+                try:
+                    print(f"💻 Creating EC2 instance for {username} in {account_name}")
+                    instance_details = self.ec2_manager.create_ec2_instance(
+                        credential,
+                        instance_type=global_config['instance_type']
                     )
-                    instance_config = InstanceConfig(
-                        instance_type=selected_type,
-                        ami_id=ami_id,
-                        region=credentials.regions[0],
-                        userdata_script=enhanced_userdata
-                    )
-                    import boto3
-                    ec2_client = boto3.client(
-                        'ec2',
-                        aws_access_key_id=credentials.access_key,
-                        aws_secret_access_key=credentials.secret_key,
-                        region_name=credentials.regions[0]
-                    )
-                
-                    launch_template_id = self.ec2_manager.create_launch_template(
-                            ec2_client, credentials, instance_config, None  # Pass None for security_group_id
-                    )
-        
-            # Step 4: Create Auto Scaling Group
-            print("\n🚀 STEP 3: AUTO SCALING GROUP CREATION")
-            create_asg = input("Create Auto Scaling Group? (y/n): ").strip().lower()
-        
-            if create_asg == 'y':
-                # Select ASG strategy
-                strategy = self.asg_manager.prompt_asg_strategy()
-            
-                # Get allowed instance types
-                allowed_types = self.ec2_manager.get_allowed_instance_types(credentials.regions[0])
-            
-                # Modify the selection method to show all instance types and allow custom entry
-                if strategy == 'on-demand':
-                    # Get quota information
-                    quota_info = self.spot_analyzer.analyze_service_quotas(credentials, allowed_types)
-                
-                    # Show all on-demand instances with quota info
-                    print("\n📊 Available On-Demand Instances:")
-                    print("-" * 70)
-                    print(f"{'#':<3} {'Type':<12} {'Available Quota':<15} {'Used':<10}")
-                    print("-" * 70)
-                
-                    for i, instance_type in enumerate(allowed_types, 1):
-                        family = instance_type.split('.')[0]
-                        if family in quota_info:
-                            quota = quota_info[family]
-                            available = quota.available_capacity
-                            used = f"{quota.current_usage}/{quota.quota_limit}"
-                        else:
-                            available = "Unknown"
-                            used = "Unknown"
-                    
-                        print(f"{i:<3} {instance_type:<12} {available:<15} {used:<10}")
-                
-                    # Allow custom selection
-                    print("\nSelect multiple instance types (comma-separated, e.g. '1,3,5-7') or enter 'c' for custom:")
-                    selection = input("> ").strip()
-                
-                    if selection.lower() == 'c':
-                        custom_types = []
-                        print("\nEnter custom instance types (one per line, empty line to finish):")
-                        while True:
-                            custom_type = input("> ").strip()
-                            if not custom_type:
-                                break
-                            custom_types.append(custom_type)
-                    
-                        if custom_types:
-                            print(f"⚠️ Warning: {len(custom_types)} custom instance types selected.")
-                            confirm = input("Confirm these selections? (y/n): ").strip().lower()
-                            if confirm == 'y':
-                                ondemand_selection = {'on-demand': custom_types}
-                            else:
-                                print("❌ Custom selection cancelled.")
-                                return False
-                        else:
-                            print("❌ No custom types entered.")
-                            return False
-                    else:
-                        # Parse the selection
-                        try:
-                            selected_indices = self.asg_manager.parse_selection(selection, len(allowed_types))
-                            selected_types = [allowed_types[i-1] for i in selected_indices]
-                            ondemand_selection = {'on-demand': selected_types}
-                        except ValueError as e:
-                            print(f"❌ Error: {e}")
-                            return False
-            
-                elif strategy == 'spot':
-                    # Get spot analysis
-                    refresh_choice = input("Use cached spot data if available? (y/n): ").strip().lower()
-                    force_refresh = refresh_choice == 'n'
-                
-                    spot_analyses = self.spot_analyzer.analyze_spot_instances(credentials, allowed_types, force_refresh)
-                
-                    # Group and sort by instance type and best score
-                    best_spots = {}
-                    for analysis in spot_analyses:
-                        instance_type = analysis.instance_type
-                        if (instance_type not in best_spots or 
-                            analysis.score > best_spots[instance_type].score):
-                            best_spots[instance_type] = analysis
-                
-                    sorted_spots = sorted(best_spots.values(), key=lambda x: x.score, reverse=True)
-                
-                    # Show all spot instances
-                    print("\n📊 Available Spot Instances:")
-                    print("-" * 80)
-                    print(f"{'#':<3} {'Type':<10} {'Zone':<15} {'Price':<8} {'Score':<6} {'Interrupt':<15}")
-                    print("-" * 80)
-                
-                    for i, analysis in enumerate(sorted_spots, 1):
-                        print(f"{i:<3} {analysis.instance_type:<10} {analysis.availability_zone:<15} "
-                              f"${analysis.current_price:<7.4f} {analysis.score:<6.1f} "
-                              f"{analysis.interruption_rate}")
-                
-                    # Allow custom selection
-                    print("\nSelect multiple instance types (comma-separated, e.g. '1,3,5-7') or enter 'c' for custom:")
-                    selection = input("> ").strip()
-                
-                    if selection.lower() == 'c':
-                        custom_types = []
-                        print("\nEnter custom instance types (one per line, empty line to finish):")
-                        while True:
-                            custom_type = input("> ").strip()
-                            if not custom_type:
-                                break
-                            custom_types.append(custom_type)
-                    
-                        if custom_types:
-                            print(f"⚠️ Warning: {len(custom_types)} custom instance types selected.")
-                            confirm = input("Confirm these selections? (y/n): ").strip().lower()
-                            if confirm == 'y':
-                                spot_selection = {'spot': custom_types}
-                            else:
-                                print("❌ Custom selection cancelled.")
-                                return False
-                        else:
-                            print("❌ No custom types entered.")
-                            return False
-                    else:
-                        # Parse the selection
-                        try:
-                            selected_indices = self.asg_manager.parse_selection(selection, len(sorted_spots))
-                            selected_types = [sorted_spots[i-1].instance_type for i in selected_indices]
-                            spot_selection = {'spot': selected_types}
-                        except ValueError as e:
-                            print(f"❌ Error: {e}")
-                            return False
-            
-                else:  # mixed
-                    # On-demand selection
-                    print("\n📊 On-Demand Instance Selection for Mixed Strategy:")
-                    print("-" * 70)
 
-                    # Get quota information
-                    quota_info = self.spot_analyzer.analyze_service_quotas(credentials, allowed_types)
-
-                    # Create a list with instance types and their availability for sorting
-                    instance_availability = []
-                    for instance_type in allowed_types:
-                        family = instance_type.split('.')[0]
-                        if family in quota_info:
-                            quota = quota_info[family]
-                            available = quota.available_capacity
-                            used = f"{quota.current_usage}/{quota.quota_limit}"
-                        else:
-                            available = 32  # Default
-                            used = "Unknown"
-
-                        instance_availability.append({
-                            'type': instance_type,
-                            'available': available,
-                            'used': used
-                        })
-
-                    # Sort by available capacity (highest first)
-                    sorted_instances = sorted(instance_availability, key=lambda x: -x['available'])
-
-                    # Display all instance types with quota info
-                    print(f"{'#':<3} {'Type':<12} {'Available Quota':<15} {'Used':<10}")
-                    print("-" * 70)
-
-                    for i, instance in enumerate(sorted_instances, 1):
-                        print(f"{i:<3} {instance['type']:<12} {instance['available']:<15} {instance['used']:<10}")
-
-                    # Allow custom selection
-                    print("\nSelect multiple on-demand instance types (comma-separated, e.g. '1,3,5-7') or enter 'c' for custom:")
-                    selection = input("> ").strip()
-
-                    if selection.lower() == 'c':
-                        custom_ondemand_types = []
-                        print("\nEnter custom on-demand instance types (one per line, empty line to finish):")
-                        while True:
-                            custom_type = input("> ").strip()
-                            if not custom_type:
-                                break
-                            custom_ondemand_types.append(custom_type)
-        
-                        if not custom_ondemand_types:
-                            print("❌ No custom on-demand types entered.")
-                            return False
-                        ondemand_types = custom_ondemand_types
-                    else:
-                        # Parse the selection
-                        try:
-                            selected_indices = self.asg_manager.parse_selection(selection, len(sorted_instances))
-                            # Use the sorted instances list for selection, not the original allowed_types
-                            ondemand_types = [sorted_instances[i-1]['type'] for i in selected_indices]
-                        except ValueError as e:
-                            print(f"❌ Error: {e}")
-                            return False
-            
-                # Inside the run_automation method, after handling the mixed strategy instance type selection
-                # If we're in on-demand or spot strategy, use the selections created above
-                if strategy == 'on-demand':
-                    instance_selections = ondemand_selection
-                elif strategy == 'spot':
-                    instance_selections = spot_selection
-                else:  # mixed strategy
-                    # Now we need spot instance types for mixed strategy
-                    print("\n📊 Spot Instance Selection for Mixed Strategy:")
-                    print("-" * 70)
-
-                    # Spot analysis
-                    refresh_choice = input("Use cached spot data for spot instances selection? (y/n): ").strip().lower()
-                    force_refresh = refresh_choice == 'n'
-
-                    spot_analyses = self.spot_analyzer.analyze_spot_instances(credentials, allowed_types, force_refresh)
-                    best_spots = {}
-                    for analysis in spot_analyses:
-                        instance_type = analysis.instance_type
-                        if (instance_type not in best_spots or 
-                            analysis.score > best_spots[instance_type].score):
-                            best_spots[instance_type] = analysis
-
-                    sorted_spots = sorted(best_spots.values(), key=lambda x: x.score, reverse=True)
-
-                    # Display all spot instances
-                    print(f"{'#':<3} {'Type':<10} {'Zone':<15} {'Price':<8} {'Score':<6} {'Interrupt':<15}")
-                    print("-" * 70)
-
-                    for i, analysis in enumerate(sorted_spots, 1):
-                        print(f"{i:<3} {analysis.instance_type:<10} {analysis.availability_zone:<15} "
-                              f"${analysis.current_price:<7.4f} {analysis.score:<6.1f} "
-                              f"{analysis.interruption_rate}")
-
-                    # Allow custom selection
-                    print("\nSelect multiple spot instance types (comma-separated, e.g. '1,3,5-7') or enter 'c' for custom:")
-                    selection = input("> ").strip()
-
-                    if selection.lower() == 'c':
-                        custom_spot_types = []
-                        print("\nEnter custom spot instance types (one per line, empty line to finish):")
-                        while True:
-                            custom_type = input("> ").strip()
-                            if not custom_type:
-                                break
-                            custom_spot_types.append(custom_type)
-
-                        if not custom_spot_types:
-                            print("❌ No custom spot types entered.")
-                            return False
-                        spot_types = custom_spot_types
-                    else:
-                        # Parse the selection
-                        try:
-                            selected_indices = self.asg_manager.parse_selection(selection, len(sorted_spots))
-                            spot_types = [sorted_spots[i-1].instance_type for i in selected_indices]
-                        except ValueError as e:
-                            print(f"❌ Error: {e}")
-                            return False
-    
-                    # Get on-demand percentage for mixed strategy
-                    print("\n" + "="*50)
-                    print("⚖️ On-Demand vs Spot Percentage")
-                    print("="*50)
-                    print("Default: 50% On-Demand, 50% Spot")
-    
-                    while True:
-                        try:
-                            percentage = input("Enter On-Demand percentage (0-100, default 50): ").strip()
-                            if not percentage:
-                                percentage = 50
-                            else:
-                                percentage = int(percentage)
-            
-                            if 0 <= percentage <= 100:
-                                break
-                            else:
-                                print("❌ Please enter a value between 0 and 100")
-                        except ValueError:
-                            print("❌ Please enter a valid number")
-    
-                    # Now create the instance_selections dictionary for mixed strategy
-                    instance_selections = {
-                        'on-demand': ondemand_types,
-                        'spot': spot_types,
-                        'on_demand_percentage': percentage
+                    result['ec2_instance'] = {
+                        'instance_id': instance_details['instance_id'],
+                        'launch_template_id': instance_details.get('launch_template_id'),
+                        'strategy': global_config['ec2_strategy']
                     }
-                
-                enable_scheduled_scaling = self.prompt_for_scheduled_scaling()
 
-                if enable_scheduled_scaling:
-                    print("🔄 Scheduled scaling enabled")
-                    print("🔄 ASG will be created with scheduled scaling enabled")
-                # Create ASG
-                asg_details = self.asg_manager.create_asg_with_strategy(
-                    credentials, instance_selections, launch_template_id, strategy, enable_scheduled_scaling
-                )
-            
-                print(f"✅ Auto Scaling Group created: {asg_details['asg_name']}")
-            
-                # Optional: Schedule ASG
-                
-                #self.prompt_asg_scheduling(credentials, asg_details['asg_name'])
-        
-            # Step 5: Summary
-            print("\n✅ AUTOMATION COMPLETED SUCCESSFULLY!")
-            print("="*60)
-            print("📋 SUMMARY:")
-            print(f"   🔑 Credential Type: {credentials.credential_type.upper()}")
-            print(f"   🏢 Account: {credentials.account_name}")
-            print(f"   🆔 Email: {credentials.email}")
-            print(f"   🌍 Region: {credentials.regions[0]}")
-        
-            if instance_details:
-                print(f"   💻 EC2 Instance: {instance_details['instance_id']}")
-                print(f"   📋 Launch Template: {instance_details['launch_template_id']}")
-                if create_ec2 == 'y' and 'ec2_strategy' in locals():
-                    print(f"   💲 EC2 Pricing: {ec2_strategy.upper()}")
-        
-            if create_asg == 'y':
-                print(f"   🚀 ASG Name: {asg_details['asg_name']}")
-                print(f"   📊 ASG Strategy: {asg_details['strategy'].upper()}")
-        
-            print(f"   📁 Output saved to: aws/ec2/{credentials.account_name}/")
+                    print(f"✅ EC2 created: {instance_details['instance_id']}")
 
-            print("="*60)
+                except Exception as e:
+                    error_msg = f"EC2 creation failed: {str(e)}"
+                    result['errors'].append(error_msg)
+                    print(f"❌ {error_msg}")
 
-            # Invalidate service quota cache after creating an instance
-            print("🔄 Updating service quota data after instance creation...")
-            # Find and remove any quota cache files
-            self.invalidate_quota_cache()
-        
+            # ASG Creation
+            if global_config.get('create_asg', False):
+                try:
+                    print(f"🚀 Creating ASG for {username} in {account_name}")
+
+                    # Use launch template from EC2 or create new one
+                    launch_template_id = None
+                    if result['ec2_instance']:
+                        launch_template_id = result['ec2_instance']['launch_template_id']
+                    else:
+                        # Create launch template for ASG
+                        launch_template_id = self.create_launch_template_for_user(credential, global_config)
+
+                    asg_details = self.asg_manager.create_asg_with_strategy(
+                        credential,
+                        global_config['asg_instance_selections'],
+                        launch_template_id,
+                        global_config['asg_strategy'],
+                        global_config.get('enable_scheduled_scaling', False)
+                    )
+
+                    result['asg'] = {
+                        'asg_name': asg_details['asg_name'],
+                        'strategy': asg_details['strategy']
+                    }
+
+                    print(f"✅ ASG created: {asg_details['asg_name']}")
+
+                except Exception as e:
+                    error_msg = f"ASG creation failed: {str(e)}"
+                    result['errors'].append(error_msg)
+                    print(f"❌ {error_msg}")
+
+            if result['errors']:
+                result['status'] = 'partial'
+
+            return result
+
+        except Exception as e:
+            print(f"❌ Error processing {username}: {e}")
+            return {
+                'user_index': user_index,
+                'account': account_name,
+                'username': username,
+                'status': 'failed',
+                'error': str(e)
+            }
+
+    def create_launch_template_for_user(self, credential: CredentialInfo, global_config: dict) -> str:
+        """Create launch template for a user"""
+        try:
+            from ec2_instance_manager import InstanceConfig
+            import boto3
+
+            # Get AMI
+            ami_mapping = self.ec2_manager.ami_config.get('region_ami_mapping', {})
+            ami_id = ami_mapping.get(credential.regions[0])
+
+            if not ami_id:
+                raise ValueError(f"No AMI found for region: {credential.regions[0]}")
+
+            enhanced_userdata = self.ec2_manager.prepare_userdata_with_aws_config(
+                self.ec2_manager.userdata_script,
+                credential.access_key,
+                credential.secret_key,
+                credential.regions[0]
+            )
+
+            instance_config = InstanceConfig(
+                instance_type=global_config.get('instance_type', 't3.micro'),
+                ami_id=ami_id,
+                region=credential.regions[0],
+                userdata_script=enhanced_userdata
+            )
+
+            ec2_client = boto3.client(
+                'ec2',
+                aws_access_key_id=credential.access_key,
+                aws_secret_access_key=credential.secret_key,
+                region_name=credential.regions[0]
+            )
+
+            launch_template_id = self.ec2_manager.create_launch_template(
+                ec2_client, credential, instance_config, None
+            )
+
+            return launch_template_id
+
+        except Exception as e:
+            print(f"❌ Error creating launch template: {e}")
+            raise
+
+    def run_automation(self):
+        """Main automation flow with multi-user processing"""
+        try:
+            # STEP 1: ENHANCED CREDENTIAL SELECTION
+            print("\n🔑 STEP 1: ENHANCED CREDENTIAL SELECTION")
+            print("Choose your credential type and select accounts/users")
+            print("For IAM users, you'll be able to select from available credential files")
+
+            # Use enhanced credential manager
+            multi_credentials = self.credential_manager.get_multiple_credentials()
+
+            if multi_credentials.total_users == 0:
+                print("❌ No credentials selected. Exiting...")
+                return False
+
+            # Validate all credentials
+            print(f"\n🔍 VALIDATING {multi_credentials.total_users} CREDENTIAL(S)")
+            validated_credentials = self.credential_manager.validate_multiple_credentials(multi_credentials)
+
+            if validated_credentials.total_users == 0:
+                print("❌ No valid credentials found. Exiting...")
+                return False
+
+            print(f"✅ {validated_credentials.total_users} valid credential(s) ready for automation")
+
+            # STEP 2: Get global preferences using first credential for analysis
+            first_credential = validated_credentials.users[0]
+            global_config = self.get_global_automation_preferences(first_credential)
+
+            # STEP 3: Show summary and confirmation
+            self.display_automation_summary(validated_credentials, global_config)
+
+            proceed = input("\n🚀 Proceed with automation for all users? (Y/n): ").strip().lower()
+            if proceed not in ['', 'y', 'yes']:
+                print("❌ Automation cancelled by user")
+                return False
+
+            # STEP 4: Process all users
+            print(f"\n🔄 STEP 3: PROCESSING {validated_credentials.total_users} USER(S)")
+
+            # Ask for processing mode
+            if validated_credentials.total_users > 1:
+                processing_mode = input("Process users in parallel? (y/n, default: n): ").strip().lower()
+                use_parallel = processing_mode == 'y'
+            else:
+                use_parallel = False
+
+            # Process users
+            if use_parallel:
+                results = self.process_users_parallel(validated_credentials.users, global_config)
+            else:
+                results = self.process_users_sequential(validated_credentials.users, global_config)
+
+            # STEP 5: Display final results
+            self.display_final_results(results, global_config)
+
             return True
-        
+
         except KeyboardInterrupt:
             print("\n\n⏹️ Automation interrupted by user")
             return False
         except Exception as e:
             print(f"\n❌ Automation failed: {e}")
+            import traceback
+            traceback.print_exc()
             return False
 
+    def process_users_sequential(self, credentials: list, global_config: dict) -> list:
+        """Process users one by one"""
+        results = []
+        total = len(credentials)
+
+        for i, credential in enumerate(credentials, 1):
+            result = self.process_single_user(credential, global_config, i, total)
+            results.append(result)
+
+            # Brief pause between users
+            if i < total:
+                time.sleep(1)
+
+        return results
+
+    def process_users_parallel(self, credentials: list, global_config: dict) -> list:
+        """Process users in parallel"""
+        results = []
+        max_workers = min(len(credentials), 5)  # Limit concurrent operations
+
+        print(f"🔄 Processing {len(credentials)} users with {max_workers} parallel workers...")
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_credential = {
+                executor.submit(self.process_single_user, cred, global_config, i, len(credentials)): cred
+                for i, cred in enumerate(credentials, 1)
+            }
+
+            for future in concurrent.futures.as_completed(future_to_credential):
+                try:
+                    result = future.result()
+                    results.append(result)
+                    credential = future_to_credential[future]
+                    username = credential.username if credential.username else "ROOT"
+                    print(f"✅ Completed: {credential.account_name} - {username}")
+                except Exception as e:
+                    credential = future_to_credential[future]
+                    username = credential.username if credential.username else "ROOT"
+                    print(f"❌ Failed: {credential.account_name} - {username} - {e}")
+
+        # Sort results by user_index
+        results.sort(key=lambda x: x.get('user_index', 0))
+        return results
+
+    def display_automation_summary(self, validated_credentials: MultiUserCredentials, global_config: dict):
+        """Display automation summary before execution"""
+        print("\n" + "="*70)
+        print("📋 AUTOMATION SUMMARY")
+        print("="*70)
+
+        print(f"🔑 Credential Type: {validated_credentials.credential_type.upper()}")
+        print(f"📊 Total Users: {validated_credentials.total_users}")
+
+        print(f"\n🏢 Selected Users:")
+        for i, cred in enumerate(validated_credentials.users, 1):
+            username = cred.username if cred.username else "ROOT"
+            print(f"  {i:2}. {cred.account_name} - {username} ({cred.regions[0]})")
+
+        print(f"\n⚙️ Global Configuration:")
+        print(f"   💻 Create EC2: {'Yes' if global_config.get('create_ec2') else 'No'}")
+        if global_config.get('create_ec2'):
+            print(f"   🖥️ EC2 Strategy: {global_config.get('ec2_strategy', 'N/A').upper()}")
+            print(f"   🔧 Instance Type: {global_config.get('instance_type', 'N/A')}")
+
+        print(f"   🚀 Create ASG: {'Yes' if global_config.get('create_asg') else 'No'}")
+        if global_config.get('create_asg'):
+            print(f"   📊 ASG Strategy: {global_config.get('asg_strategy', 'N/A').upper()}")
+            print(f"   ⏰ Scheduled: {'Yes' if global_config.get('enable_scheduled_scaling') else 'No'}")
+
+        print("="*70)
+
+    def display_final_results(self, results: list, global_config: dict):
+        """Display final automation results"""
+        print("\n" + "="*80)
+        print("🎉 MULTI-USER AUTOMATION COMPLETED!")
+        print("="*80)
+
+        successful = [r for r in results if r['status'] == 'success']
+        partial = [r for r in results if r['status'] == 'partial']
+        failed = [r for r in results if r['status'] == 'failed']
+
+        print(f"📊 OVERALL RESULTS:")
+        print(f"   ✅ Fully Successful: {len(successful)}")
+        print(f"   ⚠️ Partially Successful: {len(partial)}")
+        print(f"   ❌ Failed: {len(failed)}")
+        print(f"   📋 Total Processed: {len(results)}")
+
+        if successful:
+            print(f"\n✅ FULLY SUCCESSFUL DEPLOYMENTS:")
+            print("-" * 60)
+            for result in successful:
+                print(f"🏢 {result['account']} - {result['username']}")
+                print(f"   🌍 Region: {result['region']}")
+
+                if result.get('ec2_instance'):
+                    print(f"   💻 EC2: {result['ec2_instance']['instance_id']}")
+                    print(f"   🖥️ Strategy: {result['ec2_instance']['strategy'].upper()}")
+
+                if result.get('asg'):
+                    print(f"   🚀 ASG: {result['asg']['asg_name']}")
+                    print(f"   📊 ASG Strategy: {result['asg']['strategy'].upper()}")
+                print()
+
+        if partial:
+            print(f"\n⚠️ PARTIALLY SUCCESSFUL DEPLOYMENTS:")
+            print("-" * 60)
+            for result in partial:
+                print(f"🏢 {result['account']} - {result['username']}")
+                for error in result.get('errors', []):
+                    print(f"   ❌ {error}")
+                print()
+
+        if failed:
+            print(f"\n❌ FAILED DEPLOYMENTS:")
+            print("-" * 60)
+            for result in failed:
+                print(f"🏢 {result['account']} - {result['username']}")
+                print(f"   ❌ Error: {result.get('error', 'Unknown error')}")
+                print()
+
+        print("="*80)
+
     def invalidate_quota_cache(self):
-        """Invalidate service quota cache files to force refresh after instance changes"""
+        """Invalidate service quota cache files"""
         try:
             cache_dir = self.spot_analyzer.cache_dir
             for file in os.listdir(cache_dir):
@@ -666,127 +590,26 @@ class EC2ASGAutomation:
         except Exception as e:
             print(f"   ⚠️ Warning: Could not invalidate cache: {e}")
 
-
-    def prompt_asg_scheduling(self, credentials: CredentialInfo, asg_name: str):
-        """Optional ASG scheduling (9 AM - 6 PM IST)"""
-        print("\n" + "="*60)
-        print("⏰ OPTIONAL: ASG SCHEDULING")
-        print("="*60)
-        print("Schedule ASG to run only during business hours (9 AM - 6 PM IST)?")
-        
-        schedule_choice = input("Enable scheduling? (y/n): ").strip().lower()
-        
-        if schedule_choice == 'y':
-            print("🚧 ASG Scheduling feature will be implemented in Phase 2")
-            print("For now, ASG will run 24/7")
-            
-            # TODO: Implement ASG scheduling
-            # - Create CloudWatch Events/EventBridge rules
-            # - Create Lambda functions for scale up/down
-            # - Schedule based on IST timezone
-            pass
-    
-    def display_cache_options(self):
-        """Display options for cache management"""
-        print("\n" + "="*50)
-        print("💾 CACHE MANAGEMENT OPTIONS")
-        print("="*50)
-        print("1. Use cached data (if available)")
-        print("2. Force refresh all data")
-        print("3. Clear cache and refresh")
-        
-        while True:
-            choice = input("Select option (1-3): ").strip()
-            if choice == '1':
-                return False  # Don't force refresh
-            elif choice == '2':
-                return True   # Force refresh
-            elif choice == '3':
-                # Clear cache
-                if os.path.exists(self.spot_analyzer.cache_file):
-                    os.remove(self.spot_analyzer.cache_file)
-                    print("🗑️ Cache cleared")
-                return True   # Force refresh
-            else:
-                print("❌ Invalid choice. Please enter 1, 2, or 3.")
-
-    def setup_unicode_support_bk(self):
-        """Setup Unicode support for Windows terminals"""
-        if sys.platform.startswith('win'):
-            try:
-                # Try to enable UTF-8 mode
-                sys.stdout.reconfigure(encoding='utf-8')
-                sys.stderr.reconfigure(encoding='utf-8')
-            except (AttributeError, UnicodeError):
-                try:
-                    import codecs
-                    # Use UTF-8 codec with error handling
-                    sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'replace')
-                    sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, 'replace')
-                except Exception:
-                    try:
-                        # Last resort: use Windows console encoding
-                        import locale
-                        encoding = locale.getpreferredencoding()
-                        sys.stdout = codecs.getwriter(encoding)(sys.stdout.buffer, 'replace')
-                        sys.stderr = codecs.getwriter(encoding)(sys.stderr.buffer, 'replace')
-                    except Exception:
-                        # Final fallback
-                        os.environ['PYTHONIOENCODING'] = 'utf-8:replace'
-                        print("Warning: Using fallback encoding method")
-        else:
-            # For non-Windows systems, ensure UTF-8
-            try:
-                if sys.stdout.encoding.lower() != 'utf-8':
-                    import codecs
-                    sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'replace')
-                    sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, 'replace')
-            except Exception:
-                os.environ['PYTHONIOENCODING'] = 'utf-8:replace'
-
     def setup_unicode_support(self):
         """Setup Unicode support for Windows terminals"""
         if sys.platform.startswith('win'):
             try:
-                # Method 1: Reconfigure stdout/stderr
                 import codecs
                 sys.stdout.reconfigure(encoding='utf-8')
                 sys.stderr.reconfigure(encoding='utf-8')
             except (AttributeError, UnicodeError):
                 try:
-                    # Method 2: Use codecs wrapper
                     sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'strict')
                     sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, 'strict')
                 except:
-                    # Method 3: Set environment variable
                     os.environ['PYTHONIOENCODING'] = 'utf-8'
                     print("Warning: Using fallback encoding method")
 
-    def prompt_for_scheduled_scaling(self) -> bool:
-            """Prompt user if they want to enable scheduled scaling"""
-            print("\n" + "="*60)
-            print("⏰ SCHEDULED SCALING CONFIGURATION")
-            print("="*60)
-            print("Do you want to enable scheduled scaling?")
-            print("This will automatically scale your ASG up during business hours (9 AM IST)")
-            print("and down after hours (7 PM IST) on weekdays (Monday-Friday)")
-            print("-" * 60)
-    
-            while True:
-                choice = input("Enable scheduled scaling? (y/n): ").strip().lower()
-                if choice in ['y', 'yes']:
-                    return True
-                elif choice in ['n', 'no']:
-                    return False
-                else:
-                    print("❌ Invalid choice. Please enter 'y' or 'n'.")
-
 def main():
-    
     """Main entry point"""
     automation = EC2ASGAutomation()
     automation.setup_unicode_support()
-    
+
     try:
         success = automation.run_automation()
         if success:
@@ -797,6 +620,8 @@ def main():
             sys.exit(1)
     except Exception as e:
         print(f"\n💥 Unexpected error: {e}")
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
 
 if __name__ == "__main__":

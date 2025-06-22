@@ -127,7 +127,7 @@ class AutoScalingGroupManager:
         }
     
         # Create output directory
-        output_dir = f"aws/ec2/{cred_info.account_name}"
+        output_dir = f"aws/asg/{cred_info.account_name}"
         os.makedirs(output_dir, exist_ok=True)
     
         # Save to JSON file
@@ -886,7 +886,7 @@ class AutoScalingGroupManager:
         """Save and display detailed spot analysis summary"""
         try:
             # Create output directory
-            output_dir = f"aws/ec2/asg/{cred_info.account_name}"
+            output_dir = f"aws/asg/{cred_info.account_name}"
             os.makedirs(output_dir, exist_ok=True)
             
             # Prepare summary
@@ -1003,8 +1003,8 @@ class AutoScalingGroupManager:
             print(f"   🌍 Region: {region}")
             print(f"   🚀 ASG Name: {asg_config.name}")
             print(f"   📊 ASG Strategy: {strategy.upper()}")
-            print(f"   📁 Output saved to: aws/ec2/{cred_info.account_name}/")
-            print(f"   📊 Report: aws/ec2/{cred_info.account_name}/asg_report_{execution_timestamp}.json")
+            print(f"   📁 Output saved to: aws/asg/{cred_info.account_name}/")
+            print(f"   📊 Report: aws/asg/{cred_info.account_name}/asg_report_{execution_timestamp}.json")
             print("="*50)
         
             return result
@@ -1044,7 +1044,7 @@ class AutoScalingGroupManager:
             }
         
             # Create output directory
-            output_dir = f"aws/ec2/{cred_info.account_name}"
+            output_dir = f"aws/asg/{cred_info.account_name}"
             os.makedirs(output_dir, exist_ok=True)
         
             # Save failed report to JSON file
@@ -1192,7 +1192,7 @@ class AutoScalingGroupManager:
         """Save ASG details to output folder"""
         try:
             # Create output directory
-            output_dir = f"aws/ec2/{cred_info.account_name}"
+            output_dir = f"aws/asg/{cred_info.account_name}"
             os.makedirs(output_dir, exist_ok=True)
             
             # Prepare ASG details

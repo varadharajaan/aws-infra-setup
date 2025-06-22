@@ -262,6 +262,7 @@ class ASGLogFileCleanupManager:
                                     asg_info['account_id'] = account_data.get('account_id')
                                     if not asg_info.get('region'):
                                         asg_info['region'] = account_data.get('region')
+
                                 else:
                                     # Try to get account from directory structure
                                     path_parts = file_path.split(os.path.sep)
@@ -269,10 +270,18 @@ class ASGLogFileCleanupManager:
                                         if part == 'ec2' and i + 1 < len(path_parts):
                                             asg_info['account_name'] = path_parts[i + 1]
                                             break
-                                
+
                                 # Get additional metadata
                                 asg_info['created_by'] = asg_data.get('created_by', 'Unknown')
-                                
+
+                                # NEW: Get creation_date and creation_time from metadata, fallback to Unknown
+                                if "metadata" in asg_data:
+                                    asg_info['creation_date'] = asg_data["metadata"].get("creation_date", "Unknown")
+                                    asg_info['creation_time'] = asg_data["metadata"].get("creation_time", "Unknown")
+                                else:
+                                    asg_info['creation_date'] = "Unknown"
+                                    asg_info['creation_time'] = "Unknown"
+
                                 # Store raw ASG data for reference
                                 asg_info['raw_data'] = asg_data
                                 
