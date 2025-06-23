@@ -394,7 +394,7 @@ class SpotInstanceAnalyzer:
                 for az in availability_zones:
                     # Get enhanced price history with interruption analysis
                     price_history = self.get_spot_price_history_with_interruption(
-                        ec2_client, instance_type, az, days=7
+                        ec2_client, instance_type, az, days=10
                     )
                 
                     # Get placement score for this AZ
@@ -426,7 +426,7 @@ class SpotInstanceAnalyzer:
                         progress = completed / total_analyses * 100
                         print(f"Progress: {progress:.1f}% ({completed}/{total_analyses})", end='\r')
         
-            print("\nAnalysis complete!                           ")
+            print("\nAnalysis complete!")
         
             # Sort by interruption rate, score, and quota availability
             spot_analyses = self._sort_spot_analyses(spot_analyses)

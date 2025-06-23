@@ -3406,6 +3406,170 @@ class EKSClusterManager:
                     'success_items': []
                 }
 
+    def protect_nodes_with_no_delete_label(self, cluster_name: str, region: str, access_key: str,
+                                           secret_key: str) -> bool:
+        """
+        Protect nodes with NO_DELETE label from cluster autoscaler scale-down
+        by adding the cluster-autoscaler.kubernetes.io/scale-down-disabled annotation
+        """
+        try:
+            self.log_operation('INFO', f"Protecting nodes with NO_DELETE label in cluster {cluster_name}")
+            self.print_colored(Colors.YELLOW, f"🔒 Protecting nodes with NO_DELETE label...")
+
+            # Check if kubectl is available
+            import subprocess
+            import shutil
+
+            kubectl_available = shutil.which('kubectl') is not None
+            if not kubectl_available:
+                self.log_operation('WARNING', f"kubectl not found. Cannot protect nodes")
+                self.print_colored(Colors.YELLOW, f"⚠️ kubectl not found. Manual node protection required.")
+                return False
+
+            # Set environment variables for access
+            env = os.environ.copy()
+            env['AWS_ACCESS_KEY_ID'] = access_key
+            env['AWS_SECRET_ACCESS_KEY'] = secret_key
+            env['AWS_DEFAULT_REGION'] = region
+
+            # Update kubeconfig
+            update_cmd = [
+                'aws', 'eks', 'update-kubeconfig',
+                '--region', region,
+                '--name', cluster_name
+            ]
+
+            update_result = subprocess.run(update_cmd, env=env, capture_output=True, text=True, timeout=120)
+            if update_result.returncode != 0:
+                self.print_colored(Colors.RED, f"❌ Failed to update kubeconfig: {update_result.stderr}")
+                return False
+
+            # Get nodes with NO_DELETE label
+            get_nodes_cmd = ['kubectl', 'get', 'nodes', '-l', 'NO_DELETE', '--no-headers']
+            nodes_result = subprocess.run(get_nodes_cmd, env=env, capture_output=True, text=True, timeout=60)
+
+            if nodes_result.returncode != 0:
+                self.print_colored(Colors.YELLOW, f"⚠️ No nodes found with NO_DELETE label or kubectl error")
+                return True  # Not an error, just no nodes to protect
+
+            if not nodes_result.stdout.strip():
+                self.print_colored(Colors.CYAN, f"ℹ️ No nodes found with NO_DELETE label")
+                return True
+
+            # Process each node with NO_DELETE label
+            node_lines = [line.strip() for line in nodes_result.stdout.strip().split('\n') if line.strip()]
+            protected_nodes = 0
+
+            for line in node_lines:
+                node_name = line.split()[0] if line.split() else ""
+                if not node_name:
+                    continue
+
+                # Check if annotation already exists
+                check_annotation_cmd = [
+                    'kubectl', 'get', 'node', node_name,
+                    '-o', 'jsonpath={.metadata.annotations.cluster-autoscaler\\.kubernetes\\.io/scale-down-disabled}'
+                ]
+
+                check_result = subprocess.run(check_annotation_cmd, env=env, capture_output=True, text=True, timeout=30)
+
+                if check_result.returncode == 0 and check_result.stdout.strip() == "true":
+                    self.print_colored(Colors.CYAN, f"   ✅ Node {node_name} already protected")
+                    protected_nodes += 1
+                    continue
+
+                # Add the annotation to prevent scale-down
+                annotate_cmd = [
+                    'kubectl', 'annotate', 'node', node_name,
+                    'cluster-autoscaler.kubernetes.io/scale-down-disabled=true',
+                    '--overwrite'
+                ]
+
+                annotate_result = subprocess.run(annotate_cmd, env=env, capture_output=True, text=True, timeout=30)
+
+                if annotate_result.returncode == 0:
+                    self.print_colored(Colors.GREEN, f"   ✅ Protected node {node_name} from autoscaler scale-down")
+                    protected_nodes += 1
+                else:
+                    self.print_colored(Colors.RED, f"   ❌ Failed to protect node {node_name}: {annotate_result.stderr}")
+
+            if protected_nodes > 0:
+                self.print_colored(Colors.GREEN,
+                                   f"✅ Protected {protected_nodes} nodes with NO_DELETE label from autoscaler scale-down")
+                self.log_operation('INFO', f"Protected {protected_nodes} nodes from autoscaler scale-down")
+            else:
+                self.print_colored(Colors.YELLOW, f"⚠️ No nodes were protected")
+
+            return protected_nodes > 0
+
+        except Exception as e:
+            self.log_operation('ERROR', f"Failed to protect nodes: {str(e)}")
+            self.print_colored(Colors.RED, f"❌ Node protection failed: {str(e)}")
+            return False
+
+    def setup_node_protection_monitoring(self, cluster_name: str, region: str, access_key: str,
+                                         secret_key: str) -> bool:
+        """
+        Set up monitoring to automatically protect nodes with NO_DELETE label
+        This creates a simple script that can be run periodically
+        """
+        try:
+            # Create a script that can be run as a cron job or manually
+            script_content = f'''#!/bin/bash
+    # Auto-protect nodes with NO_DELETE label from cluster autoscaler
+    # Generated for cluster: {cluster_name}
+    # Region: {region}
+    # Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}
+
+    export AWS_ACCESS_KEY_ID="{access_key}"
+    export AWS_SECRET_ACCESS_KEY="{secret_key}"
+    export AWS_DEFAULT_REGION="{region}"
+
+    # Update kubeconfig
+    aws eks update-kubeconfig --region {region} --name {cluster_name}
+
+    # Get nodes with NO_DELETE label and protect them
+    kubectl get nodes -l NO_DELETE --no-headers | while read node rest; do
+        if [ ! -z "$node" ]; then
+            # Check if already annotated
+            current_annotation=$(kubectl get node $node -o jsonpath='{{.metadata.annotations.cluster-autoscaler\\.kubernetes\\.io/scale-down-disabled}}' 2>/dev/null)
+
+            if [ "$current_annotation" != "true" ]; then
+                echo "Protecting node $node from autoscaler scale-down..."
+                kubectl annotate node $node cluster-autoscaler.kubernetes.io/scale-down-disabled=true --overwrite
+                echo "✅ Node $node protected"
+            else
+                echo "ℹ️ Node $node already protected"
+            fi
+        fi
+    done
+
+    echo "Node protection check completed at $(date)"
+    '''
+
+            # Save the script
+            output_dir = f"aws/eks/scripts"
+            os.makedirs(output_dir, exist_ok=True)
+
+            script_file = f"{output_dir}/protect_no_delete_nodes_{cluster_name.replace('-', '_')}.sh"
+            with open(script_file, 'w') as f:
+                f.write(script_content)
+
+            # Make script executable
+            import stat
+            os.chmod(script_file, stat.S_IRWXU | stat.S_IRGRP | stat.S_IROTH)
+
+            self.print_colored(Colors.GREEN, f"✅ Node protection script created: {script_file}")
+            self.print_colored(Colors.CYAN, f"📋 To run automatically every 5 minutes, add to crontab:")
+            self.print_colored(Colors.CYAN,
+                               f"   */5 * * * * {os.path.abspath(script_file)} >> /var/log/node-protection.log 2>&1")
+
+            return True
+
+        except Exception as e:
+            self.log_operation('ERROR', f"Failed to create node protection script: {str(e)}")
+            return False
+
     def generate_cost_alarm_summary_report(self, cluster_name: str) -> str:
             """Generate a detailed cost alarm summary report"""
             if not hasattr(self, 'cost_alarm_details') or cluster_name not in self.cost_alarm_details:
@@ -6274,7 +6438,6 @@ class EKSClusterManager:
             else:
                 print("\n📊 Step 1: Skipping CloudWatch Container Insights setup as per user preference.")
                 components_status['container_insights'] = False
-
     
             # 2. Setup Cluster Autoscaler
             print("\n🔄 Step 2: Setting up Cluster Autoscaler for all nodegroups...")
@@ -6297,8 +6460,8 @@ class EKSClusterManager:
                 print("\n🔍 Step 4: Deploying CloudWatch agent...")
                 from custom_cloudwatch_agent_deployer import CustomCloudWatchAgentDeployer
                 agent_deployer = CustomCloudWatchAgentDeployer()
-                cloudwatch_agent_success = agent_deployer.deploy_cloudwatch_agent_fixed(
-                    cluster_name, region, access_key, secret_key, account_id
+                cloudwatch_agent_success = agent_deployer.deploy_custom_cloudwatch_agent(
+                    cluster_name, region, access_key, secret_key
                 )
                 components_status['cloudwatch_agent'] = cloudwatch_agent_success
             # 5. Setup CloudWatch alarms
@@ -7283,7 +7446,11 @@ class EKSClusterManager:
                 cluster_name, region, access_key, secret_key, account_id, nodegroups_created,self.setup_container_insights
             )
 
-            # Step 11: Perform health check
+            print("\n🔒 Step 11: Setting up node protection for NO_DELETE labels...")
+            self.protect_nodes_with_no_delete_label(cluster_name, region, access_key, secret_key)
+            self.setup_node_protection_monitoring(cluster_name, region, access_key, secret_key)
+
+            # Step 12: Perform health check
             self.print_colored(Colors.CYAN, "   🏥 Running health check...")
             initial_health_check = self.health_check_cluster(
                 cluster_name, region, access_key, secret_key
@@ -7484,6 +7651,9 @@ class EKSClusterManager:
                     "timestamp": datetime.now().isoformat(),
                     "total_clusters": total_clusters,
                     "failed_clusters": len(failed_clusters),
+                    "account_id": config.get('account_id', 'unknown'),
+                    "region": config.get('region', 'unknown'),
+                    "username": config.get('username', 'unknown'),
                     "errors": {cluster: error_details.get(cluster, "Unknown error") for cluster in failed_clusters}
                 }
             
