@@ -780,8 +780,8 @@ def main():
     success = deployer.deploy_complete_autoscaler(
         cluster_name="eks-cluster-account01_clouduser03-us-west-1-ffkd",
         region="us-west-1",
-        secret_key="LKe4xHS4UwVt9p9BqKbyWyr1A86K4PftAJ02LLie",  # replace placeholder with actual access key
-        access_key="AKIASDY23MA3FLI3KXAS",
+        secret_key="ACCESSKEY",  # replace placeholder with actual access key
+        access_key="SECRET_KEY",
         account_id= 'account01'# replace placeholder with actual secret key
     )
     

@@ -37,7 +37,8 @@ class EnhancedInteractiveClusterManager:
 
     def __init__(self):
         """Initialize the Enhanced Interactive Cluster Manager"""
-        self.current_time = "2025-06-24 20:18:47"
+        current_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.current_time = current_timestamp
         self.current_user = "varadharajaan"
         self.execution_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 

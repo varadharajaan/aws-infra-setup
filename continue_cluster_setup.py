@@ -785,11 +785,11 @@ class EKSClusterContinuationFromErrors:
 
             # Sort by timestamp (newest first)
             parsed_files.sort(key=lambda x: x[1], reverse=True)
-
+            current_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             self.print_colored(Colors.BOLD, "=" * 80)
             self.print_colored(Colors.BOLD, "    IAM CREDENTIAL FILES SUMMARY")
             self.print_colored(Colors.BOLD, "=" * 80)
-            self.print_colored(Colors.CYAN, f"    Current Date: 2025-06-24 15:44:27 UTC")
+            self.print_colored(Colors.CYAN, f"    Current Date: {current_timestamp}")
             self.print_colored(Colors.CYAN, f"    Current User: varadharajaan")
             self.print_colored(Colors.BOLD, "=" * 80)
 

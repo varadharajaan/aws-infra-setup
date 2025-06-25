@@ -37,7 +37,8 @@ class ASGConfig:
 class AutoScalingGroupManager:
     def __init__(self, current_user='varadharajaan', current_time='2025-06-13 05:13:24'):
         self.current_user = current_user
-        self.current_time = current_time
+        current_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.current_time = current_timestamp
         self.spot_analyzer = SpotInstanceAnalyzer()
 
     @staticmethod
