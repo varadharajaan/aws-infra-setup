@@ -2,10 +2,22 @@
   "action": "scale_up",
   "nodegroups": [
     {
-      "name": "nodegroup-1",
-      "desired_size": 3,
+      "name": "nodegroup-1-ondemand",
+      "desired_size": 2,
       "min_size": 1,
-      "max_size": 5
+      "max_size": 4
+    },
+    {
+      "name": "nodegroup-1-spot",
+      "desired_size": 2,
+      "min_size": 1,
+      "max_size": 4
+    },
+    {
+      "name": "nodegroup-2",
+      "desired_size": 2,
+      "min_size": 1,
+      "max_size": 4
     }
   ]
 }

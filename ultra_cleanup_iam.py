@@ -980,7 +980,8 @@ class UltraIAMCleanupManager:
             groups_to_delete = []
         
             # Option to exclude root accounts
-            exclude_root = input("\nExclude root account users from deletion? (y/n, default: y): ").strip().lower()
+            #exclude_root = input("\nExclude root account users from deletion? (y/n, default: y): ").strip().lower()
+            exclude_root = 'y'
             exclude_root = exclude_root != 'n'
         
             if exclude_root:

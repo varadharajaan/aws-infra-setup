@@ -42,9 +42,14 @@ class CustomCloudWatchAgentDeployer:
         self.deployment_start_time = time.time()
     
     def print_colored(self, color: str, message: str, indent: int = 0):
-        """Print colored message with optional indentation"""
+        """Print colored message with optional indentation, handling Unicode safely."""
         prefix = "  " * indent
-        print(f"{color}{prefix}{message}{self.colors.ENDC}")
+        # Ensures Unicode is printed safely (works in most modern terminals)
+        try:
+            print(f"{color}{prefix}{message}{self.colors.ENDC}")
+        except UnicodeEncodeError:
+            # Fallback for environments not supporting Unicode
+            print(f"{color}{prefix}{message.encode('utf-8', errors='replace').decode('utf-8')}{self.colors.ENDC}")
     
     def print_header(self, title: str):
         """Print formatted header"""

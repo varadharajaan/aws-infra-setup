@@ -4,7 +4,7 @@ Complete Cluster Autoscaler Deployment Solution
 - Auto creates secrets
 - Auto tags ASGs  
 - Fixes endpoint configuration
-- Fast scaling (2m delays)
+- Fast scaling (4m delays)
 - Complete verification and logging
 
 Current Time: 2025-06-19 07:40:20 UTC
@@ -39,11 +39,16 @@ class CompleteAutoscalerDeployer:
     def __init__(self):
         self.colors = Colors()
         self.deployment_start_time = time.time()
-    
+
     def print_colored(self, color: str, message: str, indent: int = 0):
-        """Print colored message with optional indentation"""
-        prefix = "   " * indent
-        print(f"{color}{prefix}{message}{self.colors.ENDC}")
+        """Print colored message with optional indentation, handling Unicode safely."""
+        prefix = "  " * indent
+        # Ensures Unicode is printed safely (works in most modern terminals)
+        try:
+            print(f"{color}{prefix}{message}{self.colors.ENDC}")
+        except UnicodeEncodeError:
+            # Fallback for environments not supporting Unicode
+            print(f"{color}{prefix}{message.encode('utf-8', errors='replace').decode('utf-8')}{self.colors.ENDC}")
     
     def log_step(self, step: str, message: str, status: str = "INFO"):
         """Log deployment step with timestamp"""
@@ -451,7 +456,7 @@ spec:
         - --skip-nodes-with-system-pods=false
         - --scale-down-enabled=true
         - --scale-down-delay-after-add=2m
-        - --scale-down-unneeded-time=2m
+        - --scale-down-unneeded-time=4m
         - --scale-down-delay-after-delete=10s
         - --scale-down-delay-after-failure=3m
         - --max-node-provision-time=10m
@@ -654,8 +659,9 @@ spec:
         self.print_colored(self.colors.WHITE, f"   • Region: {region}", 1)
         self.print_colored(self.colors.WHITE, f"   • Tagged ASGs: {len(tagged_asgs)}", 1)
         self.print_colored(self.colors.WHITE, f"   • Deployment Time: {elapsed_time:.1f} seconds", 1)
-        self.print_colored(self.colors.WHITE, f"   • Fast Scaling: 2 minute delays configured", 1)
-        
+        self.print_colored(self.colors.WHITE, f"   • Fast Scaling: 4 minute delays configured", 1)
+        self.print_colored(self.colors.WHITE, f"   • Protected Nodes: Nodes with label 'no-delete=true' will be skipped", 1)
+
         self.print_colored(self.colors.YELLOW, "\n🧪 Testing Commands:")
         self.print_colored(self.colors.WHITE, "   # Scale up test (trigger node addition):", 1)
         self.print_colored(self.colors.CYAN, "   kubectl create deployment test-scale --image=nginx --replicas=10", 1)
@@ -694,7 +700,8 @@ spec:
             self.print_colored(self.colors.WHITE, f"   • Region: {region}", 1)
             self.print_colored(self.colors.WHITE, f"   • Access Key: {access_key[:8]}...", 1)
             self.print_colored(self.colors.WHITE, f"   • Account ID: {account_id}", 1)
-            self.print_colored(self.colors.WHITE, f"   • Fast Scaling: 2 minute delays", 1)
+            self.print_colored(self.colors.WHITE, f"   • Fast Scaling: 4 minute delays", 1)
+            self.print_colored(self.colors.WHITE, f"   • Protected Nodes: Using 'no-delete=true' label", 1)
             
             # Step 1: Check prerequisites
             if not self.check_prerequisites():
@@ -758,7 +765,7 @@ spec:
             #     print(f"\n\n✅ Autoscaler deployment completed successfully!")
             #     print(f"Testing was cancelled, but autoscaler is ready to use.")
                 
-            # return True
+            return True
             
         except Exception as e:
             self.log_step("DEPLOY", f"Deployment failed with exception: {str(e)}", "ERROR")
@@ -771,10 +778,11 @@ def main():
     
     # Example usage - replace with your values
     success = deployer.deploy_complete_autoscaler(
-        cluster_name="eks-cluster-root-account03-us-west-1-olpg",
+        cluster_name="eks-cluster-account01_clouduser03-us-west-1-ffkd",
         region="us-west-1",
-        access_key="your_access_key_here",  # replace placeholder with actual access key
-        secret_key="your_secret_key_here"   # replace placeholder with actual secret key
+        secret_key="LKe4xHS4UwVt9p9BqKbyWyr1A86K4PftAJ02LLie",  # replace placeholder with actual access key
+        access_key="AKIASDY23MA3FLI3KXAS",
+        account_id= 'account01'# replace placeholder with actual secret key
     )
     
     if success:

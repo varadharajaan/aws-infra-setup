@@ -178,7 +178,7 @@ class EC2ASGAutomation:
 
     def select_global_ondemand_instances(self, credential: CredentialInfo, allowed_types: list) -> dict:
         """Select on-demand instances for global use"""
-        print("📊 On-Demand Instance Analysis (for reference)...")
+        print("📊 On-Demand Instance Analysis...")
         quota_info = self.spot_analyzer.analyze_service_quotas(credential, allowed_types)
 
         # Sort by availability
@@ -198,21 +198,58 @@ class EC2ASGAutomation:
 
         sorted_instances = sorted(instance_data, key=lambda x: -x['available'])
 
+        # Display available instances
         print(f"{'#':<3} {'Type':<12} {'Available':<10}")
         print("-" * 30)
         for i, instance in enumerate(sorted_instances, 1):
             print(f"{i:<3} {instance['type']:<12} {instance['available']:<10}")
 
-        # For simplicity, select top 3 for global use
-        print("\nFor multi-user automation, selecting top 3 most available instances...")
-        selected_types = [inst['type'] for inst in sorted_instances[:3]]
-        print(f"✅ Selected: {', '.join(selected_types)}")
+        # Ask user to select instances
+        print(f"\nPlease select instances for global use (1-{len(sorted_instances)}):")
+        print("Enter comma-separated numbers (e.g., 1,3,5) or 'all' for all instances:")
+
+        while True:
+            try:
+                user_input = input("Selection: ").strip()
+
+                if user_input.lower() == 'all':
+                    selected_indices = list(range(len(sorted_instances)))
+                    break
+                elif user_input.lower() in ['quit', 'exit', 'q']:
+                    print("❌ Selection cancelled.")
+                    return {'on-demand': []}
+                else:
+                    # Parse comma-separated numbers
+                    selected_numbers = [int(x.strip()) for x in user_input.split(',')]
+
+                    # Validate selection
+                    if all(1 <= num <= len(sorted_instances) for num in selected_numbers):
+                        selected_indices = [num - 1 for num in selected_numbers]  # Convert to 0-based index
+                        break
+                    else:
+                        print(f"❌ Invalid selection. Please enter numbers between 1 and {len(sorted_instances)}")
+                        continue
+
+            except ValueError:
+                print("❌ Invalid input. Please enter comma-separated numbers or 'all'")
+                continue
+            except KeyboardInterrupt:
+                print("\n❌ Selection cancelled.")
+                return {'on-demand': []}
+
+        # Get selected instances
+        selected_types = [sorted_instances[i]['type'] for i in selected_indices]
+
+        print(f"\n✅ Selected {len(selected_types)} instances:")
+        for i, instance_type in enumerate(selected_types, 1):
+            available = next(inst['available'] for inst in sorted_instances if inst['type'] == instance_type)
+            print(f"   {i}. {instance_type} (Available: {available})")
 
         return {'on-demand': selected_types}
 
     def select_global_spot_instances(self, credential: CredentialInfo, allowed_types: list) -> dict:
         """Select spot instances for global use"""
-        print("📊 Spot Instance Analysis (for reference)...")
+        print("📊 Spot Instance Analysis...")
         spot_analyses = self.spot_analyzer.analyze_spot_instances(credential, allowed_types, False)
 
         # Get best spots
@@ -220,22 +257,61 @@ class EC2ASGAutomation:
         for analysis in spot_analyses:
             instance_type = analysis.instance_type
             if (instance_type not in best_spots or
-                analysis.score > best_spots[instance_type].score):
+                    analysis.score > best_spots[instance_type].score):
                 best_spots[instance_type] = analysis
 
         sorted_spots = sorted(best_spots.values(), key=lambda x: x.score, reverse=True)
 
+        # Display available spot instances
         print(f"{'#':<3} {'Type':<10} {'Score':<6} {'Price':<8}")
         print("-" * 30)
-        for i, analysis in enumerate(sorted_spots[:5], 1):
+        for i, analysis in enumerate(sorted_spots, 1):
             print(f"{i:<3} {analysis.instance_type:<10} {analysis.score:<6.1f} ${analysis.current_price:<7.4f}")
 
-        # Select top 3 for global use
-        print("\nFor multi-user automation, selecting top 3 best spot instances...")
-        selected_types = [analysis.instance_type for analysis in sorted_spots[:3]]
-        print(f"✅ Selected: {', '.join(selected_types)}")
+        # Ask user to select spot instances
+        print(f"\nPlease select spot instances for global use (1-{len(sorted_spots)}):")
+        print("Enter comma-separated numbers (e.g., 1,3,5) or 'all' for all instances:")
+
+        while True:
+            try:
+                user_input = input("Selection: ").strip()
+
+                if user_input.lower() == 'all':
+                    selected_indices = list(range(len(sorted_spots)))
+                    break
+                elif user_input.lower() in ['quit', 'exit', 'q']:
+                    print("❌ Selection cancelled.")
+                    return {'spot': []}
+                else:
+                    # Parse comma-separated numbers
+                    selected_numbers = [int(x.strip()) for x in user_input.split(',')]
+
+                    # Validate selection
+                    if all(1 <= num <= len(sorted_spots) for num in selected_numbers):
+                        selected_indices = [num - 1 for num in selected_numbers]  # Convert to 0-based index
+                        break
+                    else:
+                        print(f"❌ Invalid selection. Please enter numbers between 1 and {len(sorted_spots)}")
+                        continue
+
+            except ValueError:
+                print("❌ Invalid input. Please enter comma-separated numbers or 'all'")
+                continue
+            except KeyboardInterrupt:
+                print("\n❌ Selection cancelled.")
+                return {'spot': []}
+
+        # Get selected instances
+        selected_analyses = [sorted_spots[i] for i in selected_indices]
+        selected_types = [analysis.instance_type for analysis in selected_analyses]
+
+        print(f"\n✅ Selected {len(selected_types)} spot instances:")
+        for i, analysis in enumerate(selected_analyses, 1):
+            print(
+                f"   {i}. {analysis.instance_type} (Score: {analysis.score:.1f}, Price: ${analysis.current_price:.4f})")
 
         return {'spot': selected_types}
+
 
     def select_global_mixed_instances(self, credential: CredentialInfo, allowed_types: list) -> dict:
         """Select mixed instances for global use"""

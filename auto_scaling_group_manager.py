@@ -1125,7 +1125,9 @@ class AutoScalingGroupManager:
         availability_zones = [az['ZoneName'] for az in azs_response['AvailabilityZones']]
 
         # Prompt for capacity settings
-        min_size, desired_capacity, max_size = self.prompt_capacity_settings()
+        #declare default value
+        min_size, desired_capacity, max_size = (1, 1, 3)
+       # min_size, desired_capacity, max_size = self.prompt_capacity_settings()
 
         # Update ASG naming format to include random 4-character suffix
         asg_name = f"asg-{cred_info.account_name}-{strategy}-{suffix}"

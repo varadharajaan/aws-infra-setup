@@ -14,9 +14,18 @@ from typing import Dict, List, Optional, Tuple
 import logging
 import glob
 from collections import defaultdict
-from eks_cluster_manager import EKSClusterManager, Colors
+from eks_cluster_manager import EKSClusterManager
 from complete_autoscaler_deployment import CompleteAutoscalerDeployer
 
+class Colors:
+    GREEN = '\033[92m'
+    RED = '\033[91m'
+    YELLOW = '\033[93m'
+    BLUE = '\033[94m'
+    CYAN = '\033[96m'
+    WHITE = '\033[97m'
+    BOLD = '\033[1m'
+    ENDC = '\033[0m'
 
 class EKSClusterContinuationFromErrors:
     """
@@ -66,7 +75,7 @@ class EKSClusterContinuationFromErrors:
         self.logger.info(
             f"EKS Cluster Continuation from Error Files initialized - Session ID: {self.execution_timestamp}")
 
-    def print_colored(self, color: str, message: str) -> None:
+    def print_colored(self, color: str, message: str, indent=0) -> None:
         """Print colored message to terminal"""
         colors = {
             'RED': '\033[0;31m',
@@ -341,18 +350,28 @@ class EKSClusterContinuationFromErrors:
         return sorted(list(indices))
 
     def extract_cluster_details(self, cluster_info: Dict) -> Tuple[str, str]:
-        """Extract cluster name and region from cluster info"""
+        """
+        Extract cluster name and region from cluster info
+        Current Date and Time (UTC - YYYY-MM-DD HH:MM:SS formatted): 2025-06-25 05:50:39
+        Current User's Login: varadharajaan
+        """
+        import re
         cluster_name = cluster_info['cluster_name']
 
-        # Try to extract region from cluster name
-        parts = cluster_name.split('-')
-        region = 'us-east-1'  # Default region
+        # Try to extract region from cluster name using regex pattern
+        # Look for AWS region pattern: us-east-1, us-west-1, eu-west-1, ap-south-1, etc.
+        region_pattern = r'(us|eu|ap|ca|sa|me|af)-(east|west|north|south|central|northeast|northwest|southeast|southwest)-\d+'
 
-        for part in parts:
-            if part.startswith('us-') or part.startswith('eu-') or part.startswith('ap-') or part.startswith(
-                    'ca-') or part.startswith('sa-'):
-                region = part
-                break
+        region_match = re.search(region_pattern, cluster_name)
+
+        if region_match:
+            region = region_match.group(0)
+            self.print_colored('YELLOW', f"Extracted region '{region}' from cluster name '{cluster_name}'")
+        else:
+            # Fallback: try to get from cluster_info if available
+            region = cluster_info.get('region', 'us-east-1')
+            self.print_colored('YELLOW',
+                               f"Could not extract region from cluster name '{cluster_name}', using fallback: {region}")
 
         return cluster_name, region
 
@@ -374,155 +393,846 @@ class EKSClusterContinuationFromErrors:
         print(f"\nAccount type detected: {account_type.upper()}")
         override = input("Override account type? (r for Root, i for IAM, Enter to keep detected): ").strip().lower()
 
+        self.show_account_summary()
+
         if override == 'r':
             account_type = 'root'
         elif override == 'i':
             account_type = 'iam'
 
         if account_type == 'root':
-            return self.get_root_credentials(cluster_name, region)
+            return self.get_root_credentials_from_cluster_legacy(cluster_name=cluster_name)
         else:
-            return self.get_iam_credentials(cluster_name, region)
+            return self.get_iam_credentials_from_cluster_legacy(cluster_name, region)
 
-    def get_root_credentials(self, cluster_name: str, region: str) -> Tuple[str, str]:
-        """Get root account credentials"""
-        if not self.aws_accounts_config:
-            raise ValueError("No AWS accounts configuration found")
-
-        # Try to match by region first
-        matching_accounts = []
-        for account_name, account_data in self.aws_accounts_config.items():
-            if account_data.get('region') == region:
-                matching_accounts.append((account_name, account_data))
-
-        if not matching_accounts:
-            # If no region match, show all accounts
-            matching_accounts = list(self.aws_accounts_config.items())
-
-        if len(matching_accounts) == 1:
-            # Auto-select if only one account
-            account_name, account_data = matching_accounts[0]
-            self.print_colored('GREEN',
-                               f"✅ Auto-selected account: {account_name} (Region: {account_data.get('region', 'unknown')})")
-        else:
-            # Let user choose
-            print(f"\nAvailable accounts for region {region}:")
-            for i, (account_name, account_data) in enumerate(matching_accounts, 1):
-                account_id = account_data.get('account_id', 'Unknown')
-                account_region = account_data.get('region', 'Unknown')
-                print(f"{i}. {account_name} (ID: {account_id}, Region: {account_region})")
-
-            while True:
-                try:
-                    choice = input(f"Select account (1-{len(matching_accounts)}): ").strip()
-                    choice_num = int(choice)
-                    if 1 <= choice_num <= len(matching_accounts):
-                        account_name, account_data = matching_accounts[choice_num - 1]
-                        break
-                    else:
-                        self.print_colored('RED', f"❌ Please enter a number between 1 and {len(matching_accounts)}")
-                except ValueError:
-                    self.print_colored('RED', "❌ Please enter a valid number")
-
-        admin_access_key = account_data.get('access_key', '')
-        admin_secret_key = account_data.get('secret_key', '')
-
-        if not admin_access_key or not admin_secret_key:
-            raise ValueError(f"Incomplete credentials for account {account_name}")
-
-        return admin_access_key, admin_secret_key
-
-    def get_iam_credentials(self, cluster_name: str, region: str) -> Tuple[str, str]:
-        """Get IAM user credentials"""
-        # Try to extract username from cluster name
-        suggested_username = None
-
-        # Look for common patterns in cluster names
-        parts = cluster_name.split('-')
-        for i, part in enumerate(parts):
-            if part in ['cluster', 'eks'] and i > 0:
-                # Username might be before 'cluster' or 'eks'
-                suggested_username = parts[i - 1]
-                break
-
-        if suggested_username:
-            print(f"\nSuggested username from cluster name: {suggested_username}")
-            use_suggested = input(f"Use '{suggested_username}' as username? (Y/n): ").strip().lower()
-            if use_suggested != 'n':
-                username = suggested_username
-            else:
-                username = input("Enter IAM username: ").strip()
-        else:
-            username = input("Enter IAM username: ").strip()
-
-        if not username:
-            raise ValueError("Username cannot be empty")
-
-        # Load IAM credentials
-        user_data = self.get_iam_credentials_file(username)
-        if not user_data:
-            raise ValueError(f"No credentials found for user {username}")
-
-        admin_access_key = user_data.get('access_key', '')
-        admin_secret_key = user_data.get('secret_key', '')
-
-        if not admin_access_key or not admin_secret_key:
-            raise ValueError(f"Incomplete credentials for user {username}")
-
-        return admin_access_key, admin_secret_key
-
-    def get_iam_credentials_file(self, username: str) -> Optional[dict]:
-        """Get IAM credentials file for the specified username"""
+    def show_account_summary(self):
+        """Show summary of all available root accounts"""
         try:
-            # Look for IAM credentials files
+            config = self._load_root_accounts_config()
+            accounts = config.get('accounts', {})
+            user_settings = config.get('user_settings', {})
+
+            self.print_colored(Colors.BOLD, "=" * 80)
+            self.print_colored(Colors.BOLD, "    AWS ROOT ACCOUNTS SUMMARY")
+            self.print_colored(Colors.BOLD, "=" * 80)
+
+            total_users = sum(acc.get('users_per_account', 0) for acc in accounts.values())
+
+            self.print_colored(Colors.CYAN, f"📊 Overview:")
+            self.print_colored(Colors.WHITE, f"   • Total Accounts: {len(accounts)}", 1)
+            self.print_colored(Colors.WHITE, f"   • Total Users: {total_users}", 1)
+
+            if user_settings:
+                default_password = user_settings.get('password', 'N/A')
+                allowed_instances = user_settings.get('allowed_instance_types', [])
+                self.print_colored(Colors.WHITE, f"   • Default Password: {default_password}", 1)
+                self.print_colored(Colors.WHITE, f"   • Allowed Instances: {len(allowed_instances)} types", 1)
+
+            self.print_colored(Colors.CYAN, f"\n📋 Accounts:")
+            for account_name, account_data in accounts.items():
+                account_id = account_data.get('account_id', 'Unknown')
+                email = account_data.get('email', 'Unknown')
+                users = account_data.get('users_per_account', 0)
+
+                self.print_colored(Colors.YELLOW, f"• {account_name}")
+                self.print_colored(Colors.WHITE, f"  ID: {account_id} | Email: {email} | Users: {users}", 1)
+
+            self.print_colored(Colors.BOLD, "=" * 80)
+
+        except Exception as e:
+            self.print_colored(Colors.RED, f"❌ Failed to show account summary: {str(e)}")
+
+    def get_iam_credentials(self, username: str = None, account_id: str = None, cluster_name: str = None) -> Tuple[
+        str, str, str]:
+        """
+        Find IAM credentials by username, account ID, or cluster name
+
+        Current Date and Time (UTC): 2025-06-24 15:48:52
+        Current User's Login: varadharajaan
+
+        Args:
+            username: IAM username to search for (optional)
+            account_id: AWS Account ID to filter by (optional) - should be actual account ID, not region
+            cluster_name: Cluster name to extract username from (optional)
+
+        Returns:
+            Tuple[access_key, secret_key, account_id]: AWS credentials and account ID
+        """
+        import glob
+        import re
+        import os
+        from datetime import datetime
+
+        try:
+            # If cluster_name provided, extract username from it
+            if cluster_name and not username:
+                username = self._extract_username_from_cluster_name(cluster_name)
+                if not username:
+                    raise ValueError(f"Could not extract username from cluster name: {cluster_name}")
+                self.print_colored(Colors.GREEN, f"🎯 Extracted username from cluster: {username}")
+
+            # If no username provided, show available users and prompt
+            if not username:
+                print(f"\n🔍 No username provided. Let's find your credentials...")
+                self._show_available_users()
+                username = input("\n📝 Enter your username: ").strip()
+
+                if not username:
+                    raise ValueError("Username is required")
+
+            # Validate account_id is not a region
+            if account_id and any(region_part in account_id for region_part in ['us-', 'eu-', 'ap-', 'sa-', 'ca-']):
+                self.print_colored(Colors.YELLOW, f"⚠️ Account ID looks like a region ({account_id}), ignoring filter")
+                account_id = None
+
+            # Find credential files
             iam_dir = "aws/iam"
             if not os.path.exists(iam_dir):
-                self.print_colored('RED', f"❌ IAM directory not found: {iam_dir}")
-                return None
+                raise ValueError(f"IAM directory '{iam_dir}' not found")
 
-            # Find credential files for this user
             pattern = f"{iam_dir}/iam_users_credentials_*.json"
             credential_files = glob.glob(pattern)
 
             if not credential_files:
-                self.print_colored('RED', f"❌ No IAM credential files found in {iam_dir}")
-                return None
+                raise ValueError(f"No IAM credential files found in {iam_dir} matching pattern: {pattern}")
 
-            # Sort files by timestamp (newest first)
-            credential_files.sort(reverse=True)
-
-            # Try to find the user in the latest file first
+            # Parse and sort files by timestamp
+            parsed_files = []
             for file_path in credential_files:
+                timestamp_str = self._extract_timestamp_from_filename(file_path)
+                if timestamp_str:
+                    try:
+                        # Parse timestamp from filename (format: YYYYMMDD_HHMMSS)
+                        timestamp = datetime.strptime(timestamp_str, "%Y%m%d_%H%M%S")
+                        parsed_files.append((file_path, timestamp, timestamp_str))
+                    except ValueError:
+                        # If timestamp parsing fails, use file modification time
+                        mod_time = datetime.fromtimestamp(os.path.getmtime(file_path))
+                        parsed_files.append((file_path, mod_time, "unknown"))
+                else:
+                    # Fallback to file modification time
+                    mod_time = datetime.fromtimestamp(os.path.getmtime(file_path))
+                    parsed_files.append((file_path, mod_time, "unknown"))
+
+            # Sort by timestamp (newest first)
+            parsed_files.sort(key=lambda x: x[1], reverse=True)
+
+            # Select credential file
+            selected_file = self._select_credential_file(parsed_files, username)
+
+            # Search the selected file
+            return self._search_credentials_in_file(selected_file, username, account_id, cluster_name)
+
+        except Exception as e:
+            self.print_colored(Colors.RED, f"❌ Error loading IAM credentials: {str(e)}")
+            raise ValueError(f"Error accessing credentials: {str(e)}")
+
+    def _extract_timestamp_from_filename(self, file_path: str) -> str:
+        """Extract timestamp from filename like iam_users_credentials_20250619_180944.json"""
+        try:
+            import re
+            import os
+
+            filename = os.path.basename(file_path)
+            # Pattern: iam_users_credentials_YYYYMMDD_HHMMSS.json
+            match = re.search(r'(\d{8}_\d{6})', filename)
+            if match:
+                return match.group(1)
+            return None
+        except Exception:
+            return None
+
+    def _select_credential_file(self, parsed_files: list, username: str) -> str:
+        """Interactive file selection with timestamp display"""
+        try:
+            if len(parsed_files) == 1:
+                file_path, timestamp, timestamp_str = parsed_files[0]
+                formatted_time = timestamp.strftime("%Y-%m-%d %H:%M:%S")
+                self.print_colored(Colors.GREEN,
+                                   f"✅ Using credential file: {os.path.basename(file_path)} ({formatted_time})")
+                return file_path
+
+            # Multiple files - show selection
+            self.print_colored(Colors.CYAN, f"\n📁 Found {len(parsed_files)} IAM credential files:")
+            self.print_colored(Colors.CYAN, "=" * 80)
+
+            for i, (file_path, timestamp, timestamp_str) in enumerate(parsed_files, 1):
+                filename = os.path.basename(file_path)
+                formatted_time = timestamp.strftime("%Y-%m-%d %H:%M:%S")
+
+                # Highlight the latest (default) file
+                if i == 1:
+                    self.print_colored(Colors.YELLOW, f"{i}. {formatted_time} - {filename} [LATEST - DEFAULT]")
+                else:
+                    self.print_colored(Colors.WHITE, f"{i}. {formatted_time} - {filename}")
+
+            self.print_colored(Colors.CYAN, "=" * 80)
+
+            # Get user selection
+            while True:
                 try:
-                    with open(file_path, 'r') as f:
-                        all_users = json.load(f)
+                    choice = input(f"📁 Select credential file (1-{len(parsed_files)}, Enter for latest): ").strip()
 
-                    # Find the specific user
-                    for user in all_users:
-                        if user.get('username', '').lower() == username.lower():
-                            filename = os.path.basename(file_path)
-                            timestamp_part = filename.replace('iam_users_credentials_', '').replace('.json', '')
-                            try:
-                                timestamp_obj = datetime.strptime(timestamp_part, '%Y%m%d_%H%M%S')
-                                formatted_timestamp = timestamp_obj.strftime('%Y-%m-%d %H:%M:%S')
-                            except:
-                                formatted_timestamp = timestamp_part
+                    # Default to latest (first in list)
+                    if not choice:
+                        choice = "1"
 
-                            self.print_colored('GREEN',
-                                               f"✅ Found credentials for {username} in file: {filename} ({formatted_timestamp})")
-                            return user
+                    choice_num = int(choice)
 
-                except Exception as e:
-                    self.logger.error(f"Error reading IAM file {file_path}: {str(e)}")
+                    if 1 <= choice_num <= len(parsed_files):
+                        selected_file = parsed_files[choice_num - 1][0]
+                        selected_timestamp = parsed_files[choice_num - 1][1].strftime("%Y-%m-%d %H:%M:%S")
+
+                        self.print_colored(Colors.GREEN,
+                                           f"✅ Selected: {os.path.basename(selected_file)} ({selected_timestamp})")
+                        return selected_file
+                    else:
+                        self.print_colored(Colors.RED, f"❌ Please enter a number between 1 and {len(parsed_files)}")
+
+                except ValueError:
+                    self.print_colored(Colors.RED, "❌ Please enter a valid number or press Enter for default")
+                except KeyboardInterrupt:
+                    self.print_colored(Colors.RED, "\n❌ Selection cancelled by user")
+                    # Default to latest file
+                    return parsed_files[0][0]
+
+        except Exception as e:
+            self.print_colored(Colors.RED, f"❌ File selection failed: {str(e)}")
+            # Fallback to latest file
+            return parsed_files[0][0]
+
+    def _search_credentials_in_file(self, file_path: str, username: str, account_id: str = None,
+                                    cluster_name: str = None) -> Tuple[str, str, str]:
+        """Search for credentials in a specific file"""
+        try:
+            import os
+
+            self.print_colored(Colors.BLUE, f"📁 Checking file: {os.path.basename(file_path)}")
+
+            with open(file_path, 'r', encoding='utf-8') as f:
+                credential_data = json.load(f)
+
+            # Look for users within each account
+            accounts = credential_data.get('accounts', {})
+
+            for account_name, account_data in accounts.items():
+                current_account_id = account_data.get('account_id', '')
+
+                # Check account ID filter if specified (and valid)
+                if account_id and current_account_id != account_id:
                     continue
 
-            self.print_colored('RED', f"❌ User '{username}' not found in any credential files")
+                # Search for matching username in this account's users
+                users = account_data.get('users', [])
+
+                for user in users:
+                    user_username = user.get('username', '')
+
+                    # Case-insensitive username matching
+                    if user_username.lower() == username.lower():
+                        # Found the user!
+                        access_key = user.get('access_key_id', '').strip()
+                        secret_key = user.get('secret_access_key', '').strip()
+                        region = user.get('region', 'us-east-1')
+                        real_user = user.get('real_user', {})
+
+                        if not access_key or not secret_key:
+                            raise ValueError(f"Incomplete credentials for user {username} in account {account_name}")
+
+                        # Success! Print detailed info
+                        self.print_colored(Colors.GREEN, "✅ IAM CREDENTIALS FOUND!")
+                        self.print_colored(Colors.WHITE, f"📋 User Details:")
+                        self.print_colored(Colors.WHITE, f"   • Username: {user_username}", 1)
+                        self.print_colored(Colors.WHITE, f"   • Account: {account_name} ({current_account_id})", 1)
+                        self.print_colored(Colors.WHITE, f"   • Region: {region}", 1)
+                        self.print_colored(Colors.WHITE, f"   • File: {os.path.basename(file_path)}", 1)
+
+                        if cluster_name:
+                            self.print_colored(Colors.WHITE, f"   • Cluster: {cluster_name}", 1)
+
+                        if real_user:
+                            self.print_colored(Colors.WHITE, f"   • Real User: {real_user.get('full_name', 'N/A')}", 1)
+                            self.print_colored(Colors.WHITE, f"   • Email: {real_user.get('email', 'N/A')}", 1)
+
+                        self.print_colored(Colors.WHITE, f"   • Access Key: {access_key[:8]}...", 1)
+                        self.print_colored(Colors.WHITE, f"   • Secret Key: {secret_key[:8]}...", 1)
+                        self.print_colored(Colors.CYAN, f"   • Console URL: {user.get('console_url', 'N/A')}", 1)
+
+                        return access_key, secret_key, current_account_id
+
+            # If we get here, user was not found in this file
+            error_msg = f"User '{username}' not found in file {os.path.basename(file_path)}"
+            if account_id:
+                error_msg += f" for account ID {account_id}"
+
+            raise ValueError(error_msg)
+
+        except json.JSONDecodeError as e:
+            self.print_colored(Colors.RED, f"❌ Error reading {file_path}: Invalid JSON - {str(e)}")
+            raise ValueError(f"Invalid JSON in credential file: {str(e)}")
+        except Exception as e:
+            self.print_colored(Colors.RED, f"❌ Error processing {file_path}: {str(e)}")
+            raise
+
+    def _show_available_users(self):
+        """Show available users from credential files to help user choose"""
+        try:
+            import glob
+            import os
+            from datetime import datetime
+
+            iam_dir = "aws/iam"
+            pattern = f"{iam_dir}/iam_users_credentials_*.json"
+            credential_files = glob.glob(pattern)
+
+            if not credential_files:
+                self.print_colored(Colors.RED, f"No credential files found in {iam_dir}")
+                return
+
+            # Parse and sort files by timestamp (newest first)
+            parsed_files = []
+            for file_path in credential_files:
+                timestamp_str = self._extract_timestamp_from_filename(file_path)
+                if timestamp_str:
+                    try:
+                        timestamp = datetime.strptime(timestamp_str, "%Y%m%d_%H%M%S")
+                        parsed_files.append((file_path, timestamp))
+                    except ValueError:
+                        mod_time = datetime.fromtimestamp(os.path.getmtime(file_path))
+                        parsed_files.append((file_path, mod_time))
+                else:
+                    mod_time = datetime.fromtimestamp(os.path.getmtime(file_path))
+                    parsed_files.append((file_path, mod_time))
+
+            # Sort by timestamp (newest first)
+            parsed_files.sort(key=lambda x: x[1], reverse=True)
+
+            self.print_colored(Colors.CYAN, "\n📋 Available IAM Users (from latest file):")
+            self.print_colored(Colors.CYAN, "=" * 60)
+
+            # Show users from the latest file only
+            latest_file = parsed_files[0][0]
+            latest_timestamp = parsed_files[0][1].strftime("%Y-%m-%d %H:%M:%S")
+
+            self.print_colored(Colors.BLUE, f"📁 File: {os.path.basename(latest_file)} ({latest_timestamp})")
+
+            user_count = 0
+            try:
+                with open(latest_file, 'r', encoding='utf-8') as f:
+                    credential_data = json.load(f)
+
+                accounts = credential_data.get('accounts', {})
+
+                for account_name, account_data in accounts.items():
+                    account_id = account_data.get('account_id', '')
+                    users = account_data.get('users', [])
+
+                    if users:
+                        self.print_colored(Colors.YELLOW, f"\n🏢 {account_name} ({account_id}):")
+
+                        for user in users:
+                            username = user.get('username', '')
+                            real_user = user.get('real_user', {})
+                            region = user.get('region', '')
+
+                            real_name = real_user.get('full_name', 'N/A')
+
+                            self.print_colored(Colors.WHITE, f"   • {username} ({real_name}) - {region}", 1)
+                            user_count += 1
+
+            except Exception as e:
+                self.print_colored(Colors.RED, f"Error reading {latest_file}: {str(e)}")
+
+            self.print_colored(Colors.CYAN, "=" * 60)
+            self.print_colored(Colors.CYAN, f"Total users shown: {user_count}")
+
+            if len(parsed_files) > 1:
+                self.print_colored(Colors.YELLOW,
+                                   f"💡 Note: {len(parsed_files)} credential files available - latest shown above")
+
+        except Exception as e:
+            self.print_colored(Colors.RED, f"Error showing available users: {str(e)}")
+
+    def show_all_credential_files(self):
+        """Show all available credential files with timestamps"""
+        try:
+            import glob
+            import os
+            from datetime import datetime
+
+            iam_dir = "aws/iam"
+            pattern = f"{iam_dir}/iam_users_credentials_*.json"
+            credential_files = glob.glob(pattern)
+
+            if not credential_files:
+                self.print_colored(Colors.RED, f"No credential files found in {iam_dir}")
+                return
+
+            # Parse and sort files by timestamp
+            parsed_files = []
+            for file_path in credential_files:
+                timestamp_str = self._extract_timestamp_from_filename(file_path)
+                if timestamp_str:
+                    try:
+                        timestamp = datetime.strptime(timestamp_str, "%Y%m%d_%H%M%S")
+                        parsed_files.append((file_path, timestamp, timestamp_str))
+                    except ValueError:
+                        mod_time = datetime.fromtimestamp(os.path.getmtime(file_path))
+                        parsed_files.append((file_path, mod_time, "modified"))
+                else:
+                    mod_time = datetime.fromtimestamp(os.path.getmtime(file_path))
+                    parsed_files.append((file_path, mod_time, "modified"))
+
+            # Sort by timestamp (newest first)
+            parsed_files.sort(key=lambda x: x[1], reverse=True)
+
+            self.print_colored(Colors.BOLD, "=" * 80)
+            self.print_colored(Colors.BOLD, "    IAM CREDENTIAL FILES SUMMARY")
+            self.print_colored(Colors.BOLD, "=" * 80)
+            self.print_colored(Colors.CYAN, f"    Current Date: 2025-06-24 15:44:27 UTC")
+            self.print_colored(Colors.CYAN, f"    Current User: varadharajaan")
+            self.print_colored(Colors.BOLD, "=" * 80)
+
+            for i, (file_path, timestamp, timestamp_type) in enumerate(parsed_files, 1):
+                filename = os.path.basename(file_path)
+                formatted_time = timestamp.strftime("%Y-%m-%d %H:%M:%S")
+                file_size = os.path.getsize(file_path)
+
+                if i == 1:
+                    self.print_colored(Colors.GREEN, f"{formatted_time} - {filename} [LATEST] ({file_size} bytes)")
+                else:
+                    self.print_colored(Colors.WHITE, f"{formatted_time} - {filename} ({file_size} bytes)")
+
+            self.print_colored(Colors.BOLD, "=" * 80)
+            self.print_colored(Colors.CYAN, f"📊 Total files: {len(parsed_files)}")
+
+        except Exception as e:
+            self.print_colored(Colors.RED, f"❌ Error showing credential files: {str(e)}")
+
+    def get_iam_credentials_from_cluster(self, cluster_name: str, region: str = None) -> Tuple[str, str, str]:
+        """
+        Extract username from cluster name and get IAM credentials
+
+        Current Date and Time (UTC): 2025-06-24 15:37:19
+        Current User's Login: varadharajaan
+
+        Args:
+            cluster_name: EKS cluster name with embedded username (e.g., eks-cluster-account03_clouduser01-us-east-1-diox)
+            region: AWS region (optional)
+
+        Returns:
+            Tuple[access_key, secret_key, account_id]: AWS credentials and account ID
+        """
+        try:
+            # Extract username from cluster name
+            username = self._extract_username_from_cluster_name(cluster_name)
+
+            if not username:
+                raise ValueError(f"Could not extract username from cluster name: {cluster_name}")
+
+            self.print_colored(Colors.GREEN, f"🎯 Extracted username from cluster: {username}")
+
+            # If region not provided, try to extract from cluster name
+            if not region:
+                region = self._extract_region_from_cluster_name(cluster_name)
+                if region:
+                    self.print_colored(Colors.GREEN, f"🌍 Extracted region from cluster: {region}")
+
+            # Get credentials using the extracted username (NO account_id filter)
+            return self.get_iam_credentials(username=username, account_id=None, cluster_name=cluster_name)
+
+        except Exception as e:
+            self.print_colored(Colors.RED, f"❌ Error extracting credentials from cluster '{cluster_name}': {str(e)}")
+            raise ValueError(f"Error extracting credentials from cluster '{cluster_name}': {str(e)}")
+
+    # Alternative method that returns only 2 values for backward compatibility
+    def get_iam_credentials_legacy(self, username: str = None, account_id: str = None, cluster_name: str = None) -> \
+    Tuple[str, str]:
+        """
+        Legacy method that returns only access_key and secret_key (for backward compatibility)
+
+        Returns:
+            Tuple[access_key, secret_key]: AWS credentials (without account_id)
+        """
+        try:
+            access_key, secret_key, account_id = self.get_iam_credentials(username, account_id, cluster_name)
+            return access_key, secret_key
+        except Exception as e:
+            raise e
+
+    def get_iam_credentials_from_cluster_legacy(self, cluster_name: str, region: str = None) -> Tuple[str, str]:
+        """
+        Legacy method that returns only access_key and secret_key (for backward compatibility)
+
+        Returns:
+            Tuple[access_key, secret_key]: AWS credentials (without account_id)
+        """
+        try:
+            access_key, secret_key, account_id = self.get_iam_credentials_from_cluster(cluster_name, region)
+            return access_key, secret_key
+        except Exception as e:
+            raise e
+
+    def get_root_credentials_from_cluster_legacy(self, cluster_name: str = None, region: str = None, account_id: str = None) -> Tuple[
+        str, str]:
+        """
+        Legacy method that returns only access_key and secret_key (for backward compatibility)
+
+        Returns:
+            Tuple[access_key, secret_key]: Root AWS credentials (without account_id)
+        """
+        try:
+            access_key, secret_key, _ = self.get_root_credentials(cluster_name, region, account_id)
+            return access_key, secret_key
+        except Exception as e:
+            raise e
+
+    def get_root_credentials(self, cluster_name: str = None, region: str = None, account_id: str = None) -> Tuple[
+        str, str, str]:
+        """
+        Get root account credentials from accounts config JSON
+
+        Current Date and Time (UTC): 2025-06-24 15:27:01
+        Current User's Login: varadharajaan
+
+        Args:
+            cluster_name: EKS cluster name (optional - used for auto-detection)
+            region: AWS region (optional)
+            account_id: Specific account ID to filter by (optional)
+
+        Returns:
+            Tuple[access_key, secret_key, account_id]: Root AWS credentials and account ID
+        """
+        try:
+            # Load root credentials from file if not already loaded
+            if not hasattr(self, 'aws_accounts_config') or not self.aws_accounts_config:
+                self.aws_accounts_config = self._load_root_accounts_config()
+
+            if not self.aws_accounts_config or not self.aws_accounts_config.get("accounts"):
+                raise ValueError("No AWS root accounts configuration found or invalid format")
+
+            # Get accounts dictionary
+            accounts = self.aws_accounts_config.get("accounts", {})
+            if not accounts:
+                raise ValueError("No accounts found in AWS root accounts configuration")
+
+            self.print_colored(Colors.CYAN, f"🔍 Found {len(accounts)} root accounts in configuration")
+
+            # Strategy 1: Filter by specific account ID if provided
+            if account_id:
+                matching_accounts = []
+                for account_name, account_data in accounts.items():
+                    if account_data.get('account_id') == account_id:
+                        matching_accounts.append((account_name, account_data))
+
+                if not matching_accounts:
+                    raise ValueError(f"No account found with ID: {account_id}")
+
+                self.print_colored(Colors.GREEN, f"✅ Found account by ID: {account_id}")
+
+            # Strategy 2: Try to extract account name from cluster name
+            elif cluster_name:
+                account_name_from_cluster = self._extract_account_from_cluster_name(cluster_name)
+                matching_accounts = []
+
+                if account_name_from_cluster and account_name_from_cluster in accounts:
+                    matching_accounts.append((account_name_from_cluster, accounts[account_name_from_cluster]))
+                    self.print_colored(Colors.GREEN,
+                                       f"🎯 Detected account from cluster name: {account_name_from_cluster}")
+                else:
+                    # Include all accounts if no match
+                    matching_accounts = list(accounts.items())
+                    self.print_colored(Colors.YELLOW, f"⚠️ Could not detect account from cluster name: {cluster_name}")
+
+            # Strategy 3: Show all accounts
+            else:
+                matching_accounts = list(accounts.items())
+                self.print_colored(Colors.BLUE, "📋 No filters provided, showing all accounts")
+
+            # Auto-select if only one account matches
+            if len(matching_accounts) == 1:
+                account_name, account_data = matching_accounts[0]
+                account_id = account_data.get('account_id', 'unknown')
+                self.print_colored(Colors.GREEN, f"✅ Auto-selected account: {account_name} (ID: {account_id})")
+
+            # Let user choose from multiple accounts
+            else:
+                account_name, account_data = self._interactive_account_selection(matching_accounts)
+
+            # Extract and validate credentials
+            access_key = account_data.get('access_key', '').strip()
+            secret_key = account_data.get('secret_key', '').strip()
+            account_id = account_data.get('account_id', '').strip()
+            account_email = account_data.get('email', 'N/A')
+            users_count = account_data.get('users_per_account', 0)
+
+            # Validate credentials
+            if not access_key or not secret_key or not account_id:
+                raise ValueError(f"Incomplete root credentials for account {account_name}")
+
+            if not isinstance(access_key, str) or not isinstance(secret_key, str):
+                raise ValueError(f"Invalid credential format for account {account_name}")
+
+            # Success! Print detailed info
+            self.print_colored(Colors.GREEN, "✅ ROOT CREDENTIALS LOADED!")
+            self.print_colored(Colors.WHITE, f"📋 Account Details:")
+            self.print_colored(Colors.WHITE, f"   • Account Name: {account_name}", 1)
+            self.print_colored(Colors.WHITE, f"   • Account ID: {account_id}", 1)
+            self.print_colored(Colors.WHITE, f"   • Email: {account_email}", 1)
+            self.print_colored(Colors.WHITE, f"   • Users: {users_count}", 1)
+            self.print_colored(Colors.WHITE, f"   • Access Key: {access_key[:8]}...", 1)
+            self.print_colored(Colors.WHITE, f"   • Secret Key: {secret_key[:8]}...", 1)
+
+            if region:
+                self.print_colored(Colors.WHITE, f"   • Region: {region}", 1)
+
+            return access_key, secret_key, account_id
+
+        except Exception as e:
+            self.print_colored(Colors.RED, f"❌ Error loading root credentials: {str(e)}")
+            raise ValueError(f"Error accessing root credentials: {str(e)}")
+
+    def _load_root_accounts_config(self) -> dict:
+        """Load root accounts configuration from JSON file"""
+        try:
+            import glob
+
+            # Look for root credentials files
+            root_dir = "."
+            patterns = [
+                f"{root_dir}/root_accounts_*.json",
+                f"{root_dir}/aws_accounts_*.json",
+                "aws/root_accounts.json",
+                "aws_accounts.json",
+                "root_accounts.json",
+                "aws_accounts_config.json"
+            ]
+
+            credential_files = []
+            for pattern in patterns:
+                credential_files.extend(glob.glob(pattern))
+
+            # Remove duplicates and sort by newest
+            credential_files = sorted(list(set(credential_files)), reverse=True)
+
+            if not credential_files:
+                raise ValueError(f"No root account files found. Searched patterns: {patterns}")
+
+            # Try to load the first (newest) file
+            for file_path in credential_files:
+                try:
+                    self.print_colored(Colors.BLUE, f"📁 Loading root accounts from: {file_path}")
+
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        config = json.load(f)
+
+                    # Validate structure
+                    if not config.get('accounts'):
+                        continue
+
+                    self.print_colored(Colors.GREEN, f"✅ Successfully loaded root accounts configuration")
+                    return config
+
+                except json.JSONDecodeError as e:
+                    self.print_colored(Colors.RED, f"❌ Invalid JSON in {file_path}: {str(e)}")
+                    continue
+                except Exception as e:
+                    self.print_colored(Colors.RED, f"❌ Error reading {file_path}: {str(e)}")
+                    continue
+
+            raise ValueError("No valid root account configuration files found")
+
+        except Exception as e:
+            self.print_colored(Colors.RED, f"❌ Failed to load root accounts config: {str(e)}")
+            raise
+
+    def _extract_username_from_cluster_name(self, cluster_name: str) -> str:
+        """
+        Extract username from cluster name patterns
+
+        Supported patterns:
+        - eks-cluster-{username}-{region}-{suffix}
+        - eks-cluster-{username}-{suffix}
+
+        Examples:
+        - eks-cluster-account03_clouduser01-us-east-1-diox → account03_clouduser01
+        - eks-cluster-account02_clouduser05-ap-south-1-xyz → account02_clouduser05
+        """
+        try:
+            if not cluster_name:
+                return None
+
+            self.print_colored(Colors.BLUE, f"🔍 Parsing cluster name: {cluster_name}")
+
+            # Split by hyphen
+            parts = cluster_name.split('-')
+
+            # Expected pattern: ['eks', 'cluster', 'username', 'region_part1', 'region_part2', 'suffix']
+            # Or: ['eks', 'cluster', 'username', 'suffix']
+
+            if len(parts) < 3:
+                self.print_colored(Colors.RED, f"❌ Invalid cluster name format: {cluster_name}")
+                return None
+
+            if parts[0] != 'eks' or parts[1] != 'cluster':
+                self.print_colored(Colors.RED, f"❌ Cluster name doesn't start with 'eks-cluster': {cluster_name}")
+                return None
+
+            # The username should be the 3rd part (index 2)
+            username = parts[2]
+
+            # Validate username format (should contain account and clouduser)
+            if 'account' in username and 'clouduser' in username:
+                self.print_colored(Colors.GREEN, f"✅ Valid username format detected: {username}")
+                return username
+            else:
+                self.print_colored(Colors.YELLOW,
+                                   f"⚠️ Username doesn't match expected pattern (accountXX_clouduserXX): {username}")
+                # Still return it in case it's a valid username with different format
+                return username
+
+        except Exception as e:
+            self.print_colored(Colors.RED, f"❌ Error parsing cluster name: {str(e)}")
+            return None
+
+    def _extract_account_from_cluster_name(self, cluster_name: str) -> str:
+        """Extract account name from cluster name patterns for root credentials"""
+        try:
+            if not cluster_name:
+                return None
+
+            # Pattern 1: eks-cluster-account03_clouduser01-region-suffix
+            # Extract "account03" part
+            parts = cluster_name.split('-')
+            for part in parts:
+                if part.startswith("account") or 'account' in part:
+                    # Extract just the account part (account03)
+                    if '_' in part:
+                        account_part = part.split('_')[0]  # Get account03 from account03_clouduser01
+                        if account_part.startswith('account'):
+                            return account_part
+                    elif part.startswith('account'):
+                        return part
+
+            # Pattern 2: Look for accountXX pattern
+            import re
+            account_match = re.search(r'account\d+', cluster_name.lower())
+            if account_match:
+                return account_match.group()
+
+            return None
+
+        except Exception:
+            return None
+
+    def _extract_region_from_cluster_name(self, cluster_name: str) -> str:
+        """
+        Extract AWS region from cluster name
+
+        Examples:
+        - eks-cluster-account03_clouduser01-us-east-1-diox → us-east-1
+        - eks-cluster-account02_clouduser05-ap-south-1-xyz → ap-south-1
+        """
+        try:
+            if not cluster_name:
+                return None
+
+            # Common AWS regions pattern
+            import re
+
+            # Pattern for AWS regions: us-east-1, us-west-2, ap-south-1, eu-west-1, etc.
+            region_pattern = r'(us|eu|ap|sa|ca|me|af)-(north|south|east|west|central|southeast|northeast)-[1-9]'
+
+            match = re.search(region_pattern, cluster_name)
+            if match:
+                region = match.group()
+                self.print_colored(Colors.GREEN, f"🌍 Extracted region: {region}")
+                return region
+
+            # Fallback: try to find region-like patterns in cluster name parts
+            parts = cluster_name.split('-')
+            for i in range(len(parts) - 1):
+                # Look for patterns like us-east, us-west, ap-south
+                if i + 1 < len(parts):
+                    potential_region = f"{parts[i]}-{parts[i + 1]}"
+                    if any(potential_region.startswith(prefix) for prefix in ['us-', 'eu-', 'ap-', 'sa-', 'ca-']):
+                        # Check if next part looks like a number
+                        if i + 2 < len(parts) and parts[i + 2].isdigit():
+                            region = f"{potential_region}-{parts[i + 2]}"
+                            self.print_colored(Colors.GREEN, f"🌍 Extracted region (fallback): {region}")
+                            return region
+
+            self.print_colored(Colors.YELLOW, f"⚠️ Could not extract region from cluster name: {cluster_name}")
             return None
 
         except Exception as e:
-            self.logger.error(f"Error loading IAM credentials: {str(e)}")
-            self.print_colored('RED', f"❌ Error loading IAM credentials: {str(e)}")
+            self.print_colored(Colors.RED, f"❌ Error extracting region: {str(e)}")
             return None
+
+    def _interactive_account_selection(self, matching_accounts: list) -> Tuple[str, dict]:
+        """Interactive account selection with enhanced display"""
+        try:
+            self.print_colored(Colors.CYAN, "\n📋 Available Root Accounts:")
+            self.print_colored(Colors.CYAN, "=" * 80)
+
+            # Display accounts in a nice format
+            for i, (account_name, account_data) in enumerate(matching_accounts, 1):
+                account_id = account_data.get('account_id', 'Unknown')
+                email = account_data.get('email', 'Unknown')
+                users_count = account_data.get('users_per_account', 0)
+                access_key = account_data.get('access_key', '')
+
+                self.print_colored(Colors.YELLOW, f"{i}. {account_name}")
+                self.print_colored(Colors.WHITE, f"   • Account ID: {account_id}", 1)
+                self.print_colored(Colors.WHITE, f"   • Email: {email}", 1)
+                self.print_colored(Colors.WHITE, f"   • Users: {users_count}", 1)
+                self.print_colored(Colors.WHITE,
+                                   f"   • Access Key: {access_key[:8]}..." if access_key else "   • Access Key: Not available",
+                                   1)
+                print()
+
+            self.print_colored(Colors.CYAN, "=" * 80)
+
+            # Get user selection
+            while True:
+                try:
+                    choice = input(f"🔑 Select root account (1-{len(matching_accounts)}): ").strip()
+                    choice_num = int(choice)
+
+                    if 1 <= choice_num <= len(matching_accounts):
+                        selected_account = matching_accounts[choice_num - 1]
+                        account_name, account_data = selected_account
+
+                        self.print_colored(Colors.GREEN, f"✅ Selected: {account_name}")
+                        return selected_account
+                    else:
+                        self.print_colored(Colors.RED,
+                                           f"❌ Please enter a number between 1 and {len(matching_accounts)}")
+
+                except ValueError:
+                    self.print_colored(Colors.RED, "❌ Please enter a valid number")
+                except KeyboardInterrupt:
+                    self.print_colored(Colors.RED, "\n❌ Selection cancelled by user")
+                    raise ValueError("Account selection cancelled")
+
+        except Exception as e:
+            raise ValueError(f"Account selection failed: {str(e)}")
+
+
+    def _suggest_username_from_context(self) -> str:
+        """Enhanced version that can extract from cluster names"""
+        try:
+            # This method can be called from the original get_iam_credentials
+            # when no username is provided - you can enhance this based on your needs
+
+            # For now, we could check if there are any recent cluster operations
+            # or stored cluster names that we can extract from
+
+            return None  # Will be enhanced based on your specific needs
+
+        except Exception:
+            return None
+
 
     def verify_cluster_exists(self, cluster_name: str, region: str, access_key: str, secret_key: str) -> bool:
         """Verify that the cluster exists and is accessible"""
@@ -777,7 +1487,7 @@ class EKSClusterContinuationFromErrors:
             icon = '✓' if status else '⚠️'
             self.print_colored(status_color, f"  {icon} {component}: {status_text}")
 
-    def show_main_menu(self) -> str:
+    def show_main_menu(self) -> int:
         """Show main menu and get user choice"""
         print("\n" + "=" * 60)
         print("🔧 CLUSTER CONFIGURATION MENU")
@@ -791,11 +1501,13 @@ class EKSClusterContinuationFromErrors:
         print("7. Configure Cost Monitoring")
         print("8. Generate User Instructions")
         print("9. Run Health Check")
+        print("10. configure user auth configmap")
+        print("11. add NO_DELETE protected labels to nodes")
         print("0. Exit")
         print("=" * 60)
 
-        choice = input("Enter your choice (0-9): ").strip()
-        return choice
+        choice = input("Enter your choices (0-11): ").strip()
+        return int(choice)
 
     def continue_cluster_setup_from_errors(self) -> bool:
         """Main method to continue cluster setup from error files"""
@@ -841,7 +1553,7 @@ class EKSClusterContinuationFromErrors:
                         continue
 
                     # Analyze existing components
-                    self.analyze_existing_components(cluster_name, region, admin_access_key, admin_secret_key)
+                    #self.analyze_existing_components(cluster_name, region, admin_access_key, admin_secret_key)
 
                     # Main configuration loop for this cluster
                     print(f"\n🔧 Starting configuration for {cluster_name}...")
@@ -880,46 +1592,305 @@ class EKSClusterContinuationFromErrors:
     def configure_single_cluster(self, cluster_name: str, region: str, access_key: str, secret_key: str) -> bool:
         """Configure a single cluster interactively"""
         try:
+            # Display current status
+            self.display_cluster_status()
+
             while True:
-                # Display current status
+                # Show menu and get choices
+                choice_num = self.show_main_menu()
+
+                if choice_num == 0:
+                    self.print_colored(Colors.YELLOW, "Exiting cluster configuration")
+                    return True
+                elif choice_num == 1:
+                    self.configure_nodegroups(cluster_name, region, access_key, secret_key)
+                elif choice_num == 2:
+                    self.configure_addons(cluster_name, region, access_key, secret_key)
+                elif choice_num == 3:
+                    self.configure_container_insights(cluster_name, region, access_key, secret_key)
+                elif choice_num == 4:
+                    self.configure_cluster_autoscaler(cluster_name, region, access_key, secret_key)
+                elif choice_num == 5:
+                    self.configure_scheduled_scaling(cluster_name, region, access_key, secret_key)
+                elif choice_num == 6:
+                    self.configure_cloudwatch_monitoring(cluster_name, region, access_key, secret_key)
+                elif choice_num == 7:
+                    self.configure_cost_monitoring(cluster_name, region, access_key, secret_key)
+                elif choice_num == 8:
+                    self.generate_user_instructions(cluster_name, region, access_key, secret_key)
+                elif choice_num == 9:
+                    self.run_health_check(cluster_name, region, access_key, secret_key)
+                elif choice_num == 10:
+                    # Get correct credentials for the cluster
+                    account_id = self._extract_account_from_cluster_name(cluster_name)
+                    user_data = {
+                        'username': self._extract_username_from_cluster_name(cluster_name),
+                        'email': '',
+                        'access_key_id': access_key,
+                        'secret_access_key': secret_key
+                    }
+                    is_root = 'root' in cluster_name
+
+                    # Call the configure_auth method
+                    success = self.configure_aws_auth_configmap_enhanced(
+                        cluster_name,
+                        region,
+                        account_id,
+                        user_data,
+                        access_key,
+                        secret_key,
+                        is_root
+                    )
+                    if success:
+                        self.print_colored(Colors.GREEN, f"✅ Successfully configured authentication for {cluster_name}")
+                    else:
+                        self.print_colored(Colors.YELLOW, f"⚠️ Failed to configure authentication for {cluster_name}")
+                elif choice_num == 11:
+                    self.print_colored(Colors.CYAN, "\n🔒 Setting up node protection with NO_DELETE labels...")
+                    self.eks_manager.apply_no_delete_to_matching_nodegroups(cluster_name, region, access_key, secret_key)
+                    self.eks_manager.protect_nodes_with_no_delete_label(cluster_name, region, access_key, secret_key)
+                else:
+                    self.print_colored(Colors.RED, f"❌ Invalid choice: {choice_num}")
+
+                # After processing all choices, refresh the status
+                self.analyze_existing_components(cluster_name, region, access_key, secret_key)
                 self.display_cluster_status()
 
-                # Show menu and get choice
-                choice = self.show_main_menu()
-
-                if choice == '0':
-                    self.print_colored('GREEN', f"✅ Configuration completed for {cluster_name}")
+                # Ask if user wants to continue
+                continue_choice = input("\nContinue configuring this cluster? (Y/n): ").strip().lower()
+                if continue_choice == 'n':
                     break
-                elif choice == '1':
-                    self.configure_nodegroups(cluster_name, region, access_key, secret_key)
-                elif choice == '2':
-                    self.configure_addons(cluster_name, region, access_key, secret_key)
-                elif choice == '3':
-                    self.configure_container_insights(cluster_name, region, access_key, secret_key)
-                elif choice == '4':
-                    self.configure_cluster_autoscaler(cluster_name, region, access_key, secret_key)
-                elif choice == '5':
-                    self.configure_scheduled_scaling(cluster_name, region, access_key, secret_key)
-                elif choice == '6':
-                    self.configure_cloudwatch_monitoring(cluster_name, region, access_key, secret_key)
-                elif choice == '7':
-                    self.configure_cost_monitoring(cluster_name, region, access_key, secret_key)
-                elif choice == '8':
-                    self.generate_user_instructions(cluster_name, region, access_key, secret_key)
-                elif choice == '9':
-                    self.run_health_check(cluster_name, region, access_key, secret_key)
-                else:
-                    self.print_colored('YELLOW', "⚠️  Invalid choice. Please try again.")
-
-                # Re-analyze components after each action
-                self.analyze_existing_components(cluster_name, region, access_key, secret_key)
-
-                input("\nPress Enter to continue...")
 
             return True
 
         except Exception as e:
-            self.logger.error(f"Error configuring cluster {cluster_name}: {str(e)}")
+            self.logger.error(f"Error configuring cluster: {str(e)}")
+            self.print_colored('RED', f"❌ Error configuring cluster: {str(e)}")
+            return False
+
+    def configure_aws_auth_configmap_enhanced(self, cluster_name: str, region: str, account_id: str, user_data: Dict,
+                                              admin_access_key: str, admin_secret_key: str,
+                                              is_root_cluster: bool) -> bool:
+        """
+        Enhanced configure aws-auth ConfigMap with better root/IAM detection
+        """
+        try:
+            self.logger.info(f"Configuring aws-auth ConfigMap for cluster {cluster_name}")
+            self.print_colored('CYAN', f"   🔐 Configuring aws-auth ConfigMap...")
+
+            # Create admin session for configuring the cluster
+            admin_session = boto3.Session(
+                aws_access_key_id=admin_access_key,
+                aws_secret_access_key=admin_secret_key,
+                region_name=region
+            )
+
+            eks_client = admin_session.client('eks')
+
+            # Get cluster details
+            cluster_info = eks_client.describe_cluster(name=cluster_name)
+
+            # Prepare user entries based on cluster creator type (from naming pattern)
+            users_to_add = []
+            principals_to_add = []
+
+            if is_root_cluster:
+                # If created by root user, only add root user access
+                root_arn = f"arn:aws:iam::{account_id}:root"
+                users_to_add.append({
+                    'userarn': root_arn,
+                    'username': 'root-user',
+                    'groups': ['system:masters']
+                })
+                principals_to_add.append(root_arn)
+                self.print_colored('CYAN', f"   👑 Root-created cluster - configuring root access only")
+            else:
+                # If created by IAM user, add both IAM user and root user access
+                username = user_data.get('username', 'unknown')
+                user_arn = f"arn:aws:iam::{account_id}:user/{username}"
+                root_arn = f"arn:aws:iam::{account_id}:root"
+
+                users_to_add.extend([
+                    {
+                        'userarn': user_arn,
+                        'username': username,
+                        'groups': ['system:masters']
+                    },
+                    {
+                        'userarn': root_arn,
+                        'username': 'root-user',
+                        'groups': ['system:masters']
+                    }
+                ])
+                principals_to_add.extend([user_arn, root_arn])
+                self.print_colored('CYAN', f"   👤 IAM-created cluster: {username} - configuring IAM user + root access")
+
+            # Check cluster authentication mode
+            access_config = cluster_info['cluster'].get('accessConfig', {})
+            auth_mode = access_config.get('authenticationMode', 'CONFIG_MAP')
+
+            self.print_colored('CYAN', f"   📋 Cluster authentication mode: {auth_mode}")
+
+            # If cluster uses CONFIG_MAP mode or API mode failed, create/update aws-auth ConfigMap
+            if auth_mode in ['CONFIG_MAP', 'API_AND_CONFIG_MAP']:
+                return self.apply_configmap_with_kubectl(cluster_name, region, account_id, users_to_add,
+                                                         admin_access_key, admin_secret_key, is_root_cluster, user_data)
+            else:
+                return True  # If only API mode, access entries are sufficient
+
+        except Exception as e:
+            error_msg = str(e)
+            self.logger.error(f"Failed to configure aws-auth ConfigMap for {cluster_name}: {error_msg}")
+            self.print_colored('RED', f"   ❌ ConfigMap configuration failed: {error_msg}")
+            return False
+
+    def apply_configmap_with_kubectl(self, cluster_name: str, region: str, account_id: str, users_to_add: List[Dict],
+                                     admin_access_key: str, admin_secret_key: str, is_root_cluster: bool,
+                                     user_data: Dict) -> bool:
+        """
+        Apply ConfigMap using kubectl with enhanced error handling
+        """
+        try:
+            self.print_colored('CYAN', "   📋 Creating/updating aws-auth ConfigMap...")
+            import yaml
+            import tempfile
+            import subprocess
+            import shutil
+
+            # Check if kubectl is available
+            kubectl_available = shutil.which('kubectl') is not None
+
+            if not kubectl_available:
+                self.print_colored('YELLOW', f"   ⚠️  kubectl not found. ConfigMap setup skipped.")
+                return True
+
+            # Create aws-auth ConfigMap YAML
+            aws_auth_config = {
+                'apiVersion': 'v1',
+                'kind': 'ConfigMap',
+                'metadata': {
+                    'name': 'aws-auth',
+                    'namespace': 'kube-system'
+                },
+                'data': {
+                    'mapRoles': yaml.dump([
+                        {
+                            'rolearn': f"arn:aws:iam::{account_id}:role/NodeInstanceRole",
+                            'username': 'system:node:{{EC2PrivateDNSName}}',
+                            'groups': ['system:bootstrappers', 'system:nodes']
+                        }
+                    ], default_flow_style=False),
+                    'mapUsers': yaml.dump(users_to_add, default_flow_style=False)
+                }
+            }
+
+            # Save ConfigMap YAML
+            temp_dir = tempfile.gettempdir()
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            configmap_file = os.path.join(temp_dir, f"aws-auth-{cluster_name}-{timestamp}.yaml")
+
+            try:
+                with open(configmap_file, 'w') as f:
+                    yaml.dump(aws_auth_config, f)
+                self.logger.info(f"Created ConfigMap file: {configmap_file}")
+            except Exception as e:
+                self.print_colored('RED', f"   ❌ Failed to create ConfigMap file: {str(e)}")
+                return False
+
+            # Apply ConfigMap with enhanced error handling
+            env = os.environ.copy()
+            env['AWS_ACCESS_KEY_ID'] = admin_access_key
+            env['AWS_SECRET_ACCESS_KEY'] = admin_secret_key
+            env['AWS_DEFAULT_REGION'] = region
+
+            try:
+                # Update kubeconfig
+                update_cmd = [
+                    'aws', 'eks', 'update-kubeconfig',
+                    '--region', region,
+                    '--name', cluster_name,
+                    '--overwrite-existing'
+                ]
+
+                self.print_colored('CYAN', f"   🔄 Updating kubeconfig...")
+                update_result = subprocess.run(update_cmd, env=env, capture_output=True, text=True, timeout=120)
+
+                if update_result.returncode != 0:
+                    self.print_colored('RED', f"   ❌ Failed to update kubeconfig: {update_result.stderr}")
+                    return False
+
+                # Apply ConfigMap with multiple fallback strategies
+                apply_strategies = [
+                    # Strategy 1: Standard apply with validation disabled
+                    ['kubectl', 'apply', '-f', configmap_file, '--validate=false'],
+                    # Strategy 2: Replace with force
+                    ['kubectl', 'replace', '-f', configmap_file, '--validate=false', '--force'],
+                    # Strategy 3: Delete and create
+                    ['kubectl', 'delete', 'configmap', 'aws-auth', '-n', 'kube-system', '--ignore-not-found']
+                ]
+
+                success = False
+                for i, strategy in enumerate(apply_strategies[:2], 1):  # Try first 2 strategies
+                    self.print_colored('CYAN', f"   📋 Applying ConfigMap (strategy {i})...")
+
+                    result = subprocess.run(strategy, env=env, capture_output=True, text=True, timeout=300)
+
+                    if result.returncode == 0:
+                        self.print_colored('GREEN', f"   ✅ ConfigMap applied successfully (strategy {i})")
+                        success = True
+                        break
+                    else:
+                        self.print_colored('YELLOW', f"   ⚠️  Strategy {i} failed: {result.stderr}")
+
+                # If standard strategies failed, try delete and recreate
+                if not success:
+                    self.print_colored('CYAN', f"   🔄 Trying delete and recreate strategy...")
+
+                    # Delete existing ConfigMap
+                    delete_cmd = ['kubectl', 'delete', 'configmap', 'aws-auth', '-n', 'kube-system',
+                                  '--ignore-not-found']
+                    subprocess.run(delete_cmd, env=env, capture_output=True, text=True, timeout=60)
+
+                    # Wait a moment
+                    time.sleep(5)
+
+                    # Apply new ConfigMap
+                    create_result = subprocess.run(
+                        ['kubectl', 'apply', '-f', configmap_file, '--validate=false'],
+                        env=env, capture_output=True, text=True, timeout=300
+                    )
+
+                    if create_result.returncode == 0:
+                        self.print_colored('GREEN', f"   ✅ ConfigMap recreated successfully")
+                        success = True
+                    else:
+                        self.print_colored('RED', f"   ❌ All strategies failed: {create_result.stderr}")
+
+                if success:
+                    if is_root_cluster:
+                        self.print_colored('GREEN', f"   ✅ Root user configured for cluster access")
+                    else:
+                        username = user_data.get('username', 'unknown')
+                        self.print_colored('GREEN',
+                                           f"   ✅ User [{username}] and root user configured for cluster access")
+
+                return success
+
+            except Exception as e:
+                self.print_colored('RED', f"   ❌ Command execution failed: {str(e)}")
+                return False
+
+            finally:
+                # Clean up temporary files
+                try:
+                    if os.path.exists(configmap_file):
+                        os.remove(configmap_file)
+                        self.logger.info(f"Cleaned up temporary ConfigMap file")
+                except Exception as e:
+                    self.logger.warning(f"Failed to clean up ConfigMap file: {str(e)}")
+
+        except Exception as e:
+            self.print_colored('RED', f"   ❌ ConfigMap application failed: {str(e)}")
             return False
 
     # Include all the configuration methods from the original continuation class
@@ -1416,6 +2387,125 @@ class EKSClusterContinuationFromErrors:
             self.print_colored('RED', f"❌ Error running health check: {str(e)}")
             return False
 
+    def reconfigure_cluster(self, cluster_names: List[str]) -> bool:
+        """
+        Reconfigure existing clusters by cluster name without requiring error files
+
+        Args:
+            cluster_names: List of cluster names to reconfigure
+
+        Returns:
+            bool: True if all clusters were successfully reconfigured, False otherwise
+        """
+        try:
+            self.print_colored(Colors.CYAN, "\n🔄 RECONFIGURING EXISTING CLUSTERS")
+            self.print_colored(Colors.CYAN, "=" * 80)
+
+            if not cluster_names:
+                self.print_colored(Colors.RED, "❌ No cluster names provided")
+                return False
+
+            self.print_colored(Colors.BLUE, f"📋 Found {len(cluster_names)} clusters to reconfigure")
+
+            # Process each cluster
+            successful_reconfigures = 0
+
+            for i, cluster_name in enumerate(cluster_names, 1):
+                self.print_colored(Colors.CYAN, "\n" + "=" * 80)
+                self.print_colored(Colors.CYAN, f"🚀 PROCESSING CLUSTER {i}/{len(cluster_names)}: {cluster_name}")
+                self.print_colored(Colors.CYAN, "=" * 80)
+
+                try:
+                    # Extract region from cluster name
+                    cluster_name = cluster_name.strip()
+                    region = self._extract_region_from_cluster_name(cluster_name)
+
+                    if not region:
+                        self.print_colored(Colors.YELLOW,
+                                           f"⚠️ Could not extract region from cluster name. Please enter it manually:")
+                        region = input("Enter AWS region for this cluster: ").strip()
+                        if not region:
+                            self.print_colored(Colors.RED, f"❌ No region provided, skipping cluster {cluster_name}")
+                            continue
+
+                    self.print_colored(Colors.BLUE, f"🌐 Using region: {region}")
+
+                    # Get credentials for cluster
+                    self.print_colored(Colors.BLUE, f"🔐 Retrieving credentials for cluster {cluster_name}...")
+
+                    try:
+                        access_key, secret_key, account_id = self.get_iam_credentials_from_cluster(cluster_name, region)
+                        is_iam = True
+                        self.print_colored(Colors.GREEN, f"✅ Found IAM credentials for cluster {cluster_name}")
+                    except Exception as e1:
+                        self.print_colored(Colors.YELLOW, f"⚠️ Could not get IAM credentials: {str(e1)}")
+                        self.print_colored(Colors.YELLOW, f"⚠️ Attempting to use root credentials...")
+                        try:
+                            access_key, secret_key, account_id = self.get_root_credentials(cluster_name, region)
+                            is_iam = False
+                            self.print_colored(Colors.GREEN, f"✅ Found root credentials for cluster {cluster_name}")
+                        except Exception as e2:
+                            self.print_colored(Colors.RED,
+                                               f"❌ Failed to get any credentials for cluster {cluster_name}")
+                            self.print_colored(Colors.RED, f"❌ IAM Error: {str(e1)}")
+                            self.print_colored(Colors.RED, f"❌ Root Error: {str(e2)}")
+                            continue
+
+                    # Verify cluster exists and is accessible
+                    if not self.verify_cluster_exists(cluster_name, region, access_key, secret_key):
+                        self.print_colored(Colors.RED, f"❌ Could not access cluster {cluster_name}, skipping")
+                        continue
+
+                    # Analyze existing components
+                    self.analyze_existing_components(cluster_name, region, access_key, secret_key)
+
+                    # Configure the cluster
+                    success = self.configure_single_cluster(cluster_name, region, access_key, secret_key)
+
+                    if success:
+                        successful_reconfigures += 1
+                        self.print_colored(Colors.GREEN, f"✅ Successfully reconfigured cluster {cluster_name}")
+                    else:
+                        self.print_colored(Colors.YELLOW, f"⚠️ Partial configuration for cluster {cluster_name}")
+
+                except Exception as e:
+                    self.logger.error(f"Error reconfiguring cluster {cluster_name}: {str(e)}")
+                    self.print_colored(Colors.RED, f"❌ Error reconfiguring cluster {cluster_name}: {str(e)}")
+                    continue
+
+            # Final summary
+            print(f"\n{'=' * 80}")
+            print("📋 RECONFIGURATION SUMMARY")
+            print(f"{'=' * 80}")
+            print(f"Total clusters processed: {len(cluster_names)}")
+            print(f"Successfully reconfigured: {successful_reconfigures}")
+            print(f"Failed/Partial: {len(cluster_names) - successful_reconfigures}")
+
+            return successful_reconfigures > 0
+
+        except KeyboardInterrupt:
+            self.print_colored(Colors.YELLOW, "\n⚠️ Reconfiguration interrupted by user")
+            return False
+        except Exception as e:
+            self.logger.error(f"Error in cluster reconfiguration: {str(e)}")
+            self.print_colored(Colors.RED, f"❌ Error: {str(e)}")
+            return False
+
+    def is_root_created_cluster(self, cluster_name: str) -> bool:
+        """
+        Determine if cluster was created by root user based on naming pattern
+
+        Args:
+            cluster_name: EKS cluster name
+
+        Returns:
+            bool: True if cluster was created by root user
+        """
+        # Root pattern: eks-cluster-root-account03-us-east-1-diox
+        # IAM pattern: eks-cluster-account03_clouduser01-us-east-1-diox
+        return '-root-' in cluster_name
+
+
 
 def main():
     """Main function to run the cluster continuation script with interactive input"""
@@ -1423,8 +2513,10 @@ def main():
     print("=" * 60)
 
     try:
+        cluster_names= ['eks-cluster-account01_clouduser02-us-east-2-jiho']
         continuation = EKSClusterContinuationFromErrors()
-        success = continuation.continue_cluster_setup_from_errors()
+        #success = continuation.continue_cluster_setup_from_errors()
+        success = continuation.reconfigure_cluster(cluster_names)
 
         if success:
             print("\n✅ Cluster continuation completed successfully!")

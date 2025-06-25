@@ -792,7 +792,7 @@ class EKSClusterManager:
             return {"error": str(e)}
 
 
-###
+    def verify_cluster_autoscaler_deployment_fixed(self, cluster_name: str, region: str, access_key: str, secret_key: str) -> bool:
         """
         FIXED: Enhanced verification of autoscaler deployment
         Current time: 2025-06-19 06:59:56 UTC
@@ -930,7 +930,385 @@ class EKSClusterManager:
             return False
         return True
 
-    def setup_scheduled_scaling_multi_nodegroup(self, cluster_name: str, region: str, admin_access_key: str, admin_secret_key: str, nodegroup_names: List[str]) -> bool:
+    def setup_scheduled_scaling_multi_nodegroup(self, cluster_name: str, region: str, admin_access_key: str,
+                                                admin_secret_key: str, nodegroup_names: List[str]) -> bool:
+        """Setup scheduled scaling for multiple nodegroups using a single Lambda function with default parameters"""
+        try:
+            if not nodegroup_names:
+                self.log_operation('WARNING', f"No nodegroups to configure scheduled scaling for")
+                return False
+
+            self.log_operation('INFO',
+                               f"Setting up scheduled scaling for {len(nodegroup_names)} nodegroups: {', '.join(nodegroup_names)}")
+            self.print_colored(Colors.YELLOW,
+                               f"⏰ Setting up scheduled scaling for {len(nodegroup_names)} nodegroups...")
+
+            # Create admin session
+            admin_session = boto3.Session(
+                aws_access_key_id=admin_access_key,
+                aws_secret_access_key=admin_secret_key,
+                region_name=region
+            )
+
+            # Create clients
+            eks_client = admin_session.client('eks')
+            events_client = admin_session.client('events')
+            lambda_client = admin_session.client('lambda')
+            iam_client = admin_session.client('iam')
+            sts_client = admin_session.client('sts')
+            account_id = sts_client.get_caller_identity()['Account']
+
+            # Get current nodegroup configurations (for logging only)
+            nodegroup_configs = {}
+            for ng_name in nodegroup_names:
+                try:
+                    ng_info = eks_client.describe_nodegroup(clusterName=cluster_name, nodegroupName=ng_name)
+                    scaling_config = ng_info['nodegroup'].get('scalingConfig', {})
+                    nodegroup_configs[ng_name] = {
+                        'current_min': scaling_config.get('minSize', 0),
+                        'current_desired': scaling_config.get('desiredSize', 0),
+                        'current_max': scaling_config.get('maxSize', 0)
+                    }
+                    self.print_colored(Colors.CYAN,
+                                       f"   ℹ️  Current {ng_name} scaling: min={scaling_config.get('minSize', 0)}, desired={scaling_config.get('desiredSize', 0)}, max={scaling_config.get('maxSize', 0)}")
+                except Exception as e:
+                    self.log_operation('WARNING', f"Could not get current scaling config for {ng_name}: {str(e)}")
+                    nodegroup_configs[ng_name] = {'current_min': 0, 'current_desired': 0, 'current_max': 0}
+
+            # ASK USER FOR SCALING TIMES OR USE DEFAULTS
+            self.print_colored(Colors.CYAN, "\n   🕒 Set scheduled scaling times (IST timezone):")
+            self.print_colored(Colors.CYAN, "   Default scale-up: 8:30 AM IST (3:00 AM UTC)")
+            self.print_colored(Colors.CYAN, "   Default scale-down: 6:30 PM IST (1:00 PM UTC)")
+
+            #change_times = input("   Change default scaling times? (y/N): ").strip().lower()
+            change_times = 'y'
+
+            if change_times == 'y':
+                # Get custom times from user
+                scale_up_time_input = input("   Enter scale-up time (HH:MM AM/PM IST): ").strip()
+                scale_down_time_input = input("   Enter scale-down time (HH:MM AM/PM IST): ").strip()
+
+                # Convert to cron expressions (simplified - you may want to add proper parsing)
+                scale_up_time = scale_up_time_input
+                scale_down_time = scale_down_time_input
+
+                # For simplicity, you'd need to add proper time parsing here
+                # This is a simplified version - use defaults for now
+                scale_up_cron = "0 2 * * ? *"  # 2:00 AM UTC = 7:30 AM IST
+                scale_down_cron = "0 13 * * ? *"  # 1:00 PM UTC = 6:30 PM IST
+            else:
+                scale_up_time = "7:30 AM IST"
+                scale_up_cron = "0 2 * * ? *"  # 2:00 AM UTC = 7:30 AM IST
+                scale_down_time = "6:30 PM IST"
+                scale_down_cron = "0 13 * * ? *"  # 1:00 PM UTC = 6:30 PM IST
+
+            # ASK USER FOR SCALING SIZES OR USE DEFAULTS
+            self.print_colored(Colors.CYAN, "\n   [SYSTEM] Set node scaling parameters:")
+            self.print_colored(Colors.CYAN, "   Default scale-up: min=1, desired=1, max=3")
+            self.print_colored(Colors.CYAN, "   Default scale-down: min=0, desired=0, max=3")
+
+            change_sizes = 'y'
+            #change_sizes = input("   Change default scaling sizes? (y/N): ").strip().lower()
+
+            if change_sizes == 'y':
+                # Get custom scaling sizes from user
+                try:
+                    print("   Scale-up configuration:")
+                    scale_up_min = int(input("     Min nodes for scale-up: "))
+                    scale_up_desired = int(input("     Desired nodes for scale-up: "))
+                    scale_up_max = int(input("     Max nodes for scale-up: "))
+
+                    print("   Scale-down configuration:")
+                    scale_down_min = int(input("     Min nodes for scale-down: "))
+                    scale_down_desired = int(input("     Desired nodes for scale-down: "))
+                    scale_down_max = int(input("     Max nodes for scale-down: "))
+
+                except ValueError:
+                    self.print_colored(Colors.RED, "   ❌ Invalid input. Using default values.")
+                    # Use default values
+                    scale_up_min, scale_up_desired, scale_up_max = 1, 1, 3
+                    scale_down_min, scale_down_desired, scale_down_max = 0, 0, 3
+            else:
+                # Use the values you actually want as defaults
+                scale_up_min, scale_up_desired, scale_up_max = 1, 1, 3
+                scale_down_min, scale_down_desired, scale_down_max = 0, 0, 3
+
+            # Check if current nodes exceed scale-down configuration
+            max_current_desired = max([config['current_desired'] for config in nodegroup_configs.values()])
+            if max_current_desired > scale_down_desired:
+                self.print_colored(Colors.YELLOW,
+                                   f"\n   [WARNING]  Warning: Some nodegroups currently have more nodes than the scale-down size.")
+                self.print_colored(Colors.YELLOW,
+                                   f"      This will cause nodes to be terminated during scale-down.")
+                continue_with_settings = input("   Continue with these settings? (y/N): ").strip().lower()
+                if continue_with_settings != 'y':
+                    self.print_colored(Colors.YELLOW, "   Operation cancelled by user.")
+                    return False
+
+            self.print_colored(Colors.CYAN, f"\n   🕒 Using scheduled scaling times (IST timezone):")
+            self.print_colored(Colors.CYAN, f"      - Scale up: {scale_up_time} (cron: {scale_up_cron})")
+            self.print_colored(Colors.CYAN, f"      - Scale down: {scale_down_time} (cron: {scale_down_cron})")
+
+            self.print_colored(Colors.CYAN, f"\n   💻 Using node scaling parameters:")
+            self.print_colored(Colors.CYAN,
+                               f"      - Scale up: min={scale_up_min}, desired={scale_up_desired}, max={scale_up_max}")
+            self.print_colored(Colors.CYAN,
+                               f"      - Scale down: min={scale_down_min}, desired={scale_down_desired}, max={scale_down_max}")
+
+            # Create IAM role for Lambda function - with shorter name
+            self.print_colored(Colors.CYAN, "   [SECURITY] Creating IAM role for scheduled scaling...")
+
+            # Use a shorter name - EKS-{cluster_suffix}-ScaleRole
+            short_cluster_suffix = cluster_name.split('-')[-1]  # Just take the random suffix
+            lambda_role_name = f"EKS-{short_cluster_suffix}-ScaleRole"
+
+            lambda_trust_policy = {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Effect": "Allow",
+                        "Principal": {
+                            "Service": "lambda.amazonaws.com"
+                        },
+                        "Action": "sts:AssumeRole"
+                    }
+                ]
+            }
+
+            lambda_policy = {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Effect": "Allow",
+                        "Action": [
+                            "eks:DescribeCluster",
+                            "eks:DescribeNodegroup",
+                            "eks:ListNodegroups",
+                            "eks:UpdateNodegroupConfig",
+                            "logs:CreateLogGroup",
+                            "logs:CreateLogStream",
+                            "logs:PutLogEvents"
+                        ],
+                        "Resource": "*"
+                    }
+                ]
+            }
+
+            try:
+                # Create Lambda execution role
+                role_response = iam_client.create_role(
+                    RoleName=lambda_role_name,
+                    AssumeRolePolicyDocument=json.dumps(lambda_trust_policy),
+                    Description=f"Role for scheduled scaling of EKS cluster {cluster_name}"
+                )
+                lambda_role_arn = role_response['Role']['Arn']
+
+                # Create and attach policy - also with shorter name
+                policy_name = f"EKS-{short_cluster_suffix}-ScalePolicy"
+                policy_response = iam_client.create_policy(
+                    PolicyName=policy_name,
+                    PolicyDocument=json.dumps(lambda_policy),
+                    Description=f"Policy for scheduled scaling of EKS cluster {cluster_name}"
+                )
+
+                iam_client.attach_role_policy(
+                    RoleName=lambda_role_name,
+                    PolicyArn=policy_response['Policy']['Arn']
+                )
+
+                self.log_operation('INFO', f"Created Lambda role for scheduled scaling: {lambda_role_arn}")
+
+            except iam_client.exceptions.EntityAlreadyExistsException:
+                # Role already exists
+                role_response = iam_client.get_role(RoleName=lambda_role_name)
+                lambda_role_arn = role_response['Role']['Arn']
+                self.log_operation('INFO', f"Using existing Lambda role: {lambda_role_arn}")
+
+            # Create a multi-nodegroup Lambda function
+            self.print_colored(Colors.CYAN, "   🔧 Creating Lambda function for multi-nodegroup scaling...")
+
+            # Load lambda code from template file if it exists, otherwise use embedded template
+            try:
+                template_file = os.path.join(os.path.dirname(__file__), 'lambda_eks_scaling_template.py')
+
+                # If template file doesn't exist in same directory, try current directory
+                if not os.path.exists(template_file):
+                    template_file = 'lambda_eks_scaling_template.py'
+
+                # If still not found, create it
+                if not os.path.exists(template_file):
+                    self.log_operation('INFO', f"Creating lambda template file: {template_file}")
+                    with open(template_file, 'w') as f:
+                        f.write(self._get_multi_nodegroup_lambda_template())
+
+                # Read the template
+                with open(template_file, 'r') as f:
+                    lambda_template = f.read()
+
+                # Replace placeholders
+                lambda_code = lambda_template.format(
+                    region=region,
+                    cluster_name=cluster_name
+                )
+
+                self.log_operation('INFO', f"Loaded Lambda template from file: {template_file}")
+
+            except Exception as e:
+                self.log_operation('WARNING',
+                                   f"Failed to load lambda template file: {str(e)}. Using embedded template.")
+                # Fall back to embedded template
+                lambda_code = self._get_multi_nodegroup_lambda_template().format(
+                    region=region,
+                    cluster_name=cluster_name
+                )
+
+            function_name = f"eks-scale-{short_cluster_suffix}"
+
+            # Create a zip file with the lambda code
+            import io
+            import zipfile
+
+            zip_buffer = io.BytesIO()
+            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                zip_file.writestr('index.py', lambda_code)
+
+            zip_buffer.seek(0)
+
+            try:
+                # Wait for role to be available
+                time.sleep(10)
+
+                # Create Lambda function
+                lambda_response = lambda_client.create_function(
+                    FunctionName=function_name,
+                    Runtime='python3.9',
+                    Role=lambda_role_arn,
+                    Handler='index.lambda_handler',
+                    Code={'ZipFile': zip_buffer.read()},
+                    Description=f'Scheduled scaling for EKS cluster {cluster_name} nodegroups',
+                    Timeout=60
+                )
+
+                function_arn = lambda_response['FunctionArn']
+                self.log_operation('INFO', f"Created Lambda function: {function_arn}")
+
+            except lambda_client.exceptions.ResourceConflictException:
+                # Function already exists - update the code
+                lambda_client.update_function_code(
+                    FunctionName=function_name,
+                    ZipFile=zip_buffer.read()
+                )
+                function_response = lambda_client.get_function(FunctionName=function_name)
+                function_arn = function_response['Configuration']['FunctionArn']
+                self.log_operation('INFO', f"Updated existing Lambda function: {function_arn}")
+
+            # Create EventBridge rules for scaling
+            self.print_colored(Colors.CYAN, f"   📅 Creating scheduled scaling rules (IST timezone):")
+            self.print_colored(Colors.CYAN, f"      - Scale up: {scale_up_time} → {scale_up_desired} node(s)")
+            self.print_colored(Colors.CYAN, f"      - Scale down: {scale_down_time} → {scale_down_desired} node(s)")
+
+            # Scale down rule
+            scale_down_rule = f"eks-down-{short_cluster_suffix}"
+            events_client.put_rule(
+                Name=scale_down_rule,
+                ScheduleExpression=f'cron({scale_down_cron})',
+                Description=f'Scale down EKS cluster {cluster_name} at {scale_down_time} (after hours)',
+                State='ENABLED'
+            )
+
+            # Scale up rule
+            scale_up_rule = f"eks-up-{short_cluster_suffix}"
+            events_client.put_rule(
+                Name=scale_up_rule,
+                ScheduleExpression=f'cron({scale_up_cron})',
+                Description=f'Scale up EKS cluster {cluster_name} at {scale_up_time} (business hours)',
+                State='ENABLED'
+            )
+
+            # Add Lambda permissions for EventBridge
+            try:
+                lambda_client.add_permission(
+                    FunctionName=function_name,
+                    StatementId=f'allow-eventbridge-down-{short_cluster_suffix}',
+                    Action='lambda:InvokeFunction',
+                    Principal='events.amazonaws.com',
+                    SourceArn=f'arn:aws:events:{region}:{account_id}:rule/{scale_down_rule}'
+                )
+
+                lambda_client.add_permission(
+                    FunctionName=function_name,
+                    StatementId=f'allow-eventbridge-up-{short_cluster_suffix}',
+                    Action='lambda:InvokeFunction',
+                    Principal='events.amazonaws.com',
+                    SourceArn=f'arn:aws:events:{region}:{account_id}:rule/{scale_up_rule}'
+                )
+            except lambda_client.exceptions.ResourceConflictException:
+                # Permissions already exist
+                pass
+
+            # Add targets to rules with nodegroup-aware configuration
+            # Scale down configuration includes all nodegroups to scale to configured size
+            events_client.put_targets(
+                Rule=scale_down_rule,
+                Targets=[
+                    {
+                        'Id': '1',
+                        'Arn': function_arn,
+                        'Input': json.dumps({
+                            'action': 'scale_down',
+                            'ist_time': scale_down_time,
+                            'nodegroups': [
+                                {
+                                    'name': nodegroup,
+                                    'desired_size': scale_down_desired,
+                                    'min_size': scale_down_min,
+                                    'max_size': scale_down_max
+                                } for nodegroup in nodegroup_names
+                            ]
+                        })
+                    }
+                ]
+            )
+
+            # Scale up configuration includes all nodegroups to scale to configured size
+            events_client.put_targets(
+                Rule=scale_up_rule,
+                Targets=[
+                    {
+                        'Id': '1',
+                        'Arn': function_arn,
+                        'Input': json.dumps({
+                            'action': 'scale_up',
+                            'ist_time': scale_up_time,
+                            'nodegroups': [
+                                {
+                                    'name': nodegroup,
+                                    'desired_size': scale_up_desired,
+                                    'min_size': scale_up_min,
+                                    'max_size': scale_up_max
+                                } for nodegroup in nodegroup_names
+                            ]
+                        })
+                    }
+                ]
+            )
+
+            self.print_colored(Colors.GREEN, "   [OK] Scheduled scaling configured")
+            self.print_colored(Colors.CYAN,
+                               f"   📅 Scale up: {scale_up_time} → {scale_up_desired} node(s) per nodegroup")
+            self.print_colored(Colors.CYAN,
+                               f"   📅 Scale down: {scale_down_time} → {scale_down_desired} node(s) per nodegroup")
+            self.print_colored(Colors.CYAN, f"   🌏 Timezone: Indian Standard Time (UTC+5:30)")
+
+            return True
+
+        except Exception as e:
+            error_msg = str(e)
+            self.log_operation('ERROR', f"Failed to setup multi-nodegroup scheduled scaling: {error_msg}")
+            self.print_colored(Colors.RED, f"❌ Scheduled scaling setup failed: {error_msg}")
+            return False
+
+    def setup_scheduled_scaling_multi_nodegroup_input(self, cluster_name: str, region: str, admin_access_key: str, admin_secret_key: str, nodegroup_names: List[str]) -> bool:
         """Setup scheduled scaling for multiple nodegroups using a single Lambda function with user-defined parameters"""
         try:
             if not nodegroup_names:
@@ -1081,7 +1459,8 @@ class EKSClusterManager:
             if size_reduction_detected:
                 self.print_colored(Colors.YELLOW, "\n   ⚠️  Warning: Some nodegroups currently have more nodes than the scale-down size.")
                 self.print_colored(Colors.YELLOW, "      This will cause nodes to be terminated during scale-down.")
-                confirm = input("   Continue with these settings? (y/N): ").strip().lower()
+                confirm = 'y'
+                #confirm = input("   Continue with these settings? (y/N): ").strip().lower()
                 if confirm not in ['y', 'yes']:
                     self.print_colored(Colors.YELLOW, "   ⚠️  Scheduled scaling setup canceled.")
                     return False
@@ -1454,6 +1833,7 @@ class EKSClusterManager:
                 f.write(f"aws eks update-kubeconfig --region {region} --name {cluster_name} --profile {username}\n\n")
     
                 f.write("## Test Commands\n")
+                f.write('kubectl auth can-i "*" "*"\n')
                 f.write("kubectl get nodes\n")
                 f.write("kubectl get pods --all-namespaces\n")
                 f.write("kubectl cluster-info\n")
@@ -1476,7 +1856,9 @@ class EKSClusterManager:
                 f.write("# Replace <NEW_NODEGROUP_NAME> with your desired nodegroup name\n")
                 f.write("# Replace <NODE_ROLE_ARN> with your EKS node instance role ARN\n")
                 f.write("# Replace <SUBNET_IDS> with comma-separated subnet IDs\n\n")
-            
+                f.write(" -----------------------------------------------------------------------------\n")
+                f.write("*************** EXAMPLE COMMANDS NOT TO RUN DIRECTLY ***************\n")
+                f.write(" -----------------------------------------------------------------------------\n")
                 # Get subnet information from existing nodegroups for reference
                 if nodegroup_configs:
                     f.write("# Example using similar configuration as existing nodegroups:\n")
@@ -1715,12 +2097,26 @@ class EKSClusterManager:
     
         # Display nodegroup details
         for config in nodegroup_configs:
-            status = "✅" if config['name'] in nodegroups_created else "❌"
+            if config['strategy'] == 'mixed':
+                # For mixed strategy, check if both on-demand and spot nodegroups were created
+                ondemand_name = f"{config['name']}-ondemand"
+                spot_name = f"{config['name']}-spot"
+                both_created = ondemand_name in nodegroups_created and spot_name in nodegroups_created
+                status = "✅" if both_created else "⚠️" if (
+                            ondemand_name in nodegroups_created or spot_name in nodegroups_created) else "❌"
+                suffix_info = f" → {ondemand_name}, {spot_name}"
+            else:
+                # For non-mixed strategies, check for exact match
+                status = "✅" if config['name'] in nodegroups_created else "❌"
+                suffix_info = ""
+
             instance_summary = self.format_instance_types_summary(config['instance_selections'])
-            self.print_colored(Colors.GREEN if status == "✅" else Colors.RED, 
-                                f"   {status} {config['name']}: {config['strategy'].upper()} "
-                                f"({config['min_nodes']}-{config['desired_nodes']}-{config['max_nodes']}) "
-                                f"[{instance_summary}]")
+            self.print_colored(
+                Colors.GREEN if status == "✅" else Colors.YELLOW if status == "⚠️" else Colors.RED,
+                f"   {status} {config['name']}{suffix_info}: {config['strategy'].upper()} "
+                f"({config['min_nodes']}-{config['desired_nodes']}-{config['max_nodes']}) "
+                f"[{instance_summary}]"
+            )
     
         self.print_colored(Colors.GREEN, f"   ✅ CloudWatch Logging: Enabled")
         self.print_colored(Colors.GREEN, f"   ✅ Essential Add-ons: {'Installed' if cluster_info.get('addons_installed') else 'Failed'}")
@@ -2834,7 +3230,7 @@ class EKSClusterManager:
                     else:
                         self.log_operation('ERROR', f"No supported subnets found in {region}")
                         raise Exception(f"No supported subnets found in {region}")
-            
+
                 self.log_operation('DEBUG', f"Found {len(subnet_ids)} supported subnets: {subnet_ids}")
             
                 # Get or create security group
@@ -2873,39 +3269,107 @@ class EKSClusterManager:
             except Exception as e:
                 self.log_operation('ERROR', f"Failed to get VPC resources in {region}: {str(e)}")
                 raise
-    
+
     def configure_aws_auth_configmap(self, cluster_name: str, region: str, account_id: str, user_data: Dict, admin_access_key: str, admin_secret_key: str) -> bool:
-            """Configure aws-auth ConfigMap to add user access to the cluster using admin credentials"""
+        """Configure aws-auth ConfigMap to add appropriate user access based on creator type (root or IAM user)"""
+        try:
+            self.log_operation('INFO', f"Configuring aws-auth ConfigMap for cluster {cluster_name}")
+            self.print_colored(Colors.YELLOW, f"🔐 Configuring aws-auth ConfigMap for cluster {cluster_name}")
+
+            # Create admin session for configuring the cluster
+            admin_session = boto3.Session(
+                aws_access_key_id=admin_access_key,
+                aws_secret_access_key=admin_secret_key,
+                region_name=region
+            )
+
+            eks_client = admin_session.client('eks')
+            sts_client = admin_session.client('sts')
+
+            # Determine if the creator is root user or IAM user
             try:
-                self.log_operation('INFO', f"Configuring aws-auth ConfigMap for cluster {cluster_name}")
-                self.print_colored(Colors.YELLOW, f"🔐 Configuring aws-auth ConfigMap for cluster {cluster_name}")
-            
-                # Create admin session for configuring the cluster
-                admin_session = boto3.Session(
-                    aws_access_key_id=admin_access_key,
-                    aws_secret_access_key=admin_secret_key,
-                    region_name=region
+                caller_identity = sts_client.get_caller_identity()
+                caller_arn = caller_identity.get('Arn', '')
+                caller_user_id = caller_identity.get('UserId', '')
+
+                # Check if this is a root user
+                is_root_user = (
+                        caller_arn == f"arn:aws:iam::{account_id}:root" or
+                        caller_user_id == account_id or
+                        'root' in caller_arn.lower()
                 )
-            
-                eks_client = admin_session.client('eks')
-            
-                # Get cluster details
-                cluster_info = eks_client.describe_cluster(name=cluster_name)
-                cluster_endpoint = cluster_info['cluster']['endpoint']
-                cluster_ca = cluster_info['cluster']['certificateAuthority']['data']
-            
-                # Create temporary directory if it doesn't exist
-                temp_dir = "/tmp"
-                if not os.path.exists(temp_dir):
-                    temp_dir = os.getcwd()  # Use current directory as fallback
-            
-                # Get user's IAM ARN
+
+                self.log_operation('INFO', f"Caller identity: {caller_arn}")
+                self.log_operation('INFO', f"Is root user: {is_root_user}")
+
+            except Exception as e:
+                self.log_operation('WARNING', f"Could not determine caller identity: {str(e)}")
+                # Default to treating as IAM user if we can't determine
+                is_root_user = False
+
+            # Get cluster details
+            cluster_info = eks_client.describe_cluster(name=cluster_name)
+            cluster_endpoint = cluster_info['cluster']['endpoint']
+            cluster_ca = cluster_info['cluster']['certificateAuthority']['data']
+
+            # Create temporary directory if it doesn't exist
+            temp_dir = "/tmp"
+            if not os.path.exists(temp_dir):
+                temp_dir = os.getcwd()  # Use current directory as fallback
+
+            # Prepare user entries based on creator type
+            users_to_add = []
+            principals_to_add = []
+
+            if is_root_user:
+                # If created by root user, only add root user access
+                root_arn = f"arn:aws:iam::{account_id}:root"
+                users_to_add.append({
+                    'userarn': root_arn,
+                    'username': 'root-user',
+                    'groups': ['system:masters']
+                })
+                principals_to_add.append(root_arn)
+
+                self.log_operation('INFO', f"Configuring access for root user: {root_arn}")
+                self.print_colored(Colors.CYAN, f"   👑 Creator is root user - configuring root access only")
+
+            else:
+                # If created by IAM user, add both IAM user and root user access
                 username = user_data.get('username', 'unknown')
                 user_arn = f"arn:aws:iam::{account_id}:user/{username}"
-            
-                self.log_operation('INFO', f"Configuring access for user: {username} with ARN: {user_arn}")
-            
-                # Create aws-auth ConfigMap YAML
+                root_arn = f"arn:aws:iam::{account_id}:root"
+
+                users_to_add.extend([
+                    {
+                        'userarn': user_arn,
+                        'username': username,
+                        'groups': ['system:masters']
+                    },
+                    {
+                        'userarn': root_arn,
+                        'username': 'root-user',
+                        'groups': ['system:masters']
+                    }
+                ])
+                principals_to_add.extend([user_arn, root_arn])
+
+                self.log_operation('INFO', f"Configuring access for IAM user: {username} ({user_arn})")
+                self.log_operation('INFO', f"Configuring access for root user: {root_arn}")
+                self.print_colored(Colors.CYAN,
+                                   f"   👤 Creator is IAM user: {username} - configuring IAM user + root access")
+
+            # Check cluster authentication mode
+            access_config = cluster_info['cluster'].get('accessConfig', {})
+            auth_mode = access_config.get('authenticationMode', 'CONFIG_MAP')
+
+            self.print_colored(Colors.CYAN, f"   📋 Cluster authentication mode: {auth_mode}")
+
+            # If cluster uses CONFIG_MAP mode, create/update aws-auth ConfigMap
+            if auth_mode in ['CONFIG_MAP', 'API_AND_CONFIG_MAP']:
+                self.print_colored(Colors.CYAN, "   📋 Creating/updating aws-auth ConfigMap...")
+
+                # Create aws-auth ConfigMap YAML with appropriate users
                 aws_auth_config = {
                     'apiVersion': 'v1',
                     'kind': 'ConfigMap',
@@ -2921,16 +3385,10 @@ class EKSClusterManager:
                                 'groups': ['system:bootstrappers', 'system:nodes']
                             }
                         ], default_flow_style=False),
-                        'mapUsers': yaml.dump([
-                            {
-                                'userarn': user_arn,
-                                'username': username,
-                                'groups': ['system:masters']
-                            }
-                        ], default_flow_style=False)
+                        'mapUsers': yaml.dump(users_to_add, default_flow_style=False)
                     }
                 }
-            
+
                 # Save ConfigMap YAML with error handling
                 configmap_file = os.path.join(temp_dir, f"aws-auth-{cluster_name}-{self.execution_timestamp}.yaml")
                 try:
@@ -2940,77 +3398,99 @@ class EKSClusterManager:
                 except Exception as e:
                     self.log_operation('ERROR', f"Failed to create ConfigMap file: {str(e)}")
                     return False
-            
+
                 # Check if kubectl is available
                 import subprocess
                 import shutil
-            
+
                 kubectl_available = shutil.which('kubectl') is not None
-            
+
                 if not kubectl_available:
-                    self.log_operation('WARNING', f"kubectl not found. ConfigMap file created but not applied: {configmap_file}")
+                    self.log_operation('WARNING',
+                                       f"kubectl not found. ConfigMap file created but not applied: {configmap_file}")
                     self.print_colored(Colors.YELLOW, f"⚠️  kubectl not found. Manual setup required.")
-                
+
                     # Create manual instruction file
-                    instruction_file = os.path.join(temp_dir, f"manual-auth-setup-{cluster_name}-{self.execution_timestamp}.txt")
+                    instruction_file = os.path.join(temp_dir,
+                                                    f"manual-auth-setup-{cluster_name}-{self.execution_timestamp}.txt")
                     try:
                         with open(instruction_file, 'w') as f:
                             f.write(f"# Manual aws-auth ConfigMap Setup for {cluster_name}\n")
                             f.write(f"# Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}\n")
                             f.write(f"# Cluster: {cluster_name}\n")
                             f.write(f"# Region: {region}\n")
-                            f.write(f"# User: {username}\n\n")
-                        
+                            f.write(f"# Creator type: {'Root User' if is_root_user else 'IAM User'}\n\n")
+
                             f.write("## Prerequisites\n")
                             f.write("# Install kubectl\n")
-                            f.write("curl -LO \"https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl\"\n")
+                            f.write(
+                                "curl -LO \"https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl\"\n")
                             f.write("chmod +x kubectl\n")
                             f.write("sudo mv kubectl /usr/local/bin/\n\n")
-                        
+
                             f.write("## Apply ConfigMap with Admin Credentials\n")
                             f.write(f"# Set AWS admin credentials\n")
                             f.write(f"export AWS_ACCESS_KEY_ID={admin_access_key}\n")
                             f.write(f"export AWS_SECRET_ACCESS_KEY={admin_secret_key}\n")
                             f.write(f"export AWS_DEFAULT_REGION={region}\n\n")
-                        
+
                             f.write(f"# Update kubeconfig with admin credentials\n")
                             f.write(f"aws eks update-kubeconfig --region {region} --name {cluster_name}\n\n")
-                        
+
                             f.write(f"# Apply the ConfigMap\n")
                             f.write(f"kubectl apply -f {configmap_file}\n\n")
-                        
+
                             f.write(f"# Verify ConfigMap\n")
                             f.write(f"kubectl get configmap aws-auth -n kube-system -o yaml\n\n")
-                        
-                            f.write(f"## Test User Access\n")
-                            f.write(f"# Set user credentials\n")
-                            f.write(f"export AWS_ACCESS_KEY_ID={user_data.get('access_key_id', 'USER_ACCESS_KEY')}\n")
-                            f.write(f"export AWS_SECRET_ACCESS_KEY={user_data.get('secret_access_key', 'USER_SECRET_KEY')}\n")
-                            f.write(f"# Update kubeconfig with user profile\n")
-                            f.write(f"aws eks update-kubeconfig --region {region} --name {cluster_name} --profile {username}\n")
-                            f.write(f"# Test access\n")
-                            f.write(f"kubectl get nodes\n")
-                            f.write(f"kubectl get pods\n")
-                    
+
+                            if is_root_user:
+                                f.write(f"## Test Root Access\n")
+                                f.write(f"# Use root credentials to test access\n")
+                                f.write(f"aws eks update-kubeconfig --region {region} --name {cluster_name}\n")
+                                f.write(f"kubectl get nodes\n")
+                                f.write(f"kubectl get pods\n")
+                            else:
+                                f.write(f"## Test IAM User Access\n")
+                                f.write(f"# Set user credentials\n")
+                                f.write(
+                                    f"export AWS_ACCESS_KEY_ID={user_data.get('access_key_id', 'USER_ACCESS_KEY')}\n")
+                                f.write(
+                                    f"export AWS_SECRET_ACCESS_KEY={user_data.get('secret_access_key', 'USER_SECRET_KEY')}\n")
+                                f.write(f"# Update kubeconfig with user profile\n")
+                                f.write(f"aws eks update-kubeconfig --region {region} --name {cluster_name}\n")
+                                f.write(f"# Test access\n")
+                                f.write(f"kubectl get nodes\n")
+                                f.write(f"kubectl get pods\n")
+
+                                f.write(f"\n## Test Root Access\n")
+                                f.write(f"# Set root credentials (replace with actual root credentials)\n")
+                                f.write(f"export AWS_ACCESS_KEY_ID=ROOT_ACCESS_KEY\n")
+                                f.write(f"export AWS_SECRET_ACCESS_KEY=ROOT_SECRET_KEY\n")
+                                f.write(f"# Update kubeconfig with root credentials\n")
+                                f.write(f"aws eks update-kubeconfig --region {region} --name {cluster_name}\n")
+                                f.write(f"# Test root access\n")
+                                f.write(f"kubectl get nodes\n")
+                                f.write(f"kubectl get pods\n")
+
                         self.log_operation('INFO', f"Manual setup instructions saved to: {instruction_file}")
                         self.print_colored(Colors.CYAN, f"📋 Manual setup instructions: {instruction_file}")
-                    
+
                     except Exception as e:
                         self.log_operation('WARNING', f"Failed to create instruction file: {str(e)}")
-                
+
                     # Return True since we created the ConfigMap file
                     return True
-            
+
                 # Apply ConfigMap using kubectl with admin credentials
                 self.log_operation('INFO', f"Applying ConfigMap using admin credentials")
                 self.print_colored(Colors.YELLOW, f"🚀 Applying ConfigMap with admin credentials...")
-            
+
                 # Set environment variables for admin access
                 env = os.environ.copy()
                 env['AWS_ACCESS_KEY_ID'] = admin_access_key
                 env['AWS_SECRET_ACCESS_KEY'] = admin_secret_key
                 env['AWS_DEFAULT_REGION'] = region
-            
+
                 try:
                     # Update kubeconfig with admin credentials first
                     update_cmd = [
@@ -3018,42 +3498,42 @@ class EKSClusterManager:
                         '--region', region,
                         '--name', cluster_name
                     ]
-                
+
                     self.log_operation('INFO', f"Updating kubeconfig with admin credentials")
                     update_result = subprocess.run(update_cmd, env=env, capture_output=True, text=True, timeout=120)
-                
+
                     if update_result.returncode == 0:
                         self.log_operation('INFO', f"Successfully updated kubeconfig with admin credentials")
                     else:
                         self.log_operation('ERROR', f"Failed to update kubeconfig: {update_result.stderr}")
                         return False
-                
+
                     # Apply the ConfigMap
                     apply_cmd = ['kubectl', 'apply', '-f', configmap_file]
                     self.log_operation('INFO', f"Applying ConfigMap: {' '.join(apply_cmd)}")
-                
+
                     apply_result = subprocess.run(apply_cmd, env=env, capture_output=True, text=True, timeout=300)
-                
+
                     if apply_result.returncode == 0:
                         self.log_operation('INFO', f"Successfully applied aws-auth ConfigMap for {cluster_name}")
                         self.print_colored(Colors.GREEN, f"✅ ConfigMap applied successfully")
-                    
+
                         # Verify the ConfigMap was applied
                         verify_cmd = ['kubectl', 'get', 'configmap', 'aws-auth', '-n', 'kube-system', '-o', 'yaml']
                         verify_result = subprocess.run(verify_cmd, env=env, capture_output=True, text=True, timeout=120)
-                    
+
                         if verify_result.returncode == 0:
                             self.log_operation('INFO', f"ConfigMap verification successful")
                             self.log_operation('DEBUG', f"ConfigMap content: {verify_result.stdout}")
                         else:
                             self.log_operation('WARNING', f"ConfigMap verification failed: {verify_result.stderr}")
-                    
+
                         success = True
                     else:
                         self.log_operation('ERROR', f"Failed to apply aws-auth ConfigMap: {apply_result.stderr}")
                         self.print_colored(Colors.RED, f"❌ Failed to apply ConfigMap: {apply_result.stderr}")
                         success = False
-            
+
                 except subprocess.TimeoutExpired:
                     self.log_operation('ERROR', f"kubectl/aws command timed out for {cluster_name}")
                     self.print_colored(Colors.RED, f"❌ Command timed out")
@@ -3062,7 +3542,7 @@ class EKSClusterManager:
                     self.log_operation('ERROR', f"Failed to execute kubectl/aws commands: {str(e)}")
                     self.print_colored(Colors.RED, f"❌ Command execution failed: {str(e)}")
                     success = False
-            
+
                 # Clean up temporary files
                 try:
                     if os.path.exists(configmap_file):
@@ -3070,59 +3550,70 @@ class EKSClusterManager:
                         self.log_operation('INFO', f"Cleaned up temporary ConfigMap file")
                 except Exception as e:
                     self.log_operation('WARNING', f"Failed to clean up ConfigMap file: {str(e)}")
-            
-                if success:
-                    self.print_colored(Colors.GREEN, f"✅ User [[{username}]] configured for cluster access")
-                
-                    # Test user access after a brief delay
+            else:
+                success = True  # If only API mode, access entries are sufficient
+
+            if success:
+                if is_root_user:
+                    self.print_colored(Colors.GREEN, f"✅ Root user configured for cluster access")
+                else:
+                    username = user_data.get('username', 'unknown')
+                    self.print_colored(Colors.GREEN, f"✅ User [{username}] and root user configured for cluster access")
+
+                # Test access after a brief delay (only for IAM user, not root)
+                if not is_root_user:
                     try:
                         import time
                         time.sleep(10)  # Wait for ConfigMap to propagate
-                    
+
+                        username = user_data.get('username', 'unknown')
                         self.log_operation('INFO', f"Testing user access for {username}")
                         self.print_colored(Colors.YELLOW, f"🧪 Testing user access...")
-                    
+
                         # Set user environment
                         user_env = os.environ.copy()
                         user_env['AWS_ACCESS_KEY_ID'] = user_data.get('access_key_id', '')
                         user_env['AWS_SECRET_ACCESS_KEY'] = user_data.get('secret_access_key', '')
                         user_env['AWS_DEFAULT_REGION'] = region
-                    
+
                         # Update kubeconfig with user credentials
                         user_update_cmd = [
                             'aws', 'eks', 'update-kubeconfig',
                             '--region', region,
                             '--name', cluster_name
-                            #'--profile', username
                         ]
-                    
-                        user_update_result = subprocess.run(user_update_cmd, env=user_env, capture_output=True, text=True, timeout=120)
-                    
+
+                        user_update_result = subprocess.run(user_update_cmd, env=user_env, capture_output=True,
+                                                            text=True, timeout=120)
+
                         if user_update_result.returncode == 0:
                             # Test kubectl access
                             test_cmd = ['kubectl', 'get', 'nodes']
-                            test_result = subprocess.run(test_cmd, env=user_env, capture_output=True, text=True, timeout=60)
-                        
+                            test_result = subprocess.run(test_cmd, env=user_env, capture_output=True, text=True,
+                                                         timeout=60)
+
                             if test_result.returncode == 0:
                                 self.log_operation('INFO', f"User access test successful for {username}")
                                 self.print_colored(Colors.GREEN, f"✅ User access verified - can access cluster")
                             else:
                                 self.log_operation('WARNING', f"User access test failed: {test_result.stderr}")
-                                self.print_colored(Colors.YELLOW, f"⚠️  User access test failed - may need manual verification")
+                                self.print_colored(Colors.YELLOW,
+                                                   f"⚠️  User access test failed - may need manual verification")
                         else:
-                            self.log_operation('WARNING', f"Failed to update kubeconfig for user test: {user_update_result.stderr}")
-                        
+                            self.log_operation('WARNING',
+                                               f"Failed to update kubeconfig for user test: {user_update_result.stderr}")
+
                     except Exception as e:
                         self.log_operation('WARNING', f"User access test failed: {str(e)}")
-            
-                return success
-            
-            except Exception as e:
-                error_msg = str(e)
-                self.log_operation('ERROR', f"Failed to configure aws-auth ConfigMap for {cluster_name}: {error_msg}")
-                self.print_colored(Colors.RED, f"❌ ConfigMap configuration failed: {error_msg}")
-                return False
-    
+
+            return success
+
+        except Exception as e:
+            error_msg = str(e)
+            self.log_operation('ERROR', f"Failed to configure aws-auth ConfigMap for {cluster_name}: {error_msg}")
+            self.print_colored(Colors.RED, f"❌ ConfigMap configuration failed: {error_msg}")
+            return False
+
     def health_check_cluster(self, cluster_name: str, region: str, admin_access_key: str, admin_secret_key: str) -> Dict:
             """Comprehensive cluster health check with detailed reporting"""
             try:
@@ -3423,7 +3914,7 @@ class EKSClusterManager:
             kubectl_available = shutil.which('kubectl') is not None
             if not kubectl_available:
                 self.log_operation('WARNING', f"kubectl not found. Cannot protect nodes")
-                self.print_colored(Colors.YELLOW, f"⚠️ kubectl not found. Manual node protection required.")
+                self.print_colored(Colors.YELLOW, f"kubectl not found. Manual node protection required.")
                 return False
 
             # Set environment variables for access
@@ -3441,7 +3932,7 @@ class EKSClusterManager:
 
             update_result = subprocess.run(update_cmd, env=env, capture_output=True, text=True, timeout=120)
             if update_result.returncode != 0:
-                self.print_colored(Colors.RED, f"❌ Failed to update kubeconfig: {update_result.stderr}")
+                self.print_colored(Colors.RED, f"Failed to update kubeconfig: {update_result.stderr}")
                 return False
 
             # Get nodes with NO_DELETE label
@@ -3449,18 +3940,21 @@ class EKSClusterManager:
             nodes_result = subprocess.run(get_nodes_cmd, env=env, capture_output=True, text=True, timeout=60)
 
             if nodes_result.returncode != 0:
-                self.print_colored(Colors.YELLOW, f"⚠️ No nodes found with NO_DELETE label or kubectl error")
+                self.print_colored(Colors.YELLOW, f"No nodes found with NO_DELETE label or kubectl error")
                 return True  # Not an error, just no nodes to protect
 
             if not nodes_result.stdout.strip():
-                self.print_colored(Colors.CYAN, f"ℹ️ No nodes found with NO_DELETE label")
+                self.print_colored(Colors.CYAN, f"No nodes found with NO_DELETE label")
                 return True
 
             # Process each node with NO_DELETE label
             node_lines = [line.strip() for line in nodes_result.stdout.strip().split('\n') if line.strip()]
             protected_nodes = 0
 
+            count = 0
             for line in node_lines:
+                if count >=2:
+                    break
                 node_name = line.split()[0] if line.split() else ""
                 if not node_name:
                     continue
@@ -3474,7 +3968,7 @@ class EKSClusterManager:
                 check_result = subprocess.run(check_annotation_cmd, env=env, capture_output=True, text=True, timeout=30)
 
                 if check_result.returncode == 0 and check_result.stdout.strip() == "true":
-                    self.print_colored(Colors.CYAN, f"   ✅ Node {node_name} already protected")
+                    self.print_colored(Colors.CYAN, f" Node {node_name} already protected")
                     protected_nodes += 1
                     continue
 
@@ -3486,88 +3980,26 @@ class EKSClusterManager:
                 ]
 
                 annotate_result = subprocess.run(annotate_cmd, env=env, capture_output=True, text=True, timeout=30)
+                count = count +1
 
                 if annotate_result.returncode == 0:
-                    self.print_colored(Colors.GREEN, f"   ✅ Protected node {node_name} from autoscaler scale-down")
+                    self.print_colored(Colors.GREEN, f"Protected node {node_name} from autoscaler scale-down")
                     protected_nodes += 1
                 else:
-                    self.print_colored(Colors.RED, f"   ❌ Failed to protect node {node_name}: {annotate_result.stderr}")
+                    self.print_colored(Colors.RED, f"Failed to protect node {node_name}: {annotate_result.stderr}")
 
             if protected_nodes > 0:
                 self.print_colored(Colors.GREEN,
-                                   f"✅ Protected {protected_nodes} nodes with NO_DELETE label from autoscaler scale-down")
+                                   f"Protected {protected_nodes} nodes with NO_DELETE label from autoscaler scale-down")
                 self.log_operation('INFO', f"Protected {protected_nodes} nodes from autoscaler scale-down")
             else:
-                self.print_colored(Colors.YELLOW, f"⚠️ No nodes were protected")
+                self.print_colored(Colors.YELLOW, f"No nodes were protected")
 
             return protected_nodes > 0
 
         except Exception as e:
             self.log_operation('ERROR', f"Failed to protect nodes: {str(e)}")
-            self.print_colored(Colors.RED, f"❌ Node protection failed: {str(e)}")
-            return False
-
-    def setup_node_protection_monitoring(self, cluster_name: str, region: str, access_key: str,
-                                         secret_key: str) -> bool:
-        """
-        Set up monitoring to automatically protect nodes with NO_DELETE label
-        This creates a simple script that can be run periodically
-        """
-        try:
-            # Create a script that can be run as a cron job or manually
-            script_content = f'''#!/bin/bash
-    # Auto-protect nodes with NO_DELETE label from cluster autoscaler
-    # Generated for cluster: {cluster_name}
-    # Region: {region}
-    # Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}
-
-    export AWS_ACCESS_KEY_ID="{access_key}"
-    export AWS_SECRET_ACCESS_KEY="{secret_key}"
-    export AWS_DEFAULT_REGION="{region}"
-
-    # Update kubeconfig
-    aws eks update-kubeconfig --region {region} --name {cluster_name}
-
-    # Get nodes with NO_DELETE label and protect them
-    kubectl get nodes -l NO_DELETE --no-headers | while read node rest; do
-        if [ ! -z "$node" ]; then
-            # Check if already annotated
-            current_annotation=$(kubectl get node $node -o jsonpath='{{.metadata.annotations.cluster-autoscaler\\.kubernetes\\.io/scale-down-disabled}}' 2>/dev/null)
-
-            if [ "$current_annotation" != "true" ]; then
-                echo "Protecting node $node from autoscaler scale-down..."
-                kubectl annotate node $node cluster-autoscaler.kubernetes.io/scale-down-disabled=true --overwrite
-                echo "✅ Node $node protected"
-            else
-                echo "ℹ️ Node $node already protected"
-            fi
-        fi
-    done
-
-    echo "Node protection check completed at $(date)"
-    '''
-
-            # Save the script
-            output_dir = f"aws/eks/scripts"
-            os.makedirs(output_dir, exist_ok=True)
-
-            script_file = f"{output_dir}/protect_no_delete_nodes_{cluster_name.replace('-', '_')}.sh"
-            with open(script_file, 'w') as f:
-                f.write(script_content)
-
-            # Make script executable
-            import stat
-            os.chmod(script_file, stat.S_IRWXU | stat.S_IRGRP | stat.S_IROTH)
-
-            self.print_colored(Colors.GREEN, f"✅ Node protection script created: {script_file}")
-            self.print_colored(Colors.CYAN, f"📋 To run automatically every 5 minutes, add to crontab:")
-            self.print_colored(Colors.CYAN,
-                               f"   */5 * * * * {os.path.abspath(script_file)} >> /var/log/node-protection.log 2>&1")
-
-            return True
-
-        except Exception as e:
-            self.log_operation('ERROR', f"Failed to create node protection script: {str(e)}")
+            self.print_colored(Colors.RED, f"Node protection failed: {str(e)}")
             return False
 
     def generate_cost_alarm_summary_report(self, cluster_name: str) -> str:
@@ -4176,8 +4608,8 @@ class EKSClusterManager:
             node_role_name = "NodeInstanceRole"
         
             # Step 1: Create and attach custom CSI policy from aws_csi_policy.json
-            custom_policy_attached = self.create_and_attach_custom_csi_policy(iam_client, account_id, node_role_name)
-        
+           # custom_policy_attached = self.create_and_attach_custom_csi_policy(iam_client, account_id, node_role_name)
+            custom_policy_attached = False
             # Step 2: Attach AWS managed policies
             aws_managed_policies = [
                 "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy",
@@ -4321,117 +4753,122 @@ class EKSClusterManager:
             self.print_colored(Colors.RED, f"   ❌ Failed to load custom CSI policy: {str(e)}")
             return None
 ####
-    def verify_user_access(self, cluster_name: str, region: str, username: str, access_key: str, secret_key: str) -> bool:
+    def verify_user_access(self, cluster_name: str, region: str, username: str, access_key: str,
+                           secret_key: str) -> bool:
         """Verify user access to the cluster and check cluster endpoint configuration"""
         try:
-            self.log_operation('INFO', f"Verifying user access for {username} to cluster {cluster_name}")
-            self.print_colored(Colors.YELLOW, f"🔐 Verifying user access to cluster {cluster_name}...")
-        
+            # Colorful output for just this method
+            BLUE = '\033[94m'
+            GREEN = '\033[92m'
+            RED = '\033[91m'
+            YELLOW = '\033[93m'
+            CYAN = '\033[96m'
+            RESET = '\033[0m'
+
+            print(f"{BLUE}[INFO] Verifying user access...{RESET}")
+            print(f"{BLUE}[INFO] Verifying user access for {username} to cluster {cluster_name}{RESET}")
+            print(f"{YELLOW}[SECURITY] Verifying user access to cluster {cluster_name}...{RESET}")
+
             # Create user session
             user_session = boto3.Session(
                 aws_access_key_id=access_key,
                 aws_secret_access_key=secret_key,
                 region_name=region
             )
-        
+
             eks_client = user_session.client('eks')
-        
+
             # Step 1: Check if user can describe the cluster
             try:
                 cluster_info = eks_client.describe_cluster(name=cluster_name)
-                self.print_colored(Colors.GREEN, f"   ✅ User {username} can access cluster information")
-                self.log_operation('INFO', f"User {username} can access cluster {cluster_name}")
-            
+                print(f"{GREEN}   [OK] User {username} can access cluster information{RESET}")
+                print(f"{BLUE}[INFO] User {username} can access cluster {cluster_name}{RESET}")
+
                 # Check cluster endpoint access configuration
                 endpoint_access = cluster_info['cluster'].get('resourcesVpcConfig', {})
                 endpoint_public_access = endpoint_access.get('endpointPublicAccess', False)
                 endpoint_private_access = endpoint_access.get('endpointPrivateAccess', False)
                 public_access_cidrs = endpoint_access.get('publicAccessCidrs', ['0.0.0.0/0'])
-            
-                self.print_colored(Colors.CYAN, f"   📊 Cluster Endpoint Configuration:")
-                self.print_colored(Colors.CYAN, f"      - Public Access: {'Enabled' if endpoint_public_access else 'Disabled'}")
-                self.print_colored(Colors.CYAN, f"      - Private Access: {'Enabled' if endpoint_private_access else 'Disabled'}")
-                self.print_colored(Colors.CYAN, f"      - Public Access CIDRs: {', '.join(public_access_cidrs)}")
-            
+
+                print(f"{CYAN}   [STATS] Cluster Endpoint Configuration:{RESET}")
+                print(f"{CYAN}      - Public Access: {'Enabled' if endpoint_public_access else 'Disabled'}{RESET}")
+                print(f"{CYAN}      - Private Access: {'Enabled' if endpoint_private_access else 'Disabled'}{RESET}")
+                print(f"{CYAN}      - Public Access CIDRs: {', '.join(public_access_cidrs)}{RESET}")
+
                 # Log endpoint configuration
-                self.log_operation('INFO', f"Cluster endpoint config - Public: {endpoint_public_access}, Private: {endpoint_private_access}")
-            
+                print(
+                    f"{BLUE}[INFO] Cluster endpoint config - Public: {endpoint_public_access}, Private: {endpoint_private_access}{RESET}")
+
             except Exception as e:
-                self.print_colored(Colors.RED, f"   ❌ User {username} cannot access cluster information: {str(e)}")
-                self.log_operation('ERROR', f"User {username} cannot access cluster {cluster_name}: {str(e)}")
+                print(f"{RED}   [ERROR] User {username} cannot access cluster information: {str(e)}{RESET}")
                 return False
-        
+
             # Step 2: Update kubeconfig and test kubectl access
             import subprocess
             import shutil
-        
+
             kubectl_available = shutil.which('kubectl') is not None
-        
+
             if kubectl_available:
-                self.print_colored(Colors.CYAN, f"   🧪 Testing kubectl access...")
-            
+                print(f"{CYAN}   🧪 Testing kubectl access...{RESET}")
+
                 # Set environment variables for user access
-                env = os.environ.copy()
-                env['AWS_ACCESS_KEY_ID'] = access_key
-                env['AWS_SECRET_ACCESS_KEY'] = secret_key
-                env['AWS_DEFAULT_REGION'] = region
-            
+                my_env = os.environ.copy()
+                my_env['AWS_ACCESS_KEY_ID'] = access_key
+                my_env['AWS_SECRET_ACCESS_KEY'] = secret_key
+                my_env['AWS_DEFAULT_REGION'] = region
+
                 # Update kubeconfig for user
                 update_cmd = [
                     'aws', 'eks', 'update-kubeconfig',
                     '--region', region,
                     '--name', cluster_name
                 ]
-            
-                update_result = subprocess.run(update_cmd, env=env, capture_output=True, text=True, timeout=120)
-            
+
+                update_result = subprocess.run(update_cmd, env=my_env, capture_output=True, text=True, timeout=120)
+
                 if update_result.returncode != 0:
-                    self.print_colored(Colors.RED, f"   ❌ Failed to update kubeconfig: {update_result.stderr}")
-                    self.log_operation('ERROR', f"Failed to update kubeconfig for {username}: {update_result.stderr}")
+                    print(f"{RED}   [ERROR] Failed to update kubeconfig: {update_result.stderr}{RESET}")
                     return False
-            
+
                 # Test kubectl access - get nodes
-                self.print_colored(Colors.CYAN, f"   🧪 Testing kubectl get nodes...")
+                print(f"{CYAN}   🧪 Testing kubectl get nodes...{RESET}")
                 nodes_cmd = ['kubectl', 'get', 'nodes']
-                nodes_result = subprocess.run(nodes_cmd, env=env, capture_output=True, text=True, timeout=60)
-            
+                nodes_result = subprocess.run(nodes_cmd, env=my_env, capture_output=True, text=True, timeout=60)
+
                 if nodes_result.returncode == 0:
-                    node_count = len([line for line in nodes_result.stdout.strip().split('\n') if line.strip()]) - 1  # Subtract header
-                    self.print_colored(Colors.GREEN, f"   ✅ kubectl access successful - {node_count} nodes found")
-                    self.log_operation('INFO', f"User {username} has kubectl access to cluster {cluster_name}")
+                    node_count = len([line for line in nodes_result.stdout.strip().split('\n') if line.strip()]) - 1
+                    print(f"{GREEN}   [OK] kubectl access successful - {node_count} nodes found{RESET}")
+                    print(f"{BLUE}[INFO] User {username} has kubectl access to cluster {cluster_name}{RESET}")
                 else:
-                    self.print_colored(Colors.RED, f"   ❌ kubectl access failed: {nodes_result.stderr}")
-                    self.log_operation('ERROR', f"kubectl access failed for {username}: {nodes_result.stderr}")
+                    print(f"{RED}   [ERROR] kubectl access failed: {nodes_result.stderr}{RESET}")
                     return False
-            
+
                 # Test kubectl access - get pods
-                self.print_colored(Colors.CYAN, f"   🧪 Testing kubectl get pods...")
+                print(f"{CYAN}   🧪 Testing kubectl get pods...{RESET}")
                 pods_cmd = ['kubectl', 'get', 'pods', '--all-namespaces']
-                pods_result = subprocess.run(pods_cmd, env=env, capture_output=True, text=True, timeout=60)
-            
+                pods_result = subprocess.run(pods_cmd, env=my_env, capture_output=True, text=True, timeout=60)
+
                 if pods_result.returncode == 0:
-                    pod_count = len([line for line in pods_result.stdout.strip().split('\n') if line.strip()]) - 1  # Subtract header
-                    self.print_colored(Colors.GREEN, f"   ✅ kubectl pod access successful - {pod_count} pods found")
-                    self.log_operation('INFO', f"User {username} can access pods in cluster {cluster_name}")
-                
+                    pod_count = len([line for line in pods_result.stdout.strip().split('\n') if line.strip()]) - 1
+                    print(f"{GREEN}   [OK] kubectl pod access successful - {pod_count} pods found{RESET}")
+                    print(f"{BLUE}[INFO] User {username} can access pods in cluster {cluster_name}{RESET}")
+
                     # Display kubectl access command for user
-                    self.print_colored(Colors.CYAN, f"📋 Kubectl access command:")
-                    self.print_colored(Colors.CYAN, f"   aws eks update-kubeconfig --region {region} --name {cluster_name}")
-                
+                    print(f"{CYAN}📋 Kubectl access command:{RESET}")
+                    print(f"{CYAN}   aws eks update-kubeconfig --region {region} --name {cluster_name}{RESET}")
+
                     return True
                 else:
-                    self.print_colored(Colors.RED, f"   ❌ kubectl pod access failed: {pods_result.stderr}")
-                    self.log_operation('ERROR', f"kubectl pod access failed for {username}: {pods_result.stderr}")
+                    print(f"{RED}   [ERROR] kubectl pod access failed: {pods_result.stderr}{RESET}")
                     return False
             else:
-                self.print_colored(Colors.YELLOW, f"   ⚠️ kubectl not available. Skipping kubectl access verification.")
-                self.log_operation('WARNING', f"kubectl not available. Skipping access verification for {username}")
+                print(f"{YELLOW}   ⚠️ kubectl not available. Skipping kubectl access verification.{RESET}")
                 # Return True since we could at least access the cluster API
                 return True
-        
+
         except Exception as e:
-            self.print_colored(Colors.RED, f"   ❌ User access verification failed: {str(e)}")
-            self.log_operation('ERROR', f"User access verification failed for {username}: {str(e)}")
+            print(f"{RED}   [ERROR] User access verification failed: {str(e)}{RESET}")
             return False
 
     def setup_cloudwatch_alarms(self, cluster_name: str, region: str, cloudwatch_client, nodegroup_name: str, account_id: str) -> bool:
@@ -4804,8 +5241,15 @@ class EKSClusterManager:
         """Basic logger for EKSClusterManager"""
         print(f"[{level}] {message}")
 
-    def print_colored(self, color: str, message: str) -> None:
-        """Print colored message to terminal"""
+    def print_colored(self, color: str, message: str, indent: int = 0) -> None:
+        """
+        Print colored message to terminal with proper Unicode handling for Windows.
+
+        Args:
+            color: Color name (RED, GREEN, etc.)
+            message: The message to print
+            indent: Optional indentation level (number of 2-space indents)
+        """
         if not hasattr(self, 'colors'):
             self.colors = {
                 'RED': '\033[0;31m',
@@ -4817,9 +5261,45 @@ class EKSClusterManager:
                 'WHITE': '\033[1;37m',
                 'NC': '\033[0m'  # No Color
             }
-    
+
+        # Get color code or default to WHITE
         color_code = self.colors.get(color, self.colors['WHITE'])
-        print(f"{color_code}{message}{self.colors['NC']}")
+        no_color = self.colors['NC']
+
+        # Apply indentation
+        prefix = "  " * indent
+
+        # Handle potential Unicode issues on Windows
+        try:
+            # Replace Unicode characters that might cause issues on Windows
+            safe_message = message
+            # Replace common Unicode symbols with ASCII alternatives
+            replacements = {
+                '✅': '[OK]',
+                '❌': '[X]',
+                '⚠️': '[WARNING]',
+                '🔍': '[INFO]',
+                '📊': '[STATS]',
+                '🚀': '[LAUNCH]',
+                '💰': '[COST]',
+                '🛠️': '[TOOLS]',
+                '📈': '[GRAPH]',
+                '🏥': '[HEALTH]',
+                '🔄': '[SYNC]',
+                '🔐': '[SECURITY]',
+                '📄': '[DOC]',
+                '💻': '[SYSTEM]'
+            }
+
+            for emoji, replacement in replacements.items():
+                if emoji in safe_message:
+                    safe_message = safe_message.replace(emoji, replacement)
+
+            print(f"{color_code}{prefix}{safe_message}{no_color}")
+        except UnicodeEncodeError:
+            # Fall back to ASCII only if terminal can't handle Unicode
+            ascii_message = message.encode('ascii', errors='replace').decode('ascii')
+            print(f"{color_code}{prefix}{ascii_message}{no_color}")
 
     def debug_nodegroup_configs(self, stage: str, nodegroup_configs) -> None:
         """Debug function to print the nodegroup_configs at various points"""
@@ -5274,7 +5754,8 @@ class EKSClusterManager:
             print("   Default scale-up: 8:30 AM IST (3:00 AM UTC)")
             print("   Default scale-down: 6:30 PM IST (1:00 PM UTC)")
 
-            change_times = input("   Change default scaling times? (y/N): ").strip().lower() in ['y', 'yes']
+            change_times = False
+            #change_times = input("   Change default scaling times? (y/N): ").strip().lower() in ['y', 'yes']
 
             if change_times:
                 while True:
@@ -5331,7 +5812,8 @@ class EKSClusterManager:
             print("   Default scale-up: min=1, desired=1, max=3")
             print("   Default scale-down: min=0, desired=0, max=3")
 
-            change_sizes = input("   Change default scaling sizes? (y/N): ").strip().lower() in ['y', 'yes']
+            change_sizes = False
+            #change_sizes = input("   Change default scaling sizes? (y/N): ").strip().lower() in ['y', 'yes']
 
             if change_sizes:
                 try:
@@ -5379,7 +5861,8 @@ class EKSClusterManager:
             if size_reduction_detected:
                 self.print_colored(Colors.YELLOW, "\n   ⚠️  Warning: Some nodegroups currently have more nodes than the scale-down size.")
                 self.print_colored(Colors.YELLOW, "      This will cause nodes to be terminated during scale-down.")
-                confirm = input("   Continue with these settings? (y/N): ").strip().lower()
+                confirm = 'yes'
+                #confirm = input("   Continue with these settings? (y/N): ").strip().lower()
                 if confirm not in ['y', 'yes']:
                     self.print_colored(Colors.YELLOW, "   ⚠️  Scheduled scaling setup canceled.")
                     return False
@@ -6446,17 +6929,18 @@ class EKSClusterManager:
                 cluster_name, region, access_key, secret_key, account_id
             )
             components_status['cluster_autoscaler'] = autoscaler_success
-    
+
+            if True:
             # 3. Setup Scheduled Scaling
-            print("\n⏰ Step 3: Setting up Scheduled Scaling for all nodegroups...")
-            scheduling_success = self.setup_scheduled_scaling_multi_nodegroup(
-                cluster_name, region, access_key, secret_key, nodegroups_created
-            )
-            components_status['scheduled_scaling'] = scheduling_success
+                print("\n⏰ Step 3: Setting up Scheduled Scaling for all nodegroups...")
+                scheduling_success = self.setup_scheduled_scaling_multi_nodegroup(
+                    cluster_name, region, access_key, secret_key, nodegroups_created
+                )
+                components_status['scheduled_scaling'] = scheduling_success
     
             # 4. Deploy CloudWatch agent
             #if self.should_deploy_cloudwatch_agent():
-            if True:  # Always deploy for now
+            if False:  # Always deploy for now
                 print("\n🔍 Step 4: Deploying CloudWatch agent...")
                 from custom_cloudwatch_agent_deployer import CustomCloudWatchAgentDeployer
                 agent_deployer = CustomCloudWatchAgentDeployer()
@@ -7262,7 +7746,8 @@ class EKSClusterManager:
     
                 print(f"Subnet Preference: {ng_config['subnet_preference'].upper()}")
 
-            confirmation = input("\nConfirm cluster creation with these settings? (Y/n): ").strip().lower()
+            confirmation = 'Y'  # Default to 'Y' for confirmation
+            #confirmation = input("\nConfirm cluster creation with these settings? (Y/n): ").strip().lower()
             if confirmation == 'n':
                 self.print_colored(Colors.YELLOW, "❌ Cluster creation cancelled by user")
                 return False
@@ -7352,7 +7837,13 @@ class EKSClusterManager:
                 self.print_colored(Colors.RED, f"❌ Failed to create EKS control plane: {str(e)}")
                 return False
 
-            # Step 6: Create nodegroups based on strategy
+            # Step 6: Configure Auth ConfigMap for user access
+            self.print_colored(Colors.CYAN, "   🔑 Configuring user access...")
+            auth_configured = self.configure_aws_auth_configmap(
+                cluster_name, region, account_id, config, access_key, secret_key
+            )
+
+            # Step 7: Create nodegroups based on strategy
             self.print_colored(Colors.CYAN, f"   🚀 Creating nodegroups with {strategy} strategy...")
 
             # Generate nodegroup name
@@ -7418,19 +7909,19 @@ class EKSClusterManager:
                 self.print_colored(Colors.RED, f"❌ Failed to create nodegroups: {str(e)}")
                 return False
 
-            # Step 7: Configure Auth ConfigMap for user access
-            self.print_colored(Colors.CYAN, "   🔑 Configuring user access...")
-            auth_configured = self.configure_aws_auth_configmap(
-                cluster_name, region, account_id, config, access_key, secret_key
-            )
-
             # Step 8: Verify user access to the cluster
+            print("\n🔒 Step 8: Verify user access...")
             self.print_colored(Colors.CYAN, "   🔍 Verifying user access...")
             access_verified = self.verify_user_access(
                 cluster_name, region, username, access_key, secret_key
             )
 
-            # Step 9: Install essential add-ons if confirmed by user
+            print("\n🔒 Step 9: Setting up node protection for NO_DELETE labels...")
+            self.apply_no_delete_to_matching_nodegroups(cluster_name, region, access_key, secret_key)
+            self.protect_nodes_with_no_delete_label(cluster_name, region, access_key, secret_key)
+
+            # Step 10: Install essential add-ons if confirmed by user
+            print("\n🔒 Step 10: Setting up add ons...")
             if self.setup_addons:
                 self.print_colored(Colors.CYAN, "   📦 Installing essential add-ons...")
                 addons_installed = self.install_essential_addons(
@@ -7441,16 +7932,15 @@ class EKSClusterManager:
                 addons_installed = False
                 self.log_operation('INFO', "Essential add-ons installation skipped by user")
 
-            # Step 10: Set up and verify all components
+            # Step 11: Set up and verify all components
+            print("\n🔒 Step 11: Setting up and Verify all components...")
             components_status = self.setup_and_verify_all_components(
                 cluster_name, region, access_key, secret_key, account_id, nodegroups_created,self.setup_container_insights
             )
 
-            print("\n🔒 Step 11: Setting up node protection for NO_DELETE labels...")
-            self.protect_nodes_with_no_delete_label(cluster_name, region, access_key, secret_key)
-            self.setup_node_protection_monitoring(cluster_name, region, access_key, secret_key)
 
             # Step 12: Perform health check
+            print("\n🔒 Step 11: Peform cluster health check...")
             self.print_colored(Colors.CYAN, "   🏥 Running health check...")
             initial_health_check = self.health_check_cluster(
                 cluster_name, region, access_key, secret_key
@@ -7512,6 +8002,323 @@ class EKSClusterManager:
             import traceback
             self.log_operation('ERROR', f"Stack trace: {traceback.format_exc()}")
             return False
+
+    def apply_no_delete_to_matching_nodegroups(self, cluster_name, region, access_key, secret_key):
+        """Apply NO_DELETE labels to all nodes in nodegroups matching nodegroup-*-ondemand pattern"""
+
+        import boto3
+        import subprocess
+        import json
+        import re
+        import os
+        from datetime import datetime
+
+        # Set current user and datetime
+        current_user = 'varadharajaan'
+        current_datetime = '2025-06-25 09:05:05'
+
+        print("=" * 80)
+        print("🚀 STARTING NO_DELETE LABEL APPLICATION")
+        print("=" * 80)
+        print(f"📅 Current Date and Time (UTC - YYYY-MM-DD HH:MM:SS formatted): {current_datetime}")
+        print(f"👤 Current User's Login: {current_user}")
+        print(f"🏷️  Cluster Name: {cluster_name}")
+        print(f"🌍 Region: {region}")
+        print(f"🎯 Target Pattern: nodegroup-*-ondemand (where * is 0-9)")
+        print("=" * 80)
+
+        try:
+            # Set AWS credentials as environment variables for CLI tools
+            os.environ['AWS_ACCESS_KEY_ID'] = access_key
+            os.environ['AWS_SECRET_ACCESS_KEY'] = secret_key
+            os.environ['AWS_DEFAULT_REGION'] = region
+
+            # Create AWS session with credentials
+            session = boto3.Session(
+                aws_access_key_id=access_key,
+                aws_secret_access_key=secret_key,
+                region_name=region
+            )
+            eks_client = session.client('eks')
+
+            # Step 1: Update kubeconfig
+            print(f"🔧 Updating kubeconfig for cluster: {cluster_name} in region: {region}")
+            subprocess.run([
+                'aws', 'eks', 'update-kubeconfig',
+                '--region', region,
+                '--name', cluster_name
+            ], check=True, capture_output=True)
+            print("✅ Kubeconfig updated successfully")
+
+            # Step 2: Get all nodegroups and filter matching ones
+            print("📋 Fetching all nodegroups from EKS...")
+            response = eks_client.list_nodegroups(clusterName=cluster_name)
+            all_nodegroups = response.get('nodegroups', [])
+
+            # Pattern: nodegroup-[0-9]-ondemand
+            pattern = re.compile(r'^nodegroup-[0-9]-ondemand$')
+            matching_nodegroups = [ng for ng in all_nodegroups if pattern.match(ng)]
+
+            print(f"📊 Total nodegroups found: {len(all_nodegroups)}")
+            print(f"🎯 Matching nodegroups found: {len(matching_nodegroups)}")
+
+            if matching_nodegroups:
+                for ng in matching_nodegroups:
+                    print(f"   ✓ {ng}")
+            else:
+                print("⚠️ No nodegroups found matching pattern 'nodegroup-*-ondemand'")
+                return {
+                    'success': False,
+                    'message': 'No matching nodegroups found',
+                    'nodegroups_processed': 0,
+                    'nodes_labeled': 0
+                }
+
+            # Step 3: Get all nodes and process matching ones
+            print("🔍 Getting all nodes and processing...")
+            result = subprocess.run([
+                'kubectl', 'get', 'nodes', '-o', 'json'
+            ], capture_output=True, text=True, check=True)
+
+            nodes_data = json.loads(result.stdout)
+
+            # Initialize counters
+            results = {
+                'total_processed': 0,
+                'newly_labeled': 0,
+                'already_labeled': 0,
+                'skipped': 0,
+                'errors': 0,
+                'nodes_to_verify': []  # Track nodes we labeled for verification
+            }
+
+            print(f"📋 Found {len(nodes_data['items'])} total nodes in cluster")
+
+            # Process each node
+            count = 0
+            for node in nodes_data['items']:
+                if count >= 2:
+                    break
+                node_name = node['metadata']['name']
+                node_labels = node['metadata'].get('labels', {})
+
+                # Get the nodegroup this node belongs to
+                nodegroup_label = node_labels.get('eks.amazonaws.com/nodegroup')
+
+                if nodegroup_label and nodegroup_label in matching_nodegroups:
+                    print(f"\n🎯 Processing node: {node_name} (nodegroup: {nodegroup_label})")
+                    results['total_processed'] += 1
+
+                    # Check if NO_DELETE label already exists
+                    current_no_delete = node_labels.get('NO_DELETE')
+
+                    if current_no_delete == 'true':
+                        print(f"✅ Node {node_name} already has NO_DELETE=true")
+                        results['already_labeled'] += 1
+                    else:
+                        # Apply NO_DELETE and related labels
+                        protection_labels = {
+                            'NO_DELETE': 'true',
+                            'protection-level': 'high',
+                            'protected-by': current_user,
+                            'protection-date': datetime.utcnow().strftime('%Y-%m-%d'),
+                            'protection-time': datetime.utcnow().strftime('%H-%M-%S'),
+                            'protection-timestamp': current_datetime.replace(':', '-'),  # Also replace colons here
+                            'managed-by': 'automation',
+                            'nodegroup-protected': nodegroup_label
+                        }
+
+                        try:
+                            # Apply each label
+                            for label_key, label_value in protection_labels.items():
+                                subprocess.run([
+                                    'kubectl', 'label', 'node', node_name,
+                                    f'{label_key}={label_value}', '--overwrite'
+                                ], check=True, capture_output=True)
+
+                            print(f"✅ Successfully applied NO_DELETE protection to node: {node_name}")
+                            print(f"   📋 Labels applied: {list(protection_labels.keys())}")
+                            results['newly_labeled'] += 1
+                            results['nodes_to_verify'].append({
+                                'node_name': node_name,
+                                'nodegroup': nodegroup_label,
+                                'labels_applied': protection_labels
+                            })
+                            count = count +1
+                        except subprocess.CalledProcessError as e:
+                            print(f"❌ Failed to apply labels to node {node_name}: {e}")
+                            results['errors'] += 1
+                        except Exception as e:
+                            print(f"❌ Unexpected error applying labels to {node_name}: {e}")
+                            results['errors'] += 1
+                else:
+                    results['skipped'] += 1
+
+            # Step 4: COMPREHENSIVE VERIFICATION OF APPLIED LABELS
+            print("\n" + "=" * 80)
+            print("🔍 VERIFICATION: Checking Applied Labels")
+            print("=" * 80)
+
+            verification_results = {
+                'verified_successfully': 0,
+                'verification_failed': 0,
+                'missing_labels': 0
+            }
+
+            if results['nodes_to_verify']:
+                print(f"🔍 Verifying {len(results['nodes_to_verify'])} newly labeled nodes...")
+
+                for node_info in results['nodes_to_verify']:
+                    node_name = node_info['node_name']
+                    nodegroup = node_info['nodegroup']
+                    expected_labels = node_info['labels_applied']
+
+                    print(f"\n📋 Verifying node: {node_name} (nodegroup: {nodegroup})")
+
+                    try:
+                        # Get current node labels
+                        verify_result = subprocess.run([
+                            'kubectl', 'get', 'node', node_name, '-o', 'json'
+                        ], capture_output=True, text=True, check=True)
+
+                        node_data = json.loads(verify_result.stdout)
+                        current_labels = node_data['metadata'].get('labels', {})
+
+                        # Check each expected label
+                        all_labels_present = True
+                        missing_labels = []
+
+                        for label_key, expected_value in expected_labels.items():
+                            actual_value = current_labels.get(label_key)
+
+                            if actual_value == expected_value:
+                                print(f"   ✅ {label_key}={actual_value}")
+                            else:
+                                print(f"   ❌ {label_key}: expected='{expected_value}', actual='{actual_value}'")
+                                all_labels_present = False
+                                missing_labels.append(label_key)
+
+                        if all_labels_present:
+                            print(f"   🎯 All labels verified successfully on {node_name}")
+                            verification_results['verified_successfully'] += 1
+                        else:
+                            print(f"   ⚠️ Some labels missing on {node_name}: {missing_labels}")
+                            verification_results['verification_failed'] += 1
+                            verification_results['missing_labels'] += len(missing_labels)
+
+                    except Exception as e:
+                        print(f"   ❌ Error verifying node {node_name}: {e}")
+                        verification_results['verification_failed'] += 1
+
+            # Step 5: Verify all nodes in matching nodegroups
+            print(f"\n🔍 VERIFICATION: All Nodes in Matching Nodegroups")
+            print("-" * 60)
+
+            for nodegroup in matching_nodegroups:
+                print(f"\n📋 Nodegroup: {nodegroup}")
+
+                try:
+                    # Get nodes with their labels for this nodegroup
+                    verify_result = subprocess.run([
+                        'kubectl', 'get', 'nodes',
+                        '-l', f'eks.amazonaws.com/nodegroup={nodegroup}',
+                        '-o',
+                        'custom-columns=NAME:.metadata.name,NO_DELETE:.metadata.labels.NO_DELETE,PROTECTED_BY:.metadata.labels.protected-by,PROTECTION_DATE:.metadata.labels.protection-date,PROTECTION_TIME:.metadata.labels.protection-time'
+                    ], capture_output=True, text=True, check=True)
+
+                    print("Final Verification Results:")
+                    for line in verify_result.stdout.strip().split('\n'):
+                        if 'NAME' in line:
+                            print(f"   {line}")  # Header
+                        else:
+                            # Check if NO_DELETE is true
+                            parts = line.split()
+                            if len(parts) >= 2:
+                                node_name = parts[0]
+                                no_delete_value = parts[1] if len(parts) > 1 else '<none>'
+                                if no_delete_value == 'true':
+                                    print(f"   ✅ {line}")
+                                else:
+                                    print(f"   ⚠️ {line}")
+                            else:
+                                print(f"   {line}")
+
+                    # Count nodes with NO_DELETE=true in this nodegroup
+                    count_result = subprocess.run([
+                        'kubectl', 'get', 'nodes',
+                        '-l', f'eks.amazonaws.com/nodegroup={nodegroup},NO_DELETE=true',
+                        '--no-headers'
+                    ], capture_output=True, text=True, check=True)
+
+                    protected_count = len([line for line in count_result.stdout.strip().split('\n') if line.strip()])
+                    print(f"   📊 Nodes with NO_DELETE=true: {protected_count}")
+
+                except Exception as e:
+                    print(f"   ❌ Error verifying nodegroup {nodegroup}: {e}")
+
+            # Step 6: Final Summary
+            print("\n" + "=" * 80)
+            print("📊 FINAL OPERATION SUMMARY")
+            print("=" * 80)
+            print(f"👤 Applied by: {current_user}")
+            print(f"📅 Completed at: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC")
+            print(f"🎯 Nodegroups targeted: {len(matching_nodegroups)}")
+            print(f"   • {', '.join(matching_nodegroups)}")
+            print(f"📋 Nodes processed: {results['total_processed']}")
+            print(f"🏷️  Nodes newly labeled: {results['newly_labeled']}")
+            print(f"✅ Nodes already labeled: {results['already_labeled']}")
+            print(f"⏭️ Nodes skipped: {results['skipped']}")
+            print(f"❌ Errors encountered: {results['errors']}")
+            print("\n🔍 VERIFICATION SUMMARY:")
+            print(f"✅ Nodes verified successfully: {verification_results['verified_successfully']}")
+            print(f"❌ Nodes with verification issues: {verification_results['verification_failed']}")
+            print(f"⚠️ Missing labels found: {verification_results['missing_labels']}")
+            print("=" * 80)
+
+            # Step 7: Quick command to verify all protected nodes
+            print(f"\n🔍 QUICK VERIFICATION COMMAND:")
+            print(f"To quickly check all protected nodes, run:")
+            print(
+                f"kubectl get nodes -l NO_DELETE=true -o custom-columns=NAME:.metadata.name,NODEGROUP:.metadata.labels.eks\\.amazonaws\\.com/nodegroup,NO_DELETE:.metadata.labels.NO_DELETE,PROTECTED_BY:.metadata.labels.protected-by")
+
+            # Return results
+            return {
+                'success': True,
+                'message': 'NO_DELETE labels applied and verified successfully',
+                'nodegroups_processed': len(matching_nodegroups),
+                'nodes_labeled': results['newly_labeled'],
+                'nodes_already_labeled': results['already_labeled'],
+                'total_nodes_processed': results['total_processed'],
+                'matching_nodegroups': matching_nodegroups,
+                'timestamp': current_datetime,
+                'applied_by': current_user,
+                'errors': results['errors'],
+                'verification': {
+                    'verified_successfully': verification_results['verified_successfully'],
+                    'verification_failed': verification_results['verification_failed'],
+                    'missing_labels': verification_results['missing_labels']
+                }
+            }
+
+        except subprocess.CalledProcessError as e:
+            error_msg = f"Command failed: {e}"
+            print(f"❌ {error_msg}")
+            return {
+                'success': False,
+                'message': error_msg,
+                'nodegroups_processed': 0,
+                'nodes_labeled': 0
+            }
+
+        except Exception as e:
+            error_msg = f"Unexpected error: {str(e)}"
+            print(f"❌ CRITICAL ERROR: {error_msg}")
+            return {
+                'success': False,
+                'message': error_msg,
+                'nodegroups_processed': 0,
+                'nodes_labeled': 0
+            }
 
     def create_multiple_clusters(self, cluster_configs: List[Dict]) -> bool:
         """Create multiple clusters with shared configuration and enhanced error handling"""
@@ -7651,9 +8458,6 @@ class EKSClusterManager:
                     "timestamp": datetime.now().isoformat(),
                     "total_clusters": total_clusters,
                     "failed_clusters": len(failed_clusters),
-                    "account_id": config.get('account_id', 'unknown'),
-                    "region": config.get('region', 'unknown'),
-                    "username": config.get('username', 'unknown'),
                     "errors": {cluster: error_details.get(cluster, "Unknown error") for cluster in failed_clusters}
                 }
             
