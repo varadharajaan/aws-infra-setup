@@ -892,26 +892,32 @@ class UltraVPCCleanupManager:
             if not internet_gateways:
                 return True
                 
-            self.log_operation('INFO', f"🗑️ Deleting {len(internet_gateways)} Internet Gateways in {region} ({account_name})")
+            action_text = "Would delete" if self.dry_run else "Deleting"
+            self.log_operation('INFO', f"🗑️ {action_text} {len(internet_gateways)} Internet Gateways in {region} ({account_name})")
             
             for igw in internet_gateways:
                 igw_id = igw['InternetGatewayId']
                 try:
-                    # First detach from VPCs
-                    attachments = igw.get('Attachments', [])
-                    for attachment in attachments:
-                        vpc_id = attachment.get('VpcId')
-                        if vpc_id:
-                            ec2_client.detach_internet_gateway(InternetGatewayId=igw_id, VpcId=vpc_id)
-                            self.log_operation('INFO', f"🔌 Detached IGW {igw_id} from VPC {vpc_id}")
+                    if self.dry_run:
+                        self.log_operation('INFO', f"🔍 [DRY RUN] Would detach and delete Internet Gateway: {igw_id}")
+                    else:
+                        # First detach from VPCs
+                        attachments = igw.get('Attachments', [])
+                        for attachment in attachments:
+                            vpc_id = attachment.get('VpcId')
+                            if vpc_id:
+                                ec2_client.detach_internet_gateway(InternetGatewayId=igw_id, VpcId=vpc_id)
+                                self.log_operation('INFO', f"🔌 Detached IGW {igw_id} from VPC {vpc_id}")
+                        
+                        # Then delete the IGW
+                        ec2_client.delete_internet_gateway(InternetGatewayId=igw_id)
+                        self.log_operation('INFO', f"✅ Deleted Internet Gateway: {igw_id}")
                     
-                    # Then delete the IGW
-                    ec2_client.delete_internet_gateway(InternetGatewayId=igw_id)
-                    self.log_operation('INFO', f"✅ Deleted Internet Gateway: {igw_id}")
                     self.cleanup_results['resources_deleted']['internet_gateways'].append({
                         'id': igw_id,
                         'region': region,
-                        'account': account_name
+                        'account': account_name,
+                        'dry_run': self.dry_run
                     })
                 except ClientError as e:
                     if 'InvalidInternetGatewayID.NotFound' in str(e):
@@ -934,7 +940,8 @@ class UltraVPCCleanupManager:
                             'region': region,
                             'account': account_name
                         })
-                        return False
+                        if not self.dry_run:
+                            return False
             
             return True
             
