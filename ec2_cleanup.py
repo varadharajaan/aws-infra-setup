@@ -535,60 +535,57 @@ class EC2CleanupManager:
         except Exception as e:
             logger.error(f"Error cleaning up volumes and snapshots: {e}")
             return False
-    
+
     def delete_launch_template(self, session: boto3.Session, launch_template_id: str, region: str) -> bool:
-        """Delete the launch template associated with the instance"""
+        """Delete the launch template associated with the instance, if not used by any other instances"""
         try:
             if not launch_template_id:
                 logger.info("No launch template ID provided")
                 return True
-                
-            logger.info(f"Deleting launch template: {launch_template_id}")
-            
+
+            logger.info(f"Checking and deleting launch template: {launch_template_id}")
             ec2_client = session.client('ec2', region_name=region)
-            
+
             try:
-                # Check if launch template is used by other instances
-                instances_response = ec2_client.describe_instances(
-                    Filters=[
-                        {
-                            'Name': 'launch-template.id',
-                            'Values': [launch_template_id]
-                        },
-                        {
+                # Scan for instances using the launch template
+                paginator = ec2_client.get_paginator('describe_instances')
+                other_instances = []
+
+                for page in paginator.paginate(
+                        Filters=[{
                             'Name': 'instance-state-name',
                             'Values': ['pending', 'running', 'shutting-down', 'stopping', 'stopped']
-                        }
-                    ]
-                )
-                
-                other_instances = []
-                for reservation in instances_response['Reservations']:
-                    for instance in reservation['Instances']:
-                        other_instances.append(instance['InstanceId'])
-                
+                        }]
+                ):
+                    for reservation in page['Reservations']:
+                        for instance in reservation['Instances']:
+                            lt = instance.get('LaunchTemplate')
+                            if lt and lt.get('LaunchTemplateId') == launch_template_id:
+                                other_instances.append(instance['InstanceId'])
+
                 if other_instances:
-                    logger.warning(f"Launch template {launch_template_id} is still used by other instances: {other_instances}")
+                    logger.warning(
+                        f"Launch template {launch_template_id} is still used by other instances: {other_instances}")
                     logger.warning("Skipping launch template deletion")
                     return True
-                
-                # Delete launch template
+
+                # Delete the launch template if unused
                 ec2_client.delete_launch_template(LaunchTemplateId=launch_template_id)
                 logger.info(f"Launch template {launch_template_id} deleted successfully")
                 return True
-                
+
             except ClientError as e:
                 if e.response['Error']['Code'] == 'InvalidLaunchTemplateId.NotFound':
                     logger.info(f"Launch template {launch_template_id} not found, may already be deleted")
                     return True
                 else:
-                    logger.error(f"Error deleting launch template: {e}")
+                    logger.error(f"Error deleting launch template {launch_template_id}: {e}")
                     return False
-                    
+
         except Exception as e:
-            logger.error(f"Error deleting launch template: {e}")
+            logger.error(f"Unexpected error in deleting launch template {launch_template_id}: {e}")
             return False
-    
+
     def cleanup_security_groups(self, session: boto3.Session, instance_id: str, region: str) -> bool:
         """Clean up security groups that were created specifically for this instance"""
         try:

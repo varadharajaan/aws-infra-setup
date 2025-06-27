@@ -6,28 +6,20 @@ Handles EKS cluster creation with on-demand, spot, and mixed nodegroup strategie
 
 import json
 import os
-import sys
 import time
 import boto3
-import glob
-import re
+
 from datetime import datetime
-from typing import Dict, List, Tuple, Optional
-import threading
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Dict
+
 import yaml
-import base64
-import queue
+
 import subprocess
-import textwrap
 import random
 import string
-import tempfile
 from typing import List, Tuple, Set
 from aws_credential_manager import CredentialInfo
-import zipfile
-import io
-import base64
+
 import tempfile
 import requests
 from jinja2 import Environment, FileSystemLoader
@@ -550,6 +542,7 @@ class EKSClusterManager:
                 self.log_operation('ERROR', f"Failed to update {addon_name}: {str(e)}")
 
                 self.print_colored(Colors.RED, f"❌ Failed to update {addon_name}: {str(e)}")
+
     def format_instance_types_summary(self, instance_selections: Dict) -> str:
         """Format instance types for summary display"""
         summary_parts = []
@@ -691,54 +684,6 @@ class EKSClusterManager:
             self.log_operation('ERROR', f"Failed to setup IAM permissions: {str(e)}")
             return False
 
-    def _cleanup_existing_autoscaler(self, env) -> None:
-        """Clean up existing cluster autoscaler deployment"""
-        try:
-            delete_commands = [
-                ['kubectl', 'delete', 'deployment', 'cluster-autoscaler', '-n', 'kube-system', '--ignore-not-found'],
-                ['kubectl', 'delete', 'serviceaccount', 'cluster-autoscaler', '-n', 'kube-system', '--ignore-not-found'],
-                ['kubectl', 'delete', 'clusterrole', 'cluster-autoscaler', '--ignore-not-found'],
-                ['kubectl', 'delete', 'clusterrolebinding', 'cluster-autoscaler', '--ignore-not-found'],
-                ['kubectl', 'delete', 'role', 'cluster-autoscaler', '-n', 'kube-system', '--ignore-not-found'],
-                ['kubectl', 'delete', 'rolebinding', 'cluster-autoscaler', '-n', 'kube-system', '--ignore-not-found'],
-                ['kubectl', 'delete', 'secret', 'cluster-autoscaler-aws-credentials', '-n', 'kube-system', '--ignore-not-found']
-            ]
-    
-            for delete_cmd in delete_commands:
-                try:
-                    subprocess.run(delete_cmd, env=env, capture_output=True, text=True, timeout=30)
-                except:
-                    pass
-
-            time.sleep(10)  # Wait for cleanup
-
-        except Exception as e:
-            self.log_operation('WARNING', f"Cleanup had issues: {str(e)}")
-
-    def _create_aws_credentials_secret(self, access_key: str, secret_key: str, env) -> bool:
-        """Create Kubernetes secret with AWS credentials"""
-        try:
-            # Create secret using kubectl
-            create_secret_cmd = [
-                'kubectl', 'create', 'secret', 'generic', 'cluster-autoscaler-aws-credentials',
-                f'--from-literal=AWS_ACCESS_KEY_ID={access_key}',
-                f'--from-literal=AWS_SECRET_ACCESS_KEY={secret_key}',
-                '-n', 'kube-system'
-            ]
-        
-            result = subprocess.run(create_secret_cmd, env=env, capture_output=True, text=True, timeout=30)
-        
-            if result.returncode == 0:
-                self.log_operation('INFO', "AWS credentials secret created successfully")
-                return True
-            else:
-                self.log_operation('ERROR', f"Failed to create AWS credentials secret: {result.stderr}")
-                return False
-
-        except Exception as e:
-            self.log_operation('ERROR', f"Failed to create AWS credentials secret: {str(e)}")
-            return False
-
     def debug_cluster_autoscaler(self, cluster_name: str, region: str, access_key: str, secret_key: str) -> dict:
         """Debug cluster autoscaler deployment and return detailed status"""
         try:
@@ -790,76 +735,6 @@ class EKSClusterManager:
         
         except Exception as e:
             return {"error": str(e)}
-
-
-    def verify_cluster_autoscaler_deployment_fixed(self, cluster_name: str, region: str, access_key: str, secret_key: str) -> bool:
-        """
-        FIXED: Enhanced verification of autoscaler deployment
-        Current time: 2025-06-19 06:59:56 UTC
-        User: varadharajaan
-        """
-        try:
-            self.log_operation('INFO', "Verifying cluster autoscaler deployment...")
-        
-            # Check 1: Pod is running
-            get_pods_cmd = ['kubectl', 'get', 'pods', '-n', 'kube-system', 
-                           '-l', 'app=cluster-autoscaler', '--no-headers']
-            result = subprocess.run(get_pods_cmd, env=env, capture_output=True, text=True, timeout=30)
-        
-            if result.returncode != 0 or not result.stdout.strip():
-                self.log_operation('ERROR', "No cluster autoscaler pods found")
-                return False
-        
-            pod_info = result.stdout.strip().split()
-            if len(pod_info) < 3:
-                self.log_operation('ERROR', "Invalid pod information")
-                return False
-        
-            pod_name = pod_info[0]
-            ready_status = pod_info[1]
-            pod_status = pod_info[2]
-        
-            if ready_status != "1/1" or pod_status != "Running":
-                self.log_operation('ERROR', f"Pod not ready: {pod_name} {ready_status} {pod_status}")
-                return False
-        
-            self.print_colored(Colors.GREEN, f"   ✅ Pod running: {pod_name}")
-        
-            # Check 2: Secret exists
-            get_secret_cmd = ['kubectl', 'get', 'secret', 'cluster-autoscaler-aws-credentials', '-n', 'kube-system']
-            secret_result = subprocess.run(get_secret_cmd, env=env, capture_output=True, text=True, timeout=30)
-        
-            if secret_result.returncode == 0:
-                self.print_colored(Colors.GREEN, "   ✅ AWS credentials secret exists")
-            else:
-                self.log_operation('ERROR', "AWS credentials secret not found")
-                return False
-        
-            # Check 3: Recent logs for health
-            logs_cmd = ['kubectl', 'logs', '-n', 'kube-system', '-l', 'app=cluster-autoscaler', '--tail=20']
-            logs_result = subprocess.run(logs_cmd, env=env, capture_output=True, text=True, timeout=30)
-        
-            if logs_result.returncode == 0:
-                logs = logs_result.stdout
-                # Look for positive indicators
-                if any(indicator in logs for indicator in ['Starting scale', 'Regenerating', 'cloud provider aws']):
-                    self.print_colored(Colors.GREEN, "   ✅ Autoscaler appears to be functioning")
-                else:
-                    self.print_colored(Colors.YELLOW, "   ⚠️ Autoscaler may need more time to start")
-            
-                # Check for critical errors
-                if any(error in logs.lower() for error in ['fatal', 'panic', 'crashloopbackoff']):
-                    self.log_operation('ERROR', "Critical errors found in autoscaler logs")
-                    self.log_operation('DEBUG', f"Problematic logs: {logs}")
-                    return False
-        
-            self.log_operation('INFO', "Cluster autoscaler verification completed successfully")
-            return True
-        
-        except Exception as e:
-            self.log_operation('ERROR', f"Verification failed: {str(e)}")
-            self.print_colored(Colors.RED, f"   ❌ Verification failed: {str(e)}")
-            return False
 
     def _print_usage_instructions_fixed(self, cluster_name: str, region: str):
         """
@@ -930,8 +805,7 @@ class EKSClusterManager:
             return False
         return True
 
-    def setup_scheduled_scaling_multi_nodegroup(self, cluster_name: str, region: str, admin_access_key: str,
-                                                admin_secret_key: str, nodegroup_names: List[str]) -> bool:
+    def setup_scheduled_scaling_multi_nodegroup(self, cluster_name: str, region: str, admin_access_key: str, admin_secret_key: str, nodegroup_names: List[str]) -> bool:
         """Setup scheduled scaling for multiple nodegroups using a single Lambda function with default parameters"""
         try:
             if not nodegroup_names:
@@ -1380,6 +1254,57 @@ class EKSClusterManager:
         except Exception as e:
             print(f"⚠️  Warning: Could not save enhanced cluster details: {e}")
 
+    def generate_mini_instructions(self, credential_info, cluster_name, region, username):
+        """Generate minimal instruction file with just the essential commands"""
+        try:
+            # Create output directory
+            account_name = credential_info.account_name
+            output_dir = f"aws/eks/{account_name}/user_login"
+            os.makedirs(output_dir, exist_ok=True)
+
+            # Format timestamp as YYYYMMDD_HHMMSS for filename
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+            # Filenames
+            filename = f"user_mini_instructions_{account_name}_{username}_{cluster_name}_{timestamp}.txt"
+            instruction_mini_file = os.path.join(output_dir, filename)
+            instruction_copy_file = os.path.join(os.getcwd(), filename)
+
+            # Shared content to write
+            content_lines = [
+                f"aws configure set aws_access_key_id {credential_info.access_key} --profile {username}\n\n",
+                f"aws configure set aws_secret_access_key {credential_info.secret_key} --profile {username}\n\n",
+                f"aws configure set region {region} --profile {username}\n\n",
+                f"aws eks update-kubeconfig --region {region} --name {cluster_name} --profile {username}\n\n",
+                'kubectl auth can-i "*" "*"\n\n',
+                "kubectl get nodes\n\n",
+                "kubectl get pods --all-namespaces\n\n",
+                "kubectl cluster-info\n\n",
+                "kubectl get nodes --show-labels\n\n",
+                f"aws eks list-nodegroups --cluster-name {cluster_name} --region {region} --profile {username}\n\n",
+                "sudo mkdir -p /home/ec2-user/.aws\n\n",
+                "sudo cp -r /home/demouser/.aws/* /home/ec2-user/.aws/\n\n",
+                "sudo chown -R ec2-user:ec2-user /home/ec2-user/.aws\n\n",
+                "sudo mkdir -p /home/ec2-user/.kube\n\n",
+                "sudo cp -r /home/demouser/.kube/* /home/ec2-user/.kube/\n\n",
+                "sudo chown -R ec2-user:ec2-user /home/ec2-user/.kube\n\n"
+            ]
+
+            # Write to both files
+            for filepath in [instruction_mini_file, instruction_copy_file]:
+                with open(filepath, 'w') as f:
+                    f.writelines(content_lines)
+
+            self.log_operation('INFO', f"Mini instruction file generated: {instruction_mini_file}")
+            self.print_colored(Colors.GREEN,
+                               f"✅ Mini instruction files generated:\n→ {instruction_mini_file}\n→ {instruction_copy_file}")
+            return instruction_mini_file
+
+        except Exception as e:
+            self.log_operation('ERROR', f"Failed to generate mini instruction file: {str(e)}")
+            self.print_colored(Colors.RED, f"❌ Failed to generate mini instruction file: {str(e)}")
+            return None
+
     def generate_user_instructions_enhanced(self, credential_info, cluster_name, region, username, nodegroup_configs):
         """Generate enhanced user instructions with nodegroup information"""
         try:
@@ -1600,83 +1525,6 @@ class EKSClusterManager:
             self.log_operation('WARNING', error_msg)
             self.print_colored(Colors.YELLOW, f"⚠️  Warning: {error_msg}")
 
-    def generate_user_instructions_enhanced_old(self, credential_info, cluster_name, region, username, nodegroup_configs):
-        """Generate enhanced user instructions with nodegroup information"""
-        try:
-            # Create output directory
-            account_name = credential_info.account_name
-            output_dir = f"aws/eks/{account_name}/user_login"
-            os.makedirs(output_dir, exist_ok=True)
-    
-            # Format timestamp as YYYYMMDD_HHMMSS for filename
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    
-            # Generate enhanced instruction file
-            instruction_file = f"{output_dir}/user_instructions_{account_name}_{username}_{cluster_name}_{timestamp}.txt"
-    
-            with open(instruction_file, 'w') as f:
-                f.write(f"# Enhanced EKS Cluster Access Instructions for {username}\n")
-                f.write(f"# Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}\n")
-                f.write(f"# Account: {account_name}\n")
-                f.write(f"# Cluster: {cluster_name}\n")
-                f.write(f"# Region: {region}\n")
-                f.write(f"# Total Nodegroups: {len(nodegroup_configs)}\n\n")
-        
-                f.write("## Cluster Overview\n")
-                f.write(f"Cluster Name: {cluster_name}\n")
-                f.write(f"Region: {region}\n")
-                f.write(f"Total Nodegroups: {len(nodegroup_configs)}\n\n")
-        
-                f.write("## Nodegroup Details\n")
-                for i, config in enumerate(nodegroup_configs, 1):
-                    f.write(f"{i}. {config['name']} ({config['strategy'].upper()})\n")
-                    f.write(f"   Scaling: Min={config['min_nodes']}, Desired={config['desired_nodes']}, Max={config['max_nodes']}\n")
-                    f.write(f"   Subnet Preference: {config['subnet_preference']}\n")
-        
-                f.write("\n## Prerequisites\n")
-                f.write("1. Install AWS CLI: https://aws.amazon.com/cli/\n")
-                f.write("2. Install kubectl: https://kubernetes.io/docs/tasks/tools/\n\n")
-        
-                f.write("## AWS Configuration\n")
-                f.write(f"aws configure set aws_access_key_id {credential_info.access_key} --profile {username}\n")
-                f.write(f"aws configure set aws_secret_access_key {credential_info.secret_key} --profile {username}\n")
-                f.write(f"aws configure set region {region} --profile {username}\n\n")
-        
-                f.write("## Cluster Access\n")
-                f.write(f"aws eks update-kubeconfig --region {region} --name {cluster_name} --profile {username}\n\n")
-        
-                f.write("## Test Commands\n")
-                f.write("kubectl get nodes\n")
-                f.write("kubectl get pods --all-namespaces\n")
-                f.write("kubectl cluster-info\n\n")
-        
-                f.write("## Nodegroup Management\n")
-                for config in nodegroup_configs:
-                    f.write(f"# Scale {config['name']}\n")
-                    f.write(f"aws eks update-nodegroup-config --cluster-name {cluster_name} --nodegroup-name {config['name']} --scaling-config minSize=0,maxSize={config['max_nodes']},desiredSize=1\n")
-        
-                f.write("\n## Troubleshooting\n")
-                f.write("# If you get authentication errors:\n")
-                f.write("# 1. Verify your AWS credentials are correct\n")
-                f.write("# 2. Ensure your user has been granted access to the cluster\n")
-                f.write("# 3. Try updating the kubeconfig again\n")
-                f.write("# 4. Contact administrator if issues persist\n\n")
-        
-                f.write("## Additional Resources\n")
-                f.write("- EKS User Guide: https://docs.aws.amazon.com/eks/latest/userguide/\n")
-                f.write("- kubectl Cheat Sheet: https://kubernetes.io/docs/reference/kubectl/cheatsheet/\n")
-    
-            print(f"📄 Enhanced user instructions saved to: {instruction_file}")
-    
-            # Also generate a copy in the current directory for immediate access
-            current_dir_file = f"user_instructions_{account_name}_{username}_{cluster_name}_{timestamp}.txt"
-            import shutil
-            shutil.copy(instruction_file, current_dir_file)
-            print(f"📄 User instructions also available at: {current_dir_file}")
-    
-        except Exception as e:
-            print(f"⚠️  Warning: Could not create enhanced user instruction file: {e}")
-
     def print_enhanced_cluster_summary_multi_nodegroup(self, cluster_name: str, cluster_info: dict):
         """Print enhanced cluster creation summary with multi-nodegroup support"""
     
@@ -1743,8 +1591,7 @@ class EKSClusterManager:
 
     ######
 
-    def create_eks_control_plane(self, eks_client, cluster_name: str, eks_version: str, 
-                                eks_role_arn: str, subnet_ids: List[str], security_group_id: str) -> bool:
+    def create_eks_control_plane(self, eks_client, cluster_name: str, eks_version: str, eks_role_arn: str, subnet_ids: List[str], security_group_id: str) -> bool:
         """Create EKS control plane with CloudWatch logging enabled"""
         try:
             supported_versions = ["1.26", "1.27", "1.28", "1.29", "1.30", "1.31", "1.32"]
@@ -1994,278 +1841,6 @@ class EKSClusterManager:
                 })
             }
     '''
-
-    def create_spot_nodegroup_test(self, eks_client, cluster_name: str, nodegroup_name: str,
-                          node_role_arn: str, subnet_ids: List[str], ami_type: str,
-                          instance_types: List[str], min_size: int, desired_size: int, max_size: int) -> bool:
-        """Create Spot nodegroup with exact instance types provided"""
-        try:
-            # Make sure instance_types is a list
-            if isinstance(instance_types, str):
-                instance_types = [instance_types]  # Convert single string to list
-        
-            # Handle empty instance types list
-            if not instance_types:
-                print("⚠️  No instance types provided for spot nodegroup. Using default t3.medium")
-                instance_types = ["t3.medium"]
-        
-            print(f"Creating spot nodegroup {nodegroup_name}")
-            print(f"Instance types: {', '.join(instance_types)}")
-            print(f"AMI type: {ami_type}")
-            print(f"Scaling: Min={min_size}, Desired={desired_size}, Max={max_size}")
-        
-            # Create Spot nodegroup
-            eks_client.create_nodegroup(
-                clusterName=cluster_name,
-                nodegroupName=nodegroup_name,
-                scalingConfig={
-                    'minSize': min_size,
-                    'maxSize': max_size,
-                    'desiredSize': desired_size
-                },
-                instanceTypes=instance_types,
-                amiType=ami_type,
-                nodeRole=node_role_arn,
-                subnets=subnet_ids,
-                diskSize=20,  # Default disk size in GB
-                capacityType='SPOT',
-                tags={
-                    'Name': nodegroup_name,
-                    'CreatedBy': self.current_user,
-                    'CreatedAt': self.current_time,
-                    'Strategy': 'Spot'
-                }
-            )
-        
-            # Wait for nodegroup to be active
-            print(f"⏳ Waiting for nodegroup {nodegroup_name} to be active...")
-            waiter = eks_client.get_waiter('nodegroup_active')
-            waiter.wait(
-                clusterName=cluster_name,
-                nodegroupName=nodegroup_name,
-                WaiterConfig={'Delay': 30, 'MaxAttempts': 40}
-            )
-        
-            print(f"✅ Nodegroup {nodegroup_name} is now active")
-            return True
-        
-        except Exception as e:
-            print(f"❌ Error creating spot nodegroup: {e}")
-            return False
-
-    def create_ondemand_nodegroup_test(self, eks_client, cluster_name: str, nodegroup_name: str,
-                                  node_role_arn: str, subnet_ids: List[str], ami_type: str,
-                                  instance_types: List[str], min_size: int, desired_size: int, max_size: int) -> bool:
-        """Create On-Demand nodegroup with exact instance types provided"""
-        try:
-            # Make sure instance_types is a list
-            if isinstance(instance_types, str):
-                instance_types = [instance_types]  # Convert single string to list
-        
-            # Handle empty instance types list
-            if not instance_types:
-                print("⚠️  No instance types provided for on-demand nodegroup. Using default t3.medium")
-                instance_types = ["t3.medium"]
-        
-            print(f"Creating on-demand nodegroup {nodegroup_name}")
-            print(f"Instance types: {', '.join(instance_types)}")
-            print(f"AMI type: {ami_type}")
-            print(f"Scaling: Min={min_size}, Desired={desired_size}, Max={max_size}")
-        
-            # Create On-Demand nodegroup
-            eks_client.create_nodegroup(
-                clusterName=cluster_name,
-                nodegroupName=nodegroup_name,
-                scalingConfig={
-                    'minSize': min_size,
-                    'maxSize': max_size,
-                    'desiredSize': desired_size
-                },
-                instanceTypes=instance_types,
-                amiType=ami_type,
-                nodeRole=node_role_arn,
-                subnets=subnet_ids,
-                diskSize=20,  # Default disk size in GB
-                capacityType='ON_DEMAND',
-                tags={
-                    'Name': nodegroup_name,
-                    'CreatedBy': self.current_user,
-                    'CreatedAt': self.current_time,
-                    'Strategy': 'On-Demand'
-                }
-            )
-        
-            # Wait for nodegroup to be active
-            print(f"⏳ Waiting for nodegroup {nodegroup_name} to be active...")
-            waiter = eks_client.get_waiter('nodegroup_active')
-            waiter.wait(
-                clusterName=cluster_name,
-                nodegroupName=nodegroup_name,
-                WaiterConfig={'Delay': 30, 'MaxAttempts': 40}
-            )
-        
-            print(f"✅ Nodegroup {nodegroup_name} is now active")
-            return True
-        
-        except Exception as e:
-            print(f"❌ Error creating on-demand nodegroup: {e}")
-            return False
-
-    def create_mixed_nodegroup_test(self, eks_client, cluster_name: str, nodegroup_name: str,
-                               node_role_arn: str, subnet_ids: List[str], ami_type: str,
-                               instance_selections: Dict, min_size: int, desired_size: int, max_size: int) -> bool:
-        """Create mixed strategy using two separate nodegroups with the exact instance types provided"""
-        try:
-            # Get on-demand percentage, default to 50% if not specified
-            on_demand_percentage = instance_selections.get('on_demand_percentage', 50)
-        
-            # Get instance types, use defaults if not provided
-            on_demand_types = instance_selections.get('on-demand', ["t3.medium"])
-            spot_types = instance_selections.get('spot', ["t3.medium"])
-        
-            # Make sure instance types are lists
-            if isinstance(on_demand_types, str):
-                on_demand_types = [on_demand_types]
-            if isinstance(spot_types, str):
-                spot_types = [spot_types]
-            
-            print(f"Creating mixed strategy with {on_demand_percentage}% On-Demand, {100-on_demand_percentage}% Spot")
-            print(f"On-Demand instance types: {', '.join(on_demand_types)}")
-            print(f"Spot instance types: {', '.join(spot_types)}")
-
-            # Calculate node distribution
-            total_desired = desired_size
-            total_min = min_size
-            total_max = max_size
-
-            # Calculate On-Demand nodes
-            if on_demand_percentage > 0:
-                ondemand_desired = max(1, int(total_desired * on_demand_percentage / 100))
-                ondemand_min = max(0, int(total_min * on_demand_percentage / 100))
-                ondemand_max = max(1, int(total_max * on_demand_percentage / 100))
-            else:
-                ondemand_desired = ondemand_min = ondemand_max = 0
-
-            # Calculate Spot nodes (remainder)
-            spot_desired = total_desired - ondemand_desired
-            spot_min = total_min - ondemand_min
-            spot_max = total_max - ondemand_max
-
-            # Ensure spot values are valid
-            spot_desired = max(0, spot_desired)
-            spot_min = max(0, spot_min)
-            spot_max = max(0, spot_max)
-
-            print(f"📊 Node Distribution:")
-            print(f"   On-Demand: Min={ondemand_min}, Desired={ondemand_desired}, Max={ondemand_max}")
-            print(f"   Spot: Min={spot_min}, Desired={spot_desired}, Max={spot_max}")
-
-            success_count = 0
-            created_nodegroups = []
-
-            # Create On-Demand nodegroup if we have on-demand allocation
-            if on_demand_types and ondemand_max > 0:
-                ondemand_ng_name = f"{nodegroup_name}-ondemand"
-                print(f"\n🏗️ Creating On-Demand nodegroup: {ondemand_ng_name}")
-                print(f"   Instance Types: {', '.join(on_demand_types)}")
-                print(f"   Scaling: Min={ondemand_min}, Desired={ondemand_desired}, Max={ondemand_max}")
-            
-                try:
-                    eks_client.create_nodegroup(
-                        clusterName=cluster_name,
-                        nodegroupName=ondemand_ng_name,
-                        scalingConfig={
-                            'minSize': ondemand_min,
-                            'maxSize': ondemand_max,
-                            'desiredSize': ondemand_desired
-                        },
-                        instanceTypes=on_demand_types,
-                        amiType=ami_type,
-                        nodeRole=node_role_arn,
-                        subnets=subnet_ids,
-                        diskSize=20,
-                        capacityType='ON_DEMAND',
-                        tags={
-                            'Name': ondemand_ng_name,
-                            'CreatedBy': self.current_user,
-                            'CreatedAt': self.current_time,
-                            'Strategy': 'Mixed-OnDemand',
-                            'ParentNodegroup': nodegroup_name
-                        }
-                    )
-                
-                    print(f"⏳ Waiting for On-Demand nodegroup {ondemand_ng_name} to be active...")
-                    waiter = eks_client.get_waiter('nodegroup_active')
-                    waiter.wait(
-                        clusterName=cluster_name,
-                        nodegroupName=ondemand_ng_name,
-                        WaiterConfig={'Delay': 30, 'MaxAttempts': 40}
-                    )
-                    print(f"✅ On-Demand nodegroup {ondemand_ng_name} is now active")
-                    success_count += 1
-                    created_nodegroups.append(ondemand_ng_name)
-                
-                except Exception as e:
-                    print(f"❌ Failed to create On-Demand nodegroup: {str(e)}")
-
-            # Create Spot nodegroup if we have spot allocation
-            if spot_types and spot_max > 0:
-                spot_ng_name = f"{nodegroup_name}-spot"
-                print(f"\n🏗️ Creating Spot nodegroup: {spot_ng_name}")
-                print(f"   Instance Types: {', '.join(spot_types)}")
-                print(f"   Scaling: Min={spot_min}, Desired={spot_desired}, Max={spot_max}")
-            
-                try:
-                    eks_client.create_nodegroup(
-                        clusterName=cluster_name,
-                        nodegroupName=spot_ng_name,
-                        scalingConfig={
-                            'minSize': spot_min,
-                            'maxSize': spot_max,
-                            'desiredSize': spot_desired
-                        },
-                        instanceTypes=spot_types,
-                        amiType=ami_type,
-                        nodeRole=node_role_arn,
-                        subnets=subnet_ids,
-                        diskSize=20,
-                        capacityType='SPOT',
-                        tags={
-                            'Name': spot_ng_name,
-                            'CreatedBy': self.current_user,
-                            'CreatedAt': self.current_time,
-                            'Strategy': 'Mixed-Spot',
-                            'ParentNodegroup': nodegroup_name
-                        }
-                    )
-                
-                    print(f"⏳ Waiting for Spot nodegroup {spot_ng_name} to be active...")
-                    waiter = eks_client.get_waiter('nodegroup_active')
-                    waiter.wait(
-                        clusterName=cluster_name,
-                        nodegroupName=spot_ng_name,
-                        WaiterConfig={'Delay': 30, 'MaxAttempts': 40}
-                    )
-                    print(f"✅ Spot nodegroup {spot_ng_name} is now active")
-                    success_count += 1
-                    created_nodegroups.append(spot_ng_name)
-                
-                except Exception as e:
-                    print(f"❌ Failed to create Spot nodegroup: {str(e)}")
-
-            # Final result
-            if success_count > 0:
-                print(f"\n🎉 Mixed strategy implemented successfully!")
-                print(f"   ✅ Created {success_count} nodegroups: {', '.join(created_nodegroups)}")
-                print(f"   📊 Distribution: {on_demand_percentage}% On-Demand, {100-on_demand_percentage}% Spot")
-                return True
-            else:
-                print(f"\n❌ Failed to create any nodegroups for mixed strategy")
-                return False
-
-        except Exception as e:
-            print(f"❌ Error creating mixed nodegroups: {e}")
-            return False
 
     def create_mixed_nodegroup(self, eks_client, cluster_name: str, nodegroup_name: str,
                            node_role_arn: str, subnet_ids: List[str], ami_type: str,
@@ -2830,24 +2405,102 @@ class EKSClusterManager:
                 try:
                     security_groups = ec2_client.describe_security_groups(
                         Filters=[
-                            {'Name': 'group-name', 'Values': ['eks-cluster-sg']},
+                            {'Name': 'group-name', 'Values': ['eks-cluster-sg']},  # Wildcard to match any suffix
                             {'Name': 'vpc-id', 'Values': [vpc_id]}
                         ]
                     )
-                
+
                     if security_groups['SecurityGroups']:
+                        # Use the first security group found
                         sg_id = security_groups['SecurityGroups'][0]['GroupId']
-                        self.log_operation('DEBUG', f"Using existing security group: {sg_id}")
+                        self.log_operation('DEBUG', f"Using security group: {sg_id}")
+
+                        # Get VPC CIDR block
+                        vpc_response = ec2_client.describe_vpcs(VpcIds=[vpc_id])
+                        vpc_cidr = vpc_response['Vpcs'][0]['CidrBlock']
+                        self.log_operation('DEBUG', f"VPC {vpc_id} has CIDR block: {vpc_cidr}")
+
+                        # Check if the security group has the required rule
+                        sg_rules = ec2_client.describe_security_group_rules(
+                            Filters=[{'Name': 'group-id', 'Values': [sg_id]}]
+                        )
+
+                        # Check if the VPC CIDR rule exists
+                        has_vpc_rule = any(
+                            rule.get('IsEgress') == False and
+                            rule.get('CidrIpv4') == vpc_cidr and
+                            rule.get('IpProtocol') == '-1'
+                            for rule in sg_rules['SecurityGroupRules']
+                        )
+
+                        if not has_vpc_rule:
+                            self.log_operation('INFO',
+                                               f"Adding VPC access rule for CIDR {vpc_cidr} to security group {sg_id}")
+                            ec2_client.authorize_security_group_ingress(
+                                GroupId=sg_id,
+                                IpPermissions=[
+                                    {
+                                        'IpProtocol': '-1',  # All protocols
+                                        'FromPort': -1,  # All ports
+                                        'ToPort': -1,  # All ports
+                                        'IpRanges': [
+                                            {
+                                                'CidrIp': vpc_cidr,
+                                                'Description': 'Allow traffic within VPC for private cluster access'
+                                            }
+                                        ]
+                                    }
+                                ]
+                            )
                     else:
-                        # Create security group
+                        # No existing security groups, create a new one
                         sg_response = ec2_client.create_security_group(
                             GroupName='eks-cluster-sg',
                             Description='Security group for EKS cluster',
                             VpcId=vpc_id
                         )
                         sg_id = sg_response['GroupId']
-                        self.log_operation('INFO', f"Created security group {sg_id}")
-                    
+                        self.log_operation('INFO', f"Created new security group {sg_id}")
+
+                        # Add creation time tag
+                        ec2_client.create_tags(
+                            Resources=[sg_id],
+                            Tags=[
+                                {
+                                    'Key': 'CreationTime',
+                                    'Value': datetime.now().isoformat()
+                                },
+                                {
+                                    'Key': 'Name',
+                                    'Value': 'eks-cluster-sg'
+                                }
+                            ]
+                        )
+
+                        # Get VPC CIDR block
+                        vpc_response = ec2_client.describe_vpcs(VpcIds=[vpc_id])
+                        vpc_cidr = vpc_response['Vpcs'][0]['CidrBlock']
+                        self.log_operation('INFO', f"VPC {vpc_id} has CIDR block: {vpc_cidr}")
+
+                        # Add the VPC access rule
+                        self.log_operation('INFO', f"Adding VPC access rule to new security group {sg_id}")
+                        ec2_client.authorize_security_group_ingress(
+                            GroupId=sg_id,
+                            IpPermissions=[
+                                {
+                                    'IpProtocol': '-1',  # All protocols
+                                    'FromPort': -1,  # All ports
+                                    'ToPort': -1,  # All ports
+                                    'IpRanges': [
+                                        {
+                                            'CidrIp': vpc_cidr,
+                                            'Description': 'Allow traffic within VPC for private cluster access'
+                                        }
+                                    ]
+                                }
+                            ]
+                        )
+
                 except Exception as e:
                     self.log_operation('WARNING', f"Using default security group due to: {str(e)}")
                     default_sg = ec2_client.describe_security_groups(
@@ -3026,6 +2679,7 @@ class EKSClusterManager:
                             f.write(f"export AWS_ACCESS_KEY_ID={admin_access_key}\n")
                             f.write(f"export AWS_SECRET_ACCESS_KEY={admin_secret_key}\n")
                             f.write(f"export AWS_DEFAULT_REGION={region}\n\n")
+                            f.write(f"# export profil= {username}\n")
 
                             f.write(f"# Update kubeconfig with admin credentials\n")
                             f.write(f"aws eks update-kubeconfig --region {region} --name {cluster_name}\n\n")
@@ -3079,10 +2733,10 @@ class EKSClusterManager:
                 self.print_colored(Colors.YELLOW, f"🚀 Applying ConfigMap with admin credentials...")
 
                 # Set environment variables for admin access
-                env = os.environ.copy()
-                env['AWS_ACCESS_KEY_ID'] = admin_access_key
-                env['AWS_SECRET_ACCESS_KEY'] = admin_secret_key
-                env['AWS_DEFAULT_REGION'] = region
+                myenv = os.environ.copy()
+                myenv['AWS_ACCESS_KEY_ID'] = admin_access_key
+                myenv['AWS_SECRET_ACCESS_KEY'] = admin_secret_key
+                myenv['AWS_DEFAULT_REGION'] = region
 
                 try:
                     # Update kubeconfig with admin credentials first
@@ -3093,7 +2747,7 @@ class EKSClusterManager:
                     ]
 
                     self.log_operation('INFO', f"Updating kubeconfig with admin credentials")
-                    update_result = subprocess.run(update_cmd, env=env, capture_output=True, text=True, timeout=120)
+                    update_result = subprocess.run(update_cmd, env=myenv, capture_output=True, text=True, timeout=120)
 
                     if update_result.returncode == 0:
                         self.log_operation('INFO', f"Successfully updated kubeconfig with admin credentials")
@@ -3105,7 +2759,7 @@ class EKSClusterManager:
                     apply_cmd = ['kubectl', 'apply', '-f', configmap_file]
                     self.log_operation('INFO', f"Applying ConfigMap: {' '.join(apply_cmd)}")
 
-                    apply_result = subprocess.run(apply_cmd, env=env, capture_output=True, text=True, timeout=300)
+                    apply_result = subprocess.run(apply_cmd, env=myenv, capture_output=True, text=True, timeout=300)
 
                     if apply_result.returncode == 0:
                         self.log_operation('INFO', f"Successfully applied aws-auth ConfigMap for {cluster_name}")
@@ -3113,7 +2767,7 @@ class EKSClusterManager:
 
                         # Verify the ConfigMap was applied
                         verify_cmd = ['kubectl', 'get', 'configmap', 'aws-auth', '-n', 'kube-system', '-o', 'yaml']
-                        verify_result = subprocess.run(verify_cmd, env=env, capture_output=True, text=True, timeout=120)
+                        verify_result = subprocess.run(verify_cmd, env=myenv, capture_output=True, text=True, timeout=120)
 
                         if verify_result.returncode == 0:
                             self.log_operation('INFO', f"ConfigMap verification successful")
@@ -3165,9 +2819,11 @@ class EKSClusterManager:
 
                         # Set user environment
                         user_env = os.environ.copy()
-                        user_env['AWS_ACCESS_KEY_ID'] = user_data.get('access_key_id', '')
-                        user_env['AWS_SECRET_ACCESS_KEY'] = user_data.get('secret_access_key', '')
+                        user_env['AWS_ACCESS_KEY_ID'] = user_data.get('access_key', '')
+                        user_env['AWS_SECRET_ACCESS_KEY'] = user_data.get('secret_key', '')
                         user_env['AWS_DEFAULT_REGION'] = region
+                        user_env['AWS_PROFILE'] = user_data.get('username', username)
+
 
                         # Update kubeconfig with user credentials
                         user_update_cmd = [
@@ -3825,6 +3481,109 @@ class EKSClusterManager:
         return confirm in ['y', 'yes']
 
     def setup_cost_alarms(self, cluster_name: str, region: str, cloudwatch_client, account_id: str) -> bool:
+        """Setup cost monitoring alarms with proper service names and realistic expectations"""
+        try:
+            self.log_operation('INFO', f"Setting up cost monitoring alarms for cluster {cluster_name}")
+
+            cost_alarms_created = 0
+            total_cost_alarms = 0
+
+            # Fixed cost alarm configurations with correct service names
+            cost_alarm_configs = [
+                {
+                    'name': f'{cluster_name}-ec2-cost-high',
+                    'description': f'High EC2 cost for {cluster_name} nodes',
+                    'threshold': 50.0,  # $50 daily
+                    'metric_name': 'EstimatedCharges',
+                    'namespace': 'AWS/Billing',
+                    'period': 86400,  # 24 hours
+                    'dimensions': [
+                        {'Name': 'Currency', 'Value': 'USD'},
+                        {'Name': 'ServiceName', 'Value': 'Amazon Elastic Compute Cloud - Compute'}  # Fixed service name
+                    ],
+                    'severity': 'HIGH'
+                },
+                {
+                    'name': f'{cluster_name}-ebs-cost-warning',
+                    'description': f'EBS storage cost warning for {cluster_name}',
+                    'threshold': 20.0,  # $20 daily
+                    'metric_name': 'EstimatedCharges',
+                    'namespace': 'AWS/Billing',
+                    'period': 86400,
+                    'dimensions': [
+                        {'Name': 'Currency', 'Value': 'USD'},
+                        {'Name': 'ServiceName', 'Value': 'Amazon Elastic Block Store'}  # Fixed service name
+                    ],
+                    'severity': 'MEDIUM'
+                },
+                {
+                    'name': f'{cluster_name}-total-cost-critical',
+                    'description': f'Total AWS cost critical threshold',
+                    'threshold': 100.0,  # $100 daily
+                    'metric_name': 'EstimatedCharges',
+                    'namespace': 'AWS/Billing',
+                    'period': 86400,
+                    'dimensions': [
+                        {'Name': 'Currency', 'Value': 'USD'}
+                        # No ServiceName dimension = total account cost
+                    ],
+                    'severity': 'CRITICAL'
+                }
+            ]
+
+            # Create each cost alarm
+            for alarm_config in cost_alarm_configs:
+                total_cost_alarms += 1
+                try:
+                    cloudwatch_client.put_metric_alarm(
+                        AlarmName=alarm_config['name'],
+                        ComparisonOperator='GreaterThanThreshold',
+                        EvaluationPeriods=1,  # Only 1 period since billing updates daily
+                        MetricName=alarm_config['metric_name'],
+                        Namespace=alarm_config['namespace'],
+                        Period=alarm_config['period'],
+                        Statistic='Maximum',
+                        Threshold=alarm_config['threshold'],
+                        ActionsEnabled=False,  # Set to False since no actions configured
+                        AlarmDescription=alarm_config['description'],
+                        Dimensions=alarm_config['dimensions'],
+                        Unit='None',
+                        TreatMissingData='notBreaching',  # Important: Don't alarm if no data yet
+                        Tags=[
+                            {'Key': 'Cluster', 'Value': cluster_name},
+                            {'Key': 'AlarmType', 'Value': 'Cost'},
+                            {'Key': 'Severity', 'Value': alarm_config['severity']},
+                            {'Key': 'CreatedBy', 'Value': self.current_user}
+                        ]
+                    )
+
+                    cost_alarms_created += 1
+                    self.log_operation('INFO',
+                                       f"Created cost alarm: {alarm_config['name']} (${alarm_config['threshold']}, {alarm_config['severity']})")
+                    self.print_colored(Colors.GREEN,
+                                       f"   ✅ Cost alarm: {alarm_config['name']} (${alarm_config['threshold']})")
+
+                except Exception as e:
+                    self.log_operation('ERROR', f"Failed to create cost alarm {alarm_config['name']}: {str(e)}")
+                    self.print_colored(Colors.YELLOW, f"   ⚠️ Failed cost alarm: {alarm_config['name']}")
+
+            # Print important note about cost alarm delays
+            if cost_alarms_created > 0:
+                self.print_colored(Colors.CYAN, "   ℹ️  Note: Cost alarms may show 'Insufficient Data' for 24-48 hours")
+                self.print_colored(Colors.CYAN, "      This is normal as AWS billing metrics update daily")
+
+            success_rate = (cost_alarms_created / total_cost_alarms) * 100 if total_cost_alarms > 0 else 0
+            self.log_operation('INFO',
+                               f"Cost alarms setup: {cost_alarms_created}/{total_cost_alarms} created ({success_rate:.1f}%)")
+
+            return success_rate >= 70
+
+        except Exception as e:
+            self.log_operation('ERROR', f"Failed to setup cost alarms: {str(e)}")
+            self.print_colored(Colors.RED, f"❌ Cost alarms setup failed: {str(e)}")
+            return False
+
+    def setup_cost_alarms_v1(self, cluster_name: str, region: str, cloudwatch_client, account_id: str) -> bool:
         """Setup cost monitoring alarms for EKS cluster"""
         try:
             self.log_operation('INFO', f"Setting up cost monitoring alarms for cluster {cluster_name}")
@@ -4464,7 +4223,56 @@ class EKSClusterManager:
             print(f"{RED}   [ERROR] User access verification failed: {str(e)}{RESET}")
             return False
 
-    def setup_cloudwatch_alarms(self, cluster_name: str, region: str, cloudwatch_client, nodegroup_name: str, account_id: str) -> bool:
+    def setup_cloudwatch_alarms(self, cluster_name: str, region: str, cloudwatch_client, nodegroup_name: str,
+                                account_id: str) -> bool:
+        """Setup comprehensive CloudWatch alarms for EKS cluster with proper metric validation"""
+        try:
+            self.log_operation('INFO', f"Setting up CloudWatch alarms for cluster {cluster_name}")
+
+            alarms_created = 0
+            total_alarms = 0
+
+            # Step 1: Verify what metrics are actually available
+            available_metrics = self._discover_available_metrics(cloudwatch_client, cluster_name, nodegroup_name)
+
+            # Step 2: Create EC2-based alarms (these will have data)
+            ec2_alarms_created = self._create_ec2_based_alarms(
+                cloudwatch_client, cluster_name, nodegroup_name, available_metrics
+            )
+            alarms_created += ec2_alarms_created[0]
+            total_alarms += ec2_alarms_created[1]
+
+            # Step 3: Create Container Insights alarms only if metrics exist
+            if available_metrics.get('container_insights', False):
+                ci_alarms_created = self._create_container_insights_alarms(
+                    cloudwatch_client, cluster_name, available_metrics
+                )
+                alarms_created += ci_alarms_created[0]
+                total_alarms += ci_alarms_created[1]
+            else:
+                self.print_colored(Colors.YELLOW,
+                                   "   ⚠️ Container Insights metrics not available, skipping related alarms")
+
+            # Step 4: Create composite alarms
+            composite_success = self.create_composite_alarms(cloudwatch_client, cluster_name, alarms_created)
+
+            # Calculate success rates
+            basic_alarm_success_rate = (alarms_created / total_alarms) * 100 if total_alarms > 0 else 0
+            overall_success = basic_alarm_success_rate >= 70 and composite_success
+
+            self.log_operation('INFO',
+                               f"CloudWatch alarms setup: {alarms_created}/{total_alarms} created ({basic_alarm_success_rate:.1f}%)")
+            self.print_colored(Colors.GREEN,
+                               f"   📊 CloudWatch alarms: {alarms_created}/{total_alarms} created ({basic_alarm_success_rate:.1f}%)")
+
+            return overall_success
+
+        except Exception as e:
+            self.log_operation('ERROR', f"Failed to setup CloudWatch alarms: {str(e)}")
+            self.print_colored(Colors.RED, f"❌ CloudWatch alarms setup failed: {str(e)}")
+            return False
+
+    def setup_cloudwatch_alarms_v1(self, cluster_name: str, region: str, cloudwatch_client, nodegroup_name: str, account_id: str) -> bool:
         """Setup comprehensive CloudWatch alarms for EKS cluster"""
         try:
             self.log_operation('INFO', f"Setting up CloudWatch alarms for cluster {cluster_name}")
@@ -4620,7 +4428,381 @@ class EKSClusterManager:
             self.log_operation('ERROR', f"Failed to setup CloudWatch alarms: {str(e)}")
             return False
 
-    def create_composite_alarms(self, cloudwatch_client, cluster_name: str, alarm_configs: list) -> bool:
+    def _create_container_insights_alarms(self, cloudwatch_client, cluster_name: str, available_metrics: dict) -> tuple:
+        """Create Container Insights alarms only if the metrics actually exist"""
+        created = 0
+        total = 0
+
+        if not available_metrics.get('container_insights'):
+            return (0, 0)
+
+        # Container Insights alarm configurations
+        ci_alarm_configs = [
+            {
+                'name': f'{cluster_name}-node-not-ready',
+                'description': f'Node not ready in {cluster_name}',
+                'metric_name': 'cluster_node_running_total',
+                'namespace': 'ContainerInsights',
+                'statistic': 'Average',
+                'threshold': 1.0,
+                'comparison': 'LessThanThreshold',
+                'evaluation_periods': 3,
+                'period': 300,
+                'dimensions': [{'Name': 'ClusterName', 'Value': cluster_name}]
+            },
+            {
+                'name': f'{cluster_name}-pod-failures',
+                'description': f'High pod restart rate in {cluster_name}',
+                'metric_name': 'pod_number_of_container_restarts',
+                'namespace': 'ContainerInsights',
+                'statistic': 'Sum',
+                'threshold': 10.0,
+                'comparison': 'GreaterThanThreshold',
+                'evaluation_periods': 2,
+                'period': 300,
+                'dimensions': [{'Name': 'ClusterName', 'Value': cluster_name}]
+            },
+            {
+                'name': f'{cluster_name}-service-unhealthy',
+                'description': f'Service unhealthy in {cluster_name}',
+                'metric_name': 'service_number_of_running_pods',
+                'namespace': 'ContainerInsights',
+                'statistic': 'Average',
+                'threshold': 1.0,
+                'comparison': 'LessThanThreshold',
+                'evaluation_periods': 2,
+                'period': 300,
+                'dimensions': [{'Name': 'ClusterName', 'Value': cluster_name}]
+            }
+        ]
+
+        # Create each Container Insights alarm
+        for alarm_config in ci_alarm_configs:
+            total += 1
+            try:
+                # First verify the specific metric exists
+                if self._verify_metric_exists(cloudwatch_client, alarm_config['namespace'],
+                                              alarm_config['metric_name'], alarm_config['dimensions']):
+
+                    cloudwatch_client.put_metric_alarm(
+                        AlarmName=alarm_config['name'],
+                        ComparisonOperator=alarm_config['comparison'],
+                        EvaluationPeriods=alarm_config['evaluation_periods'],
+                        MetricName=alarm_config['metric_name'],
+                        Namespace=alarm_config['namespace'],
+                        Period=alarm_config['period'],
+                        Statistic=alarm_config['statistic'],
+                        Threshold=alarm_config['threshold'],
+                        ActionsEnabled=True,
+                        AlarmDescription=alarm_config['description'],
+                        Dimensions=alarm_config['dimensions'],
+                        Unit='Count',
+                        Tags=[
+                            {'Key': 'Cluster', 'Value': cluster_name},
+                            {'Key': 'AlarmType', 'Value': 'ContainerInsights'},
+                            {'Key': 'CreatedBy', 'Value': self.current_user}
+                        ]
+                    )
+
+                    created += 1
+                    self.log_operation('INFO', f"Created Container Insights alarm: {alarm_config['name']}")
+                    self.print_colored(Colors.GREEN, f"   ✅ Created CI alarm: {alarm_config['name']}")
+                else:
+                    self.log_operation('WARNING',
+                                       f"Metric {alarm_config['metric_name']} not found, skipping alarm {alarm_config['name']}")
+                    self.print_colored(Colors.YELLOW, f"   ⚠️ Metric not found, skipped: {alarm_config['name']}")
+
+            except Exception as e:
+                self.log_operation('ERROR',
+                                   f"Failed to create Container Insights alarm {alarm_config['name']}: {str(e)}")
+                self.print_colored(Colors.YELLOW, f"   ⚠️ Failed to create CI alarm: {alarm_config['name']}")
+
+        return (created, total)
+
+    def _create_ec2_based_alarms(self, cloudwatch_client, cluster_name: str, nodegroup_name: str,
+                                 available_metrics: dict) -> tuple:
+        """Create alarms based on EC2 metrics that actually exist"""
+        created = 0
+        total = 0
+
+        if not available_metrics.get('ec2') or not available_metrics.get('asg_names'):
+            self.log_operation('WARNING', f"No EC2 metrics available for cluster {cluster_name}")
+            return (0, 0)
+
+        # Use the first ASG name found (or you could create alarms for all ASGs)
+        asg_name = available_metrics['asg_names'][0]
+
+        # Define EC2-based alarm configurations that will actually have data
+        ec2_alarm_configs = [
+            {
+                'name': f'{cluster_name}-high-cpu-utilization',
+                'description': f'High CPU utilization on nodes in {cluster_name}',
+                'metric_name': 'CPUUtilization',
+                'namespace': 'AWS/EC2',
+                'statistic': 'Average',
+                'threshold': 80.0,
+                'comparison': 'GreaterThanThreshold',
+                'evaluation_periods': 2,
+                'period': 300,
+                'dimensions': [{'Name': 'AutoScalingGroupName', 'Value': asg_name}]
+            },
+            {
+                'name': f'{cluster_name}-high-network-in',
+                'description': f'High network input on nodes in {cluster_name}',
+                'metric_name': 'NetworkIn',
+                'namespace': 'AWS/EC2',
+                'statistic': 'Average',
+                'threshold': 100000000,  # 100MB in bytes
+                'comparison': 'GreaterThanThreshold',
+                'evaluation_periods': 2,
+                'period': 300,
+                'dimensions': [{'Name': 'AutoScalingGroupName', 'Value': asg_name}]
+            },
+            {
+                'name': f'{cluster_name}-high-network-out',
+                'description': f'High network output on nodes in {cluster_name}',
+                'metric_name': 'NetworkOut',
+                'namespace': 'AWS/EC2',
+                'statistic': 'Average',
+                'threshold': 100000000,  # 100MB in bytes
+                'comparison': 'GreaterThanThreshold',
+                'evaluation_periods': 2,
+                'period': 300,
+                'dimensions': [{'Name': 'AutoScalingGroupName', 'Value': asg_name}]
+            }
+        ]
+
+        # Create Auto Scaling Group specific alarms
+        asg_alarm_configs = [
+            {
+                'name': f'{cluster_name}-low-instance-count',
+                'description': f'Low instance count in ASG for {cluster_name}',
+                'metric_name': 'GroupTotalInstances',
+                'namespace': 'AWS/AutoScaling',
+                'statistic': 'Average',
+                'threshold': 1.0,
+                'comparison': 'LessThanThreshold',
+                'evaluation_periods': 2,
+                'period': 300,
+                'dimensions': [{'Name': 'AutoScalingGroupName', 'Value': asg_name}]
+            },
+            {
+                'name': f'{cluster_name}-unhealthy-instances',
+                'description': f'Unhealthy instances in ASG for {cluster_name}',
+                'metric_name': 'GroupTotalInstances',
+                'namespace': 'AWS/AutoScaling',
+                'statistic': 'Average',
+                'threshold': 0.0,
+                'comparison': 'GreaterThanThreshold',
+                'evaluation_periods': 1,
+                'period': 300,
+                'dimensions': [{'Name': 'AutoScalingGroupName', 'Value': asg_name}]
+            }
+        ]
+
+        # Combine all EC2-based alarms
+        all_ec2_alarms = ec2_alarm_configs + asg_alarm_configs
+
+        # Create each alarm
+        for alarm_config in all_ec2_alarms:
+            total += 1
+            try:
+                cloudwatch_client.put_metric_alarm(
+                    AlarmName=alarm_config['name'],
+                    ComparisonOperator=alarm_config['comparison'],
+                    EvaluationPeriods=alarm_config['evaluation_periods'],
+                    MetricName=alarm_config['metric_name'],
+                    Namespace=alarm_config['namespace'],
+                    Period=alarm_config['period'],
+                    Statistic=alarm_config['statistic'],
+                    Threshold=alarm_config['threshold'],
+                    ActionsEnabled=True,
+                    AlarmDescription=alarm_config['description'],
+                    Dimensions=alarm_config['dimensions'],
+                    Unit='Percent' if 'utilization' in alarm_config['metric_name'].lower() else 'Count',
+                    Tags=[
+                        {'Key': 'Cluster', 'Value': cluster_name},
+                        {'Key': 'AlarmType', 'Value': 'EC2'},
+                        {'Key': 'CreatedBy', 'Value': self.current_user}
+                    ]
+                )
+
+                created += 1
+                self.log_operation('INFO', f"Created EC2 alarm: {alarm_config['name']}")
+                self.print_colored(Colors.GREEN, f"   ✅ Created alarm: {alarm_config['name']}")
+
+            except Exception as e:
+                self.log_operation('ERROR', f"Failed to create EC2 alarm {alarm_config['name']}: {str(e)}")
+                self.print_colored(Colors.YELLOW, f"   ⚠️ Failed to create alarm: {alarm_config['name']}")
+
+        return (created, total)
+
+    def _discover_available_metrics(self, cloudwatch_client, cluster_name: str, nodegroup_name: str) -> dict:
+        """Discover what metrics are actually available for this cluster"""
+        try:
+            available_metrics = {
+                'ec2': False,
+                'container_insights': False,
+                'cwagent': False,
+                'asg_names': []
+            }
+
+            # Check for EC2 metrics by looking for Auto Scaling Groups
+            try:
+                ec2_metrics = cloudwatch_client.list_metrics(
+                    Namespace='AWS/EC2',
+                    MetricName='CPUUtilization'
+                )
+
+                # Find ASGs related to this cluster
+                for metric in ec2_metrics.get('Metrics', []):
+                    for dimension in metric.get('Dimensions', []):
+                        if dimension['Name'] == 'AutoScalingGroupName':
+                            asg_name = dimension['Value']
+                            # Check if this ASG belongs to our cluster
+                            if cluster_name.split('-')[-1] in asg_name or nodegroup_name in asg_name:
+                                available_metrics['asg_names'].append(asg_name)
+                                available_metrics['ec2'] = True
+
+                self.log_operation('INFO',
+                                   f"Found {len(available_metrics['asg_names'])} Auto Scaling Groups for cluster")
+
+            except Exception as e:
+                self.log_operation('WARNING', f"Failed to discover EC2 metrics: {str(e)}")
+
+            # Check for Container Insights metrics
+            try:
+                ci_metrics = cloudwatch_client.list_metrics(
+                    Namespace='ContainerInsights',
+                    MetricName='cluster_node_running_total',
+                    Dimensions=[
+                        {'Name': 'ClusterName', 'Value': cluster_name}
+                    ]
+                )
+
+                if ci_metrics.get('Metrics'):
+                    available_metrics['container_insights'] = True
+                    self.log_operation('INFO', f"Container Insights metrics available for cluster {cluster_name}")
+                else:
+                    self.log_operation('INFO', f"Container Insights metrics not available for cluster {cluster_name}")
+
+            except Exception as e:
+                self.log_operation('WARNING', f"Failed to check Container Insights metrics: {str(e)}")
+
+            # Check for CloudWatch Agent metrics
+            try:
+                cwa_metrics = cloudwatch_client.list_metrics(
+                    Namespace='CWAgent',
+                    MetricName='cpu_usage_active'
+                )
+
+                if cwa_metrics.get('Metrics'):
+                    available_metrics['cwagent'] = True
+                    self.log_operation('INFO', f"CloudWatch Agent metrics available")
+
+            except Exception as e:
+                self.log_operation('WARNING', f"Failed to check CloudWatch Agent metrics: {str(e)}")
+
+            return available_metrics
+
+        except Exception as e:
+            self.log_operation('ERROR', f"Failed to discover available metrics: {str(e)}")
+            return {'ec2': False, 'container_insights': False, 'cwagent': False, 'asg_names': []}
+
+
+    def _verify_metric_exists(self, cloudwatch_client, namespace: str, metric_name: str, dimensions: list) -> bool:
+        """Verify a metric exists before creating alarm"""
+        try:
+            response = cloudwatch_client.list_metrics(
+                Namespace=namespace,
+                MetricName=metric_name,
+                Dimensions=dimensions
+            )
+
+            metrics_found = len(response.get('Metrics', []))
+            if metrics_found > 0:
+                self.log_operation('DEBUG', f"Metric {namespace}/{metric_name} exists ({metrics_found} instances)")
+                return True
+            else:
+                self.log_operation('DEBUG', f"Metric {namespace}/{metric_name} not found")
+                return False
+
+        except Exception as e:
+            self.log_operation('WARNING', f"Failed to verify metric {namespace}/{metric_name}: {str(e)}")
+            return False
+
+    def create_composite_alarms(self, cloudwatch_client, cluster_name: str, basic_alarms_created: int) -> bool:
+        """Create composite alarms only if we have basic alarms to reference"""
+        try:
+            if basic_alarms_created == 0:
+                self.log_operation('WARNING', f"No basic alarms created, skipping composite alarms")
+                return True  # Not a failure, just nothing to composite
+
+            composite_alarms_created = 0
+            total_composite_alarms = 0
+
+            # Define composite alarm configurations - only reference alarms that likely exist
+            composite_configs = [
+                {
+                    'name': f'{cluster_name}-infrastructure-issues',
+                    'description': f'Infrastructure issues detected in {cluster_name}',
+                    'rule': f'ALARM("{cluster_name}-high-cpu-utilization") OR ALARM("{cluster_name}-low-instance-count")',
+                    'severity': 'HIGH'
+                },
+                {
+                    'name': f'{cluster_name}-performance-degradation',
+                    'description': f'Performance degradation detected in {cluster_name}',
+                    'rule': f'ALARM("{cluster_name}-high-network-in") OR ALARM("{cluster_name}-high-network-out")',
+                    'severity': 'MEDIUM'
+                },
+                {
+                    'name': f'{cluster_name}-critical-health',
+                    'description': f'Critical health issues detected in {cluster_name}',
+                    'rule': f'ALARM("{cluster_name}-unhealthy-instances") OR ALARM("{cluster_name}-low-instance-count")',
+                    'severity': 'CRITICAL'
+                }
+            ]
+
+            # Create composite alarms
+            for composite_config in composite_configs:
+                total_composite_alarms += 1
+                try:
+                    cloudwatch_client.put_composite_alarm(
+                        AlarmName=composite_config['name'],
+                        AlarmDescription=composite_config['description'],
+                        AlarmRule=composite_config['rule'],
+                        ActionsEnabled=False,  # Set to False since no actions configured
+                        Tags=[
+                            {'Key': 'Cluster', 'Value': cluster_name},
+                            {'Key': 'Severity', 'Value': composite_config['severity']},
+                            {'Key': 'AlarmType', 'Value': 'Composite'},
+                            {'Key': 'CreatedBy', 'Value': self.current_user}
+                        ]
+                    )
+
+                    composite_alarms_created += 1
+                    self.log_operation('INFO', f"Created composite alarm: {composite_config['name']}")
+                    self.print_colored(Colors.GREEN, f"   ✅ Composite alarm: {composite_config['name']}")
+
+                except Exception as e:
+                    # This is expected if referenced alarms don't exist
+                    self.log_operation('WARNING',
+                                       f"Failed to create composite alarm {composite_config['name']}: {str(e)}")
+                    self.print_colored(Colors.YELLOW, f"   ⚠️ Composite alarm skipped: {composite_config['name']}")
+
+            success_rate = (
+                                       composite_alarms_created / total_composite_alarms) * 100 if total_composite_alarms > 0 else 100
+            self.log_operation('INFO',
+                               f"Composite alarms: {composite_alarms_created}/{total_composite_alarms} created ({success_rate:.1f}%)")
+
+            return success_rate >= 50  # More lenient for composite alarms
+
+        except Exception as e:
+            self.log_operation('ERROR', f"Failed to create composite alarms: {str(e)}")
+            return False
+
+
+    def create_composite_alarms_v1(self, cloudwatch_client, cluster_name: str, alarm_configs: list) -> bool:
         """Create composite alarms for critical conditions"""
         try:
             composite_alarms_created = 0
@@ -5105,7 +5287,6 @@ class EKSClusterManager:
             except Exception as e:
                 self.log_operation('ERROR', f"Failed to deploy CloudWatch agent: {str(e)}")
                 return False
-
     def deploy_cloudwatch_agent_fixed(self, cluster_name: str, region: str, access_key: str, secret_key: str, account_id: str) -> bool:
             """Deploy CloudWatch agent as DaemonSet with proper handling of existing resources"""
             try:
@@ -5298,7 +5479,6 @@ class EKSClusterManager:
             self.log_operation('ERROR', f"Failed to process DaemonSet manifest: {str(e)}")
             # Return original manifest if processing failed
             return manifest
-
 
     ########
     def setup_scheduled_scaling_multi_nodegroup(self, cluster_name: str, region: str, admin_access_key: str, admin_secret_key: str, nodegroup_names: List[str]) -> bool:
@@ -6533,7 +6713,7 @@ class EKSClusterManager:
     
             # 4. Deploy CloudWatch agent
             #if self.should_deploy_cloudwatch_agent():
-            if False:  # Always deploy for now
+            if False:  # Always skip for now
                 print("\n🔍 Step 4: Deploying CloudWatch agent...")
                 from custom_cloudwatch_agent_deployer import CustomCloudWatchAgentDeployer
                 agent_deployer = CustomCloudWatchAgentDeployer()
@@ -7531,9 +7711,15 @@ class EKSClusterManager:
                 cluster_name, region, access_key, secret_key, account_id, nodegroups_created,self.setup_container_insights
             )
 
+            # print("\n🔒 Step 12: disable public access to eks control plane and use only private access...")
+            # # Disable public access - using the same eks_client
+            # self.log_operation('INFO', "Disabling public access for the EKS control plane...")
+            # if self.disable_public_access(eks_client, cluster_name):
+            #     self.log_operation('SUCCESS', "Successfully disabled public access for EKS control plane")
 
-            # Step 12: Perform health check
-            print("\n🔒 Step 11: Peform cluster health check...")
+
+            # Step 13: Perform health check
+            print("\n🔒 Step 13: Peform cluster health check...")
             self.print_colored(Colors.CYAN, "   🏥 Running health check...")
             initial_health_check = self.health_check_cluster(
                 cluster_name, region, access_key, secret_key
@@ -7579,6 +7765,9 @@ class EKSClusterManager:
                 credential_info, cluster_name, region, username, nodegroup_configs
             )
 
+            # Generate mini instructions for quick reference
+            self.generate_mini_instructions(credential_info, cluster_name, region, username)
+
             # Print enhanced cluster summary
             self.print_enhanced_cluster_summary_multi_nodegroup(cluster_name, features_status)
 
@@ -7618,15 +7807,10 @@ class EKSClusterManager:
         print(f"👤 Current User's Login: {current_user}")
         print(f"🏷️  Cluster Name: {cluster_name}")
         print(f"🌍 Region: {region}")
-        print(f"🎯 Target Pattern: nodegroup-*-ondemand (where * is 0-9)")
+        print(f"🎯 Target Pattern: nodegroup-*-ondemand (where * is 0-9) if not found then Target Pattern: nodegroup-*-")
         print("=" * 80)
 
         try:
-            # Set AWS credentials as environment variables for CLI tools
-            os.environ['AWS_ACCESS_KEY_ID'] = access_key
-            os.environ['AWS_SECRET_ACCESS_KEY'] = secret_key
-            os.environ['AWS_DEFAULT_REGION'] = region
-
             # Create AWS session with credentials
             session = boto3.Session(
                 aws_access_key_id=access_key,
@@ -7650,8 +7834,24 @@ class EKSClusterManager:
             all_nodegroups = response.get('nodegroups', [])
 
             # Pattern: nodegroup-[0-9]-ondemand
-            pattern = re.compile(r'^nodegroup-[0-9]-ondemand$')
-            matching_nodegroups = [ng for ng in all_nodegroups if pattern.match(ng)]
+            # First try to match nodegroup-[0-9]-ondemand pattern
+            primary_pattern = re.compile(r'^nodegroup-[0-9]-ondemand$')
+            matching_nodegroups = [ng for ng in all_nodegroups if primary_pattern.match(ng)]
+
+            # If none found, try more flexible pattern nodegroup-[0-9]-*
+            if not matching_nodegroups:
+                secondary_pattern = re.compile(r'^nodegroup-[0-9]-.*$')
+                matching_nodegroups = [ng for ng in all_nodegroups if secondary_pattern.match(ng)]
+
+            # If still none found, try the most flexible pattern nodegroup-*
+            if not matching_nodegroups:
+                fallback_pattern = re.compile(r'^nodegroup-.*$')
+                matching_nodegroups = [ng for ng in all_nodegroups if fallback_pattern.match(ng)]
+                # If multiple found with the fallback pattern, just take the first one
+                if len(matching_nodegroups) > 1:
+                    print(
+                        f"⚠️ Multiple nodegroups found with pattern 'nodegroup-*'. Selecting the first one: {matching_nodegroups[0]}")
+                    matching_nodegroups = [matching_nodegroups[0]]
 
             print(f"📊 Total nodegroups found: {len(all_nodegroups)}")
             print(f"🎯 Matching nodegroups found: {len(matching_nodegroups)}")
@@ -7660,7 +7860,7 @@ class EKSClusterManager:
                 for ng in matching_nodegroups:
                     print(f"   ✓ {ng}")
             else:
-                print("⚠️ No nodegroups found matching pattern 'nodegroup-*-ondemand'")
+                print("⚠️ No nodegroups found matching any 'nodegroup-*' pattern")
                 return {
                     'success': False,
                     'message': 'No matching nodegroups found',
@@ -7711,13 +7911,16 @@ class EKSClusterManager:
                         results['already_labeled'] += 1
                     else:
                         # Apply NO_DELETE and related labels
+                        raw_datetime = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+                        label_safe_timestamp = raw_datetime.replace(' ', 'T').replace(':', '-')
+
                         protection_labels = {
                             'NO_DELETE': 'true',
                             'protection-level': 'high',
                             'protected-by': current_user,
                             'protection-date': datetime.utcnow().strftime('%Y-%m-%d'),
                             'protection-time': datetime.utcnow().strftime('%H-%M-%S'),
-                            'protection-timestamp': current_datetime.replace(':', '-'),  # Also replace colons here
+                            'protection-timestamp': label_safe_timestamp,
                             'managed-by': 'automation',
                             'nodegroup-protected': nodegroup_label
                         }
@@ -7741,6 +7944,11 @@ class EKSClusterManager:
                             count = count +1
                         except subprocess.CalledProcessError as e:
                             print(f"❌ Failed to apply labels to node {node_name}: {e}")
+                            # print e.stderr.decode()
+                            if e.stderr:
+                                error_msg = e.stderr.decode().strip() if isinstance(e.stderr, bytes) else e.stderr.strip()
+                                print(f"   Error details when applying NO_DELETE Protection Label: {error_msg}")
+
                             results['errors'] += 1
                         except Exception as e:
                             print(f"❌ Unexpected error applying labels to {node_name}: {e}")
@@ -8474,4 +8682,38 @@ class EKSClusterManager:
     
         return len(created_clusters) > 0
 
+    def disable_public_access(self, eks_client, cluster_name: str) -> bool:
+        """
+        Disable public access for an EKS cluster while maintaining private access.
+        Assumes the cluster already has public access enabled.
+
+        Args:
+            eks_client: Boto3 EKS client
+            cluster_name: Name of the EKS cluster
+
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            self.log_operation('INFO', f"Disabling public access for EKS cluster {cluster_name}...")
+
+            # Update the cluster to disable public access while ensuring private access is enabled
+            update_response = eks_client.update_cluster_config(
+                name=cluster_name,
+                resourcesVpcConfig={
+                    'endpointPrivateAccess': True,
+                    'endpointPublicAccess': False
+                }
+            )
+
+            # Wait for the update to complete
+            waiter = eks_client.get_waiter('cluster_active')
+            waiter.wait(name=cluster_name)
+
+            self.log_operation('SUCCESS', f"Successfully disabled public access for EKS cluster {cluster_name}")
+            return True
+
+        except Exception as e:
+            self.log_operation('ERROR', f"Error disabling public access for cluster {cluster_name}: {str(e)}")
+            return False
 #####

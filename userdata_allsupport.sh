@@ -5,17 +5,32 @@ echo "Updating system..."
 sudo dnf update -y
 
 echo "Installing base packages..."
-sudo dnf install -y git vim htop awscli python3-pip openssl jq docker conntrack
+sudo dnf install -y git vim htop awscli python3-pip openssl jq docker conntrack shadow-utils
 
 echo "Enabling Docker..."
 sudo systemctl enable --now docker
 sudo usermod -aG docker ec2-user
 
-# Create .aws directory with proper permissions
+echo "Creating user 'demouser' with password login..."
+sudo useradd -m demouser
+echo "demouser:demouser@123" | sudo chpasswd
+echo "demouser ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/demouser
+
+echo "Enabling password authentication in SSH config..."
+sudo sed -i 's/^PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
+sudo sed -i 's/^#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
+sudo sed -i 's/^ChallengeResponseAuthentication no/ChallengeResponseAuthentication yes/' /etc/ssh/sshd_config
+sudo systemctl restart sshd
+
+echo "Disabling requiretty for sudo (just in case)..."
+sudo sed -i 's/^Defaults    requiretty/#Defaults    requiretty/' /etc/sudoers
+
+echo "✅ User 'demouser' is now set up with password authentication."
+
+# AWS setup (same as before)
 sudo -u ec2-user mkdir -p /home/ec2-user/.aws
 sudo chown -R ec2-user:ec2-user /home/ec2-user/.aws
 
-# Check if AWS credentials are set
 if [[ -n "${AWS_ACCESS_KEY_ID}" && -n "${AWS_SECRET_ACCESS_KEY}" ]]; then
   echo "Configuring AWS CLI for ec2-user..."
   sudo -u ec2-user bash <<EOF
@@ -25,8 +40,6 @@ aws configure set default.region "${AWS_DEFAULT_REGION:-us-east-1}"
 aws configure set default.output text
 EOF
   echo "✅ AWS CLI configured for ec2-user."
-
-  # Optional: Check identity
   sudo -u ec2-user aws sts get-caller-identity || echo "⚠️ AWS credentials may be invalid or blocked."
 else
   echo "⚠️ AWS credentials not found in environment variables. Skipping AWS CLI configuration."
@@ -45,13 +58,12 @@ sudo rpm -Uvh minikube-latest.x86_64.rpm
 
 # Install eksctl
 echo "Installing eksctl..."
-curl -sL "https://github.com/eksctl-io/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
+curl -sL "https://github.com/eksctl-io/eksctl/releases/latest/download/eksctl_Linux_amd64.tar.gz" | tar xz -C /tmp
 sudo mv /tmp/eksctl /usr/local/bin
 
 echo ""
 echo "✅ All tools installed successfully!"
 echo "🔍 Tool Versions:"
-
 echo "Docker version:       $(docker --version)"
 echo "kubectl version:      $(kubectl version --client --short)"
 echo "Minikube version:     $(minikube version | grep version)"

@@ -843,6 +843,10 @@ class UltraEKSCleanupManager:
             for sg in response['SecurityGroups']:
                 sg_id = sg['GroupId']
                 sg_name = sg['GroupName']
+
+                if sg_name == 'eks-cluster-sg':
+                    self.log_operation('INFO', f"Skipping and **DONT DELETE** EKS cluster SG which has private access to EC2: {sg_name}")
+                    continue
             
                 # Skip default security group
                 if sg_name == 'default':

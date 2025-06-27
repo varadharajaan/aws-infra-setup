@@ -2322,6 +2322,8 @@ class EKSClusterContinuationFromErrors:
             # Create mock credential info for instruction generation
             from aws_credential_manager import CredentialInfo
 
+            username = self.extract_username_from_cluster_name(cluster_name)
+
             credential_info = CredentialInfo(
                 account_name=f"account-{self.cluster_info['account_id']}",
                 account_id=self.cluster_info['account_id'],
@@ -2330,7 +2332,7 @@ class EKSClusterContinuationFromErrors:
                 secret_key=secret_key,
                 credential_type='iam',
                 regions=[region],
-                username='cluster-user'
+                username=username
             )
 
             # Convert nodegroup info to config format
@@ -2348,8 +2350,10 @@ class EKSClusterContinuationFromErrors:
                 })
 
             self.eks_manager.generate_user_instructions_enhanced(
-                credential_info, cluster_name, region, 'cluster-user', nodegroup_configs
+                credential_info, cluster_name, region, credential_info.username, nodegroup_configs
             )
+
+            self.generate_mini_instructions(credential_info, cluster_name, region, credential_info.username)
 
             self.print_colored('GREEN', "✅ User instructions generated successfully")
             return True
@@ -2358,6 +2362,39 @@ class EKSClusterContinuationFromErrors:
             self.logger.error(f"Error generating user instructions: {str(e)}")
             self.print_colored('RED', f"❌ Error generating user instructions: {str(e)}")
             return False
+
+    def extract_username_from_cluster_name(cluster_name):
+        """
+        Extracts username from EKS cluster name based on common patterns.
+
+        Args:
+            cluster_name (str): EKS cluster name like 'eks-cluster-account01_clouduser05-ap-south-1-tnkg'
+
+        Returns:
+            str: Extracted username or None if pattern doesn't match
+        """
+        try:
+            # Pattern 1: eks-cluster-account01_clouduser05-ap-south-1-tnkg
+            if '_' in cluster_name:
+                # Split by '-' to get segments
+                segments = cluster_name.split('-')
+                # Find the segment containing the username (with '_')
+                for segment in segments:
+                    if '_' in segment:
+                        return segment
+
+            # Pattern 2: eks-cluster-root-account01-ap-south-1-tnkg
+            else:
+                # Match pattern for root user
+                parts = cluster_name.split('-')
+                if len(parts) >= 4 and parts[2] == 'root':
+                    return f"root-{parts[3]}"
+
+            return None
+        except Exception as e:
+            print(f"Error extracting username: {str(e)}")
+            return None
+
 
     def run_health_check(self, cluster_name: str, region: str, access_key: str, secret_key: str) -> bool:
         """Run comprehensive health check"""

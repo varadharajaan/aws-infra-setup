@@ -143,7 +143,10 @@ cache
 aws
 quota_cache*
 cluster_creation_*
-aws_bk/*
+aws_bkk/*
 user_instructions_*
 files/*
 get-pipx.py
+user_mini_instructions_*
+reports/*
+aws_bkk/*

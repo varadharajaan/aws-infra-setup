@@ -9,6 +9,8 @@ openpyxl>=3.1.0
 # Colored terminal output
 colorama>=0.4.6
 
+paramiko
+
 pyyaml>=6.0.0
 
 pytz>=2023.3

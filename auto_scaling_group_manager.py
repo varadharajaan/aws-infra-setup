@@ -1206,7 +1206,8 @@ class AutoScalingGroupManager:
                     'account_name': cred_info.account_name,
                     'account_id': cred_info.account_id,
                     'credential_type': cred_info.credential_type,
-                    'region': cred_info.regions[0]
+                    'region': cred_info.regions[0],
+                    'username': cred_info.username,
                 },
                 'asg_configuration': asdict(asg_config),
                 'aws_response': asg_response,
@@ -1214,7 +1215,7 @@ class AutoScalingGroupManager:
             }
             
             # Save to JSON file
-            filename = f"{output_dir}/asg_{asg_config.name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+            filename = f"{output_dir}/asg_{asg_config.name}_{cred_info.username}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
             with open(filename, 'w') as f:
                 json.dump(details, f, indent=2)
             
@@ -1286,7 +1287,7 @@ class AutoScalingGroupManager:
                 AutoScalingGroupName=asg_name,
                 ScheduledActionName=scale_up_name,
                 StartTime=unique_start_time,
-                Recurrence="30 2 * * 1-5",  # 2:30 AM UTC (8 AM IST), Monday-Friday
+                Recurrence="30 2 * * 1-5",  # 2 AM UTC (8 AM IST), Monday-Friday
                 MinSize=1,
                 MaxSize=3,
                 DesiredCapacity=1
@@ -1299,7 +1300,7 @@ class AutoScalingGroupManager:
                 AutoScalingGroupName=asg_name,
                 ScheduledActionName=scale_down_name,
                 StartTime=unique_start_time + timedelta(minutes=1),  # Ensure different start time
-                Recurrence="30 13 * * 1-5",  # 1:30 PM UTC (7 PM IST), Monday-Friday
+                Recurrence="30 13 * * 1-5",  # 1 PM UTC (7 PM IST), Monday-Friday
                 MinSize=0,
                 MaxSize=3,
                 DesiredCapacity=0

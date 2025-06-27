@@ -52,6 +52,103 @@ class EC2InstanceManager:
             print(f"❌ Error loading AMI configuration: {e}")
             raise
 
+    def prepare_userdata_with_aws_config_enchanced(self, base_userdata, access_key, secret_key, region, account_name=None):
+        """Add AWS credentials to userdata script for both default and custom profiles"""
+
+        # Create custom profile name based on user type
+        if account_name:
+            if self.current_user == "root":
+                custom_profile = f"root-{account_name.lower()}"
+            else:
+                custom_profile = self.current_user
+        else:
+            custom_profile = self.current_user
+
+        # Replace placeholder variables if they exist
+        enhanced_userdata = base_userdata.replace('${AWS_ACCESS_KEY_ID}', access_key)
+        enhanced_userdata = enhanced_userdata.replace('${AWS_SECRET_ACCESS_KEY}', secret_key)
+        enhanced_userdata = enhanced_userdata.replace('${AWS_DEFAULT_REGION}', region)
+
+        # Create AWS config block for both default and custom profiles
+        aws_config_commands = f"""
+    # Configure AWS CLI with both default and custom profiles
+    echo "Configuring AWS CLI for ec2-user..."
+    sudo -u ec2-user bash <<EOF
+    # Configure default profile
+    aws configure set aws_access_key_id "{access_key}"
+    aws configure set aws_secret_access_key "{secret_key}"
+    aws configure set default.region "{region}"
+    aws configure set default.output "json"
+
+    # Configure custom profile ({custom_profile})
+    aws configure set aws_access_key_id "{access_key}" --profile {custom_profile}
+    aws configure set aws_secret_access_key "{secret_key}" --profile {custom_profile}
+    aws configure set region "{region}" --profile {custom_profile}
+    aws configure set output "json" --profile {custom_profile}
+    EOF
+
+    echo "✅ AWS CLI configured with profiles: default and {custom_profile}"
+
+    # Test the credentials
+    sudo -u ec2-user bash <<EOF
+    echo "Testing AWS credentials for default profile:"
+    aws sts get-caller-identity || echo "⚠️ Default profile credentials may be invalid"
+
+    echo "Testing AWS credentials for {custom_profile} profile:"
+    aws sts get-caller-identity --profile {custom_profile} || echo "⚠️ {custom_profile} profile credentials may be invalid"
+    EOF
+    """
+
+        # Check if we can find the AWS CLI configuration section in userdata
+        if "Configure AWS CLI" in enhanced_userdata and "aws configure set" in enhanced_userdata:
+            # Look for the section after "Configuring AWS CLI for ec2-user..."
+            parts = enhanced_userdata.split('echo "Configuring AWS CLI for ec2-user..."', 1)
+            if len(parts) == 2:
+                # Split at the end of existing config section
+                before_config = parts[0] + 'echo "Configuring AWS CLI for ec2-user..."'
+                after_config = parts[1]
+
+                # Find where the configuration section ends
+                if "echo \"✅ AWS CLI configured" in after_config:
+                    end_marker = "echo \"✅ AWS CLI configured"
+                    config_parts = after_config.split(end_marker, 1)
+                    if len(config_parts) == 2:
+                        # Replace the entire configuration section
+                        enhanced_userdata = before_config + aws_config_commands
+                        return enhanced_userdata
+
+        # If we couldn't find the right section to replace, let's check if the file
+        # has aws configure commands and replace that entire section
+        if "aws configure set aws_access_key_id" in enhanced_userdata:
+            # Find the sudo -u ec2-user bash part
+            start_marker = "sudo -u ec2-user bash <<EOF"
+            end_marker = "EOF"
+
+            # Split at start marker
+            parts = enhanced_userdata.split(start_marker, 1)
+            if len(parts) == 2:
+                before_block = parts[0]
+                after_start = parts[1]
+
+                # Split at end marker
+                config_parts = after_start.split(end_marker, 1)
+                if len(config_parts) == 2:
+                    # Replace the entire block
+                    enhanced_userdata = before_block + aws_config_commands + config_parts[1]
+                    return enhanced_userdata
+
+        # If we couldn't find a good place to replace, just add it after AWS CLI installation
+        if "awscli" in enhanced_userdata:
+            enhanced_userdata = enhanced_userdata.replace(
+                "sudo dnf install -y git vim htop awscli python3-pip",
+                "sudo dnf install -y git vim htop awscli python3-pip\n" + aws_config_commands
+            )
+        else:
+            # Just append at the end if we can't find a good insertion point
+            enhanced_userdata += "\n\n" + aws_config_commands
+
+        return enhanced_userdata
+
     def prepare_userdata_with_aws_config(self, base_userdata, access_key, secret_key, region):
         """Add AWS credentials to userdata script"""
         
@@ -523,7 +620,8 @@ class EC2InstanceManager:
                     'account_name': cred_info.account_name,
                     'account_id': cred_info.account_id,
                     'email': cred_info.email,
-                    'credential_type': cred_info.credential_type
+                    'credential_type': cred_info.credential_type,
+                    'username': cred_info.username,
                 },
                 'instance_details': {
                     'instance_id': instance_id,
@@ -535,7 +633,7 @@ class EC2InstanceManager:
             }
             
             # Save to JSON file
-            filename = f"{output_dir}/ec2_instance_{instance_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+            filename = f"{output_dir}/ec2_instance_{instance_id}_{cred_info.username}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
             with open(filename, 'w') as f:
                 json.dump(details, f, indent=2)
             

@@ -34,6 +34,88 @@ class EKSLambdaScaler:
         """Print colored message to console"""
         print(f"{color}{message}{Colors.END}")
 
+    def select_iam_credentials_file(self) -> Optional[str]:
+        """Interactive IAM credentials file selection with timestamp sorting."""
+        iam_files = self.cred_manager.scan_iam_credentials_files()
+
+        if not iam_files:
+            self.print_colored(Colors.RED, "❌ No IAM credential files found")
+            return None
+
+        if len(iam_files) == 1:
+            self.print_colored(Colors.GREEN, f"✅ Using single IAM credentials file: {iam_files[0]['filename']}")
+            return iam_files[0]['file_path']
+
+        # Sort by timestamp (newest first)
+        # Handle both string and datetime timestamp formats
+        def get_sort_key(file_info):
+            timestamp = file_info['timestamp']
+            if isinstance(timestamp, str):
+                try:
+                    # Try to parse string timestamp
+                    return datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S')
+                except ValueError:
+                    try:
+                        return datetime.strptime(timestamp, '%Y%m%d_%H%M%S')
+                    except ValueError:
+                        # If parsing fails, use file modification time
+                        return datetime.fromtimestamp(os.path.getmtime(file_info['file_path']))
+            return timestamp
+
+        sorted_files = sorted(iam_files, key=get_sort_key, reverse=True)
+
+        self.print_colored(Colors.YELLOW, f"\n📁 Found {len(sorted_files)} IAM credential files:")
+        self.print_colored(Colors.YELLOW, "=" * 80)
+
+        for i, file_info in enumerate(sorted_files, 1):
+            timestamp = file_info['timestamp']
+
+            # Format timestamp for display
+            if isinstance(timestamp, str):
+                timestamp_str = timestamp  # Use as-is if it's already a string
+            else:
+                timestamp_str = timestamp.strftime('%Y-%m-%d %H:%M:%S')
+
+            filename = file_info['filename']
+
+            # Mark the latest (first) file as default
+            if i == 1:
+                self.print_colored(Colors.GREEN, f"   {i}. [{timestamp_str}] {filename} (DEFAULT)")
+            else:
+                self.print_colored(Colors.CYAN, f"   {i}. [{timestamp_str}] {filename}")
+
+        self.print_colored(Colors.YELLOW, "=" * 80)
+        self.print_colored(Colors.YELLOW, "💡 Press Enter to use default (latest file) or select by number")
+        self.print_colored(Colors.YELLOW, "=" * 80)
+
+        while True:
+            try:
+                choice = input(
+                    f"Select IAM credentials file (1-{len(sorted_files)}, Enter for default) or 'q' to quit: ").strip()
+
+                if choice.lower() == 'q':
+                    return None
+
+                # Use default (latest file)
+                if choice == '':
+                    selected_file = sorted_files[0]
+                    self.print_colored(Colors.GREEN, f"✅ Using default: {selected_file['filename']}")
+                    return selected_file['file_path']
+
+                # Parse selection
+                selection = int(choice)
+                if 1 <= selection <= len(sorted_files):
+                    selected_file = sorted_files[selection - 1]
+                    self.print_colored(Colors.GREEN, f"✅ Selected: {selected_file['filename']}")
+                    return selected_file['file_path']
+                else:
+                    self.print_colored(Colors.RED, f"❌ Invalid selection. Please enter 1-{len(sorted_files)}")
+
+            except ValueError:
+                self.print_colored(Colors.RED, "❌ Invalid input. Please enter a number")
+            except Exception as e:
+                self.print_colored(Colors.RED, f"❌ Error processing selection: {str(e)}")
+
     def _check_required_files(self):
         """Check if required files exist."""
         if not os.path.exists(self.eks_dir):
@@ -235,7 +317,7 @@ class EKSLambdaScaler:
         self.print_colored(Colors.YELLOW, "\n🚀 Available EKS Clusters:")
         self.print_colored(Colors.YELLOW, "=" * 100)
 
-        # Group by account for display
+        # Create a flat list for proper indexing while still grouping for display
         clusters_by_account = {}
         for cluster in clusters:
             account_key = f"{cluster['account_key']} ({cluster['account_id']})"
@@ -243,15 +325,15 @@ class EKSLambdaScaler:
                 clusters_by_account[account_key] = []
             clusters_by_account[account_key].append(cluster)
 
-        # Display clusters grouped by account
-        index = 1
+        # Display clusters grouped by account but maintain correct indexing
         for account, account_clusters in clusters_by_account.items():
             self.print_colored(Colors.PURPLE, f"\n📋 Account: {account}")
 
             for cluster in account_clusters:
-                self.print_colored(Colors.CYAN, f"   {index}. {cluster['name']} ({cluster['region']})")
+                # Find the correct index in the original clusters list
+                cluster_index = clusters.index(cluster) + 1
+                self.print_colored(Colors.CYAN, f"   {cluster_index}. {cluster['name']} ({cluster['region']})")
                 self.print_colored(Colors.WHITE, f"      Status: {cluster['status']}, Created: {cluster['created_at']}")
-                index += 1
 
         total_clusters = len(clusters)
         self.print_colored(Colors.YELLOW, "=" * 100)
@@ -280,7 +362,12 @@ class EKSLambdaScaler:
                     continue
 
                 selected_clusters = [clusters[i - 1] for i in selected_indices]
-                self.print_colored(Colors.GREEN, f"✅ Selected {len(selected_clusters)} clusters")
+
+                # Show what was actually selected for confirmation
+                self.print_colored(Colors.GREEN, f"✅ Selected {len(selected_clusters)} clusters:")
+                for cluster in selected_clusters:
+                    self.print_colored(Colors.WHITE, f"   • {cluster['name']} ({cluster['account_key']})")
+
                 return selected_clusters
 
             except Exception as e:
@@ -369,7 +456,8 @@ class EKSLambdaScaler:
                 'error': str(e)
             }
 
-    def get_credentials_for_cluster(self, cluster_info: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def get_credentials_for_cluster(self, cluster_info: Dict[str, Any], selected_iam_file: str = None) -> Optional[
+        Dict[str, Any]]:
         """Get AWS credentials for the cluster's account."""
         account_id = cluster_info['account_id']
         account_key = cluster_info['account_key']
@@ -385,21 +473,19 @@ class EKSLambdaScaler:
             # Extract username from cluster name (if format is account_clouduser)
             user_match = re.search(r'_clouduser(\d+)', cluster_name)
 
-            # First try getting IAM credentials
-            iam_creds_files = self.cred_manager.scan_iam_credentials_files()
-            if iam_creds_files:
-                for file_info in iam_creds_files:
-                    all_users = self.cred_manager.get_all_iam_users_from_file(file_info['file_path'])
-                    for user in all_users:
-                        if user['account_id'] == account_id:
-                            # If we have a specific username match, prioritize that user
-                            if user_match and f"clouduser{user_match.group(1)}" == user['username']:
-                                return user
-
-                    # If we didn't find a specific match but have users for this account, return the first one
-                    for user in all_users:
-                        if user['account_id'] == account_id:
+            # Use selected IAM file if provided
+            if selected_iam_file:
+                all_users = self.cred_manager.get_all_iam_users_from_file(selected_iam_file)
+                for user in all_users:
+                    if user['account_id'] == account_id:
+                        # If we have a specific username match, prioritize that user
+                        if user_match and f"clouduser{user_match.group(1)}" == user['username']:
                             return user
+
+                # If we didn't find a specific match but have users for this account, return the first one
+                for user in all_users:
+                    if user['account_id'] == account_id:
+                        return user
 
             # Fall back to root credentials
             return self.cred_manager.get_root_account_by_id(account_id) or self.cred_manager.get_root_account_by_key(
@@ -412,6 +498,11 @@ class EKSLambdaScaler:
         self.print_colored(Colors.YELLOW, "=" * 80)
 
         # Scan and select dates
+        selected_iam_file = self.select_iam_credentials_file()
+        if not selected_iam_file:
+            self.print_colored(Colors.RED, "❌ No IAM credentials file selected, exiting...")
+            return
+
         files_by_date = self.scan_eks_files()
         if not files_by_date:
             return

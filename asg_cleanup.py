@@ -156,23 +156,27 @@ class ASGCleanupManager:
             except Exception as e:
                 logger.warning(f"Error processing timestamp for {asg.get('file_name', 'unknown')}: {e}")
                 grouped["unknown"].append(asg)
-    
+
+        return grouped  # Add this missing return statement        """Group ASG files by creation day"""
+
     def display_day_options(self, grouped_asgs: Dict[str, List[Dict]]) -> None:
         """Display available day options to user"""
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("AVAILABLE ASG CREATION DAYS")
-        print("="*60)
-        
-        sorted_days = sorted([day for day in grouped_asgs.keys() if day != "unknown"])
+        print("=" * 60)
+
+        # Sort days in descending order (latest first), excluding "unknown"
+        sorted_days = sorted([day for day in grouped_asgs.keys() if day != "unknown"], reverse=True)
         if "unknown" in grouped_asgs:
             sorted_days.append("unknown")
-        
+
         for i, day in enumerate(sorted_days, 1):
             count = len(grouped_asgs[day])
             print(f"Day-{i}: {day} ({count} ASGs)")
-        
+
         print(f"\nTotal days available: {len(sorted_days)}")
-        print("="*60)
+        print("=" * 60)
+
     
     def get_user_day_selection(self, grouped_asgs: Dict[str, List[Dict]]) -> List[str]:
         """Get user selection for days"""

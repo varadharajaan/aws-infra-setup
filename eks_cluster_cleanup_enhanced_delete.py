@@ -38,7 +38,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class EKSClusterManager:
-    def __init__(self, base_path: str = "files/eks"):
+    def __init__(self, base_path: str = "aws/eks"):
         self.base_path = base_path
         self.aws_accounts_config = self.load_json_file("aws_accounts_config.json")
         self.users_mapping = self.load_json_file("user_mapping.json")
@@ -836,7 +836,12 @@ class EKSClusterManager:
                 
                 for sg in security_groups.get('SecurityGroups', []):
                     sg_id = sg['GroupId']
-                    if sg['GroupName'] != 'default':  # Don't delete default SG
+                    sg_name = sg['GroupName']
+                    if sg_name == 'eks-cluster-sg':
+                        self.log_operation('INFO',
+                                           f"Skipping and **DONT DELETE** EKS cluster SG which has private access to EC2: {sg_name}")
+                        continue
+                    if sg_name != 'default' and sg_name != 'eks-cluster-sg':  # Don't delete default SG
                         logger.info(f"Deleting security group: {sg_id}")
                         try:
                             ec2_client.delete_security_group(GroupId=sg_id)
