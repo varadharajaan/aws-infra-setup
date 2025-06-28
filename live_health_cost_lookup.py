@@ -9,9 +9,6 @@ import threading
 import requests
 import logging
 from datetime import datetime, timedelta
-from botocore.exceptions import ClientError, BotoCoreError
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import List, Dict, Any, Set, Optional, Tuple
 
 class LiveCostCalculator:
     def __init__(self, config_file='aws_accounts_config.json'):
@@ -1562,7 +1559,7 @@ class LiveCostCalculator:
 
     def calculate_eks_costs(self, account_selection, region_selection, eks_selection=None):
         """Calculate costs for EKS clusters with proper timezone handling"""
-        current_timestamp_utc = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        current_timestamp_utc = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         current_user = "varadharajaan"
 
         self.logger.info(f"Calculating EKS costs for account {account_selection} in regions: {region_selection}")
@@ -1990,11 +1987,12 @@ class LiveCostCalculator:
 
     def display_active_resources(self, account_id, account_name, regions, access_key, secret_key):
         """Display active EC2 instances and EKS clusters with enhanced details"""
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC")
 
         print("\n" + "=" * 80)
         print(f"🔍 ACTIVE RESOURCES IN ACCOUNT: {account_id} ({account_name})")
         print("=" * 80)
-        print(f"📅 Scan Time: 2025-06-25 19:44:04 UTC")
+        print(f"📅 Scan Time: {now_str}")
         print(f"👤 Scanned by: varadharajaan")
         print(f"🌍 Regions: {', '.join(regions)}")
         print("=" * 80)
@@ -4086,11 +4084,13 @@ class LiveCostCalculator:
         """Generate HTML for data tables inline with EKS table included"""
         html = '<div class="data-tables">'
 
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC")
+
         # EC2 Summary Table
         if aggregated_results.get('ec2', {}).get('accounts'):
             html += f'''
             <div class="table-container">
-                <div class="table-header">🖥️ EC2 Instances Summary - Generated: 2025-06-25 21:13:49 UTC by varadharajaan</div>
+                <div class="table-header">🖥️ EC2 Instances Summary - Generated: {now_str} by varadharajaan</div>
                 <table>
                     <thead>
                         <tr>
@@ -4163,11 +4163,13 @@ class LiveCostCalculator:
             </div>
             '''
 
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC")
+
         # EKS Summary Table - THIS WAS MISSING!
         if aggregated_results.get('eks', {}).get('accounts'):
             html += f'''
             <div class="table-container">
-                <div class="table-header">🚢 EKS Clusters Summary - Generated: 2025-06-25 21:13:49 UTC by varadharajaan</div>
+                <div class="table-header">🚢 EKS Clusters Summary - Generated: {now_str} by varadharajaan</div>
                 <table>
                     <thead>
                         <tr>
@@ -4230,9 +4232,11 @@ class LiveCostCalculator:
             '''
         else:
             # Add message if no EKS clusters found
+            now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC")
+
             html += f'''
             <div class="table-container">
-                <div class="table-header">🚢 EKS Clusters Summary - Generated: 2025-06-25 21:13:49 UTC by varadharajaan</div>
+                <div class="table-header">🚢 EKS Clusters Summary - Generated: {now_str} by varadharajaan</div>
                 <div style="padding: 30px; text-align: center; color: #666;">
                     <div style="font-size: 3em; margin-bottom: 15px;">🚢</div>
                     <h3>No EKS Clusters Found</h3>
@@ -4248,11 +4252,13 @@ class LiveCostCalculator:
             </div>
             '''
 
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC")
+
         # Historical Analysis Table
         if aggregated_results.get('historical_analysis', {}).get('accounts'):
             html += f'''
             <div class="table-container">
-                <div class="table-header">📈 Historical Cost Analysis (Last 9 Hours) - Generated: 2025-06-25 21:13:49 UTC by varadharajaan</div>
+                <div class="table-header">📈 Historical Cost Analysis (Last 9 Hours) - Generated: {now_str} by varadharajaan</div>
                 <table>
                     <thead>
                         <tr>
@@ -4325,11 +4331,13 @@ class LiveCostCalculator:
             </div>
             '''
 
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC")
+
         # Forecast Analysis Table
         if aggregated_results.get('forecast_analysis', {}).get('accounts'):
             html += f'''
             <div class="table-container">
-                <div class="table-header">🔮 Cost Forecast Analysis (Next 9 Hours) - Generated: 2025-06-25 21:13:49 UTC by varadharajaan</div>
+                <div class="table-header">🔮 Cost Forecast Analysis (Next 9 Hours) - Generated: {now_str} by varadharajaan</div>
                 <table>
                     <thead>
                         <tr>
@@ -4398,10 +4406,12 @@ class LiveCostCalculator:
             </div>
             '''
 
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC")
+
         # Cost Optimization Recommendations Table
         html += f'''
         <div class="table-container">
-            <div class="table-header">💡 Cost Optimization Recommendations - Generated: 2025-06-25 21:13:49 UTC by varadharajaan</div>
+            <div class="table-header">💡 Cost Optimization Recommendations - Generated: {now_str} by varadharajaan</div>
             <table>
                 <thead>
                     <tr>

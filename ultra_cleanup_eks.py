@@ -118,9 +118,11 @@ class UltraEKSCleanupManager:
             print(f"[{level.upper()}] {message}")
 
     def delete_related_event_rules(self, access_key, secret_key, region, cluster_name):
-        """Delete EventBridge rules related to the EKS cluster with matching patterns."""
+        """Delete EventBridge rules related to the EKS cluster"""
         try:
-            # Create EventBridge client
+            self.log_operation('INFO', f"🔍 Searching for EventBridge rules related to cluster {cluster_name}")
+            print(f"   🔍 Searching for EventBridge rules related to cluster {cluster_name}...")
+
             events_client = boto3.client(
                 'events',
                 aws_access_key_id=access_key,
@@ -128,221 +130,117 @@ class UltraEKSCleanupManager:
                 region_name=region
             )
 
-            # Get cluster suffix for matching
-            cluster_suffix = cluster_name.split('-')[-1]
-            cluster_parts = self.extract_cluster_identifiers(cluster_name)
-
-            self.log_operation('INFO',
-                               f"🔍 Searching for EventBridge rules related to cluster {cluster_name} in {region}")
-            print(f"   🔍 Searching for EventBridge rules with suffix '{cluster_suffix}'...")
-
-            # Get all rules
-            paginator = events_client.get_paginator('list_rules')
-
             deleted_rules = []
             skipped_rules = []
-            failed_rules = []
+
+            # First check for rules that match the cluster name pattern
+            cluster_suffix = cluster_name.split('-')[-1]
+            self.log_operation('INFO', f"🔍 Searching for EventBridge rules with suffix '{cluster_suffix}'...")
+            print(f"   🔍 Searching for EventBridge rules with suffix '{cluster_suffix}'...")
+
+            # Get all EventBridge rules
+            paginator = events_client.get_paginator('list_rules')
 
             for page in paginator.paginate():
                 for rule in page['Rules']:
                     rule_name = rule['Name']
-                    rule_arn = rule['Arn']
-                    rule_state = rule.get('State', 'UNKNOWN')
 
-                    # Skip AWS managed rules
-                    if rule_name.startswith('aws.') or 'AWSServiceRoleFor' in rule_name:
-                        self.log_operation('INFO', f"⚠️ Skipping AWS managed rule: {rule_name}")
+                    # Skip default rules and AWS managed rules
+                    if rule_name in ['default', 'AutoScalingManagedRule'] or rule_name.startswith('AWS'):
                         continue
 
-                    # Skip common/shared rules - expanded list
+                    # Skip shared/common rules
                     if any(pattern in rule_name.lower() for pattern in [
-                        'common-', 'shared-', 'global-', 'admin-', 'monitoring-',
-                        'all-', 'master-', 'centrallogging', 'security', 'backup-',
-                        'scheduled-', 'maintenance-', 'patching-', 'compliance-',
-                        'cost-optimization', 'governance-', 'audit-'
+                        'common-', 'shared-', 'global-', 'admin-', 'all-', 'multi-',
+                        'monitoring-', 'backup-', 'security-'
                     ]):
                         self.log_operation('INFO', f"⚠️ Skipping shared EventBridge rule: {rule_name}")
                         skipped_rules.append(rule_name)
-                        self.cleanup_results['skipped_resources'].append({
-                            'resource_type': 'EventBridge rule',
-                            'resource_id': rule_name,
-                            'reason': 'Appears to be a shared resource'
-                        })
                         continue
 
-                    # Check if rule is related to this EKS cluster
+                    # Check if rule is related to THIS specific EKS cluster
                     is_cluster_related = False
 
-                    # Method 1: Direct cluster name match
-                    if cluster_name.lower() in rule_name.lower():
+                    # Check rule name for cluster reference
+                    if (cluster_name.lower() in rule_name.lower() or
+                            f"-{cluster_suffix}" in rule_name.lower() or
+                            f"eks-{cluster_suffix}" in rule_name.lower() or
+                            f"{cluster_suffix}-" in rule_name.lower()):
                         is_cluster_related = True
 
-                    # Method 2: Check EKS-specific patterns with cluster suffix
-                    # Common patterns: eks-down-{suffix}, eks-up-{suffix}, eks-{action}-{suffix}
-                    # Scale patterns: scale-up-{suffix}, scale-down-{suffix}
-                    # Lifecycle patterns: start-{suffix}, stop-{suffix}, terminate-{suffix}
-                    if not is_cluster_related and len(cluster_suffix) >= 3:
-                        eks_patterns = [
-                            f"eks-down-{cluster_suffix}",
-                            f"eks-up-{cluster_suffix}",
-                            f"eks-start-{cluster_suffix}",
-                            f"eks-stop-{cluster_suffix}",
-                            f"eks-scale-{cluster_suffix}",
-                            f"scale-up-{cluster_suffix}",
-                            f"scale-down-{cluster_suffix}",
-                            f"start-{cluster_suffix}",
-                            f"stop-{cluster_suffix}",
-                            f"terminate-{cluster_suffix}",
-                            f"cluster-{cluster_suffix}",
-                            f"{cluster_suffix}-eks",
-                            f"{cluster_suffix}-scale",
-                            f"{cluster_suffix}-lifecycle"
-                        ]
-
-                        for pattern in eks_patterns:
-                            if pattern.lower() in rule_name.lower():
-                                is_cluster_related = True
-                                break
-
-                        # Also check generic suffix patterns
-                        if not is_cluster_related:
-                            if (f"-{cluster_suffix}" in rule_name or
-                                    f"_{cluster_suffix}" in rule_name or
-                                    rule_name.lower().endswith(f"-{cluster_suffix}") or
-                                    rule_name.lower().endswith(f"_{cluster_suffix}")):
-                                is_cluster_related = True
-
-                    # Method 3: Check rule description for cluster reference
+                    # Check rule description
                     if not is_cluster_related:
-                        rule_description = rule.get('Description', '').lower()
-                        if (cluster_name.lower() in rule_description or
-                                f"cluster {cluster_suffix}" in rule_description or
-                                f"eks {cluster_suffix}" in rule_description):
+                        description = rule.get('Description', '')
+                        if cluster_name.lower() in description.lower():
                             is_cluster_related = True
 
-                    # Method 4: Check rule tags
+                    # Check rule tags - FIX THE TAG CHECKING LOGIC HERE
                     if not is_cluster_related:
                         try:
-                            tags_response = events_client.list_tags_for_resource(ResourceARN=rule_arn)
-                            tags = tags_response.get('Tags', {})
+                            tags_response = events_client.list_tags_for_resource(
+                                ResourceARN=rule['Arn']
+                            )
+                            tags = tags_response.get('Tags', [])
 
-                            for key, value in tags.items():
-                                if ((key.lower() in ['cluster', 'clustername', 'eks-cluster'] and
-                                     value.lower() == cluster_name.lower()) or
-                                        key.lower() == f'kubernetes.io/cluster/{cluster_name.lower()}'):
+                            # FIXED: tags is a list of dictionaries, not a dictionary
+                            for tag in tags:
+                                tag_key = tag.get('Key', '').lower()
+                                tag_value = tag.get('Value', '').lower()
+
+                                if ((tag_key in ['cluster', 'eks-cluster',
+                                                 'clustername'] and tag_value == cluster_name.lower()) or
+                                        tag_key == f'kubernetes.io/cluster/{cluster_name.lower()}' or
+                                        cluster_name.lower() in tag_value):
                                     is_cluster_related = True
                                     break
+
                         except Exception as tag_error:
                             self.log_operation('WARNING',
                                                f"Could not check tags for EventBridge rule {rule_name}: {tag_error}")
 
                     if is_cluster_related:
-                        # Final safety check - multi-cluster rules
-                        if any(pattern in rule_name.lower() for pattern in [
-                            'all-clusters', 'multi-cluster', 'all-eks', 'global-eks'
-                        ]):
-                            self.log_operation('INFO',
-                                               f"⚠️ Skipping potential multi-cluster EventBridge rule: {rule_name}")
-                            skipped_rules.append(rule_name)
-                            self.cleanup_results['skipped_resources'].append({
-                                'resource_type': 'EventBridge rule',
-                                'resource_id': rule_name,
-                                'reason': 'Potential multi-cluster resource'
-                            })
-                            continue
-
-                        # Additional safety: Check if rule has many targets (might be shared)
-                        target_safety_check_passed = True
                         try:
+                            # First, remove all targets from the rule
                             targets_response = events_client.list_targets_by_rule(Rule=rule_name)
                             targets = targets_response.get('Targets', [])
 
-                            # If rule has more than 10 targets, it might be shared
-                            if len(targets) > 10:
-                                self.log_operation('INFO',
-                                                   f"⚠️ Skipping EventBridge rule with many targets ({len(targets)}): {rule_name}")
-                                skipped_rules.append(rule_name)
-                                self.cleanup_results['skipped_resources'].append({
-                                    'resource_type': 'EventBridge rule',
-                                    'resource_id': rule_name,
-                                    'reason': f'Has many targets ({len(targets)}) - might be shared'
-                                })
-                                target_safety_check_passed = False
-                        except Exception as target_check_error:
-                            self.log_operation('WARNING',
-                                               f"Could not check targets for rule {rule_name}: {target_check_error}")
+                            if targets:
+                                target_ids = [target['Id'] for target in targets]
+                                events_client.remove_targets(
+                                    Rule=rule_name,
+                                    Ids=target_ids
+                                )
+                                self.log_operation('INFO', f"Removed {len(target_ids)} targets from rule {rule_name}")
 
-                        if target_safety_check_passed:
-                            try:
-                                # First, remove any targets from the rule
-                                targets_response = events_client.list_targets_by_rule(Rule=rule_name)
-                                targets = targets_response.get('Targets', [])
+                            # Delete the rule
+                            events_client.delete_rule(Name=rule_name)
+                            deleted_rules.append(rule_name)
+                            self.log_operation('INFO', f"✅ Deleted EventBridge rule: {rule_name}")
+                            print(f"      ✅ Deleted EventBridge rule: {rule_name}")
 
-                                if targets:
-                                    target_ids = [t['Id'] for t in targets]
-                                    events_client.remove_targets(Rule=rule_name, Ids=target_ids)
-                                    self.log_operation('INFO',
-                                                       f"Removed {len(target_ids)} targets from rule {rule_name}")
-                                    print(f"      Removed {len(target_ids)} targets from rule {rule_name}")
+                        except Exception as delete_error:
+                            self.log_operation('ERROR',
+                                               f"Failed to delete EventBridge rule {rule_name}: {delete_error}")
+                            print(f"      ❌ Failed to delete EventBridge rule {rule_name}: {delete_error}")
 
-                                    # Wait a moment for targets to be removed
-                                    time.sleep(1)
-
-                                # Now delete the rule
-                                self.log_operation('INFO',
-                                                   f"🗑️  Deleting EventBridge rule {rule_name} (state: {rule_state}) related to cluster {cluster_name}")
-                                print(f"      🗑️  Deleting EventBridge rule: {rule_name}")
-
-                                events_client.delete_rule(Name=rule_name)
-                                deleted_rules.append(rule_name)
-                                self.log_operation('INFO', f"✅ Deleted EventBridge rule {rule_name}")
-
-                                # Small delay to avoid throttling
-                                time.sleep(0.2)
-
-                            except Exception as delete_error:
-                                error_msg = str(delete_error)
-                                self.log_operation('ERROR',
-                                                   f"Failed to delete EventBridge rule {rule_name}: {error_msg}")
-                                print(f"      ❌ Failed to delete rule {rule_name}: {error_msg}")
-                                failed_rules.append(rule_name)
-                                self.cleanup_results['failed_deletions'].append({
-                                    'resource_type': 'EventBridge rule',
-                                    'resource_id': rule_name,
-                                    'cluster_name': cluster_name,
-                                    'region': region,
-                                    'error': error_msg
-                                })
-
-            # Summary logging
+            # Summary
             if deleted_rules:
                 self.log_operation('INFO', f"Deleted {len(deleted_rules)} EventBridge rules for cluster {cluster_name}")
                 print(f"   ✅ Deleted {len(deleted_rules)} EventBridge rules for cluster {cluster_name}")
 
-                # Log first few deleted rules for verification
-                for rule in deleted_rules[:5]:
-                    print(f"      • {rule}")
-                if len(deleted_rules) > 5:
-                    print(f"      • ... and {len(deleted_rules) - 5} more rules")
-
             if skipped_rules:
                 self.log_operation('INFO', f"Skipped {len(skipped_rules)} EventBridge rules that appear to be shared")
-                print(f"   ⚠️ Skipped {len(skipped_rules)} EventBridge rules (shared resources)")
+                print(f"   ⚠️ Skipped {len(skipped_rules)} EventBridge rules that may be shared resources")
 
-            if failed_rules:
-                self.log_operation('WARNING', f"Failed to delete {len(failed_rules)} EventBridge rules")
-                print(f"   ❌ Failed to delete {len(failed_rules)} EventBridge rules")
-
-            if not deleted_rules and not skipped_rules and not failed_rules:
+            if not deleted_rules and not skipped_rules:
                 self.log_operation('INFO', f"No EventBridge rules found related to cluster {cluster_name}")
                 print(f"   ℹ️ No EventBridge rules found related to cluster {cluster_name}")
 
-            return len(failed_rules) == 0  # Return True if no failures
+            return True
 
         except Exception as e:
-            error_msg = str(e)
-            self.log_operation('ERROR', f"Failed to delete EventBridge rules for cluster {cluster_name}: {error_msg}")
-            print(f"   ❌ Failed to delete EventBridge rules: {error_msg}")
+            self.log_operation('ERROR', f"Failed to delete EventBridge rules for cluster {cluster_name}: {e}")
+            print(f"   ❌ Failed to delete EventBridge rules: {e}")
             return False
 
     def delete_all_lambda_functions_backup(self, access_key, secret_key, region, cluster_name):

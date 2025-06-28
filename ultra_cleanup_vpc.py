@@ -9,6 +9,8 @@ from datetime import datetime
 from botocore.exceptions import ClientError, BotoCoreError
 from typing import List, Dict, Any, Set, Optional, Tuple
 import logging
+from  root_iam_credential_manager import AWSCredentialManager
+from  root_iam_credential_manager import Colors
 
 class UltraVPCCleanupManager:
     """
@@ -20,12 +22,14 @@ class UltraVPCCleanupManager:
     
     def __init__(self, config_file='aws_accounts_config.json'):
         self.config_file = config_file
+        self.cred_manager = AWSCredentialManager()
         self.current_time = datetime.now()
         self.current_time_str = self.current_time.strftime("%Y-%m-%d %H:%M:%S")
         self.current_user = "varadharajaan"
-        
+
         # Generate timestamp for output files
         self.execution_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.user_regions = self._get_user_regions()
         
         # Operation mode
         self.dry_run = False
@@ -94,7 +98,7 @@ class UltraVPCCleanupManager:
             os.makedirs(log_dir, exist_ok=True)
             
             self.log_filename = f"{log_dir}/ultra_vpc_cleanup_{self.execution_timestamp}.log"
-            
+
             # Create logger for detailed operations
             self.logger = logging.getLogger('ultra_vpc_cleanup')
             self.logger.setLevel(logging.INFO)
@@ -136,6 +140,19 @@ class UltraVPCCleanupManager:
         except Exception as e:
             print(f"Warning: Could not setup detailed logging: {e}")
             self.logger = None
+
+    def _get_user_regions(self) -> List[str]:
+        """Get user regions from root accounts config."""
+        try:
+            config = self.cred_manager.load_root_accounts_config()
+            if config:
+                return config.get('user_settings', {}).get('user_regions', [
+                    'us-east-1', 'us-east-2', 'us-west-1', 'us-west-2', 'ap-south-1'
+                ])
+        except Exception as e:
+            self.print_colored(Colors.YELLOW, f"⚠️  Warning: Could not load user regions: {e}")
+
+        return ['us-east-1', 'us-east-2', 'us-west-1', 'us-west-2', 'ap-south-1']
 
     def log_operation(self, level, message):
         """Simple logging operation"""
@@ -1323,6 +1340,10 @@ class UltraVPCCleanupManager:
             self.log_operation('ERROR', f"Error deleting Network Interfaces in {region} ({account_name}): {e}")
             return False
 
+    def print_colored(self, color: str, message: str):
+        """Print colored message to console"""
+        print(f"{color}{message}{Colors.END}")
+
     def delete_subnets(self, ec2_client, subnets: List[Dict], region: str, account_name: str) -> bool:
         """Delete all custom subnets"""
         try:
@@ -1504,6 +1525,19 @@ class UltraVPCCleanupManager:
             self.log_operation('ERROR', f"Error deleting VPC Peering Connections in {region} ({account_name}): {e}")
             return False
 
+    def _get_user_regions(self) -> List[str]:
+        """Get user regions from root accounts config."""
+        try:
+            config = self.cred_manager.load_root_accounts_config()
+            if config:
+                return config.get('user_settings', {}).get('user_regions', [
+                    'us-east-1', 'us-east-2', 'us-west-1', 'us-west-2', 'ap-south-1'
+                ])
+        except Exception as e:
+            self.print_colored(Colors.YELLOW, f"⚠️  Warning: Could not load user regions: {e}")
+
+        return ['us-east-1', 'us-east-2', 'us-west-1', 'us-west-2', 'ap-south-1']
+
     def select_operation_mode(self) -> bool:
         """Select between dry-run and actual deletion"""
         print("\n" + "="*80)
@@ -1584,48 +1618,134 @@ class UltraVPCCleanupManager:
             except Exception as e:
                 print(f"❌ Error in selection: {e}")
 
-    def select_regions_interactive(self) -> List[str]:
-        """Interactive region selection"""
-        print("\n" + "="*80)
-        print("🌍 REGION SELECTION")
-        print("="*80)
-        
-        for i, region in enumerate(self.regions, 1):
-            print(f"   {i}. {region}")
-        
-        print(f"   {len(self.regions) + 1}. All regions")
-        print("="*80)
-        
+    def select_regions_interactive(self) -> Optional[List[str]]:
+        """Interactive region selection."""
+        self.print_colored(Colors.YELLOW, "\n🌍 Available AWS Regions:")
+        self.print_colored(Colors.YELLOW, "=" * 80)
+
+        for i, region in enumerate(self.user_regions, 1):
+            self.print_colored(Colors.CYAN, f"   {i}. {region}")
+
+        self.print_colored(Colors.YELLOW, "=" * 80)
+        self.print_colored(Colors.YELLOW, "💡 Selection options:")
+        self.print_colored(Colors.WHITE, "   • Single: 1")
+        self.print_colored(Colors.WHITE, "   • Multiple: 1,3,5")
+        self.print_colored(Colors.WHITE, "   • Range: 1-5")
+        self.print_colored(Colors.WHITE, "   • All: all")
+        self.print_colored(Colors.YELLOW, "=" * 80)
+
         while True:
             try:
-                choice = input("Select regions (comma-separated numbers) or 'q' to quit: ").strip()
-                
-                if choice.lower() == 'q':
-                    return []
-                
-                if choice == str(len(self.regions) + 1):
-                    return self.regions
-                
-                selected_indices = [int(x.strip()) for x in choice.split(',')]
-                selected_regions = []
-                
-                for idx in selected_indices:
-                    if 1 <= idx <= len(self.regions):
-                        selected_regions.append(self.regions[idx - 1])
-                    else:
-                        print(f"❌ Invalid choice: {idx}. Please select numbers between 1 and {len(self.regions)}")
-                        break
-                else:
-                    if selected_regions:
-                        print(f"\n✅ Selected regions: {', '.join(selected_regions)}")
-                        return selected_regions
-                
-            except ValueError:
-                print("❌ Please enter valid numbers separated by commas")
-            except Exception as e:
-                print(f"❌ Error in selection: {e}")
+                choice = input(f"Select regions (1-{len(self.user_regions)}, comma-separated, range, or 'all') or 'q' to quit: ").strip()
 
+                if choice.lower() == 'q':
+                    return None
+
+                if choice.lower() == "all" or not choice:
+                    self.print_colored(Colors.GREEN, f"✅ Selected all {len(self.user_regions)} regions")
+                    return self.user_regions
+
+                selected_indices = self.cred_manager._parse_selection(choice, len(self.user_regions))
+                if not selected_indices:
+                    self.print_colored(Colors.RED, "❌ Invalid selection format")
+                    continue
+
+                selected_regions = [self.user_regions[i - 1] for i in selected_indices]
+                self.print_colored(Colors.GREEN, f"✅ Selected {len(selected_regions)} regions: {', '.join(selected_regions)}")
+                return selected_regions
+
+            except Exception as e:
+                self.print_colored(Colors.RED, f"❌ Error processing selection: {str(e)}")
+
+    # Replace the run_interactive_cleanup method with this version:
     def run_interactive_cleanup(self):
+        """Simplified cleanup flow using shared account/region selection"""
+        try:
+            print("\n" + "=" * 100)
+            print("🚨 ENHANCED ULTRA VPC CLEANUP MANAGER 🚨")
+            print("=" * 100)
+            print("⚠️  WARNING: This tool can DELETE ALL CUSTOM VPC resources!")
+            print("✅ DEFAULT VPC resources will be COMPLETELY PROTECTED and IGNORED")
+            print("=" * 100)
+
+            # Use shared account/region selection
+
+            root_accounts = self.cred_manager.select_root_accounts_interactive(allow_multiple=True)
+            if not root_accounts:
+                self.print_colored(Colors.RED, "❌ No root accounts selected, exiting...")
+                return
+            selected_accounts = [acc['account_key'] for acc in root_accounts]
+
+            # STEP 2: Select regions
+            selected_regions = self.select_regions_interactive()
+            if not selected_regions:
+                self.print_colored(Colors.RED, "❌ No regions selected, exiting...")
+                return
+
+            # STEP 3: Calculate total operations and confirm
+            total_operations = len(selected_accounts) * len(selected_regions)
+            print(f"\n📊 Total operations: {total_operations} (Accounts: {len(selected_accounts)}, Regions: {len(selected_regions)})")
+
+
+
+            # Simple yes/no confirmation
+            confirm = input(
+                f"\nProceed to DELETE all custom VPC resources in selected accounts/regions? (y/n): ").strip().lower()
+            if confirm != 'y' and confirm != 'yes':
+                print("❌ Operation cancelled")
+                return
+
+            self.dry_run = False  # Always actual cleanup in this flow
+
+            self.log_operation('INFO',
+                               f"🚀 Starting VPC cleanup for {len(selected_accounts)} accounts and {len(selected_regions)} regions")
+            total_operations = len(selected_accounts) * len(selected_regions)
+            current_operation = 0
+
+            for account_name in selected_accounts:
+                account_data = self.config_data['accounts'][account_name]
+                access_key = account_data['access_key']
+                secret_key = account_data['secret_key']
+
+                self.cleanup_results['accounts_processed'].append(account_name)
+
+                for region in selected_regions:
+                    current_operation += 1
+                    print(f"\n[{current_operation}/{total_operations}] Processing {account_name} - {region}")
+                    self.log_operation('INFO', f"Processing {account_name} - {region}")
+
+                    ec2_client = self.create_ec2_client(access_key, secret_key, region)
+                    if not ec2_client:
+                        continue
+
+                    self.cleanup_results['regions_processed'].append(f"{account_name}:{region}")
+
+                    success = self.cleanup_vpc_resources_in_region(ec2_client, region, account_name)
+
+                    # Delete unused EBS volumes
+                    ebs_deleted = self.delete_unused_ebs_volumes(ec2_client, region, account_name)
+                    print(f"   🗑️ Deleted {ebs_deleted} unused EBS volumes in {region}")
+
+                    # Delete unused EFS file systems
+                    efs_deleted = self.delete_unused_efs_filesystems(access_key, secret_key, region, account_name)
+                    print(f"   🗑️ Deleted {efs_deleted} unused EFS file systems in {region}")
+
+
+                    if success:
+                        print(f"   ✅ Completed cleanup for {account_name} - {region}")
+                    else:
+                        print(f"   ⚠️ Cleanup completed with some issues for {account_name} - {region}")
+
+            self.generate_cleanup_report()
+
+        except KeyboardInterrupt:
+            self.log_operation('WARNING', "🛑 Cleanup interrupted by user")
+            print("\n🛑 Cleanup interrupted by user")
+        except Exception as e:
+            self.log_operation('ERROR', f"Error in cleanup: {e}")
+            print(f"❌ Error in cleanup: {e}")
+
+    def run_interactive_cleanup_bk(self):
         """Main interactive cleanup flow"""
         try:
             print("\n" + "="*100)
@@ -1712,6 +1832,14 @@ class UltraVPCCleanupManager:
                         print(f"   ✅ Completed {operation_text} for {account_name} - {region}")
                     else:
                         print(f"   ⚠️ {operation_text.title()} completed with some issues for {account_name} - {region}")
+
+                    # Delete unused EBS volumes
+                    ebs_deleted = self.delete_unused_ebs_volumes(ec2_client, region, account_name)
+                    print(f"   🗑️ Deleted {ebs_deleted} unused EBS volumes in {region}")
+
+                    # Delete unused EFS file systems
+                    efs_deleted = self.delete_unused_efs_filesystems(access_key, secret_key, region, account_name)
+                    print(f"   🗑️ Deleted {efs_deleted} unused EFS file systems in {region}")
             
             # Generate final report
             self.generate_cleanup_report()
@@ -1722,6 +1850,52 @@ class UltraVPCCleanupManager:
         except Exception as e:
             self.log_operation('ERROR', f"Error in interactive {operation_text}: {e}")
             print(f"❌ Error in {operation_text}: {e}")
+
+    def delete_unused_ebs_volumes(self, ec2_client, region: str, account_name: str) -> int:
+        """Delete all unattached (available) EBS volumes in the region."""
+        try:
+            response = ec2_client.describe_volumes(Filters=[{'Name': 'status', 'Values': ['available']}])
+            volumes = response.get('Volumes', [])
+            count = 0
+            for vol in volumes:
+                vol_id = vol['VolumeId']
+                try:
+                    ec2_client.delete_volume(VolumeId=vol_id)
+                    self.log_operation('INFO', f"✅ Deleted unused EBS volume: {vol_id}")
+                    count += 1
+                except Exception as e:
+                    self.log_operation('ERROR', f"❌ Failed to delete EBS volume {vol_id}: {e}")
+            return count
+        except Exception as e:
+            self.log_operation('ERROR', f"Error deleting unused EBS volumes in {region} ({account_name}): {e}")
+            return 0
+
+    def delete_unused_efs_filesystems(self, access_key: str, secret_key: str, region: str, account_name: str) -> int:
+        """Delete all EFS file systems with no mount targets in the region."""
+        try:
+            efs_client = boto3.client(
+                'efs',
+                aws_access_key_id=access_key,
+                aws_secret_access_key=secret_key,
+                region_name=region
+            )
+            response = efs_client.describe_file_systems()
+            filesystems = response.get('FileSystems', [])
+            count = 0
+            for fs in filesystems:
+                fs_id = fs['FileSystemId']
+                mt_resp = efs_client.describe_mount_targets(FileSystemId=fs_id)
+                if not mt_resp.get('MountTargets'):
+                    try:
+                        efs_client.delete_file_system(FileSystemId=fs_id)
+                        self.log_operation('INFO', f"✅ Deleted unused EFS file system: {fs_id}")
+                        count += 1
+                    except Exception as e:
+                        self.log_operation('ERROR', f"❌ Failed to delete EFS file system {fs_id}: {e}")
+            return count
+        except Exception as e:
+            self.log_operation('ERROR', f"Error deleting unused EFS file systems in {region} ({account_name}): {e}")
+            return 0
 
     def cleanup_vpc_resources_in_region(self, ec2_client, region: str, account_name: str) -> bool:
         """Clean up all VPC resources in a region following dependency order"""

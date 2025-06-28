@@ -193,6 +193,58 @@ class AWSCredentialManager:
 
         return root_accounts
 
+    def select_regions_interactive(self) -> Optional[List[str]]:
+        """Interactive region selection."""
+        self.print_colored(Colors.YELLOW, "\n🌍 Available AWS Regions:")
+        self.print_colored(Colors.YELLOW, "=" * 80)
+
+        for i, region in enumerate(self.user_regions, 1):
+            self.print_colored(Colors.CYAN, f"   {i}. {region}")
+
+        self.print_colored(Colors.YELLOW, "=" * 80)
+        self.print_colored(Colors.YELLOW, "💡 Selection options:")
+        self.print_colored(Colors.WHITE, "   • Single: 1")
+        self.print_colored(Colors.WHITE, "   • Multiple: 1,3,5")
+        self.print_colored(Colors.WHITE, "   • Range: 1-5")
+        self.print_colored(Colors.WHITE, "   • All: all")
+        self.print_colored(Colors.YELLOW, "=" * 80)
+
+        while True:
+            try:
+                choice = input(f"Select regions (1-{len(self.user_regions)}, comma-separated, range, or 'all') or 'q' to quit: ").strip()
+
+                if choice.lower() == 'q':
+                    return None
+
+                if choice.lower() == "all" or not choice:
+                    self.print_colored(Colors.GREEN, f"✅ Selected all {len(self.user_regions)} regions")
+                    return self.user_regions
+
+                selected_indices = self.cred_manager._parse_selection(choice, len(self.user_regions))
+                if not selected_indices:
+                    self.print_colored(Colors.RED, "❌ Invalid selection format")
+                    continue
+
+                selected_regions = [self.user_regions[i - 1] for i in selected_indices]
+                self.print_colored(Colors.GREEN, f"✅ Selected {len(selected_regions)} regions: {', '.join(selected_regions)}")
+                return selected_regions
+
+            except Exception as e:
+                self.print_colored(Colors.RED, f"❌ Error processing selection: {str(e)}")
+
+    def get_user_regions(self) -> List[str]:
+        """Get user regions from root accounts config."""
+        try:
+            config = self.load_root_accounts_config()
+            if config:
+                return config.get('user_settings', {}).get('user_regions', [
+                    'us-east-1', 'us-east-2', 'us-west-1', 'us-west-2', 'ap-south-1'
+                ])
+        except Exception as e:
+            self.print_colored(Colors.YELLOW, f"⚠️  Warning: Could not load user regions: {e}")
+
+        return ['us-east-1', 'us-east-2', 'us-west-1', 'us-west-2', 'ap-south-1']
+
     def select_root_accounts_interactive(self, allow_multiple: bool = True) -> Optional[List[Dict[str, Any]]]:
         """Interactive root account selection."""
         config = self.load_root_accounts_config()
