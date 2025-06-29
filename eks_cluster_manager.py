@@ -46,6 +46,7 @@ class EKSClusterManager:
             self.current_user = current_user
             self.current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             self.execution_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            self.eks_ssh_keypair_name = "k8s_demo_key"
         
             # Setup logging
             self.setup_logging()
@@ -1182,6 +1183,31 @@ class EKSClusterManager:
             self.print_colored(Colors.RED, f"❌ Scheduled scaling setup failed: {error_msg}")
             return False
 
+    def ensure_ec2_key_pair(self, ec2_client, key_name: str, save_dir: str = ".") -> str:
+        """
+        Ensure the EC2 key pair exists. If not, create it and save the private key.
+        Returns the key name.
+        """
+        try:
+            # Check if key exists
+            response = ec2_client.describe_key_pairs(KeyNames=[key_name])
+            self.log_operation('INFO', f"EC2 key pair '{key_name}' already exists.")
+            return key_name
+        except ec2_client.exceptions.ClientError as e:
+            if "InvalidKeyPair.NotFound" in str(e):
+                # Create the key pair
+                key_pair = ec2_client.create_key_pair(KeyName=key_name)
+                private_key = key_pair['KeyMaterial']
+                key_path = os.path.join(save_dir, f"{key_name}.pem")
+                with open(key_path, "w") as f:
+                    f.write(private_key)
+                os.chmod(key_path, 0o400)
+                self.log_operation('INFO', f"Created EC2 key pair '{key_name}' and saved private key to {key_path}")
+                return key_name
+            else:
+                self.log_operation('ERROR', f"Error checking/creating key pair: {str(e)}")
+                raise
+
     def setup_cloudwatch_alarms_multi_nodegroup(self, cluster_name: str, region: str, cloudwatch_client, nodegroup_names: List[str], account_id: str) -> bool:
         """Setup CloudWatch alarms for multiple nodegroups"""
         if not nodegroup_names:
@@ -1844,7 +1870,7 @@ class EKSClusterManager:
 
     def create_mixed_nodegroup(self, eks_client, cluster_name: str, nodegroup_name: str,
                            node_role_arn: str, subnet_ids: List[str], ami_type: str,
-                           instance_selections: Dict, min_size: int, desired_size: int, max_size: int) -> bool:
+                           instance_selections: Dict, min_size: int, desired_size: int, max_size: int, ec2_key_name: string) -> bool:
         """Create mixed strategy using two separate nodegroups with proper validation"""
         try:
             # Validate required instance selections are provided
@@ -1945,6 +1971,9 @@ class EKSClusterManager:
                         subnets=subnet_ids,
                         diskSize=20,
                         capacityType='ON_DEMAND',
+                        remoteAccess={
+                            'ec2SshKey': ec2_key_name
+                        },
                         tags=ondemand_instance_tags,
                         labels={
                             'nodegroup-name': ondemand_ng_name,
@@ -2039,7 +2068,7 @@ class EKSClusterManager:
 
     def create_spot_nodegroup(self, eks_client, cluster_name: str, nodegroup_name: str,
                           node_role_arn: str, subnet_ids: List[str], ami_type: str,
-                          instance_types: List[str], min_size: int, desired_size: int, max_size: int) -> bool:
+                          instance_types: List[str], min_size: int, desired_size: int, max_size: int, ec2_key_name: string) -> bool:
         """Create Spot nodegroup with strict instance type validation"""
         try:
         
@@ -2073,6 +2102,9 @@ class EKSClusterManager:
                 instanceTypes=instance_types,  # This is now a list of strings
                 amiType=ami_type,
                 nodeRole=node_role_arn,
+                remoteAccess={
+                    'ec2SshKey': ec2_key_name
+                },
                 subnets=subnet_ids,
                 diskSize=20,  # Default disk size in GB
                 capacityType='SPOT',
@@ -2103,7 +2135,7 @@ class EKSClusterManager:
 
     def create_ondemand_nodegroup(self, eks_client, cluster_name: str, nodegroup_name: str,
                         node_role_arn: str, subnet_ids: List[str], ami_type: str,
-                        instance_types: List[str], min_size: int, desired_size: int, max_size: int) -> bool:
+                        instance_types: List[str], min_size: int, desired_size: int, max_size: int, ec2_key_name: string) -> bool:
         """Create On-Demand nodegroup with strict instance type validation"""
         try:
             # Validate that instance types are provided
@@ -2142,6 +2174,9 @@ class EKSClusterManager:
                 instanceTypes=instance_types,  # This is now a list of strings
                 amiType=ami_type,
                 nodeRole=node_role_arn,
+                remoteAccess={
+                    'ec2SshKey': ec2_key_name
+                },
                 subnets=subnet_ids,
                 diskSize=20,  # Default disk size in GB
                 capacityType='ON_DEMAND',
@@ -7622,6 +7657,8 @@ class EKSClusterManager:
             # Generate nodegroup name
             nodegroup_name = self.generate_nodegroup_name(cluster_name, strategy)
             ami_type = config.get('ami_type', 'AL2_x86_64')  # Amazon Linux 2 x86_64
+            key_name = self.eks_ssh_keypair_name
+            ec2_key_name = self.ensure_ec2_key_pair(ec2_client, key_name)
 
             # Create nodegroup(s) based on strategy
             nodegroups_created = []
@@ -7645,7 +7682,7 @@ class EKSClusterManager:
                     if strategy == 'on-demand':
                         success = self.create_ondemand_nodegroup(
                             eks_client, cluster_name, nodegroup_name, node_role_arn, selected_subnets,
-                            ami_type, instance_selections.get('on-demand', ["c6a.large"]), min_size, desired_size, max_size
+                            ami_type, instance_selections.get('on-demand', ["c6a.large"]), min_size, desired_size, max_size, ec2_key_name
                         )
                         if success:
                             nodegroups_created.append(nodegroup_name)
@@ -7655,7 +7692,7 @@ class EKSClusterManager:
                         success = self.create_spot_nodegroup(
                             eks_client, cluster_name, nodegroup_name, node_role_arn, selected_subnets,
                             ami_type, instance_selections.get('spot', ["c6a.large"]), 
-                            min_size, desired_size, max_size
+                            min_size, desired_size, max_size, ec2_key_name
                         )
                         if success:
                             nodegroups_created.append(nodegroup_name)
@@ -7663,7 +7700,7 @@ class EKSClusterManager:
                     elif strategy == 'mixed':
                         success = self.create_mixed_nodegroup(
                             eks_client, cluster_name, nodegroup_name, node_role_arn, selected_subnets,
-                            ami_type, instance_selections, min_size, desired_size, max_size
+                            ami_type, instance_selections, min_size, desired_size, max_size, ec2_key_name
                         )
                         if success:
                             # For mixed strategy, we'll have two nodegroups

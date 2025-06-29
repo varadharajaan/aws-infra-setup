@@ -1943,27 +1943,32 @@ class EKSClusterContinuationFromErrors:
             # Create nodegroup based on strategy
             success = False
             strategy = nodegroup_config['strategy']
+            key_name = "k8s_demo_key"
+            ec2_key_name = self.ensure_ec2_key_pair(ec2_client, key_name)
 
             if strategy == 'on-demand':
                 success = self.eks_manager.create_ondemand_nodegroup(
                     eks_client, cluster_name, nodegroup_config['name'], node_role_arn,
                     selected_subnets, nodegroup_config['ami_type'],
                     nodegroup_config['instance_selections']['on-demand'],
-                    nodegroup_config['min_size'], nodegroup_config['desired_size'], nodegroup_config['max_size']
+                    nodegroup_config['min_size'], nodegroup_config['desired_size'], nodegroup_config['max_size'],
+                    ec2_key_name
                 )
             elif strategy == 'spot':
                 success = self.eks_manager.create_spot_nodegroup(
                     eks_client, cluster_name, nodegroup_config['name'], node_role_arn,
                     selected_subnets, nodegroup_config['ami_type'],
                     nodegroup_config['instance_selections']['spot'],
-                    nodegroup_config['min_size'], nodegroup_config['desired_size'], nodegroup_config['max_size']
+                    nodegroup_config['min_size'], nodegroup_config['desired_size'], nodegroup_config['max_size'],
+                    ec2_key_name
                 )
             elif strategy == 'mixed':
                 success = self.eks_manager.create_mixed_nodegroup(
                     eks_client, cluster_name, nodegroup_config['name'], node_role_arn,
                     selected_subnets, nodegroup_config['ami_type'],
                     nodegroup_config['instance_selections'],
-                    nodegroup_config['min_size'], nodegroup_config['desired_size'], nodegroup_config['max_size']
+                    nodegroup_config['min_size'], nodegroup_config['desired_size'], nodegroup_config['max_size'],
+                    ec2_key_name
                 )
 
             if success:
