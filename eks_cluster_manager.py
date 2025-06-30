@@ -1981,8 +1981,8 @@ class EKSClusterManager:
                 ondemand_instance_tags = self.generate_instance_tags(cluster_name, ondemand_ng_name, 'Mixed-OnDemand')
                 ondemand_instance_tags['ParentNodegroup'] = nodegroup_name
                 ondemand_instance_tags['OnDemandPercentage'] = str(on_demand_percentage)
-                if ondemand_instance_tags['name'] == None or ondemand_instance_tags['name'] == '':
-                    ondemand_instance_tags['name'] = f"{ondemand_ng_name}-instance"
+                if ondemand_instance_tags['Name'] == None or ondemand_instance_tags['Name'] == '':
+                    ondemand_instance_tags['Name'] = f"{ondemand_ng_name}-instance"
         
                 try:
                     eks_client.create_nodegroup(
