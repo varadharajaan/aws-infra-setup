@@ -131,19 +131,59 @@ Examples:
             print("Interactive mode: Multi-account processing supported")
             return True
 
-    def extract_username_from_cluster(self, cluster_name):
-        """Extract username from cluster name format: {username}_eks-cluster-{username}-{region}-suffix"""
+    def extract_username_from_cluster_name(cluster_name):
+        """
+        Extracts username from EKS cluster name based on common patterns.
+
+        Args:
+            cluster_name (str): EKS cluster name like 'eks-cluster-account01_clouduser05-ap-south-1-tnkg'
+
+        Returns:
+            str: Extracted username or None if pattern doesn't match
+        """
         try:
-            if cluster_name and '_eks-cluster-' in cluster_name:
-                # Split by '_eks-cluster-' and take the first part as username
-                parts = cluster_name.split('_eks-cluster-')
-                if len(parts) >= 1:
-                    username = parts[0]  # Everything before '_eks-cluster-'
-                    return username
+            # Pattern 1: eks-cluster-account01_clouduser05-ap-south-1-tnkg
+            if '_' in cluster_name:
+                # Split by '-' to get segments
+                segments = cluster_name.split('-')
+                # Find the segment containing the username (with '_')
+                for segment in segments:
+                    if '_' in segment:
+                        return segment
+
+            # Pattern 2: eks-cluster-root-account01-ap-south-1-tnkg
+            else:
+                # Match pattern for root user
+                parts = cluster_name.split('-')
+                if len(parts) >= 4 and parts[2] == 'root':
+                    return f"root-{parts[3]}"
+
+            return None
+        except Exception as e:
+            print(f"Error extracting username: {str(e)}")
+            return None
+
+    def extract_username_from_cluster(self, cluster_name):
+        """
+        Extract username from cluster name:
+        - For root: eks-cluster-root-account01-... -> root-account01
+        - For IAM: {username}_eks-cluster-{username}-... -> {username}
+        """
+        try:
+            if not cluster_name:
+                return 'unknown-user'
+            if cluster_name.startswith('eks-cluster-root-'):
+                # root user: username is 'root-accountXX'
+                parts = cluster_name.split('-')
+                if len(parts) >= 4:
+                    return f"root-{parts[3]}"
+                return 'root-user'
+            if '_eks-cluster-' in cluster_name:
+                # IAM user: username is before '_eks-cluster-'
+                return cluster_name.split('_eks-cluster-')[0]
             return 'unknown-user'
         except Exception:
             return 'unknown-user'
-
 
 
     def extract_username_from_instruction_filename(self, filename):
@@ -246,19 +286,29 @@ Examples:
             return []
 
     def extract_username_from_cluster_name_in_instruction(self, cluster_name):
-        """Extract username from cluster name in instruction file: {something}_eks-cluster-{username}-{region}-{suffix}"""
+        """
+        Extract username from cluster name in instruction file:
+        - For root: eks-cluster-root-account01-...
+          -> username: root-account01
+        - For IAM: eks-cluster-account01_clouduser01-...
+          -> username: account01_clouduser01
+        """
         try:
-            if cluster_name and '_eks-cluster-' in cluster_name:
-                # Find the part after '_eks-cluster-' and before the next '-'
+            if not cluster_name:
+                return 'unknown-user'
+            if cluster_name.startswith('eks-cluster-root-'):
+                # root user: username is 'root-accountXX'
+                parts = cluster_name.split('-')
+                if len(parts) >= 4:
+                    return f"root-{parts[3]}"
+                return 'root-user'
+            elif '_eks-cluster-' in cluster_name:
+                # IAM user: username is before '-'
                 parts = cluster_name.split('_eks-cluster-')
                 if len(parts) >= 2:
-                    # Take everything after '_eks-cluster-' and split by '-'
                     after_cluster = parts[1]
-                    # Split by '-' and take the first part (username)
-                    username_parts = after_cluster.split('-')
-                    if len(username_parts) >= 1:
-                        username = username_parts[0]  # This should be account03_clouduser05
-                        return username
+                    username = after_cluster.split('-')[0]
+                    return username
             return 'unknown-user'
         except Exception:
             return 'unknown-user'
@@ -307,6 +357,8 @@ Examples:
 
                     # NEW: Extract username from cluster name (the proper way)
                     extracted_username = self.extract_username_from_cluster_name_in_instruction(cluster_name)
+                    if 'root-account' in cluster_name:
+                        extracted_username = username
 
                     print(f"  ✓ Parsed: {file_path.name}")
                     print(
@@ -376,6 +428,9 @@ Examples:
                 base_username = self.extract_username_from_asg_filename(filename)
                 # Create full username: account_username
                 full_username = f"{asg_info['account']}_{base_username}"
+                if 'root-account' in base_username:
+                    full_username = base_username
+
                 self.asg_username_mapping[asg_info['name']] = full_username
                 print(f"{asg_info['name']:<30} {asg_info['account']:<15} {base_username:<20} {full_username:<25}")
 
@@ -389,6 +444,8 @@ Examples:
                 base_username = self.extract_username_from_ec2_filename(filename)
                 # Create full username: account_username (same logic as ASG)
                 full_username = f"{instance_info['account']}_{base_username}"
+                if 'root-account' in base_username:
+                    full_username = base_username
                 self.ec2_username_mapping[instance_info['instance_id']] = full_username
                 print(
                     f"{instance_info['instance_id']:<20} {instance_info['account']:<15} {base_username:<20} {full_username:<25}")
@@ -707,16 +764,20 @@ Examples:
         return dict(asg_files_by_day)
 
     def extract_username_from_ec2_filename(self, filename):
-        """Extract username from EC2 filename: ec2_instance_{instance_id}_{account}_{username}_{timestamp}.json"""
+        """
+        Extract username from EC2 filename:
+        - ec2_instance_{instance_id}_{account}_{username}_{timestamp}.json
+        - ec2_instance_{instance_id}_root-account01_{timestamp}.json
+        """
         try:
-            # Updated pattern for: ec2_instance_{instance_id}_{account}_{username}_{timestamp}.json
-            match = re.search(r'ec2_instance_([^_]+)_([^_]+)_([^_]+)_\d{8}_\d{6}\.json$', filename)
+            # Pattern 1: account + username
+            match = re.match(r'ec2_instance_[^_]+_[^_]+_([^_]+)_\d{8}_\d{6}\.json$', filename)
             if match:
-                instance_id = match.group(1)  # i-09bc037e52d66d915
-                account = match.group(2)  # account01
-                username = match.group(3)  # clouduser01
-                # Return the base username, we'll combine with account later
-                return username
+                return match.group(1)
+            # Pattern 2: root-accountXX
+            match_root = re.match(r'ec2_instance_[^_]+_(root-account\d+)_\d{8}_\d{6}\.json$', filename)
+            if match_root:
+                return match_root.group(1)
             return 'unknown-user'
         except Exception:
             return 'unknown-user'
@@ -734,18 +795,20 @@ Examples:
             if ec2_path.exists():
                 files_found = 0
                 for file_path in ec2_path.glob("ec2_instance_*.json"):
-                    # Updated pattern for: ec2_instance_{instance_id}_{account}_{username}_{timestamp}.json
-                    match = re.search(r'ec2_instance_([^_]+)_([^_]+)_([^_]+)_(\d{8})_(\d{6})\.json$', file_path.name)
+                    # Match both: ec2_instance_{instance_id}_{account}_{username}_{timestamp}.json
+                    # and ec2_instance_{instance_id}_root-account01_{timestamp}.json
+                    match = re.match(
+                        r'ec2_instance_([^_]+)_((?:root-account\d+|[^_]+))_(?:([^_]+)_)?(\d{8})_(\d{6})\.json$',
+                        file_path.name
+                    )
                     if match:
-                        instance_id = match.group(1)  # i-09bc037e52d66d915
-                        file_account = match.group(2)  # account01
-                        username = match.group(3)  # clouduser01
-                        date_str = match.group(4)  # 20250620
-                        time_str = match.group(5)  # 111935
+                        instance_id = match.group(1)
+                        account_or_root = match.group(2)
+                        username = match.group(3) if match.group(3) else account_or_root
+                        date_str = match.group(4)
+                        time_str = match.group(5)
                         try:
-                            # Parse date and time separately
                             date_obj = datetime.strptime(date_str, '%Y%m%d')
-                            # Parse time and add to date
                             hour = int(time_str[:2])
                             minute = int(time_str[2:4])
                             second = int(time_str[4:6])
@@ -1352,41 +1415,51 @@ Examples:
             }
 
     def process_instance(self, instance, instruction_file_info):
-        """Process a single instance with user instructions"""
+        """Process a single instance with user instructions for both demouser and ec2-user"""
         logger.info(f"Processing instance {instance['instance_id']} in account {instance['account']}")
 
-        # Test SSH connection first
+        # Prepare output file path
+        account = instance['account']
+        instance_id = instance['instance_id']
+        cluster_name = instruction_file_info.get('cluster_name', 'unknown-cluster')
+        extracted_username = self.extract_username_from_cluster(cluster_name)
+        account_dir = Path(self.reports_path) / account / 'instances'
+        account_dir.mkdir(parents=True, exist_ok=True)
+        output_file = account_dir / f"{instance_id}_{account}_{extracted_username}_command_output.txt"
+
+        # --- 1. Run as demouser ---
+        self.ssh_username = "demouser"
+        self.ssh_password = "demouser@123"
         ssh_success, ssh_message, ssh_command = self.test_ssh_connection(instance)
 
         if not ssh_success:
-            logger.error(f"SSH connection failed for {instance['instance_id']}: {ssh_message}")
+            logger.error(f"SSH connection failed for {instance_id}: {ssh_message}")
             return {
-                'instance_id': instance['instance_id'],
-                'account': instance['account'],
+                'instance_id': instance_id,
+                'account': account,
                 'instance_ip': instance['public_ip'] or instance['private_ip'],
                 'ssh_command': f"ssh {self.ssh_username}@{instance['public_ip'] or instance['private_ip']}",
                 'ssh_success': False,
                 'ssh_message': ssh_message,
                 'username': instruction_file_info.get('username', 'unknown'),
-                'cluster_name': instruction_file_info.get('cluster_name', 'unknown'),
+                'cluster_name': cluster_name,
                 'commands_executed': 0,
                 'commands_successful': 0,
                 'command_results': [],
                 'asg_name': instance.get('asg_name', 'N/A')
             }
 
-        # Parse user instructions
         commands = self.parse_user_instructions(instruction_file_info['path'])
         if not commands:
             return {
-                'instance_id': instance['instance_id'],
-                'account': instance['account'],
+                'instance_id': instance_id,
+                'account': account,
                 'instance_ip': instance['public_ip'] or instance['private_ip'],
                 'ssh_command': ssh_command,
                 'ssh_success': True,
                 'ssh_message': "SSH successful",
                 'username': instruction_file_info.get('username', 'unknown'),
-                'cluster_name': instruction_file_info.get('cluster_name', 'unknown'),
+                'cluster_name': cluster_name,
                 'commands_executed': 0,
                 'commands_successful': 0,
                 'command_results': [],
@@ -1394,92 +1467,113 @@ Examples:
                 'error': "Failed to parse instruction file"
             }
 
-        # Execute commands
         results = []
         successful_commands = 0
         total_commands = len(commands)
 
-        print(f"\nExecuting {total_commands} commands on instance {instance['instance_id']} ({instance['account']}):")
+        with open(output_file, 'w', encoding='utf-8') as f:
+            f.write(f"=== demouser OUTPUT ===\n")
 
         for i, command in enumerate(commands, 1):
-            print(f"  [{i}/{total_commands}] Executing: {command}")
-            logger.info(f"Executing command on {instance['instance_id']}: {command}")
-
             result = self.execute_command_on_instance(instance, command)
             result['command'] = command
             result['command_number'] = i
             results.append(result)
-
             if result['success']:
                 successful_commands += 1
-                print(f"    ✓ SUCCESS (exit code: {result['exit_code']})")
-                logger.info(f"Command successful on {instance['instance_id']}")
-            else:
-                print(f"    ✗ FAILED (exit code: {result['exit_code']}) - {result['error']}")
-                logger.error(f"Command failed on {instance['instance_id']}: {result['error']}")
 
-            # Small delay between commands
+            # Append to output file
+            with open(output_file, 'a', encoding='utf-8') as f:
+                f.write(f"Command #{i}: {command}\n")
+                f.write(f"Success: {'YES' if result['success'] else 'NO'}\n")
+                f.write(f"Output:\n{result['output']}\n")
+                if result['error']:
+                    f.write(f"Error:\n{result['error']}\n")
+                f.write("-" * 50 + "\n")
+
             time.sleep(1)
 
-        print(f"  Completed: {successful_commands}/{total_commands} commands successful\n")
+        # --- 2. Run as ec2-user, skipping setup commands ---
+        skip_cmds = [
+            "sudo mkdir -p /home/ec2-user/.aws",
+            "sudo cp -r /home/demouser/.aws/* /home/ec2-user/.aws/",
+            "sudo chown -R ec2-user:ec2-user /home/ec2-user/.aws",
+            "sudo mkdir -p /home/ec2-user/.kube",
+            "sudo cp -r /home/demouser/.kube/* /home/ec2-user/.kube/",
+            "sudo chown -R ec2-user:ec2-user /home/ec2-user/.kube"
+        ]
+        self.ssh_username = "ec2-user"
+        self.ssh_password = None  # Use key-based auth if needed
 
+        # Try SSH as ec2-user
+        ssh_success_ec2, ssh_message_ec2, ssh_command_ec2 = self.test_ssh_connection(instance)
+        ec2_results = []
+        ec2_successful = 0
+
+        filtered_commands = [
+            cmd for cmd in commands
+            if not any(cmd.strip().startswith(skip) for skip in skip_cmds)
+        ]
+
+        with open(output_file, 'a', encoding='utf-8') as f:
+            f.write("\n=== ec2-user OUTPUT ===\n")
+
+        if ssh_success_ec2:
+            for i, command in enumerate(filtered_commands, 1):
+                result = self.execute_command_on_instance(instance, command)
+                result['command'] = command
+                result['command_number'] = i
+                ec2_results.append(result)
+                if result['success']:
+                    ec2_successful += 1
+
+                with open(output_file, 'a', encoding='utf-8') as f:
+                    f.write(f"Command #{i}: {command}\n")
+                    f.write(f"Success: {'YES' if result['success'] else 'NO'}\n")
+                    f.write(f"Output:\n{result['output']}\n")
+                    if result['error']:
+                        f.write(f"Error:\n{result['error']}\n")
+                    f.write("-" * 50 + "\n")
+                time.sleep(1)
+        else:
+            with open(output_file, 'a', encoding='utf-8') as f:
+                f.write(f"ec2-user SSH failed: {ssh_message_ec2}\n")
+
+        # Return combined result (demouser + ec2-user)
         return {
-            'instance_id': instance['instance_id'],
-            'account': instance['account'],
+            'instance_id': instance_id,
+            'account': account,
             'instance_ip': instance['public_ip'] or instance['private_ip'],
             'ssh_command': ssh_command,
             'username': instruction_file_info['username'],
-            'cluster_name': instruction_file_info['cluster_name'],
+            'cluster_name': cluster_name,
             'ssh_success': True,
-            'ssh_message': "SSH successful",
+            'ssh_message': "SSH successful (demouser)",
             'commands_executed': total_commands,
             'commands_successful': successful_commands,
             'command_results': results,
+            'ec2_user_ssh_success': ssh_success_ec2,
+            'ec2_user_ssh_message': ssh_message_ec2,
+            'ec2_user_commands_executed': len(filtered_commands),
+            'ec2_user_commands_successful': ec2_successful,
+            'ec2_user_command_results': ec2_results,
             'asg_name': instance.get('asg_name', 'N/A')
         }
 
     def save_instance_report(self, instance_result):
-        """Save individual instance report with extracted username in filename"""
+        """Save individual instance report with extracted username in filename, showing both demouser and ec2-user results"""
         account = instance_result['account']
         instance_id = instance_result['instance_id']
         cluster_name = instance_result.get('cluster_name', 'unknown-cluster')
-
-        # Extract username from cluster name
         extracted_username = self.extract_username_from_cluster(cluster_name)
-
-        # Create account directory
         account_dir = Path(self.reports_path) / account / 'instances'
         account_dir.mkdir(parents=True, exist_ok=True)
-
-        # Use extracted username in filename
         report_file = account_dir / f"{instance_id}_{account}_{extracted_username}_report.json"
 
-        report_data = {
-            'report_generated': self.current_time,
-            'generated_by': self.current_user,
-            'instance_id': instance_id,
-            'account': account,
-            'username': instance_result.get('username', 'N/A'),
-            'extracted_username': extracted_username,
-            'cluster_name': instance_result.get('cluster_name', 'N/A'),
-            'instance_ip': instance_result.get('instance_ip', 'N/A'),
-            'ssh_command': instance_result.get('ssh_command', 'N/A'),
-            'ssh_password': self.ssh_password,
-            'ssh_success': instance_result['ssh_success'],
-            'ssh_message': instance_result['ssh_message'],
-            'commands_executed': instance_result['commands_executed'],
-            'commands_successful': instance_result['commands_successful'],
-            'success_rate': (instance_result['commands_successful'] / max(instance_result['commands_executed'],
-                                                                          1)) * 100,
-            'command_results': instance_result['command_results'],
-            'asg_name': instance_result.get('asg_name', 'N/A'),
-            'instance_source': self.instance_source
-        }
-
+        # Save JSON report (optional, as before)
         # with open(report_file, 'w', encoding='utf-8') as f:
-        #     json.dump(report_data, f, indent=2)
+        #     json.dump(instance_result, f, indent=2)
 
-        # Also save command outputs to a separate file
         output_file = account_dir / f"{instance_id}_{account}_{extracted_username}_command_output.txt"
         with open(output_file, 'w', encoding='utf-8') as f:
             f.write(f"Command Outputs for Instance: {instance_id}\n")
@@ -1491,91 +1585,71 @@ Examples:
             f.write(f"Instance Source: {self.instance_source}\n")
             f.write(f"Instance IP: {instance_result.get('instance_ip', 'N/A')}\n")
             f.write(f"SSH Command: {instance_result.get('ssh_command', 'N/A')}\n")
-            f.write(f"SSH Password: {self.ssh_password}\n")
             f.write(f"Report Generated: {self.current_time} UTC\n")
             f.write(f"Generated By: {self.current_user}\n")
             f.write("=" * 80 + "\n\n")
 
-            for result in instance_result['command_results']:
-                f.write(f"Command #{result['command_number']}: {result['command']}\n")
-                f.write(f"Success: {'YES' if result['success'] else 'NO'}\n")
-                f.write(f"Exit Code: {result['exit_code']}\n")
-                f.write("Output:\n")
-                f.write(result['output'])
-                f.write("\n")
-                if result['error']:
-                    f.write("Error:\n")
-                    f.write(result['error'])
-                    f.write("\n")
-                f.write("-" * 50 + "\n\n")
+            # demouser summary
+            f.write(
+                f"demouser: {instance_result['commands_successful']}/{instance_result['commands_executed']} commands successful\n")
+            # ec2-user summary
+            f.write(
+                f"ec2-user: {instance_result.get('ec2_user_commands_successful', 0)}/{instance_result.get('ec2_user_commands_executed', 0)} commands successful\n\n")
 
-        #logger.info(f"Instance report saved: {report_file}")
+            # demouser output
+            f.write("=== demouser OUTPUT ===\n")
+            for result in instance_result['command_results']:
+                f.write(f"[{result['command_number']}] {result['command']}\n")
+                f.write(
+                    f"    Status: {'SUCCESS' if result['success'] else 'FAILED'} (exit code: {result['exit_code']})\n")
+                if result['output'].strip():
+                    f.write("    Output:\n")
+                    for line in result['output'].strip().split('\n'):
+                        f.write(f"      {line}\n")
+                if result['error'].strip():
+                    f.write("    Error:\n")
+                    for line in result['error'].strip().split('\n'):
+                        f.write(f"      {line}\n")
+                f.write("\n")
+
+            # ec2-user output
+            f.write("=== ec2-user OUTPUT ===\n")
+            for result in instance_result.get('ec2_user_command_results', []):
+                f.write(f"[{result['command_number']}] {result['command']}\n")
+                f.write(
+                    f"    Status: {'SUCCESS' if result['success'] else 'FAILED'} (exit code: {result['exit_code']})\n")
+                if result['output'].strip():
+                    f.write("    Output:\n")
+                    for line in result['output'].strip().split('\n'):
+                        f.write(f"      {line}\n")
+                if result['error'].strip():
+                    f.write("    Error:\n")
+                    for line in result['error'].strip().split('\n'):
+                        f.write(f"      {line}\n")
+                f.write("\n")
+
         logger.info(f"Command outputs saved: {output_file}")
 
     def save_asg_report(self, asg_name, username, instance_results):
-        """Save ASG-level report in account/asg/ directory"""
+        """Save ASG-level report in account/asg/ directory, showing both demouser and ec2-user results"""
         if not instance_results:
             return
 
-        # Get account from first instance result
         account = instance_results[0]['account']
         cluster_name = instance_results[0].get('cluster_name', 'unknown-cluster')
-
-        # Extract username from cluster name
         extracted_username = self.extract_username_from_cluster(cluster_name)
-
-        # Create ASG directory under account
         asg_dir = Path(self.reports_path) / account / 'asg'
         asg_dir.mkdir(parents=True, exist_ok=True)
-
-        # Use extracted username in filename
         json_file = asg_dir / f"{asg_name}_{account}_{extracted_username}.json"
         txt_file = asg_dir / f"{asg_name}_{account}_{extracted_username}_output.txt"
 
-        # Calculate summary statistics
         total_instances = len(instance_results)
         ssh_successful = sum(1 for r in instance_results if r['ssh_success'])
-        total_commands = sum(r['commands_executed'] for r in instance_results)
-        successful_commands = sum(r['commands_successful'] for r in instance_results)
-
-        # Prepare JSON report data
-        json_report_data = {
-            'report_generated': self.current_time,
-            'generated_by': self.current_user,
-            'asg_name': asg_name,
-            'username': username,
-            'extracted_username': extracted_username,
-            'account': account,
-            'instance_source': self.instance_source,
-            'summary': {
-                'total_instances': total_instances,
-                'ssh_successful_instances': ssh_successful,
-                'ssh_success_rate': (ssh_successful / max(total_instances, 1)) * 100,
-                'total_commands_executed': total_commands,
-                'total_commands_successful': successful_commands,
-                'command_success_rate': (successful_commands / max(total_commands, 1)) * 100
-            },
-            'instances': []
-        }
-
-        # Add instance details to JSON report
-        for result in instance_results:
-            json_report_data['instances'].append({
-                'instance_id': result['instance_id'],
-                'instance_ip': result.get('instance_ip', 'N/A'),
-                'ssh_command': result.get('ssh_command', 'N/A'),
-                'ssh_success': result['ssh_success'],
-                'ssh_message': result['ssh_message'],
-                'cluster_name': result.get('cluster_name', 'N/A'),
-                'commands_executed': result['commands_executed'],
-                'commands_successful': result['commands_successful'],
-                'success_rate': (result['commands_successful'] / max(result['commands_executed'], 1)) * 100,
-                'command_results': result['command_results']
-            })
-
-        # Save JSON report
-        # with open(json_file, 'w', encoding='utf-8') as f:
-        #     json.dump(json_report_data, f, indent=2)
+        # Per-user stats
+        demouser_total = sum(r['commands_executed'] for r in instance_results)
+        demouser_success = sum(r['commands_successful'] for r in instance_results)
+        ec2user_total = sum(r.get('ec2_user_commands_executed', 0) for r in instance_results)
+        ec2user_success = sum(r.get('ec2_user_commands_successful', 0) for r in instance_results)
 
         # Save text output report
         with open(txt_file, 'w', encoding='utf-8') as f:
@@ -1588,15 +1662,12 @@ Examples:
             f.write(f"Instance Source: {self.instance_source}\n")
             f.write(f"Report Generated: {self.current_time} UTC\n")
             f.write(f"Generated By: {self.current_user}\n")
-            f.write(f"SSH Username: {self.ssh_username}\n")
-            f.write(f"SSH Password: {self.ssh_password}\n")
             f.write(f"\nSummary Statistics:\n")
             f.write(f"- Total Instances: {total_instances}\n")
             f.write(
                 f"- SSH Successful: {ssh_successful}/{total_instances} ({(ssh_successful / max(total_instances, 1) * 100):.1f}%)\n")
-            f.write(f"- Total Commands Executed: {total_commands}\n")
-            f.write(
-                f"- Commands Successful: {successful_commands}/{total_commands} ({(successful_commands / max(total_commands, 1) * 100):.1f}%)\n")
+            f.write(f"- demouser: {demouser_success}/{demouser_total} commands successful\n")
+            f.write(f"- ec2-user: {ec2user_success}/{ec2user_total} commands successful\n")
             f.write(f"\n" + "=" * 80 + "\n")
             f.write(f"INSTANCE DETAILS\n")
             f.write(f"=" * 80 + "\n\n")
@@ -1607,37 +1678,51 @@ Examples:
                 f.write(f"SSH Success: {'SUCCESS' if result['ssh_success'] else 'FAILED'}\n")
                 f.write(f"SSH Command: {result.get('ssh_command', 'N/A')}\n")
                 f.write(f"Cluster: {result.get('cluster_name', 'N/A')}\n")
-                f.write(f"Commands: {result['commands_successful']}/{result['commands_executed']} successful\n")
+                f.write(
+                    f"Commands (demouser): {result['commands_successful']}/{result['commands_executed']} successful\n")
+                f.write(
+                    f"Commands (ec2-user): {result.get('ec2_user_commands_successful', 0)}/{result.get('ec2_user_commands_executed', 0)} successful\n")
 
                 if not result['ssh_success']:
                     f.write(f"SSH Error: {result['ssh_message']}\n")
 
-                f.write(f"\nCommand Execution Details:\n")
-                f.write(f"-" * 40 + "\n")
-
+                # demouser output
+                f.write(f"\n=== demouser OUTPUT ===\n")
                 for cmd_result in result['command_results']:
                     status = "SUCCESS" if cmd_result['success'] else "FAILED"
                     f.write(f"[{cmd_result['command_number']}] {cmd_result['command']}\n")
                     f.write(f"    Status: {status} (exit code: {cmd_result['exit_code']})\n")
-
                     if cmd_result['output'].strip():
                         f.write(f"    Output:\n")
                         for line in cmd_result['output'].strip().split('\n'):
                             f.write(f"      {line}\n")
-
                     if cmd_result['error'].strip():
                         f.write(f"    Error:\n")
                         for line in cmd_result['error'].strip().split('\n'):
                             f.write(f"      {line}\n")
+                    f.write(f"\n")
 
+                # ec2-user output
+                f.write(f"=== ec2-user OUTPUT ===\n")
+                for cmd_result in result.get('ec2_user_command_results', []):
+                    status = "SUCCESS" if cmd_result['success'] else "FAILED"
+                    f.write(f"[{cmd_result['command_number']}] {cmd_result['command']}\n")
+                    f.write(f"    Status: {status} (exit code: {cmd_result['exit_code']})\n")
+                    if cmd_result['output'].strip():
+                        f.write(f"    Output:\n")
+                        for line in cmd_result['output'].strip().split('\n'):
+                            f.write(f"      {line}\n")
+                    if cmd_result['error'].strip():
+                        f.write(f"    Error:\n")
+                        for line in cmd_result['error'].strip().split('\n'):
+                            f.write(f"      {line}\n")
                     f.write(f"\n")
 
                 f.write(f"=" * 80 + "\n\n")
 
-        #logger.info(f"ASG JSON report saved: {json_file}")
         logger.info(f"ASG text report saved: {txt_file}")
-
         return json_file, txt_file
+
 
     def save_account_summary(self, account, instance_results):
         """Save account-level summary report"""

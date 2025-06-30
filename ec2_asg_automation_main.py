@@ -14,6 +14,7 @@ import random
 import string
 import concurrent.futures
 import time
+import boto3
 
 class EC2ASGAutomation:
     def __init__(self):
@@ -23,11 +24,27 @@ class EC2ASGAutomation:
         self.ec2_manager = EC2InstanceManager()
         self.asg_manager = AutoScalingGroupManager(self.current_user, self.current_time)
         self.spot_analyzer = SpotInstanceAnalyzer()
+        self.keypair_name = 'k8s_demo_key'
 
         print("🚀 EC2 + ASG Multi-User Automation Tool")
         print(f"👤 User: {self.current_user}")
         print(f"🕒 Time: {self.current_time}")
         print("="*60)
+
+    def ensure_key_pair(self, region):
+        key_name = self.keypair_name
+        key_file = f"{key_name}.pem"
+        if not os.path.exists(key_file):
+            print(f"🔑 Key file {key_file} not found. Creating new key pair...")
+            ec2 = boto3.client('ec2', region_name=region)
+            key_pair = ec2.create_key_pair(KeyName=key_name)
+            with open(key_file, 'w') as f:
+                f.write(key_pair['KeyMaterial'])
+            os.chmod(key_file, 0o400)
+            print(f"✅ Key pair created and saved as {key_file}")
+        else:
+            print(f"🔑 Using existing key file: {key_file}")
+        return key_name
 
     @staticmethod
     def generate_random_suffix(length=4):
@@ -338,6 +355,8 @@ class EC2ASGAutomation:
 
             print(f"\n🔄 Processing User {user_index}/{total_users}: {account_name} - {username}")
             print("-" * 50)
+            region = credential.regions[0]
+            key_name = self.ensure_key_pair(region)
 
             result = {
                 'user_index': user_index,
@@ -348,7 +367,9 @@ class EC2ASGAutomation:
                 'status': 'success',
                 'ec2_instance': None,
                 'asg': None,
-                'errors': []
+                'errors': [],
+                'created_at': self.current_time,
+                'keypair_name': key_name
             }
 
             # EC2 Instance Creation
@@ -384,7 +405,7 @@ class EC2ASGAutomation:
                         launch_template_id = result['ec2_instance']['launch_template_id']
                     else:
                         # Create launch template for ASG
-                        launch_template_id = self.create_launch_template_for_user(credential, global_config)
+                        launch_template_id = self.create_launch_template_for_user(credential, global_config, key_name)
 
                     asg_details = self.asg_manager.create_asg_with_strategy(
                         credential,
@@ -421,49 +442,44 @@ class EC2ASGAutomation:
                 'error': str(e)
             }
 
-    def create_launch_template_for_user(self, credential: CredentialInfo, global_config: dict) -> str:
-        """Create launch template for a user"""
-        try:
-            from ec2_instance_manager import InstanceConfig
-            import boto3
+    # In create_launch_template_for_user
+    def create_launch_template_for_user(self, credential: CredentialInfo, global_config: dict, key_name: str) -> str:
+        from ec2_instance_manager import InstanceConfig
+        import boto3
 
-            # Get AMI
-            ami_mapping = self.ec2_manager.ami_config.get('region_ami_mapping', {})
-            ami_id = ami_mapping.get(credential.regions[0])
+        ami_mapping = self.ec2_manager.ami_config.get('region_ami_mapping', {})
+        ami_id = ami_mapping.get(credential.regions[0])
+        if not ami_id:
+            raise ValueError(f"No AMI found for region: {credential.regions[0]}")
 
-            if not ami_id:
-                raise ValueError(f"No AMI found for region: {credential.regions[0]}")
+        enhanced_userdata = self.ec2_manager.prepare_userdata_with_aws_config(
+            self.ec2_manager.userdata_script,
+            credential.access_key,
+            credential.secret_key,
+            credential.regions[0]
+        )
 
-            enhanced_userdata = self.ec2_manager.prepare_userdata_with_aws_config(
-                self.ec2_manager.userdata_script,
-                credential.access_key,
-                credential.secret_key,
-                credential.regions[0]
-            )
+        instance_config = InstanceConfig(
+            instance_type=global_config.get('instance_type', 't3.micro'),
+            ami_id=ami_id,
+            region=credential.regions[0],
+            userdata_script=enhanced_userdata,
+            key_name=key_name  # Pass the key name here
+        )
 
-            instance_config = InstanceConfig(
-                instance_type=global_config.get('instance_type', 't3.micro'),
-                ami_id=ami_id,
-                region=credential.regions[0],
-                userdata_script=enhanced_userdata
-            )
+        ec2_client = boto3.client(
+            'ec2',
+            aws_access_key_id=credential.access_key,
+            aws_secret_access_key=credential.secret_key,
+            region_name=credential.regions[0]
+        )
 
-            ec2_client = boto3.client(
-                'ec2',
-                aws_access_key_id=credential.access_key,
-                aws_secret_access_key=credential.secret_key,
-                region_name=credential.regions[0]
-            )
+        # Ensure security groups are created and fetched
+        launch_template_id = self.ec2_manager.create_launch_template(
+            ec2_client, credential, instance_config
+        )
 
-            launch_template_id = self.ec2_manager.create_launch_template(
-                ec2_client, credential, instance_config, None
-            )
-
-            return launch_template_id
-
-        except Exception as e:
-            print(f"❌ Error creating launch template: {e}")
-            raise
+        return launch_template_id
 
     def run_automation(self):
         """Main automation flow with multi-user processing"""

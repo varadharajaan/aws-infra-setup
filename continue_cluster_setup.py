@@ -382,7 +382,7 @@ class EKSClusterContinuationFromErrors:
         print("=" * 60)
 
         # Try to determine account type from cluster name
-        if 'root-account' in cluster_name.lower():
+        if 'root-account' in cluster_name.lower() or 'root_account' in cluster_name.lower():
             account_type = 'root'
             self.print_colored('CYAN', "📋 Detected: Root Account (from cluster name)")
         else:
@@ -1048,15 +1048,10 @@ class EKSClusterContinuationFromErrors:
 
     def _extract_username_from_cluster_name(self, cluster_name: str) -> str:
         """
-        Extract username from cluster name patterns
+        Extract username from cluster name patterns.
 
-        Supported patterns:
-        - eks-cluster-{username}-{region}-{suffix}
-        - eks-cluster-{username}-{suffix}
-
-        Examples:
-        - eks-cluster-account03_clouduser01-us-east-1-diox → account03_clouduser01
-        - eks-cluster-account02_clouduser05-ap-south-1-xyz → account02_clouduser05
+        - Root: eks-cluster-root-account01-us-east-1-xxxx → root-account01
+        - IAM:  eks-cluster-account01_clouduser01-us-east-1-xxxx → account01_clouduser01
         """
         try:
             if not cluster_name:
@@ -1064,64 +1059,64 @@ class EKSClusterContinuationFromErrors:
 
             self.print_colored(Colors.BLUE, f"🔍 Parsing cluster name: {cluster_name}")
 
-            # Split by hyphen
-            parts = cluster_name.split('-')
+            # Root user pattern
+            if cluster_name.startswith("eks-cluster-root-account"):
+                # Example: eks-cluster-root-account01-us-east-1-xxxx
+                parts = cluster_name.split('-')
+                if len(parts) >= 4:
+                    username = f"{parts[2]}-{parts[3]}"  # root-account01
+                    self.print_colored(Colors.GREEN, f"✅ Detected root user: {username}")
+                    return username
+                else:
+                    self.print_colored(Colors.RED, f"❌ Invalid root cluster name format: {cluster_name}")
+                    return None
 
-            # Expected pattern: ['eks', 'cluster', 'username', 'region_part1', 'region_part2', 'suffix']
-            # Or: ['eks', 'cluster', 'username', 'suffix']
+            # IAM user pattern
+            if cluster_name.startswith("eks-cluster-"):
+                parts = cluster_name.split('-')
+                if len(parts) >= 3:
+                    username = parts[2]
+                    if '_' in username:
+                        self.print_colored(Colors.GREEN, f"✅ Detected IAM user: {username}")
+                        return username
+                    else:
+                        self.print_colored(Colors.YELLOW,
+                                           f"⚠️ Username does not match expected IAM pattern: {username}")
+                        return username
 
-            if len(parts) < 3:
-                self.print_colored(Colors.RED, f"❌ Invalid cluster name format: {cluster_name}")
-                return None
-
-            if parts[0] != 'eks' or parts[1] != 'cluster':
-                self.print_colored(Colors.RED, f"❌ Cluster name doesn't start with 'eks-cluster': {cluster_name}")
-                return None
-
-            # The username should be the 3rd part (index 2)
-            username = parts[2]
-
-            # Validate username format (should contain account and clouduser)
-            if 'account' in username and 'clouduser' in username:
-                self.print_colored(Colors.GREEN, f"✅ Valid username format detected: {username}")
-                return username
-            else:
-                self.print_colored(Colors.YELLOW,
-                                   f"⚠️ Username doesn't match expected pattern (accountXX_clouduserXX): {username}")
-                # Still return it in case it's a valid username with different format
-                return username
+            self.print_colored(Colors.RED, f"❌ Unrecognized cluster name format: {cluster_name}")
+            return None
 
         except Exception as e:
             self.print_colored(Colors.RED, f"❌ Error parsing cluster name: {str(e)}")
             return None
 
     def _extract_account_from_cluster_name(self, cluster_name: str) -> str:
-        """Extract account name from cluster name patterns for root credentials"""
+        """
+        Extract account name from EKS cluster name.
+        - Root: eks-cluster-root-account01-us-east-1-xxxx → account01
+        - IAM:  eks-cluster-account01_clouduser01-us-east-1-xxxx → account01
+        """
         try:
             if not cluster_name:
                 return None
 
-            # Pattern 1: eks-cluster-account03_clouduser01-region-suffix
-            # Extract "account03" part
             parts = cluster_name.split('-')
-            for part in parts:
-                if part.startswith("account") or 'account' in part:
-                    # Extract just the account part (account03)
-                    if '_' in part:
-                        account_part = part.split('_')[0]  # Get account03 from account03_clouduser01
-                        if account_part.startswith('account'):
-                            return account_part
-                    elif part.startswith('account'):
-                        return part
+            # Root pattern: eks-cluster-root-account01-us-east-1-xxxx
+            if len(parts) >= 4 and parts[2] == 'root':
+                return parts[3] if parts[3].startswith('account') else None
 
-            # Pattern 2: Look for accountXX pattern
+            # IAM pattern: eks-cluster-account01_clouduser01-us-east-1-xxxx
+            if len(parts) >= 3 and parts[2].startswith('account'):
+                return parts[2].split('_')[0]
+
+            # Fallback: regex search
             import re
-            account_match = re.search(r'account\d+', cluster_name.lower())
-            if account_match:
-                return account_match.group()
+            match = re.search(r'account\d+', cluster_name)
+            if match:
+                return match.group(0)
 
             return None
-
         except Exception:
             return None
 
@@ -1259,7 +1254,8 @@ class EKSClusterContinuationFromErrors:
                 'arn': cluster['arn'],
                 'created_at': cluster['createdAt'].strftime('%Y-%m-%d %H:%M:%S'),
                 'region': region,
-                'account_id': cluster['arn'].split(':')[4]
+                'account_id': cluster['arn'].split(':')[4],
+                'username': self._extract_username_from_cluster_name(cluster_name)
             }
 
             if cluster['status'] != 'ACTIVE':
@@ -1270,6 +1266,7 @@ class EKSClusterContinuationFromErrors:
             self.print_colored('CYAN', f"   Version: {cluster['version']}")
             self.print_colored('CYAN', f"   Created: {self.cluster_info['created_at']}")
             self.print_colored('CYAN', f"   Account: {self.cluster_info['account_id']}")
+            self.print_colored('CYAN', f"   ARN: {self.cluster_info['region']}")
 
             return True
 
@@ -2400,7 +2397,6 @@ class EKSClusterContinuationFromErrors:
             print(f"Error extracting username: {str(e)}")
             return None
 
-
     def run_health_check(self, cluster_name: str, region: str, access_key: str, secret_key: str) -> bool:
         """Run comprehensive health check"""
         self.print_colored('YELLOW', "\n🏥 Running Health Check")
@@ -2555,7 +2551,7 @@ def main():
     print("=" * 60)
 
     try:
-        cluster_names= ['eks-cluster-account01_clouduser02-us-east-2-jiho']
+        cluster_names= ['eks-cluster-root-account01-us-east-1-bbhc']
         continuation = EKSClusterContinuationFromErrors()
         #success = continuation.continue_cluster_setup_from_errors()
         success = continuation.reconfigure_cluster(cluster_names)

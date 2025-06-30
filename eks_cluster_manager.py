@@ -7,6 +7,8 @@ Handles EKS cluster creation with on-demand, spot, and mixed nodegroup strategie
 import json
 import os
 import time
+from os import environ
+
 import boto3
 
 from datetime import datetime
@@ -1868,9 +1870,31 @@ class EKSClusterManager:
             }
     '''
 
+    # python
+    def short_cluster_name(self, cluster_name: str) -> str:
+        # Example: eks-cluster-account01_clouduser03-us-west-1-ffkd -> eks-acc1-user03-uws1
+        parts = cluster_name.split('-')
+        acc = parts[2].replace('account', 'acc') if len(parts) > 2 else ''
+        user = parts[3].replace('clouduser', 'user') if len(parts) > 3 else ''
+        region = parts[4].replace('us', 'u').replace('west', 'w').replace('east', 'e') if len(parts) > 4 else ''
+        return f"eks-{acc}-{user}-{region}"
+
+    def short_nodegroup_name(self, nodegroup: str) -> str:
+        # nodegroup-1-ondemand -> ng1o, nodegroup-1-spot -> ng1s, nodegrup-2 -> ng2
+        if 'ondemand' in nodegroup:
+            return f"ng{nodegroup.split('-')[1]}o"
+        if 'spot' in nodegroup:
+            return f"ng{nodegroup.split('-')[1]}s"
+        # fallback for other patterns
+        nums = ''.join(filter(str.isdigit, nodegroup))
+        return f"ng{nums}"
+
+    def generate_short_name(self, cluster_name: str, nodegroup: str) -> str:
+        return f"{self.short_cluster_name(cluster_name)}-{self.short_nodegroup_name(nodegroup)}"
+
     def create_mixed_nodegroup(self, eks_client, cluster_name: str, nodegroup_name: str,
                            node_role_arn: str, subnet_ids: List[str], ami_type: str,
-                           instance_selections: Dict, min_size: int, desired_size: int, max_size: int, ec2_key_name: string) -> bool:
+                           instance_selections: Dict, min_size: int, desired_size: int, max_size: int, ec2_key_name: str) -> bool:
         """Create mixed strategy using two separate nodegroups with proper validation"""
         try:
             # Validate required instance selections are provided
@@ -2067,8 +2091,9 @@ class EKSClusterManager:
             return False
 
     def create_spot_nodegroup(self, eks_client, cluster_name: str, nodegroup_name: str,
-                          node_role_arn: str, subnet_ids: List[str], ami_type: str,
-                          instance_types: List[str], min_size: int, desired_size: int, max_size: int, ec2_key_name: string) -> bool:
+                              node_role_arn: str, subnet_ids: List[str], ami_type: str,
+                              instance_types: List[str], min_size: int, desired_size: int, max_size: int,
+                              ec2_key_name: str) -> bool:
         """Create Spot nodegroup with strict instance type validation"""
         try:
         
@@ -2135,7 +2160,7 @@ class EKSClusterManager:
 
     def create_ondemand_nodegroup(self, eks_client, cluster_name: str, nodegroup_name: str,
                         node_role_arn: str, subnet_ids: List[str], ami_type: str,
-                        instance_types: List[str], min_size: int, desired_size: int, max_size: int, ec2_key_name: string) -> bool:
+                        instance_types: List[str], min_size: int, desired_size: int, max_size: int, ec2_key_name: str) -> bool:
         """Create On-Demand nodegroup with strict instance type validation"""
         try:
             # Validate that instance types are provided
@@ -3188,7 +3213,8 @@ class EKSClusterManager:
         by adding the cluster-autoscaler.kubernetes.io/scale-down-disabled annotation
         """
         try:
-            self.log_operation('INFO', f"Protecting nodes with NO_DELETE label in cluster {cluster_name}")
+            self.log_operation('INFO', f"Prot"
+                                       f"ecting nodes with NO_DELETE label in cluster {cluster_name}")
             self.print_colored(Colors.YELLOW, f"🔒 Protecting nodes with NO_DELETE label...")
 
             # Check if kubectl is available
@@ -6748,7 +6774,7 @@ class EKSClusterManager:
     
             # 4. Deploy CloudWatch agent
             #if self.should_deploy_cloudwatch_agent():
-            if False:  # Always skip for now
+            if True:  # Always skip for now
                 print("\n🔍 Step 4: Deploying CloudWatch agent...")
                 from custom_cloudwatch_agent_deployer import CustomCloudWatchAgentDeployer
                 agent_deployer = CustomCloudWatchAgentDeployer()
@@ -7291,8 +7317,9 @@ class EKSClusterManager:
     
     def generate_instance_tags(self, cluster_name: str, nodegroup_name: str, strategy: str) -> Dict:
         """Generate comprehensive tags for EC2 instances in nodegroup"""
+        short_name = self.generate_short_name(cluster_name, nodegroup_name)
         return {
-            'Name': f'{cluster_name}-node',
+            'Name': short_name,
             'kubernetes.io/cluster/' + cluster_name: 'owned',
             'k8s.io/cluster-autoscaler/enabled': 'true',
             'k8s.io/cluster-autoscaler/' + cluster_name: 'owned',
@@ -7855,6 +7882,10 @@ class EKSClusterManager:
                 region_name=region
             )
             eks_client = session.client('eks')
+            env = os.environ.copy()
+            env['AWS_ACCESS_KEY_ID'] = access_key
+            env['AWS_SECRET_ACCESS_KEY'] = secret_key
+            env['AWS_DEFAULT_REGION'] = region
 
             # Step 1: Update kubeconfig
             print(f"🔧 Updating kubeconfig for cluster: {cluster_name} in region: {region}")
@@ -7862,7 +7893,7 @@ class EKSClusterManager:
                 'aws', 'eks', 'update-kubeconfig',
                 '--region', region,
                 '--name', cluster_name
-            ], check=True, capture_output=True)
+            ], check=True, capture_output=True, env=env)
             print("✅ Kubeconfig updated successfully")
 
             # Step 2: Get all nodegroups and filter matching ones
@@ -7905,11 +7936,20 @@ class EKSClusterManager:
                     'nodes_labeled': 0
                 }
 
+            # Update kubeconfig before running kubectl
+            subprocess.run([
+                'aws', 'eks', 'update-kubeconfig',
+                '--region', region,
+                '--name', cluster_name
+            ], check=True, capture_output=True, env=env)
+            print("✅ Kubeconfig updated successfully")
+
             # Step 3: Get all nodes and process matching ones
             print("🔍 Getting all nodes and processing...")
+            # Now run kubectl
             result = subprocess.run([
                 'kubectl', 'get', 'nodes', '-o', 'json'
-            ], capture_output=True, text=True, check=True)
+            ], capture_output=True, text=True, check=True, env=env)
 
             nodes_data = json.loads(result.stdout)
 
@@ -7968,7 +8008,7 @@ class EKSClusterManager:
                                 subprocess.run([
                                     'kubectl', 'label', 'node', node_name,
                                     f'{label_key}={label_value}', '--overwrite'
-                                ], check=True, capture_output=True)
+                                ], check=True, capture_output=True, env=env)
 
                             print(f"✅ Successfully applied NO_DELETE protection to node: {node_name}")
                             print(f"   📋 Labels applied: {list(protection_labels.keys())}")
@@ -8018,7 +8058,7 @@ class EKSClusterManager:
                         # Get current node labels
                         verify_result = subprocess.run([
                             'kubectl', 'get', 'node', node_name, '-o', 'json'
-                        ], capture_output=True, text=True, check=True)
+                        ], capture_output=True, text=True, check=True, env=env)
 
                         node_data = json.loads(verify_result.stdout)
                         current_labels = node_data['metadata'].get('labels', {})
@@ -8063,7 +8103,7 @@ class EKSClusterManager:
                         '-l', f'eks.amazonaws.com/nodegroup={nodegroup}',
                         '-o',
                         'custom-columns=NAME:.metadata.name,NO_DELETE:.metadata.labels.NO_DELETE,PROTECTED_BY:.metadata.labels.protected-by,PROTECTION_DATE:.metadata.labels.protection-date,PROTECTION_TIME:.metadata.labels.protection-time'
-                    ], capture_output=True, text=True, check=True)
+                    ], capture_output=True, text=True, check=True, env=env)
 
                     print("Final Verification Results:")
                     for line in verify_result.stdout.strip().split('\n'):
@@ -8087,7 +8127,7 @@ class EKSClusterManager:
                         'kubectl', 'get', 'nodes',
                         '-l', f'eks.amazonaws.com/nodegroup={nodegroup},NO_DELETE=true',
                         '--no-headers'
-                    ], capture_output=True, text=True, check=True)
+                    ], capture_output=True, text=True, check=True, env=env)
 
                     protected_count = len([line for line in count_result.stdout.strip().split('\n') if line.strip()])
                     print(f"   📊 Nodes with NO_DELETE=true: {protected_count}")
@@ -8158,6 +8198,89 @@ class EKSClusterManager:
                 'nodegroups_processed': 0,
                 'nodes_labeled': 0
             }
+
+    def ensure_single_no_delete_per_nodegroup(cluster_name, region, access_key, secret_key):
+        """
+        Ensures only one node per selected nodegroup has the NO_DELETE label.
+        Only nodegroups matching the specified patterns are considered.
+        """
+        import re
+        env = os.environ.copy()
+        env['AWS_ACCESS_KEY_ID'] = access_key
+        env['AWS_SECRET_ACCESS_KEY'] = secret_key
+        env['AWS_DEFAULT_REGION'] = region
+
+        # 1. List all nodegroups
+        result = subprocess.run([
+            'aws', 'eks', 'list-nodegroups',
+            '--cluster-name', cluster_name,
+            '--region', region
+        ], capture_output=True, text=True, check=True, env=env)
+        all_nodegroups = json.loads(result.stdout).get('nodegroups', [])
+
+        # 2. Pattern matching logic
+        primary_pattern = re.compile(r'^nodegroup-[0-9]-ondemand$')
+        matching_nodegroups = [ng for ng in all_nodegroups if primary_pattern.match(ng)]
+
+        if not matching_nodegroups:
+            secondary_pattern = re.compile(r'^nodegroup-[0-9]-.*$')
+            matching_nodegroups = [ng for ng in all_nodegroups if secondary_pattern.match(ng)]
+
+        if not matching_nodegroups:
+            fallback_pattern = re.compile(r'^nodegroup-.*$')
+            matching_nodegroups = [ng for ng in all_nodegroups if fallback_pattern.match(ng)]
+            if len(matching_nodegroups) > 1:
+                print(
+                    f"⚠️ Multiple nodegroups found with pattern 'nodegroup-*'. Selecting the first one: {matching_nodegroups[0]}")
+                matching_nodegroups = [matching_nodegroups[0]]
+
+        if not matching_nodegroups:
+            print("No matching nodegroups found.")
+            return
+
+        # 3. Update kubeconfig
+        subprocess.run([
+            'aws', 'eks', 'update-kubeconfig',
+            '--region', region,
+            '--name', cluster_name
+        ], check=True, capture_output=True, env=env)
+
+        # 4. Get all nodes and their labels
+        result = subprocess.run([
+            'kubectl', 'get', 'nodes', '-o', 'json'
+        ], capture_output=True, text=True, check=True, env=env)
+        nodes = json.loads(result.stdout)['items']
+
+        # 5. Group nodes by nodegroup, but only for matching nodegroups
+        nodegroups = {}
+        for node in nodes:
+            node_name = node['metadata']['name']
+            labels = node['metadata'].get('labels', {})
+            nodegroup = labels.get('eks.amazonaws.com/nodegroup')
+            if not nodegroup or nodegroup not in matching_nodegroups:
+                continue
+            nodegroups.setdefault(nodegroup, []).append({
+                'name': node_name,
+                'has_no_delete': labels.get('NO_DELETE') == 'true'
+            })
+
+        # 6. For each matching nodegroup, ensure only one node has NO_DELETE
+        for ng, nodes in nodegroups.items():
+            nodes_with_label = [n for n in nodes if n['has_no_delete']]
+            nodes_without_label = [n for n in nodes if not n['has_no_delete']]
+
+            # Remove label from extra nodes if more than one has it
+            if len(nodes_with_label) > 1:
+                for n in nodes_with_label[1:]:
+                    subprocess.run([
+                        'kubectl', 'label', 'node', n['name'], 'NO_DELETE-', '--overwrite'
+                    ], check=True, env=env)
+            # Add label if none has it
+            if len(nodes_with_label) == 0 and nodes_without_label:
+                n = nodes_without_label[0]
+                subprocess.run([
+                    'kubectl', 'label', 'node', n['name'], 'NO_DELETE=true', '--overwrite'
+                ], check=True, env=env)
 
     def create_multiple_clusters(self, cluster_configs: List[Dict]) -> bool:
         """Create multiple clusters with shared configuration and enhanced error handling"""

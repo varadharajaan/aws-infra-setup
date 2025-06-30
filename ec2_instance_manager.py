@@ -22,6 +22,7 @@ class InstanceConfig:
     region: str
     launch_template_id: Optional[str] = None
     userdata_script: Optional[str] = None
+    key_name: Optional[str] = None
 
 class EC2InstanceManager:
     def __init__(self, ami_mapping_file='ec2-region-ami-mapping.json', userdata_file='userdata_allsupport.sh', current_user='varadharajaan'):
@@ -31,6 +32,7 @@ class EC2InstanceManager:
         self.current_user = current_user  # Add this line to define the current_user attribute
         self.load_ami_configuration()
         self.userdata_script = self.load_userdata_script()
+        self.keypair_name = 'k8s_demo_key'
 
     
     def generate_random_suffix(self,length=4):
@@ -400,6 +402,7 @@ class EC2InstanceManager:
                     'InstanceType': instance_config.instance_type,
                     'UserData': userdata_b64,
                     'SecurityGroupIds': [security_group_id],
+                    'KeyName': instance_config.key_name,  # Use provided key name
                     'TagSpecifications': [
                         {
                             'ResourceType': 'instance',
@@ -505,6 +508,21 @@ class EC2InstanceManager:
             print(f"❌ Error creating security group: {e}")
             raise
 
+    def ensure_key_pair(self, region):
+        key_name = self.keypair_name
+        key_file = f"{key_name}.pem"
+        if not os.path.exists(key_file):
+            print(f"🔑 Key file {key_file} not found. Creating new key pair...")
+            ec2 = boto3.client('ec2', region_name=region)
+            key_pair = ec2.create_key_pair(KeyName=key_name)
+            with open(key_file, 'w') as f:
+                f.write(key_pair['KeyMaterial'])
+            os.chmod(key_file, 0o400)
+            print(f"✅ Key pair created and saved as {key_file}")
+        else:
+            print(f"🔑 Using existing key file: {key_file}")
+        return key_name
+
     def create_ec2_instance(self, cred_info: CredentialInfo, instance_type: str = None) -> Dict:
         """Create EC2 instance with specified configuration, avoiding unsupported AZs"""
         try:
@@ -522,6 +540,7 @@ class EC2InstanceManager:
 
             # Create security group
             security_group_id = self.create_security_group(ec2_client, cred_info, suffix)
+            key_name = self.ensure_key_pair(region)
 
             # Get AMI for region
             ami_mapping = self.ami_config.get('region_ami_mapping', {})
@@ -551,7 +570,8 @@ class EC2InstanceManager:
                 instance_type=instance_type,
                 ami_id=ami_id,
                 region=region,
-                userdata_script=enhanced_userdata
+                userdata_script=enhanced_userdata,
+                key_name=key_name  # Use provided key name
             )
 
             # Create launch template
@@ -612,6 +632,10 @@ class EC2InstanceManager:
             # Create output directory
             output_dir = f"aws/ec2/{cred_info.account_name}"
             os.makedirs(output_dir, exist_ok=True)
+
+            if cred_info.credential_type == 'root':
+                cred_info.username = f"root-{cred_info.account_name}"
+
             
             # Prepare instance details
             details = {

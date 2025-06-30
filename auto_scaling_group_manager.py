@@ -1197,6 +1197,8 @@ class AutoScalingGroupManager:
             # Create output directory
             output_dir = f"aws/asg/{cred_info.account_name}"
             os.makedirs(output_dir, exist_ok=True)
+            if cred_info.credential_type == 'root':
+                cred_info.username = f"root-{cred_info.account_name}"
             
             # Prepare ASG details
             details = {
