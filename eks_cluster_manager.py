@@ -1981,6 +1981,8 @@ class EKSClusterManager:
                 ondemand_instance_tags = self.generate_instance_tags(cluster_name, ondemand_ng_name, 'Mixed-OnDemand')
                 ondemand_instance_tags['ParentNodegroup'] = nodegroup_name
                 ondemand_instance_tags['OnDemandPercentage'] = str(on_demand_percentage)
+                if ondemand_instance_tags['name'] == None or ondemand_instance_tags['name'] == '':
+                    ondemand_instance_tags['name'] = f"{ondemand_ng_name}-instance"
         
                 try:
                     eks_client.create_nodegroup(
@@ -7320,6 +7322,10 @@ class EKSClusterManager:
     def generate_instance_tags(self, cluster_name: str, nodegroup_name: str, strategy: str) -> Dict:
         """Generate comprehensive tags for EC2 instances in nodegroup"""
         short_name = self.generate_short_name(cluster_name, nodegroup_name)
+        self.log_operation('DEBUG', f"Generating instance tags for {short_name} in cluster {cluster_name} with strategy {strategy}")
+        if not short_name or not short_name.strip():
+            short_name = f"eks-{nodegroup_name}-instance"
+
         return {
             'Name': short_name,
             'kubernetes.io/cluster/' + cluster_name: 'owned',
