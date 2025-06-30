@@ -1322,34 +1322,45 @@ Examples:
             return None
 
     def test_ssh_connection(self, instance):
-        """Test SSH connection to an instance"""
+        """Test SSH connection to an instance, supporting key-based auth for ec2-user."""
         try:
             ssh = paramiko.SSHClient()
             ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
-            # Try public IP first, then private IP
             ip = instance['public_ip'] or instance['private_ip']
             if not ip:
                 return False, "No IP address available", None
 
-            ssh.connect(
-                hostname=ip,
-                username=self.ssh_username,
-                password=self.ssh_password,
-                timeout=10
-            )
+            if self.ssh_username == "ec2-user":
+                key_path = "./k8s_demo_key.pem"  # Update this path as needed
+                if not os.path.exists(key_path):
+                    return False, f"Key file not found: {key_path}", None
+                pkey = paramiko.RSAKey.from_private_key_file(key_path)
+                ssh.connect(
+                    hostname=ip,
+                    username="ec2-user",
+                    pkey=pkey,
+                    timeout=10
+                )
+            else:
+                ssh.connect(
+                    hostname=ip,
+                    username=self.ssh_username,
+                    password=self.ssh_password,
+                    timeout=10
+                )
 
-            # Test basic command
             stdin, stdout, stderr = ssh.exec_command('echo "SSH connection successful"')
             output = stdout.read().decode().strip()
-
             ssh.close()
 
             if "SSH connection successful" in output:
                 ssh_command = f"ssh {self.ssh_username}@{ip}"
+                if self.ssh_username == "ec2-user":
+                    ssh_command += f" -i k8s_demo_key.pem"
                 logger.info(f"SSH connection successful to {instance['instance_id']} ({ip})")
                 print(
-                    f"✓ SSH SUCCESS: {instance['instance_id']} - To connect manually: {ssh_command} (password: {self.ssh_password})")
+                    f"✓ SSH SUCCESS: {instance['instance_id']} - To connect manually: {ssh_command}")
                 return True, "SSH connection successful", ssh_command
             else:
                 return False, "SSH command failed", None
@@ -1383,41 +1394,38 @@ Examples:
             return None
 
     def execute_command_on_instance(self, instance, command, timeout=30):
-        """Execute a command on an instance via SSH"""
         try:
             ssh = paramiko.SSHClient()
             ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-
             ip = instance['public_ip'] or instance['private_ip']
-            ssh.connect(
-                hostname=ip,
-                username=self.ssh_username,
-                password=self.ssh_password,
-                timeout=10
-            )
+
+            if self.ssh_username == "ec2-user":
+                key_path = "./k8s_demo_key.pem"
+                if not os.path.exists(key_path):
+                    return {'success': False, 'output': '', 'error': f'Key file not found: {key_path}', 'exit_code': -1}
+                pkey = paramiko.RSAKey.from_private_key_file(key_path)
+                ssh.connect(hostname=ip, username="ec2-user", pkey=pkey, timeout=10)
+            else:
+                ssh.connect(hostname=ip, username=self.ssh_username, password=self.ssh_password, timeout=10)
 
             stdin, stdout, stderr = ssh.exec_command(command, timeout=timeout)
-
             output = stdout.read().decode()
             error = stderr.read().decode()
             exit_code = stdout.channel.recv_exit_status()
-
             ssh.close()
-
-            return {
-                'success': exit_code == 0,
-                'output': output,
-                'error': error,
-                'exit_code': exit_code
-            }
-
+            return {'success': exit_code == 0, 'output': output, 'error': error, 'exit_code': exit_code}
         except Exception as e:
-            return {
-                'success': False,
-                'output': '',
-                'error': str(e),
-                'exit_code': -1
-            }
+            return {'success': False, 'output': '', 'error': str(e), 'exit_code': -1}
+
+    def log_command_output(log_file, username, command, output, error, success, command_number):
+        with open(log_file, 'a', encoding='utf-8') as f:
+            f.write(f"User: {username}\n")
+            f.write(f"Command #{command_number}: {command}\n")
+            f.write(f"Success: {'YES' if success else 'NO'}\n")
+            f.write(f"Output:\n{output}\n")
+            if error:
+                f.write(f"Error:\n{error}\n")
+            f.write("-" * 50 + "\n")
 
     def process_instance(self, instance, instruction_file_info):
         """Process a single instance with user instructions for both demouser and ec2-user"""
@@ -1498,6 +1506,8 @@ Examples:
 
             time.sleep(1)
 
+        #self.log_command_output(output_file, self.ssh_username, command, result['output'], result['error'], result['success'], i)
+
         # --- 2. Run as ec2-user, skipping setup commands ---
         skip_cmds = [
             "sudo mkdir -p /home/ec2-user/.aws",
@@ -1521,7 +1531,7 @@ Examples:
         ]
 
         with open(output_file, 'a', encoding='utf-8') as f:
-            f.write("\n=== ec2-user OUTPUT ===\n")
+            f.write("\n =============ec2-user OUTPUT =============\n")
 
         if ssh_success_ec2:
             for i, command in enumerate(filtered_commands, 1):
@@ -1543,6 +1553,8 @@ Examples:
         else:
             with open(output_file, 'a', encoding='utf-8') as f:
                 f.write(f"ec2-user SSH failed: {ssh_message_ec2}\n")
+
+        #self.log_command_output(output_file, self.ssh_username, command, result['output'], result['error'], result['success'], i)
 
         # Return combined result (demouser + ec2-user)
         return {
@@ -1618,7 +1630,7 @@ Examples:
                 f.write("\n")
 
             # ec2-user output
-            f.write("=== ec2-user OUTPUT ===\n")
+            f.write("\n =============ec2-user OUTPUT =============\n")
             for result in instance_result.get('ec2_user_command_results', []):
                 f.write(f"[{result['command_number']}] {result['command']}\n")
                 f.write(
@@ -1708,7 +1720,7 @@ Examples:
                     f.write(f"\n")
 
                 # ec2-user output
-                f.write(f"=== ec2-user OUTPUT ===\n")
+                f.write("\n =============ec2-user OUTPUT =============\n")
                 for cmd_result in result.get('ec2_user_command_results', []):
                     status = "SUCCESS" if cmd_result['success'] else "FAILED"
                     f.write(f"[{cmd_result['command_number']}] {cmd_result['command']}\n")

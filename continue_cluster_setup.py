@@ -1639,11 +1639,12 @@ class EKSClusterContinuationFromErrors:
                     changed = True
                 elif choice_num == 12:
                     self.print_colored(Colors.CYAN, "\n🔒 Configuring custom cloudwatch agent...")
-                    from custom_cloudwatch_agent_deployer import CustomCloudWatchAgentDeployer
-                    agent_deployer = CustomCloudWatchAgentDeployer()
-                    changed = agent_deployer.deploy_custom_cloudwatch_agent(
-                        cluster_name, region, access_key, secret_key
-                    )
+                    if False:
+                        from custom_cloudwatch_agent_deployer import CustomCloudWatchAgentDeployer
+                        agent_deployer = CustomCloudWatchAgentDeployer()
+                        changed = agent_deployer.deploy_custom_cloudwatch_agent(
+                            cluster_name, region, access_key, secret_key
+                        )
                 else:
                     self.print_colored(Colors.RED, f"❌ Invalid choice: {choice_num}")
 
@@ -2542,7 +2543,81 @@ class EKSClusterContinuationFromErrors:
         # IAM pattern: eks-cluster-account03_clouduser01-us-east-1-diox
         return '-root-' in cluster_name
 
+    def select_clusters_from_eks_accounts(self, base_dir='aws/eks'):
+        import os
+        import glob
 
+        # Step 1: List account folders
+        unused_accounts = {'live-host', 'reports'}
+        accounts = [d for d in os.listdir(base_dir) if os.path.isdir(os.path.join(base_dir, d)) and d not in unused_accounts]
+        if not accounts:
+            print("No account folders found in aws/eks")
+            return []
+
+        print("\nAvailable accounts:")
+        for idx, acc in enumerate(accounts, 1):
+            print(f"{idx}. {acc}")
+        print("Enter account numbers (comma, range, or 'all'): ", end='')
+        acc_input = input().strip().lower()
+
+        # Step 2: Parse account selection
+        def parse_selection(selection, max_count):
+            if selection == 'all':
+                return list(range(1, max_count + 1))
+            indices = set()
+            for part in selection.split(','):
+                part = part.strip()
+                if '-' in part:
+                    start, end = map(int, part.split('-'))
+                    indices.update(range(start, end + 1))
+                else:
+                    indices.add(int(part))
+            return sorted(indices)
+
+        try:
+            acc_indices = parse_selection(acc_input, len(accounts))
+            selected_accounts = [accounts[i - 1] for i in acc_indices]
+        except Exception:
+            print("Invalid account selection.")
+            return []
+
+        # Step 3: For each account, list cluster files and prompt for selection
+        selected_clusters = []
+        for acc in selected_accounts:
+            acc_dir = os.path.join(base_dir, acc)
+            cluster_files = glob.glob(os.path.join(acc_dir, "eks_cluster_*"))
+            if not cluster_files:
+                print(f"No cluster files found in {acc_dir}")
+                continue
+
+            print(f"\nAccount: {acc}")
+            for idx, f in enumerate(cluster_files, 1):
+                print(f"{idx}. {os.path.basename(f)}")
+            print("Enter cluster numbers (comma, range, or 'all') for this account: ", end='')
+            cl_input = input().strip().lower()
+            try:
+                cl_indices = parse_selection(cl_input, len(cluster_files))
+                for i in cl_indices:
+                    fname = os.path.basename(cluster_files[i - 1])
+                    # Remove extension if present
+                    fname = fname.rsplit('.', 1)[0]
+                    parts = fname.split('_')
+                    # Join all parts from index 2 to -2 for full cluster name
+                    if len(parts) >= 4:
+                        cluster_name = '_'.join(parts[2:-2])
+                        selected_clusters.append(cluster_name)
+            except Exception:
+                print("Invalid cluster selection for account", acc)
+                continue
+
+        print("\nSelected clusters:")
+        for c in selected_clusters:
+            print(" -", c)
+        confirm = input("Proceed with these clusters? (Y/n): ").strip().lower()
+        if confirm == 'n':
+            return []
+
+        return selected_clusters
 
 def main():
     """Main function to run the cluster continuation script with interactive input"""
@@ -2550,8 +2625,9 @@ def main():
     print("=" * 60)
 
     try:
-        cluster_names= ['eks-cluster-root-account01-us-east-1-bbhc']
+        #cluster_names= ['eks-cluster-account01_clouduser01-us-east-1-igku']
         continuation = EKSClusterContinuationFromErrors()
+        cluster_names = continuation.select_clusters_from_eks_accounts()
         #success = continuation.continue_cluster_setup_from_errors()
         success = continuation.reconfigure_cluster(cluster_names)
 

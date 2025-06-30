@@ -169,7 +169,7 @@ class CustomCloudWatchAgentDeployer:
         """Create AWS credentials secret for CloudWatch agent"""
         self.log_step("SECRET", "Creating AWS credentials secret for CloudWatch agent...")
 
-        secret_name = f"{self.custom_agent_name}-credentials"
+        secret_name = f"{self.custom_agent_name}-credentials".replace("_", "-").lower()
 
         cmd = [
             'kubectl', 'create', 'secret', 'generic', secret_name,
@@ -737,6 +737,9 @@ def main():
     clusters = [
         "eks-cluster-root-account01-us-east-1-bbhc"
     ]
+    from continue_cluster_setup import EKSClusterContinuationFromErrors
+    helper = EKSClusterContinuationFromErrors()
+    clusters = helper.select_clusters_from_eks_accounts()
     results = deployer.deploy_to_clusters(clusters)
     print("\nDeployment results:")
     for cluster, success in results.items():

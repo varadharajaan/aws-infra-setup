@@ -6776,7 +6776,7 @@ class EKSClusterManager:
     
             # 4. Deploy CloudWatch agent
             #if self.should_deploy_cloudwatch_agent():
-            if True:  # Always skip for now
+            if False:  # Always skip for now
                 print("\n🔍 Step 4: Deploying CloudWatch agent...")
                 from custom_cloudwatch_agent_deployer import CustomCloudWatchAgentDeployer
                 agent_deployer = CustomCloudWatchAgentDeployer()
