@@ -9,6 +9,8 @@ openpyxl>=3.1.0
 # Colored terminal output
 colorama>=0.4.6
 
+paramiko
+
 pyyaml>=6.0.0
 
 pytz>=2023.3
@@ -16,6 +18,8 @@ requests>=2.28.0
 jinja2>=3.1.2
 # Optional: Progress bars for long operations
 tqdm>=4.65.0
+arrow
+
 
 # JSON handling (built-in, but listing for completeness)
 # json - built-in module

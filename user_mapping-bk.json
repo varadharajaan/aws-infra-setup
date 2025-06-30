@@ -1,0 +1,268 @@
+{
+  "metadata": {
+    "last_updated": "2025-06-11 16:49:44",
+    "updated_by": "varadharajaan",
+    "total_users": 21,
+    "organization": "Baker Hughes",
+    "version": "3.1",
+    "training_event": {
+      "course": "K8S Beginners",
+      "location": "Kochi",
+      "dates": "June 12th & 13th, 2025",
+      "mode": "In-Person"
+    }
+  },
+  "user_mappings": {
+    "account01_clouduser01": {
+      "first_name": "Greeshma",
+      "last_name": "Madhav",
+      "email": "Greeshma.Madhav@bakerhughes.com",
+      "full_name": "Greeshma Madhav",
+      "role": "Developer",
+      "location": "Kochi"
+    },
+    "account01_clouduser02": {
+      "first_name": "Vishnu",
+      "last_name": "T S Thachangat",
+      "email": "VishnuTS.Thachangat@bakerhughes.com",
+      "full_name": "Vishnu T S Thachangat",
+      "role": "Developer",
+      "location": "Kochi"
+    },
+    "account01_clouduser03": {
+      "first_name": "Athul",
+      "last_name": "Raj",
+      "email": "AthulRaj.TS@bakerhughes.com",
+      "full_name": "Athul Raj",
+      "role": "Developer",
+      "location": "Kochi"
+    },
+    "account01_clouduser04": {
+      "first_name": "N.",
+      "last_name": "Ramakrishnan",
+      "email": "Nithin.Ramakrishnan@bakerhughes.com",
+      "full_name": "N. Ramakrishnan",
+      "role": "Developer",
+      "location": "Kochi"
+    },
+    "account01_clouduser05": {
+      "first_name": "Bejoy",
+      "last_name": "Kalathil",
+      "email": "Bejoy.Kalathil@bakerhughes.com",
+      "full_name": "Bejoy Kalathil",
+      "role": "Developer",
+      "location": "Kochi"
+    },
+    "account02_clouduser01": {
+      "first_name": "Aneesa",
+      "last_name": "Moitheen",
+      "email": "Aneesa.Moitheen@bakerhughes.com",
+      "full_name": "Aneesa Moitheen",
+      "role": "QA",
+      "location": "Kochi"
+    },
+    "account02_clouduser02": {
+      "first_name": "Arun",
+      "last_name": "Davis",
+      "email": "Arun.Davis@bakerhughes.com",
+      "full_name": "Arun Davis",
+      "role": "Developer",
+      "location": "Kochi"
+    },
+    "account02_clouduser03": {
+      "first_name": "Saira",
+      "last_name": "Reju",
+      "email": "Saira.KReju@bakerhughes.com",
+      "full_name": "Saira Reju",
+      "role": "QA",
+      "location": "Kochi"
+    },
+    "account02_clouduser04": {
+      "first_name": "Joseph",
+      "last_name": "Varghese",
+      "email": "Joseph.Varghese@bakerhughes.com",
+      "full_name": "Joseph Varghese",
+      "role": "Developer",
+      "location": "Kochi"
+    },
+    "account02_clouduser05": {
+      "first_name": "Hari",
+      "last_name": "Kumar",
+      "email": "Hari.Kumar@bakerhughes.com",
+      "full_name": "Hari Kumar",
+      "role": "Developer",
+      "location": "Kochi"
+    },
+    "account03_clouduser01": {
+      "first_name": "Aruna",
+      "last_name": "VP",
+      "email": "Aruna.VP@bakerhughes.com",
+      "full_name": "Aruna VP",
+      "role": "PO",
+      "location": "Kochi"
+    },
+    "account03_clouduser02": {
+      "first_name": "Indrajit",
+      "last_name": "Pachore",
+      "email": "Indrajit.Pachore@bakerhughes.com",
+      "full_name": "Indrajit Pachore",
+      "role": "QA",
+      "location": "Pune"
+    },
+    "account03_clouduser03": {
+      "first_name": "Munish",
+      "last_name": "Gupta",
+      "email": "Munish.Gupta@bakerhughes.com",
+      "full_name": "Munish Gupta",
+      "role": "Developer",
+      "location": "Pune"
+    },
+    "account03_clouduser04": {
+      "first_name": "Amrendra",
+      "last_name": "Kumar",
+      "email": "Amrendra.Kumar@bakerhughes.com",
+      "full_name": "Amrendra Kumar",
+      "role": "Developer",
+      "location": "Pune"
+    },
+    "account03_clouduser05": {
+      "first_name": "Binnu",
+      "last_name": "Jose",
+      "email": "Binnu.Jose@bakerhughes.com",
+      "full_name": "Binnu jose",
+      "role": "Developer",
+      "location": "Bangalore"
+    },
+    "account04_clouduser01": {
+      "first_name": "Aiswarya",
+      "last_name": "Issac",
+      "email": "Aiswarya.Issac@bakerhughes.com",
+      "full_name": "Aiswarya Issac",
+      "role": "DevOps",
+      "location": "Kochi"
+    },
+    "account04_clouduser02": {
+      "first_name": "Martin",
+      "last_name": "Jacob",
+      "email": "Martin.Jacob@bakerhughes.com",
+      "full_name": "Martin Jacob",
+      "role": "Developer",
+      "location": "Kochi"
+    },
+    "account04_clouduser03": {
+      "first_name": "Neethu",
+      "last_name": "Haridas",
+      "email": "Neethu.Haridas@bakerhughes.com",
+      "full_name": "Neethu Haridas",
+      "role": "Developer",
+      "location": "Kochi"
+    },
+    "account04_clouduser04": {
+      "first_name": "Abhinav",
+      "last_name": "G Nath",
+      "email": "Abhinav.GNath@bakerhughes.com",
+      "full_name": "Abhinav G Nath",
+      "role": "Developer",
+      "location": "Kochi"
+    },
+    "account04_clouduser05": {
+      "first_name": "Amarjeet",
+      "last_name": "Singh",
+      "email": "amarjeet.arora@asreet-tech.com",
+      "full_name": "Amarjeet Singh",
+      "role": "Trainer",
+      "location": "Remote"
+    },
+    "account04_clouduser06": {
+      "first_name": "Varadharajan",
+      "last_name": "Damotharan",
+      "email": "varathu09@gmail.com",
+      "full_name": "Varadharajan Damotharan",
+      "role": "Trainer",
+      "location": "Remote"
+    }
+  },
+  "account_distribution": {
+    "account01": {
+      "users": 5,
+      "description": "Primary Development Team - Kochi",
+      "roles": ["Developer"]
+    },
+    "account02": {
+      "users": 5,
+      "description": "Mixed Development & QA Team - Kochi",
+      "roles": ["Developer", "QA"]
+    },
+    "account03": {
+      "users": 5,
+      "description": "Multi-location Team - Kochi/Pune/Bangalore",
+      "roles": ["PO", "QA", "Developer"]
+    },
+    "account04": {
+      "users": 6,
+      "description": "DevOps, Development & Training Team - Kochi/Remote",
+      "roles": ["DevOps", "Developer", "Trainer"]
+    },
+    "account05": {
+      "users": 0,
+      "description": "Reserved for Future Use"
+    }
+  },
+  "location_distribution": {
+    "Kochi": 14,
+    "Pune": 3,
+    "Bangalore": 1,
+    "Remote": 3
+  },
+  "role_distribution": {
+    "Developer": 13,
+    "QA": 3,
+    "DevOps": 1,
+    "PO": 1,
+    "Trainer": 2,
+    "Other": 1
+  },
+  "email_domains": {
+    "bakerhughes.com": 19,
+    "asreet-tech.com": 1,
+    "gmail.com": 1
+  },
+  "training_statistics": {
+    "total_participants": 21,
+    "by_location": {
+      "Kochi_based": 14,
+      "Pune_based": 3,
+      "Bangalore_based": 1,
+      "Remote": 3
+    },
+    "by_role": {
+      "Developers": 13,
+      "QA_Engineers": 3,
+      "DevOps_Engineers": 1,
+      "Product_Owners": 1,
+      "Trainers": 2,
+      "Others": 1
+    },
+    "by_organization": {
+      "Baker_Hughes": 19,
+      "External_Trainers": 2
+    },
+    "course_details": {
+      "name": "K8S Beginners",
+      "duration": "2 days",
+      "venue": "Kochi",
+      "dates": "June 12-13, 2025",
+      "delivery_mode": "In-Person"
+    }
+  },
+  "statistics": {
+    "total_accounts": 5,
+    "active_accounts": 4,
+    "total_users": 21,
+    "baker_hughes_employees": 19,
+    "external_contractors": 2,
+    "last_sync": "2025-06-11 16:49:44",
+    "created_by": "varadharajaan",
+    "purpose": "K8S Beginners Training - June 2025"
+  }
+}

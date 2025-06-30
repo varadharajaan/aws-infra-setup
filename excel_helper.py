@@ -287,11 +287,13 @@ class ExcelCredentialsExporter:
 # Example usage and testing
 if __name__ == "__main__":
     exporter = ExcelCredentialsExporter()
-    
+    now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+    now_date = datetime.utcnow().strftime("%Y-%m-%d")
+
     # Example JSON structure for testing
     sample_data = {
-        "created_date": "2025-06-01",
-        "created_time": "17:24:36 UTC",
+        "created_date": now_date,
+        "created_time": now_str,
         "created_by": "varadharajaan",
         "total_users": 2,
         "accounts": {

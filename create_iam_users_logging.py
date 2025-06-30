@@ -313,13 +313,64 @@ class IAMUserManager:
             }
         })
 
-        # Always allow launch template creation
+        # Allow launch template creation and usage
         policy["Statement"].append({
-            "Sid": "AllowCreateLaunchTemplate",
+            "Sid": "AllowLaunchTemplateOperations",
             "Effect": "Allow",
             "Action": [
                 "ec2:CreateLaunchTemplate",
-                "ec2:CreateLaunchTemplateVersion"
+                "ec2:CreateLaunchTemplateVersion",
+                "ec2:DescribeLaunchTemplates",
+                "ec2:DescribeLaunchTemplateVersions",
+                "ec2:GetLaunchTemplateData"
+            ],
+            "Resource": "*"
+        })
+
+        # Allow IAM PassRole for Auto Scaling and EC2
+        policy["Statement"].append({
+            "Sid": "AllowPassRoleForAutoScaling",
+            "Effect": "Allow",
+            "Action": [
+                "iam:PassRole"
+            ],
+            "Resource": "*",
+            "Condition": {
+                "StringEquals": {
+                    "iam:PassedToService": [
+                        "ec2.amazonaws.com",
+                        "autoscaling.amazonaws.com"
+                    ]
+                }
+            }
+        })
+
+        # Allow essential IAM read operations (needed for role validation)
+        policy["Statement"].append({
+            "Sid": "AllowIAMReadOperations",
+            "Effect": "Allow",
+            "Action": [
+                "iam:GetRole",
+                "iam:ListInstanceProfiles",
+                "iam:GetInstanceProfile"
+            ],
+            "Resource": "*"
+        })
+
+        # Allow essential EC2 describe operations (needed for Auto Scaling)
+        policy["Statement"].append({
+            "Sid": "AllowEC2DescribeOperations",
+            "Effect": "Allow",
+            "Action": [
+                "ec2:DescribeImages",
+                "ec2:DescribeKeyPairs",
+                "ec2:DescribeSecurityGroups",
+                "ec2:DescribeSubnets",
+                "ec2:DescribeVpcs",
+                "ec2:DescribeAvailabilityZones",
+                "ec2:DescribeInstanceTypes",
+                "ec2:DescribeInstanceAttribute",
+                "ec2:DescribeInstances"
             ],
             "Resource": "*"
         })
@@ -426,12 +477,30 @@ class IAMUserManager:
                 # Check if the policy restricts to the correct region
                 for statement in policy_doc.get('Statement', []):
                     if statement.get('Sid') == 'DenyIfNotInRegion':
-                        policy_region = statement.get('Condition', {}).get('StringNotEquals', {}).get('aws:RequestedRegion')
-                        if policy_region == region:
-                            self.logger.debug(f"User {username} has correct region restriction: {region}")
+                        policy_region = statement.get('Condition', {}).get('StringNotEquals', {}).get(
+                            'aws:RequestedRegion')
+
+                        # Handle case where policy_region might be a list or string
+                        if isinstance(policy_region, list):
+                            # If it's a list, check if the region is in the list
+                            if region in policy_region:
+                                self.logger.debug(f"User {username} has correct region restriction: {region}")
+                            else:
+                                self.logger.warning(
+                                    f"User {username} has incorrect region restriction: {policy_region}, should include {region}")
+                        elif isinstance(policy_region, str):
+                            # If it's a string, do direct comparison
+                            if policy_region == region:
+                                self.logger.debug(f"User {username} has correct region restriction: {region}")
+                            else:
+                                self.logger.warning(
+                                    f"User {username} has incorrect region restriction: {policy_region}, should be {region}")
+                        elif policy_region is None:
+                            self.logger.warning(f"User {username} has no region restriction policy found")
                         else:
-                            self.logger.warning(f"User {username} has incorrect region restriction: {policy_region}, should be {region}")
-        
+                            self.logger.warning(
+                                f"User {username} has unexpected region restriction format: {policy_region}, expected string or list")
+
             except ClientError as e:
                 if e.response['Error']['Code'] == 'NoSuchEntity':
                     self.logger.warning(f"User {username} does not have a region restriction policy")
@@ -764,7 +833,8 @@ class IAMUserManager:
         
         # Save credentials if any users were created
         if all_created_users:
-            save_to_file = input("\n💾 Save credentials to file? (y/N): ").lower().strip()
+            #save_to_file = input("\n💾 Save credentials to file? (y/N): ").lower().strip()
+            save_to_file = 'y'  # Automatically save to file for demonstration purposes
             if save_to_file == 'y':
                 saved_file = self.save_credentials_to_file(all_created_users)
                 if saved_file:

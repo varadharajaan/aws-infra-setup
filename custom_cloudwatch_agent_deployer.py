@@ -42,16 +42,25 @@ class CustomCloudWatchAgentDeployer:
         self.deployment_start_time = time.time()
     
     def print_colored(self, color: str, message: str, indent: int = 0):
-        """Print colored message with optional indentation"""
+        """Print colored message with optional indentation, handling Unicode safely."""
         prefix = "  " * indent
-        print(f"{color}{prefix}{message}{self.colors.ENDC}")
+        # Ensures Unicode is printed safely (works in most modern terminals)
+        try:
+            print(f"{color}{prefix}{message}{self.colors.ENDC}")
+        except UnicodeEncodeError:
+            # Fallback for environments not supporting Unicode
+            print(f"{color}{prefix}{message.encode('utf-8', errors='replace').decode('utf-8')}{self.colors.ENDC}")
     
     def print_header(self, title: str):
         """Print formatted header"""
         self.print_colored(self.colors.BOLD, "=" * 90)
         self.print_colored(self.colors.BOLD, f"    {title}")
         self.print_colored(self.colors.BOLD, "=" * 90)
-        self.print_colored(self.colors.CYAN, f"    Current Date and Time (UTC): 2025-06-19 10:13:17")
+        from datetime import datetime
+        self.print_colored(
+            self.colors.CYAN,
+            f"    Current Date and Time (UTC): {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}"
+        )
         self.print_colored(self.colors.CYAN, f"    Current User's Login: varadharajaan")
         self.print_colored(self.colors.CYAN, f"    Custom Agent Name: {self.custom_agent_name}")
         self.print_colored(self.colors.BOLD, "=" * 90)
@@ -690,7 +699,7 @@ spec:
         self.print_colored(self.colors.WHITE, f"   • Metrics Namespace: EKS/Custom/{cluster_name}", 1)
         self.print_colored(self.colors.WHITE, f"   • AWS Console: https://{region}.console.aws.amazon.com/cloudwatch/", 1)
     
-    def deploy_custom_cloudwatch_agent(self, cluster_name: str, region: str, access_key: str, secret_key: str, user_name) -> bool:
+    def deploy_custom_cloudwatch_agent(self, cluster_name: str, region: str, access_key: str, secret_key: str) -> bool:
         """
         Complete custom CloudWatch agent deployment
         
@@ -699,13 +708,12 @@ spec:
             region: AWS region
             access_key: AWS access key
             secret_key: AWS secret key
-            user_name: User name for deployment context
-            
+
         Returns:
             bool: True if deployment successful
         """
         try:
-            self.custom_agent_name = f"{user_name}-cw-agent"
+            self.custom_agent_name = f"{cluster_name}-cw-agent"
             self.print_header("CUSTOM CLOUDWATCH AGENT DEPLOYMENT")
             
             self.print_colored(self.colors.BLUE, "🎯 Deployment Parameters:")
@@ -759,14 +767,14 @@ spec:
 
 def main():
     """Main function for command line usage"""
-    deployer = CustomCloudWatchAgentDeployer(custom_agent_name="varadharajaan-cloudwatch-agent")
+    deployer = CustomCloudWatchAgentDeployer()
     
     # Example usage - replace with your values
     success = deployer.deploy_custom_cloudwatch_agent(
         cluster_name="eks-cluster-root-account03-us-west-1-pxfw",
         region="us-west-1",
         access_key="YOUR_ACCESS_KEY_HERE",
-        secret_key="YOUR_SECRET_KEY_HERE"
+        secret_key="YOUR_SECRET_KEY_HERE",
     )
     
     if success:

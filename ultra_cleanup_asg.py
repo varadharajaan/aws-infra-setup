@@ -40,7 +40,7 @@ class UltraASGCleanupManager:
     def setup_detailed_logging(self):
         """Setup detailed logging to file"""
         try:
-            log_dir = "aws/ec2/asg"
+            log_dir = "aws/asg"
             os.makedirs(log_dir, exist_ok=True)
         
             # Save log file in the aws/ec2/asg directory
@@ -482,7 +482,7 @@ class UltraASGCleanupManager:
     def save_cleanup_report(self):
         """Save comprehensive cleanup results to JSON report"""
         try:
-            report_dir = "aws/ec2/asg/reports"
+            report_dir = "aws/asg/reports"
             os.makedirs(report_dir, exist_ok=True)
             report_filename = f"{report_dir}/ultra_asg_cleanup_report_{self.execution_timestamp}.json"
             

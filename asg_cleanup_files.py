@@ -11,33 +11,38 @@ from datetime import datetime, timedelta
 from botocore.exceptions import ClientError
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Dict, Any, Set, Optional
+from collections import defaultdict
+
 
 class ASGLogFileCleanupManager:
-    def __init__(self, config_file='aws_accounts_config.json', aws_base_dir='aws/ec2', target_pattern='asg-account02-mixed'):
+    def __init__(self, config_file='aws_accounts_config.json', aws_base_dir='aws/asg',
+                 target_pattern='asg-account02-mixed'):
         self.config_file = config_file
         self.aws_base_dir = aws_base_dir
         self.target_pattern = target_pattern  # Pattern to filter ASGs
         self.current_time = datetime.now()
         self.current_time_str = self.current_time.strftime("%Y-%m-%d %H:%M:%S")
         self.current_user = "varadharajaan"
-        
+
         # Generate timestamp for output files
-        self.execution_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        
+        self.execution_timestamp = self.current_time.strftime("%Y%m%d_%H%M%S")
+
         # Initialize lock for thread-safe logging
         self.log_lock = threading.Lock()
-        
+
         # Initialize log file
         self.setup_detailed_logging()
-        
+
         # Load AWS accounts configuration
         self.load_aws_accounts_config()
-        
+
         # Initialize storage for ASG data
         self.asgs_by_file = {}  # Map filename to ASG data
-        self.asgs_by_age = {}   # Group ASGs by age in days
-        self.asgs_list = []     # List of all ASGs found
-        
+        self.asgs_by_day = {}  # NEW: Group ASG files by day
+        self.asgs_by_age = {}  # Group ASGs by age in days
+        self.asgs_list = []  # List of all ASGs found
+        self.selected_asg_files = []  # NEW: Selected ASG files
+
         # Cleanup results tracking
         self.cleanup_results = {
             'accounts_processed': [],
@@ -51,10 +56,10 @@ class ASGLogFileCleanupManager:
     def setup_detailed_logging(self):
         """Setup detailed logging to file"""
         try:
-            log_dir = "aws/ec2/asg"
+            log_dir = "logs/asg"
             os.makedirs(log_dir, exist_ok=True)
-        
-            # Save log file in the aws/ec2/asg directory
+
+            # Save log file in the logs/asg directory
             self.log_filename = f"{log_dir}/asg_log_cleanup_{self.execution_timestamp}.log"
             
             # Create a file handler for detailed logging
@@ -136,9 +141,9 @@ class ASGLogFileCleanupManager:
             # Filter out accounts without valid credentials
             valid_accounts = {}
             for account_name, account_data in self.aws_config['accounts'].items():
-                if (account_data.get('access_key') and 
-                    account_data.get('secret_key') and
-                    not account_data.get('access_key').startswith('ADD_')):
+                if (account_data.get('access_key') and
+                        account_data.get('secret_key') and
+                        not account_data.get('access_key').startswith('ADD_')):
                     valid_accounts[account_name] = account_data
                 else:
                     self.log_operation('WARNING', f"Skipping account with invalid credentials: {account_name}")
@@ -188,8 +193,9 @@ class ASGLogFileCleanupManager:
 
     def find_asg_log_files(self):
         """Find and parse all ASG log files in the AWS directory with target pattern"""
-        self.log_operation('INFO', f"🔍 Scanning for ASG log files matching '{self.target_pattern}' in {self.aws_base_dir}")
-        
+        self.log_operation('INFO',
+                           f"🔍 Scanning for ASG log files matching '{self.target_pattern}' in {self.aws_base_dir}")
+
         if not os.path.exists(self.aws_base_dir):
             self.log_operation('ERROR', f"AWS base directory does not exist: {self.aws_base_dir}")
             return []
@@ -250,7 +256,8 @@ class ASGLogFileCleanupManager:
                                 # Get region info
                                 if 'asg_configuration' in asg_data and 'region' in asg_data['asg_configuration']:
                                     asg_info['region'] = asg_data['asg_configuration']['region']
-                                    asg_info['launch_template_id'] = asg_data['asg_configuration'].get('launch_template_id')
+                                    asg_info['launch_template_id'] = asg_data['asg_configuration'].get(
+                                        'launch_template_id')
                                 elif 'region' in asg_data:
                                     asg_info['region'] = asg_data['region']
                                     asg_info['launch_template_id'] = asg_data.get('launch_template_id')
@@ -262,17 +269,26 @@ class ASGLogFileCleanupManager:
                                     asg_info['account_id'] = account_data.get('account_id')
                                     if not asg_info.get('region'):
                                         asg_info['region'] = account_data.get('region')
+
                                 else:
                                     # Try to get account from directory structure
                                     path_parts = file_path.split(os.path.sep)
                                     for i, part in enumerate(path_parts):
-                                        if part == 'ec2' and i + 1 < len(path_parts):
+                                        if part in ['asg'] and i + 1 < len(path_parts):
                                             asg_info['account_name'] = path_parts[i + 1]
                                             break
-                                
+
                                 # Get additional metadata
                                 asg_info['created_by'] = asg_data.get('created_by', 'Unknown')
-                                
+
+                                # Get creation_date and creation_time from metadata, fallback to Unknown
+                                if "metadata" in asg_data:
+                                    asg_info['creation_date'] = asg_data["metadata"].get("creation_date", "Unknown")
+                                    asg_info['creation_time'] = asg_data["metadata"].get("creation_time", "Unknown")
+                                else:
+                                    asg_info['creation_date'] = "Unknown"
+                                    asg_info['creation_time'] = "Unknown"
+
                                 # Store raw ASG data for reference
                                 asg_info['raw_data'] = asg_data
                                 
@@ -283,13 +299,112 @@ class ASGLogFileCleanupManager:
                                 self.log_operation('WARNING', f"Invalid JSON in file: {file_path}")
                     except Exception as e:
                         self.log_operation('ERROR', f"Error processing file {file_path}: {e}")
-        
-        self.log_operation('INFO', f"📊 Found {matching_pattern_files} ASG files matching pattern '{self.target_pattern}' out of {valid_files} valid files")
-        
+
+
+        self.log_operation('INFO',
+                           f"📊 Found {matching_pattern_files} ASG files matching pattern '{self.target_pattern}' out of {valid_files} valid files")
+
         # Sort ASG files by date (newest first)
         asg_files.sort(key=lambda x: x['file_date'], reverse=True)
         
         return asg_files
+
+    def discover_asg_files_by_day(self, asg_files):
+        """NEW: Group ASG files by day like in eks_connector.py"""
+        asg_files_by_day = defaultdict(list)
+
+        for asg_info in asg_files:
+            # Use the file date to group by day
+            day_key = asg_info['file_date'].strftime('%Y-%m-%d')
+            asg_files_by_day[day_key].append(asg_info)
+
+        # Sort files within each day by timestamp
+        for day in asg_files_by_day:
+            asg_files_by_day[day].sort(key=lambda x: x['file_date'])
+
+        return dict(asg_files_by_day)
+
+    def display_asg_files_by_day(self, files_by_day):
+        """NEW: Display ASG files grouped by day like in eks_connector.py"""
+        print("\n=== ASG Files by Day ===")
+        sorted_days = sorted(files_by_day.keys())
+
+        for i, day in enumerate(sorted_days, 1):
+            # Group files by account for this day
+            accounts_this_day = defaultdict(int)
+            for file_info in files_by_day[day]:
+                account = file_info.get('account_name', 'Unknown')
+                accounts_this_day[account] += 1
+
+            account_summary = ", ".join([f"{acc}({count})" for acc, count in accounts_this_day.items()])
+            print(f"\n{i}. {day} ({len(files_by_day[day])} files) - Accounts: {account_summary}")
+
+            for file_info in files_by_day[day]:
+                timestamp_str = file_info['file_date'].strftime('%H:%M:%S')
+                account = file_info.get('account_name', 'Unknown')
+                print(f"   {timestamp_str} - {file_info['asg_name']} - {file_info['file_name']} ({account})")
+
+        print(f"\n{len(sorted_days) + 1}. All days")
+        return sorted_days
+
+    def select_asg_files_by_day(self, asg_files):
+        """NEW: Select ASG files by day like in eks_connector.py"""
+        files_by_day = self.discover_asg_files_by_day(asg_files)
+
+        if not files_by_day:
+            print("No ASG files found for selected pattern")
+            return []
+
+        sorted_days = self.display_asg_files_by_day(files_by_day)
+
+        while True:
+            selection = input("\nSelect days (single/comma-separated/range/all): ").strip()
+
+            if selection.lower() in ['all', str(len(sorted_days) + 1)]:
+                selected_days = sorted_days
+                break
+
+            try:
+                selected_days = []
+                parts = selection.split(',')
+
+                for part in parts:
+                    part = part.strip()
+                    if '-' in part and not part.startswith('-'):
+                        start, end = map(int, part.split('-'))
+                        for i in range(start - 1, min(end, len(sorted_days))):
+                            if i >= 0:
+                                selected_days.append(sorted_days[i])
+                    else:
+                        if part.isdigit():
+                            idx = int(part) - 1
+                            if 0 <= idx < len(sorted_days):
+                                selected_days.append(sorted_days[idx])
+
+                if selected_days:
+                    break
+                else:
+                    print("Invalid selection. Please try again.")
+
+            except (ValueError, IndexError):
+                print("Invalid selection format. Please try again.")
+
+        # Collect all files from selected days
+        self.selected_asg_files = []
+        for day in selected_days:
+            self.selected_asg_files.extend(files_by_day[day])
+
+        # Show summary by account
+        account_file_count = defaultdict(int)
+        for file_info in self.selected_asg_files:
+            account = file_info.get('account_name', 'Unknown')
+            account_file_count[account] += 1
+
+        print(f"\nSelected {len(self.selected_asg_files)} ASG files from {len(selected_days)} days:")
+        for account, count in account_file_count.items():
+            print(f"  - {account}: {count} files")
+
+        return self.selected_asg_files
 
     def group_asgs_by_age(self, asg_files):
         """Group ASGs by age in days"""
@@ -439,9 +554,12 @@ class ASGLogFileCleanupManager:
                 'file_path': asg_info['file_path'],
                 'file_date': asg_info['file_date'].strftime("%Y-%m-%d %H:%M:%S"),
                 'file_age_days': asg_info['file_age_days'],
-                'deleted_at': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                'deleted_at': self.current_time.strftime("%Y-%m-%d %H:%M:%S"),
+                'file_name': asg_info['file_name']
             })
-            
+
+            self.move_processed_file(asg_info['file_path'], asg_name, success=True)
+
             return True
             
         except Exception as e:
@@ -455,8 +573,40 @@ class ASGLogFileCleanupManager:
                 'file_path': asg_info['file_path'],
                 'error': str(e)
             })
-            
+
+            new_file_path = self.move_processed_file(asg_info['file_path'], asg_info['asg_name'], success=False)
+
             return False
+
+    def move_processed_file(self, file_path: str, asg_name: str, success: bool):
+        """Move processed file to indicate it was processed"""
+        try:
+            # Get the directory and filename
+            directory = os.path.dirname(file_path)
+            filename = os.path.basename(file_path)
+
+            # Remove .json extension if present
+            if filename.endswith('.json'):
+                base_filename = filename[:-5]
+            else:
+                base_filename = filename
+
+            # Create new filename with status and timestamp
+            status = "deleted" if success else "failed"
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            new_filename = f"{filename}.{status}.{timestamp}"
+            new_file_path = os.path.join(directory, new_filename)
+
+            # Move the file
+            os.rename(file_path, new_file_path)
+
+            self.log_operation('INFO', f"📁 Moved file: {filename} -> {new_filename}")
+
+            return new_file_path
+
+        except Exception as e:
+            self.log_operation('ERROR', f"Failed to move file {file_path}: {e}")
+            return file_path
 
     def parse_selection(self, selection: str, max_count: int) -> List[int]:
         """Parse user selection string into list of indices"""
@@ -503,8 +653,13 @@ class ASGLogFileCleanupManager:
     def save_cleanup_report(self):
         """Save cleanup results to JSON report"""
         try:
-            report_filename = f"asg_cleanup_report_{self.target_pattern}_{self.execution_timestamp}.json"
-            
+            # Create reports directory under aws/asg
+            reports_dir = os.path.join(self.aws_base_dir, "reports")
+            os.makedirs(reports_dir, exist_ok=True)
+
+            report_filename = f"asg_cleanup_report_{self.target_pattern.replace('-', '_')}_{self.execution_timestamp}.json"
+            report_path = os.path.join(reports_dir, report_filename)
+
             report_data = {
                 "metadata": {
                     "execution_date": self.current_time_str,
@@ -525,23 +680,24 @@ class ASGLogFileCleanupManager:
                     "errors": self.cleanup_results['errors']
                 }
             }
-            
-            with open(report_filename, 'w', encoding='utf-8') as f:
+
+            with open(report_path, 'w', encoding='utf-8') as f:
                 json.dump(report_data, f, indent=2, default=str)
-            
-            self.log_operation('INFO', f"✅ Cleanup report saved to: {report_filename}")
-            return report_filename
-            
+
+            self.log_operation('INFO', f"✅ Cleanup report saved to: {report_path}")
+            return report_path
+
         except Exception as e:
             self.log_operation('ERROR', f"Failed to save cleanup report: {e}")
             return None
 
+
     def run(self):
-        """Main execution method"""
+        """Main execution method with day-based selection"""
         try:
-            print("\n" + "="*80)
+            print("\n" + "=" * 80)
             print(f"🧹 AUTO SCALING GROUP CLEANUP UTILITY - PATTERN: {self.target_pattern}")
-            print("="*80)
+            print("=" * 80)
             print(f"Execution Date/Time: {self.current_time_str}")
             print(f"Searching for ASG logs in: {self.aws_base_dir}")
             
@@ -552,45 +708,42 @@ class ASGLogFileCleanupManager:
             if not asg_files:
                 print(f"\n❌ No ASG log files found matching pattern '{self.target_pattern}'. Nothing to clean up.")
                 return
-            
-            # Step 2: Extract unique ASGs (taking the latest version of each)
-            unique_asgs = self.extract_unique_asgs(asg_files)
+
+            print(f"\n📊 Found {len(asg_files)} ASG files matching pattern '{self.target_pattern}'")
+
+            # Step 2: NEW - Select ASG files by day (like eks_connector.py)
+            selected_asg_files = self.select_asg_files_by_day(asg_files)
+
+            if not selected_asg_files:
+                print("\n❌ No ASG files selected. Nothing to clean up.")
+                return
+
+            # Step 3: Extract unique ASGs from selected files (taking the latest version of each)
+            unique_asgs = self.extract_unique_asgs(selected_asg_files)
             self.asgs_list = unique_asgs
-            
-            # Step 3: Group ASGs by age
-            self.asgs_by_age = self.group_asgs_by_age(asg_files)
-            age_groups = sorted(self.asgs_by_age.keys())
-            
-            # Step 4: Display age groups and ask user which to process
-            print(f"\n📊 Found {len(unique_asgs)} unique ASGs matching '{self.target_pattern}' across {len(asg_files)} log files")
-            print(f"\nASGs grouped by age:")
-            for age in age_groups:
-                count = len(self.asgs_by_age[age])
-                age_label = "today" if age == 0 else f"{age} day{'s' if age != 1 else ''} old"
-                print(f"  • {age_label}: {count} ASG{'s' if count != 1 else ''}")
-            
-            # Process all ASGs together in a single list
-            asgs_to_delete = []
-            
-            print("\n" + "="*80)
-            print(f"🔍 ASG SELECTION - PATTERN: {self.target_pattern}")
-            print("="*80)
-            
-            # List all ASGs together sorted by age (newest first)
-            all_asgs = sorted(unique_asgs, key=lambda x: x['file_age_days'])
-            
-            print(f"\n📋 Available ASGs matching pattern '{self.target_pattern}':")
-            print(f"{'#':<4} {'ASG Name':<40} {'Account':<15} {'Age':<8} {'Region':<12}")
-            print("-" * 90)
-            
-            for i, asg in enumerate(all_asgs, 1):
+
+            if not unique_asgs:
+                print(f"\n❌ No unique ASGs found in selected files. Nothing to clean up.")
+                return
+
+            # Step 4: Display ASGs and ask which to delete
+            print("\n" + "=" * 80)
+            print(f"🔍 ASG SELECTION FROM SELECTED FILES - PATTERN: {self.target_pattern}")
+            print("=" * 80)
+
+            print(f"\n📋 Available ASGs from selected files:")
+            print(f"{'#':<4} {'ASG Name':<40} {'Account':<15} {'Age':<8} {'Region':<12} {'Date':<12}")
+            print("-" * 100)
+
+            for i, asg in enumerate(unique_asgs, 1):
                 asg_name = asg['asg_name']
                 account_name = asg.get('account_name', 'Unknown')
                 region = asg.get('region', 'Unknown')
                 age = asg['file_age_days']
                 age_str = "Today" if age == 0 else f"{age} day{'s' if age != 1 else ''}"
-                print(f"{i:<4} {asg_name:<40} {account_name:<15} {age_str:<8} {region:<12}")
-            
+                date_str = asg['file_date'].strftime('%Y-%m-%d')
+                print(f"{i:<4} {asg_name:<40} {account_name:<15} {age_str:<8} {region:<12} {date_str:<12}")
+
             # Ask which ASGs to delete
             print("\nASG Selection Options:")
             print("  • Single ASGs: 1,3,5")
@@ -604,14 +757,15 @@ class ASGLogFileCleanupManager:
             if selection == 'cancel':
                 print("❌ Operation cancelled.")
                 return
-            
+
+            asgs_to_delete = []
             if not selection or selection == 'all':
-                asgs_to_delete = all_asgs
-                print(f"✅ Selected all {len(all_asgs)} ASGs")
+                asgs_to_delete = unique_asgs
+                print(f"✅ Selected all {len(unique_asgs)} ASGs")
             else:
                 try:
-                    indices = self.parse_selection(selection, len(all_asgs))
-                    asgs_to_delete = [all_asgs[i-1] for i in indices]
+                    indices = self.parse_selection(selection, len(unique_asgs))
+                    asgs_to_delete = [unique_asgs[i - 1] for i in indices]
                     print(f"✅ Selected {len(asgs_to_delete)} ASGs")
                 except ValueError as e:
                     print(f"❌ Invalid selection: {e}")
@@ -621,21 +775,22 @@ class ASGLogFileCleanupManager:
             if not asgs_to_delete:
                 print("\n❌ No ASGs selected for deletion. Nothing to clean up.")
                 return
-                
-            print("\n" + "="*80)
+
+            print("\n" + "=" * 80)
             print(f"📋 SELECTED {len(asgs_to_delete)} ASGs FOR DELETION:")
-            print("="*80)
-            print(f"{'#':<4} {'ASG Name':<40} {'Account':<15} {'Age':<8} {'Region':<12}")
-            print("-" * 90)
-            
+            print("=" * 80)
+            print(f"{'#':<4} {'ASG Name':<40} {'Account':<15} {'Age':<8} {'Region':<12} {'Date':<12}")
+            print("-" * 100)
+
             for i, asg in enumerate(asgs_to_delete, 1):
                 asg_name = asg['asg_name']
                 account_name = asg.get('account_name', 'Unknown')
                 region = asg.get('region', 'Unknown')
                 age = asg['file_age_days']
                 age_str = "Today" if age == 0 else f"{age} day{'s' if age != 1 else ''}"
-                print(f"{i:<4} {asg_name:<40} {account_name:<15} {age_str:<8} {region:<12}")
-            
+                date_str = asg['file_date'].strftime('%Y-%m-%d')
+                print(f"{i:<4} {asg_name:<40} {account_name:<15} {age_str:<8} {region:<12} {date_str:<12}")
+
             # Final confirmation
             print("\n⚠️  WARNING: This will delete the selected Auto Scaling Groups")
             print(f"    and terminate all EC2 instances within them.")
@@ -672,9 +827,9 @@ class ASGLogFileCleanupManager:
             total_time = int(end_time - start_time)
             
             # Display results
-            print("\n" + "="*80)
+            print("\n" + "=" * 80)
             print("✅ CLEANUP COMPLETE")
-            print("="*80)
+            print("=" * 80)
             print(f"⏱️  Total execution time: {total_time} seconds")
             print(f"✅ Successfully deleted: {successful} ASGs")
             print(f"❌ Failed to delete: {failed} ASGs")
@@ -695,6 +850,7 @@ class ASGLogFileCleanupManager:
             traceback.print_exc()
             print(f"\n❌ Error: {e}")
 
+
 def main():
     """Main entry point"""
     print("\n🧹 ASG PATTERN-BASED CLEANUP UTILITY 🧹")
@@ -702,7 +858,7 @@ def main():
     
     # Default paths and pattern
     default_config = "aws_accounts_config.json"
-    default_aws_dir = "aws/ec2"
+    default_aws_dir = "aws/asg"
     default_pattern = "asg-account"
     
     # Get configuration file
@@ -723,7 +879,7 @@ def main():
     # Create and run the cleanup manager
     try:
         cleanup_manager = ASGLogFileCleanupManager(
-            config_file=config_file, 
+            config_file=config_file,
             aws_base_dir=aws_dir,
             target_pattern=pattern
         )

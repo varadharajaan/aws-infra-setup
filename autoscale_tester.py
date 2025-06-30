@@ -39,7 +39,11 @@ class AutoscalerTester:
         self.print_colored(self.colors.BOLD, "=" * 80)
         self.print_colored(self.colors.BOLD, f"    {title}")
         self.print_colored(self.colors.BOLD, "=" * 80)
-        self.print_colored(self.colors.CYAN, "    Current Date and Time (UTC): 2025-06-19 08:55:32")
+        from datetime import datetime
+        self.print_colored(
+            self.colors.CYAN,
+            f"    Current Date and Time (UTC): {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}"
+        )
         self.print_colored(self.colors.CYAN, "    Current User's Login: varadharajaan")
         self.print_colored(self.colors.BOLD, "=" * 80)
     
@@ -442,9 +446,9 @@ def deploy_my_autoscaler():
     region = "us-west-1"
     access_key = "your_access_key_here"  # replace placeholder with actual access key
     secret_key = "your_secret_key_here"   # replace placeholder with actual secret key
-    
+    from datetime import datetime
     print(f"\n🚀 Starting autoscaler deployment...")
-    print(f"Current Date and Time (UTC): 2025-06-19 08:55:32")
+    print(f"Current Date and Time (UTC): {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"Current User's Login: varadharajaan")
     print(f"Cluster: {cluster_name}")
     print(f"Region: {region}")
