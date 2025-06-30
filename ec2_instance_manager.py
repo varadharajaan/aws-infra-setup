@@ -593,6 +593,7 @@ class EC2InstanceManager:
                 UserData=enhanced_userdata,
                 SubnetId=subnet_id,
                 SecurityGroupIds=[security_group_id],
+                KeyName=key_name,  # Use provided key name
                 TagSpecifications=[
                     {
                         'ResourceType': 'instance',
