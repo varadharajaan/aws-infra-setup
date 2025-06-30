@@ -8,6 +8,8 @@ import json
 import os
 import time
 from os import environ
+import re
+import textwrap
 
 import boto3
 
@@ -8204,7 +8206,6 @@ class EKSClusterManager:
         Ensures only one node per selected nodegroup has the NO_DELETE label.
         Only nodegroups matching the specified patterns are considered.
         """
-        import re
         env = os.environ.copy()
         env['AWS_ACCESS_KEY_ID'] = access_key
         env['AWS_SECRET_ACCESS_KEY'] = secret_key

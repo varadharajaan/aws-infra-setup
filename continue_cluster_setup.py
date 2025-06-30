@@ -16,6 +16,7 @@ import glob
 from collections import defaultdict
 from eks_cluster_manager import EKSClusterManager
 from complete_autoscaler_deployment import CompleteAutoscalerDeployer
+import textwrap
 
 class Colors:
     GREEN = '\033[92m'
@@ -1500,10 +1501,11 @@ class EKSClusterContinuationFromErrors:
         print("9. Run Health Check")
         print("10. configure user auth configmap")
         print("11. add NO_DELETE protected labels to nodes")
+        print("12. add custom cloudwatch agent")
         print("0. Exit")
         print("=" * 60)
 
-        choice = input("Enter your choices (0-11): ").strip()
+        choice = input("Enter your choices (0-12): ").strip()
         return int(choice)
 
     def continue_cluster_setup_from_errors(self) -> bool:
@@ -1589,36 +1591,35 @@ class EKSClusterContinuationFromErrors:
     def configure_single_cluster(self, cluster_name: str, region: str, access_key: str, secret_key: str) -> bool:
         """Configure a single cluster interactively"""
         try:
-            # Display current status
+            # Show status once at the start
             self.display_cluster_status()
 
             while True:
-                # Show menu and get choices
+                changed = False
                 choice_num = self.show_main_menu()
 
                 if choice_num == 0:
                     self.print_colored(Colors.YELLOW, "Exiting cluster configuration")
                     return True
                 elif choice_num == 1:
-                    self.configure_nodegroups(cluster_name, region, access_key, secret_key)
+                    changed = self.configure_nodegroups(cluster_name, region, access_key, secret_key)
                 elif choice_num == 2:
-                    self.configure_addons(cluster_name, region, access_key, secret_key)
+                    changed = self.configure_addons(cluster_name, region, access_key, secret_key)
                 elif choice_num == 3:
-                    self.configure_container_insights(cluster_name, region, access_key, secret_key)
+                    changed = self.configure_container_insights(cluster_name, region, access_key, secret_key)
                 elif choice_num == 4:
-                    self.configure_cluster_autoscaler(cluster_name, region, access_key, secret_key)
+                    changed = self.configure_cluster_autoscaler(cluster_name, region, access_key, secret_key)
                 elif choice_num == 5:
-                    self.configure_scheduled_scaling(cluster_name, region, access_key, secret_key)
+                    changed = self.configure_scheduled_scaling(cluster_name, region, access_key, secret_key)
                 elif choice_num == 6:
-                    self.configure_cloudwatch_monitoring(cluster_name, region, access_key, secret_key)
+                    changed = self.configure_cloudwatch_monitoring(cluster_name, region, access_key, secret_key)
                 elif choice_num == 7:
-                    self.configure_cost_monitoring(cluster_name, region, access_key, secret_key)
+                    changed = self.configure_cost_monitoring(cluster_name, region, access_key, secret_key)
                 elif choice_num == 8:
-                    self.generate_user_instructions(cluster_name, region, access_key, secret_key)
+                    changed = self.generate_user_instructions(cluster_name, region, access_key, secret_key)
                 elif choice_num == 9:
-                    self.run_health_check(cluster_name, region, access_key, secret_key)
+                    changed = self.run_health_check(cluster_name, region, access_key, secret_key)
                 elif choice_num == 10:
-                    # Get correct credentials for the cluster
                     account_id = self._extract_account_from_cluster_name(cluster_name)
                     user_data = {
                         'username': self._extract_username_from_cluster_name(cluster_name),
@@ -1627,33 +1628,30 @@ class EKSClusterContinuationFromErrors:
                         'secret_access_key': secret_key
                     }
                     is_root = 'root' in cluster_name
-
-                    # Call the configure_auth method
-                    success = self.configure_aws_auth_configmap_enhanced(
-                        cluster_name,
-                        region,
-                        account_id,
-                        user_data,
-                        access_key,
-                        secret_key,
-                        is_root
+                    changed = self.configure_aws_auth_configmap_enhanced(
+                        cluster_name, region, account_id, user_data, access_key, secret_key, is_root
                     )
-                    if success:
-                        self.print_colored(Colors.GREEN, f"✅ Successfully configured authentication for {cluster_name}")
-                    else:
-                        self.print_colored(Colors.YELLOW, f"⚠️ Failed to configure authentication for {cluster_name}")
                 elif choice_num == 11:
                     self.print_colored(Colors.CYAN, "\n🔒 Setting up node protection with NO_DELETE labels...")
-                    self.eks_manager.apply_no_delete_to_matching_nodegroups(cluster_name, region, access_key, secret_key)
+                    self.eks_manager.apply_no_delete_to_matching_nodegroups(cluster_name, region, access_key,
+                                                                            secret_key)
                     self.eks_manager.protect_nodes_with_no_delete_label(cluster_name, region, access_key, secret_key)
+                    changed = True
+                elif choice_num == 12:
+                    self.print_colored(Colors.CYAN, "\n🔒 Configuring custom cloudwatch agent...")
+                    from custom_cloudwatch_agent_deployer import CustomCloudWatchAgentDeployer
+                    agent_deployer = CustomCloudWatchAgentDeployer()
+                    changed = agent_deployer.deploy_custom_cloudwatch_agent(
+                        cluster_name, region, access_key, secret_key
+                    )
                 else:
                     self.print_colored(Colors.RED, f"❌ Invalid choice: {choice_num}")
 
-                # After processing all choices, refresh the status
-                self.analyze_existing_components(cluster_name, region, access_key, secret_key)
-                self.display_cluster_status()
+                # Only re-analyze and show status if something changed
+                if changed:
+                    self.analyze_existing_components(cluster_name, region, access_key, secret_key)
+                    self.display_cluster_status()
 
-                # Ask if user wants to continue
                 continue_choice = input("\nContinue configuring this cluster? (Y/n): ").strip().lower()
                 if continue_choice == 'n':
                     break
@@ -1664,6 +1662,7 @@ class EKSClusterContinuationFromErrors:
             self.logger.error(f"Error configuring cluster: {str(e)}")
             self.print_colored('RED', f"❌ Error configuring cluster: {str(e)}")
             return False
+
 
     def configure_aws_auth_configmap_enhanced(self, cluster_name: str, region: str, account_id: str, user_data: Dict,
                                               admin_access_key: str, admin_secret_key: str,

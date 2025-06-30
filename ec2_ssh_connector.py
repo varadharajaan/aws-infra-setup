@@ -181,6 +181,11 @@ Examples:
             if '_eks-cluster-' in cluster_name:
                 # IAM user: username is before '_eks-cluster-'
                 return cluster_name.split('_eks-cluster-')[0]
+            if 'eks-cluster-' in cluster_name:
+                # Fallback for other patterns
+                parts = cluster_name.split('-')
+                if len(parts) >= 3:
+                    return parts[2]
             return 'unknown-user'
         except Exception:
             return 'unknown-user'
