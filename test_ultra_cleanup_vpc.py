@@ -14,6 +14,9 @@ from unittest.mock import Mock, patch, MagicMock
 # Add the main directory and functionality directory to the path
 sys.path.append('/home/runner/work/aws-infra-setup/aws-infra-setup')
 sys.path.append('/home/runner/work/aws-infra-setup/aws-infra-setup/functionality')
+# Add specific module directories for proper imports
+for module_dir in ['ec2', 'eks', 'iam', 'asg', 'cleanup', 'aws_management', 'core_utils', 'lambda_functions']:
+    sys.path.append(f'/home/runner/work/aws-infra-setup/aws-infra-setup/functionality/{module_dir}')
 
 def create_test_config():
     """Create a test configuration file"""
@@ -53,7 +56,7 @@ def test_basic_functionality():
     
     try:
         # Import the module
-        from functionality.ultra_cleanup_vpc import UltraVPCCleanupManager
+        from functionality.cleanup.ultra_cleanup_vpc import UltraVPCCleanupManager
         
         # Test initialization
         print("✅ Testing initialization...")
@@ -150,7 +153,7 @@ def test_vpc_resource_methods():
     config_file = create_test_config()
     
     try:
-        from functionality.ultra_cleanup_vpc import UltraVPCCleanupManager
+        from functionality.cleanup.ultra_cleanup_vpc import UltraVPCCleanupManager
         manager = UltraVPCCleanupManager(config_file)
         manager.dry_run = True
         

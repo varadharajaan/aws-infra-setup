@@ -22,7 +22,7 @@ import subprocess
 import random
 import string
 from typing import List, Tuple, Set
-from aws_credential_manager import CredentialInfo
+from ..aws_management.aws_credential_manager import CredentialInfo
 
 import tempfile
 import requests

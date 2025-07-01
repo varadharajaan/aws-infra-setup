@@ -54,7 +54,7 @@ def simulate_interactive_demo():
     config_file = create_demo_config()
     
     try:
-        from ultra_cleanup_vpc import UltraVPCCleanupManager
+        from .ultra_cleanup_vpc import UltraVPCCleanupManager
         
         print("🎯 ULTRA VPC CLEANUP MANAGER - DEMO")
         print("=" * 80)

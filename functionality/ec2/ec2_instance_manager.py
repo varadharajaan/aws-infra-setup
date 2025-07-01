@@ -10,7 +10,7 @@ import boto3
 from typing import Dict, List, Optional, Tuple, Set
 from dataclasses import dataclass
 from datetime import datetime
-from aws_credential_manager import CredentialInfo
+from ..aws_management.aws_credential_manager import CredentialInfo
 import sys
 import random
 import string

@@ -6,8 +6,8 @@ import sys
 import os
 from datetime import datetime
 from botocore.exceptions import ClientError, BotoCoreError
-from logger import setup_logger
-from excel_helper import ExcelCredentialsExporter
+from ..core_utils.logger import setup_logger
+from ..core_utils.excel_helper import ExcelCredentialsExporter
 
 class IAMUserManager:
     def __init__(self, config_file='aws_accounts_config.json', mapping_file='user_mapping.json'):

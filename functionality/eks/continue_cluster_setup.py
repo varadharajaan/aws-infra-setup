@@ -14,8 +14,8 @@ from typing import Dict, List, Optional, Tuple
 import logging
 import glob
 from collections import defaultdict
-from eks_cluster_manager import EKSClusterManager
-from complete_autoscaler_deployment import CompleteAutoscalerDeployer
+from .eks_cluster_manager import EKSClusterManager
+from ..asg.complete_autoscaler_deployment import CompleteAutoscalerDeployer
 import textwrap
 
 class Colors:
