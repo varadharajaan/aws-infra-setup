@@ -11,8 +11,9 @@ import tempfile
 import json
 from unittest.mock import Mock, patch, MagicMock
 
-# Add the main directory to the path
+# Add the main directory and functionality directory to the path
 sys.path.append('/home/runner/work/aws-infra-setup/aws-infra-setup')
+sys.path.append('/home/runner/work/aws-infra-setup/aws-infra-setup/functionality')
 
 def create_test_config():
     """Create a test configuration file"""
@@ -52,7 +53,7 @@ def test_basic_functionality():
     
     try:
         # Import the module
-        from ultra_cleanup_vpc import UltraVPCCleanupManager
+        from functionality.ultra_cleanup_vpc import UltraVPCCleanupManager
         
         # Test initialization
         print("✅ Testing initialization...")
@@ -149,7 +150,7 @@ def test_vpc_resource_methods():
     config_file = create_test_config()
     
     try:
-        from ultra_cleanup_vpc import UltraVPCCleanupManager
+        from functionality.ultra_cleanup_vpc import UltraVPCCleanupManager
         manager = UltraVPCCleanupManager(config_file)
         manager.dry_run = True
         

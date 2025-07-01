@@ -9,8 +9,8 @@ from datetime import datetime
 from botocore.exceptions import ClientError, BotoCoreError
 from typing import List, Dict, Any, Set, Optional, Tuple
 import logging
-from  root_iam_credential_manager import AWSCredentialManager
-from  root_iam_credential_manager import Colors
+from root_iam_credential_manager import AWSCredentialManager
+from root_iam_credential_manager import Colors
 
 class UltraVPCCleanupManager:
     """
