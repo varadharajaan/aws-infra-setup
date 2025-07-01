@@ -31,7 +31,7 @@
   <a href="#-installation">📦 Installation</a> •
   <a href="#-usage-guide">📖 Usage Guide</a> •
   <a href="#-architecture">🏗️ Architecture</a> •
-  <a href="#-api-documentation">📚 API Docs</a> •
+  <a href="./docs/README.md">📚 Advanced Documentation</a> •
   <a href="#-contributing">🤝 Contributing</a>
 </p>
 
@@ -53,6 +53,87 @@
 <td align="center"><strong>👥 Community</strong><br/><code>10k+ Users</code></td>
 </tr>
 </table>
+
+</div>
+
+---
+
+## 📚 Comprehensive Documentation Hub
+
+<div align="center">
+
+### 🤖 Advanced AI-Powered AWS Infrastructure Documentation
+
+*Explore our cutting-edge AI/ML features and intelligent automation capabilities*
+
+</div>
+
+<table align="center">
+<tr>
+<td width="33%" align="center">
+
+### 🏗️ **[Architecture Documentation](./docs/architecture/)**
+- [EKS Auto-Scaling Architecture](./docs/architecture/eks-autoscaling.md)
+- [Lambda Handler Ecosystem](./docs/architecture/lambda-ecosystem.md)
+- [AI/ML Pipeline Architecture](./docs/architecture/ai-ml-pipeline.md)
+- [CloudWatch Agent Integration](./docs/architecture/cloudwatch-integration.md)
+
+</td>
+<td width="33%" align="center">
+
+### 🤖 **[AI Features Documentation](./docs/ai-features/)**
+- [AI-Powered Spot Intelligence](./docs/ai-features/spot-intelligence.md)
+- [Machine Learning Capabilities](./docs/ai-features/ml-capabilities.md)
+- [Predictive Analytics](./docs/ai-features/predictive-analytics.md)
+- [Cost Optimization Engine](./docs/ai-features/cost-optimization.md)
+
+</td>
+<td width="33%" align="center">
+
+### 📊 **[Monitoring & Analytics](./docs/monitoring/)**
+- [Custom CloudWatch Agent](./docs/monitoring/cloudwatch-agent.md)
+- [Real-Time Analytics](./docs/monitoring/real-time-analytics.md)
+- [Intelligent Alerting](./docs/monitoring/intelligent-alerting.md)
+- [Performance Benchmarks](./docs/monitoring/performance-benchmarks.md)
+
+</td>
+</tr>
+<tr>
+<td align="center">
+
+### 💡 **[Enterprise Use Cases](./docs/use-cases/)**
+- [Sports Analytics Integration](./docs/use-cases/sports-analytics.md)
+- [IAM Security Analysis](./docs/use-cases/iam-security.md)
+- [Multi-Account Management](./docs/use-cases/multi-account.md)
+- [ROI Calculations](./docs/use-cases/roi-calculations.md)
+
+</td>
+<td align="center">
+
+### 🔗 **[Integration Guide](./docs/integration/)**
+- [AWS AI Services Integration](./docs/integration/aws-ai-services.md)
+- [Third-Party ML Tools](./docs/integration/third-party-tools.md)
+- [Data Pipeline Architecture](./docs/integration/data-pipelines.md)
+- [API Gateway Integration](./docs/integration/api-gateway.md)
+
+</td>
+<td align="center">
+
+### 🎯 **[Getting Started](./docs/README.md)**
+- **[📖 Complete Documentation Hub](./docs/README.md)**
+- **Interactive Architecture Diagrams**
+- **AI-Powered Cost Optimization**
+- **Enterprise ROI Calculator**
+
+</td>
+</tr>
+</table>
+
+<div align="center">
+
+**🚀 [Explore Full Documentation →](./docs/README.md)**
+
+*Comprehensive guides, architecture diagrams, AI model documentation, and enterprise use cases*
 
 </div>
 
