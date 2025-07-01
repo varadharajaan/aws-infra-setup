@@ -6,10 +6,10 @@ Enhanced with Root/IAM credential support and multiple user processing
 import os
 import sys
 from datetime import datetime
-from enhanced_aws_credential_manager import EnhancedAWSCredentialManager, MultiUserCredentials, CredentialInfo
-from ec2_instance_manager import EC2InstanceManager
-from auto_scaling_group_manager import AutoScalingGroupManager
-from spot_instance_analyzer import SpotInstanceAnalyzer
+from ..aws_management.enhanced_aws_credential_manager import EnhancedAWSCredentialManager, MultiUserCredentials, CredentialInfo
+from .ec2_instance_manager import EC2InstanceManager
+from ..asg.auto_scaling_group_manager import AutoScalingGroupManager
+from .spot_instance_analyzer import SpotInstanceAnalyzer
 import random
 import string
 import concurrent.futures

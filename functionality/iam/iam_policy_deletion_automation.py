@@ -1,8 +1,8 @@
 from datetime import datetime
 from typing import Dict, List, Any
 import os
-from root_iam_credential_manager import AWSCredentialManager, Colors
-from iam_policy_manager import IAMPolicyManager
+from .root_iam_credential_manager import AWSCredentialManager, Colors
+from .iam_policy_manager import IAMPolicyManager
 
 
 class IAMCleanupAutomation:

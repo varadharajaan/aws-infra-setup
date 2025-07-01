@@ -14,8 +14,8 @@ from dataclasses import dataclass, asdict
 from datetime import datetime, timedelta
 
 from botocore import regions
-from aws_credential_manager import CredentialInfo
-from spot_instance_analyzer import SpotInstanceAnalyzer, SpotAnalysis, ServiceQuotaInfo
+from ..aws_management.aws_credential_manager import CredentialInfo
+from ..ec2.spot_instance_analyzer import SpotInstanceAnalyzer, SpotAnalysis, ServiceQuotaInfo
 import random
 import string
 

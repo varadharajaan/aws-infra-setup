@@ -4,7 +4,7 @@ from botocore.exceptions import ClientError, NoCredentialsError
 from typing import List, Optional, Dict, Any
 import time
 from datetime import datetime
-from root_iam_credential_manager import Colors
+from .root_iam_credential_manager import Colors
 
 
 class IAMPolicyManager:

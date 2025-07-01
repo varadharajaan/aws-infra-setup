@@ -14,13 +14,13 @@ from typing import Dict, List, Optional, Tuple, Set
 import boto3
 
 # Import ENHANCED credential manager for Root/IAM support
-from enhanced_aws_credential_manager import EnhancedAWSCredentialManager, MultiUserCredentials, CredentialInfo
+from ..aws_management.enhanced_aws_credential_manager import EnhancedAWSCredentialManager, MultiUserCredentials, CredentialInfo
 
 # Import spot analyzer for instance analysis
-from spot_instance_analyzer import SpotInstanceAnalyzer, SpotAnalysis
+from ..ec2.spot_instance_analyzer import SpotInstanceAnalyzer, SpotAnalysis
 
 # Import EKS manager for cluster operations
-from eks_cluster_manager import EKSClusterManager
+from .eks_cluster_manager import EKSClusterManager
 
 
 class Colors:

@@ -9,8 +9,8 @@ from datetime import datetime
 from botocore.exceptions import ClientError, BotoCoreError
 from typing import List, Dict, Any, Set, Optional, Tuple
 import logging
-from  root_iam_credential_manager import AWSCredentialManager
-from  root_iam_credential_manager import Colors
+from ..iam.root_iam_credential_manager import AWSCredentialManager
+from ..iam.root_iam_credential_manager import Colors
 
 class UltraVPCCleanupManager:
     """
@@ -1745,111 +1745,6 @@ class UltraVPCCleanupManager:
             self.log_operation('ERROR', f"Error in cleanup: {e}")
             print(f"❌ Error in cleanup: {e}")
 
-    def run_interactive_cleanup_bk(self):
-        """Main interactive cleanup flow"""
-        try:
-            print("\n" + "="*100)
-            print("🚨 ENHANCED ULTRA VPC CLEANUP MANAGER 🚨")
-            print("="*100)
-            print("⚠️  WARNING: This tool can DELETE ALL CUSTOM VPC resources!")
-            print("✅ DEFAULT VPC resources will be COMPLETELY PROTECTED and IGNORED")
-            print("="*100)
-            
-            # Select operation mode first
-            if not self.select_operation_mode():
-                print("❌ Operation cancelled")
-                return
-            
-            # Confirm user wants to proceed
-            if not self.dry_run:
-                confirm = input("\nDo you want to proceed with ACTUAL VPC cleanup? (type 'YES' to continue): ").strip()
-                if confirm != 'YES':
-                    print("❌ Operation cancelled")
-                    return
-            
-            # Select accounts
-            selected_accounts = self.select_accounts_interactive()
-            if not selected_accounts:
-                print("❌ No accounts selected. Exiting...")
-                return
-            
-            # Select regions
-            selected_regions = self.select_regions_interactive()
-            if not selected_regions:
-                print("❌ No regions selected. Exiting...")
-                return
-            
-            # Final confirmation
-            mode_text = "DRY RUN ANALYSIS" if self.dry_run else "ACTUAL CLEANUP"
-            print(f"\n⚠️  FINAL CONFIRMATION - {mode_text}")
-            print(f"📊 Accounts to process: {len(selected_accounts)}")
-            print(f"🌍 Regions to process: {len(selected_regions)}")
-            
-            if self.dry_run:
-                print(f"🔍 This will ANALYZE VPC resources (no deletions)")
-                final_confirm = input("\nType 'ANALYZE VPC RESOURCES' to proceed: ").strip()
-                if final_confirm != 'ANALYZE VPC RESOURCES':
-                    print("❌ Operation cancelled")
-                    return
-            else:
-                print(f"🗑️ This will DELETE ALL CUSTOM VPC resources in selected accounts/regions")
-                print(f"✅ Default VPC resources will be PROTECTED")
-                final_confirm = input("\nType 'DELETE CUSTOM VPC RESOURCES' to proceed: ").strip()
-                if final_confirm != 'DELETE CUSTOM VPC RESOURCES':
-                    print("❌ Operation cancelled")
-                    return
-            
-            # Start cleanup
-            operation_text = "analysis" if self.dry_run else "cleanup"
-            self.log_operation('INFO', f"🚀 Starting VPC {operation_text} for {len(selected_accounts)} accounts and {len(selected_regions)} regions")
-            
-            total_operations = len(selected_accounts) * len(selected_regions)
-            current_operation = 0
-            
-            for account_name in selected_accounts:
-                account_data = self.config_data['accounts'][account_name]
-                access_key = account_data['access_key']
-                secret_key = account_data['secret_key']
-                
-                self.cleanup_results['accounts_processed'].append(account_name)
-                
-                for region in selected_regions:
-                    current_operation += 1
-                    print(f"\n[{current_operation}/{total_operations}] Processing {account_name} - {region}")
-                    self.log_operation('INFO', f"Processing {account_name} - {region}")
-                    
-                    # Create EC2 client
-                    ec2_client = self.create_ec2_client(access_key, secret_key, region)
-                    if not ec2_client:
-                        continue
-                    
-                    self.cleanup_results['regions_processed'].append(f"{account_name}:{region}")
-                    
-                    # Clean up VPC resources in the specified order
-                    success = self.cleanup_vpc_resources_in_region(ec2_client, region, account_name)
-                    
-                    if success:
-                        print(f"   ✅ Completed {operation_text} for {account_name} - {region}")
-                    else:
-                        print(f"   ⚠️ {operation_text.title()} completed with some issues for {account_name} - {region}")
-
-                    # Delete unused EBS volumes
-                    ebs_deleted = self.delete_unused_ebs_volumes(ec2_client, region, account_name)
-                    print(f"   🗑️ Deleted {ebs_deleted} unused EBS volumes in {region}")
-
-                    # Delete unused EFS file systems
-                    efs_deleted = self.delete_unused_efs_filesystems(access_key, secret_key, region, account_name)
-                    print(f"   🗑️ Deleted {efs_deleted} unused EFS file systems in {region}")
-            
-            # Generate final report
-            self.generate_cleanup_report()
-            
-        except KeyboardInterrupt:
-            self.log_operation('WARNING', f"🛑 {operation_text.title()} interrupted by user")
-            print(f"\n🛑 {operation_text.title()} interrupted by user")
-        except Exception as e:
-            self.log_operation('ERROR', f"Error in interactive {operation_text}: {e}")
-            print(f"❌ Error in {operation_text}: {e}")
 
     def delete_unused_ebs_volumes(self, ec2_client, region: str, account_name: str) -> int:
         """Delete all unattached (available) EBS volumes in the region."""

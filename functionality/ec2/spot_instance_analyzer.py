@@ -17,7 +17,7 @@ import statistics
 import requests
 import re
 
-from aws_credential_manager import CredentialInfo
+from ..aws_management.aws_credential_manager import CredentialInfo
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
