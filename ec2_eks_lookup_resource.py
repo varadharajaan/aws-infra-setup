@@ -1751,7 +1751,7 @@ class AWSResourceManager:
     def ask_resource_type(self):
         """Main interactive menu"""
         print(f"\n🚀 AWS Resource Manager")
-        print(f"📅 Current Date/Time (UTC): 2025-06-03 09:33:34")
+        print(f"Current Date and Time (UTC): {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}")
         print(f"👤 Current User: varadharajaan")
         print("=" * 60)
         

@@ -37,7 +37,8 @@ class ASGConfig:
 class AutoScalingGroupManager:
     def __init__(self, current_user='varadharajaan', current_time='2025-06-13 05:13:24'):
         self.current_user = current_user
-        self.current_time = current_time
+        current_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.current_time = current_timestamp
         self.spot_analyzer = SpotInstanceAnalyzer()
 
     @staticmethod
@@ -127,7 +128,7 @@ class AutoScalingGroupManager:
         }
     
         # Create output directory
-        output_dir = f"aws/ec2/{cred_info.account_name}"
+        output_dir = f"aws/asg/{cred_info.account_name}"
         os.makedirs(output_dir, exist_ok=True)
     
         # Save to JSON file
@@ -886,7 +887,7 @@ class AutoScalingGroupManager:
         """Save and display detailed spot analysis summary"""
         try:
             # Create output directory
-            output_dir = f"aws/ec2/asg/{cred_info.account_name}"
+            output_dir = f"aws/asg/{cred_info.account_name}"
             os.makedirs(output_dir, exist_ok=True)
             
             # Prepare summary
@@ -1003,8 +1004,8 @@ class AutoScalingGroupManager:
             print(f"   🌍 Region: {region}")
             print(f"   🚀 ASG Name: {asg_config.name}")
             print(f"   📊 ASG Strategy: {strategy.upper()}")
-            print(f"   📁 Output saved to: aws/ec2/{cred_info.account_name}/")
-            print(f"   📊 Report: aws/ec2/{cred_info.account_name}/asg_report_{execution_timestamp}.json")
+            print(f"   📁 Output saved to: aws/asg/{cred_info.account_name}/")
+            print(f"   📊 Report: aws/asg/{cred_info.account_name}/asg_report_{execution_timestamp}.json")
             print("="*50)
         
             return result
@@ -1044,7 +1045,7 @@ class AutoScalingGroupManager:
             }
         
             # Create output directory
-            output_dir = f"aws/ec2/{cred_info.account_name}"
+            output_dir = f"aws/asg/{cred_info.account_name}"
             os.makedirs(output_dir, exist_ok=True)
         
             # Save failed report to JSON file
@@ -1125,7 +1126,9 @@ class AutoScalingGroupManager:
         availability_zones = [az['ZoneName'] for az in azs_response['AvailabilityZones']]
 
         # Prompt for capacity settings
-        min_size, desired_capacity, max_size = self.prompt_capacity_settings()
+        #declare default value
+        min_size, desired_capacity, max_size = (1, 1, 3)
+       # min_size, desired_capacity, max_size = self.prompt_capacity_settings()
 
         # Update ASG naming format to include random 4-character suffix
         asg_name = f"asg-{cred_info.account_name}-{strategy}-{suffix}"
@@ -1192,8 +1195,10 @@ class AutoScalingGroupManager:
         """Save ASG details to output folder"""
         try:
             # Create output directory
-            output_dir = f"aws/ec2/{cred_info.account_name}"
+            output_dir = f"aws/asg/{cred_info.account_name}"
             os.makedirs(output_dir, exist_ok=True)
+            if cred_info.credential_type == 'root':
+                cred_info.username = f"root-{cred_info.account_name}"
             
             # Prepare ASG details
             details = {
@@ -1203,7 +1208,8 @@ class AutoScalingGroupManager:
                     'account_name': cred_info.account_name,
                     'account_id': cred_info.account_id,
                     'credential_type': cred_info.credential_type,
-                    'region': cred_info.regions[0]
+                    'region': cred_info.regions[0],
+                    'username': cred_info.username,
                 },
                 'asg_configuration': asdict(asg_config),
                 'aws_response': asg_response,
@@ -1211,7 +1217,7 @@ class AutoScalingGroupManager:
             }
             
             # Save to JSON file
-            filename = f"{output_dir}/asg_{asg_config.name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+            filename = f"{output_dir}/asg_{asg_config.name}_{cred_info.username}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
             with open(filename, 'w') as f:
                 json.dump(details, f, indent=2)
             
@@ -1283,7 +1289,7 @@ class AutoScalingGroupManager:
                 AutoScalingGroupName=asg_name,
                 ScheduledActionName=scale_up_name,
                 StartTime=unique_start_time,
-                Recurrence="30 2 * * 1-5",  # 2:30 AM UTC (8 AM IST), Monday-Friday
+                Recurrence="30 2 * * 1-5",  # 2 AM UTC (8 AM IST), Monday-Friday
                 MinSize=1,
                 MaxSize=3,
                 DesiredCapacity=1
@@ -1296,7 +1302,7 @@ class AutoScalingGroupManager:
                 AutoScalingGroupName=asg_name,
                 ScheduledActionName=scale_down_name,
                 StartTime=unique_start_time + timedelta(minutes=1),  # Ensure different start time
-                Recurrence="30 13 * * 1-5",  # 1:30 PM UTC (7 PM IST), Monday-Friday
+                Recurrence="30 13 * * 1-5",  # 1 PM UTC (7 PM IST), Monday-Friday
                 MinSize=0,
                 MaxSize=3,
                 DesiredCapacity=0

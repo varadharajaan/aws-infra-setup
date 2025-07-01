@@ -457,7 +457,8 @@ def main():
     """Main execution flow"""
     print_colored(Colors.GREEN, "🔧 EKS Cluster Authentication Fix Tool - Dynamic Version")
     print("=" * 70)
-    print(f"📅 Current Date/Time: 2025-06-02 02:53:14 UTC")
+    from datetime import datetime
+    print(f"Current Date and Time (UTC): {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"👤 Current User: varadharajaan")
     print("=" * 70)
     
