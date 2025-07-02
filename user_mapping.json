@@ -1,14 +1,14 @@
 {
   "metadata": {
-    "last_updated": "2025-06-25 12:00:00",
+    "last_updated": "2025-07-02 12:00:00",
     "updated_by": "varadharajaan",
     "total_users": 15,
     "organization": "Baker Hughes",
     "version": "1.0",
     "training_event": {
-      "course": "K8S Advance Training",
-      "location": "Kochi",
-      "dates": "June 26th & 27th, 2025",
+      "course": "Kubernetes Advance Training",
+      "location": "Online",
+      "dates": "July 09th,10th & 11th 2025",
       "mode": "In-Person"
     }
   },
@@ -39,6 +39,7 @@
       "email": "Hari.Kumar@bakerhughes.com"
     },
 
+
     "account02_clouduser01": {
       "first_name": "Munish",
       "last_name": "Gupta",
@@ -64,6 +65,7 @@
       "last_name": "Raj",
       "email": "AthulRaj.TS@bakerhughes.com"
     },
+
 
     "account03_clouduser01": {
       "first_name": "Martin",
@@ -109,8 +111,8 @@
     "total_accounts": 3,
     "active_accounts": 3,
     "total_users": 15,
-    "last_sync": "2025-06-25 12:00:00",
+    "last_sync": "2025-02-07 12:00:00",
     "created_by": "varadharajaan",
-    "purpose": "K8S Beginners Training - June 2025"
+    "purpose": "K8S Advance Training - July 2025"
   }
 }

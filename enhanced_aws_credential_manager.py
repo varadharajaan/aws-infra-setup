@@ -106,10 +106,19 @@ class EnhancedAWSCredentialManager:
                 'full_name': 'Unknown User'
             }
 
+    def get_users_per_account_name(self, account_name: str) -> int:
+        """
+        Return the users_per_account for a given account, falling back to the global value if not set at the account level.
+        """
+        account = self.aws_accounts.get(account_name, {})
+        if 'users_per_account' in account:
+            return account['users_per_account']
+        return self.user_settings.get('users_per_account', 1)
+
     def get_users_for_account(self, account_name):
         """Get user-region mapping for specific account"""
         regions = self.user_settings['user_regions']
-        users_count = self.user_settings['users_per_account']
+        users_count = self.get_users_per_account_name(account_name)
         
         users_regions = {}
         for i in range(1, users_count + 1):
