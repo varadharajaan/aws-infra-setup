@@ -155,3 +155,4 @@ aws_bkk/*
 sanitized_iam_users_credentials*
 user_mapping*
 user_mapping.json
+user_mapping-bk.json
