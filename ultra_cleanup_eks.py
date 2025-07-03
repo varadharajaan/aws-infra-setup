@@ -436,7 +436,8 @@ class UltraEKSCleanupManager:
                         f"{cluster_suffix}-node-protection",
                         f"node-protection-{cluster_suffix}",
                         f"{cluster_name.lower()}-no-delete-monitor",
-                        f"no-delete-monitor-{cluster_name.lower()}"
+                        f"no-delete-monitor-{cluster_name.lower()}",
+                        f"eks-scale-{cluster_suffix}",  # 🔥 New pattern added
                     ]
 
                     # Combine all patterns
