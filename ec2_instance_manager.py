@@ -14,6 +14,8 @@ from aws_credential_manager import CredentialInfo
 import sys
 import random
 import string
+import threading
+
 
 @dataclass
 class InstanceConfig:
@@ -25,6 +27,7 @@ class InstanceConfig:
     key_name: Optional[str] = None
 
 class EC2InstanceManager:
+    keypair_lock = threading.Lock()  # Add this at class level
     def __init__(self, ami_mapping_file='ec2-region-ami-mapping.json', userdata_file='userdata_allsupport.sh', current_user='varadharajaan'):
         self.ami_mapping_file = ami_mapping_file
         self.userdata_file = userdata_file
@@ -371,7 +374,7 @@ class EC2InstanceManager:
                 except ValueError:
                     print("❌ Please enter a valid number")
 
-    def create_launch_template(self, ec2_client, cred_info: CredentialInfo, instance_config: InstanceConfig, security_group_id: None) -> str:
+    def create_launch_template(self, ec2_client, cred_info: CredentialInfo, instance_config: InstanceConfig, security_group_id=None) -> str:
         """Create launch template with userdata"""
 
         suffix = self.generate_random_suffix()
@@ -508,21 +511,46 @@ class EC2InstanceManager:
             print(f"❌ Error creating security group: {e}")
             raise
 
-    def ensure_key_pair(self, region):
+    def ensure_key_pair(self, region, credential=None):
+        import botocore
+
         key_name = self.keypair_name
         key_file = f"{key_name}.pem"
-        if not os.path.exists(key_file):
-            print(f"🔑 Key file {key_file} not found. Creating new key pair...")
-            ec2 = boto3.client('ec2', region_name=region)
-            key_pair = ec2.create_key_pair(KeyName=key_name)
-            with open(key_file, 'w') as f:
-                f.write(key_pair['KeyMaterial'])
-            os.chmod(key_file, 0o400)
-            print(f"✅ Key pair created and saved as {key_file}")
-        else:
-            print(f"🔑 Using existing key file: {key_file}")
-        return key_name
+        public_key_file = f"{key_name}.pub"
 
+        # Use credential if provided, else default
+        if credential:
+            ec2 = boto3.client(
+                'ec2',
+                aws_access_key_id=credential.access_key,
+                aws_secret_access_key=credential.secret_key,
+                region_name=region
+            )
+        else:
+            ec2 = boto3.client('ec2', region_name=region)
+
+        with self.keypair_lock:
+            try:
+                ec2.describe_key_pairs(KeyNames=[key_name])
+                print(f"🔑 Key pair '{key_name}' already exists in region {region}")
+            except botocore.exceptions.ClientError as e:
+                if e.response['Error']['Code'] == 'InvalidKeyPair.NotFound':
+                    print(f"🔑 Key pair '{key_name}' not found in region {region}. Importing public key...")
+                    if not os.path.exists(public_key_file):
+                        raise FileNotFoundError(f"Public key file '{public_key_file}' not found.")
+                    with open(public_key_file, 'r') as pubf:
+                        public_key_material = pubf.read()
+                    ec2.import_key_pair(KeyName=key_name, PublicKeyMaterial=public_key_material)
+                    print(f"✅ Imported public key as key pair '{key_name}' in region {region}")
+                else:
+                    raise
+
+            if not os.path.exists(key_file):
+                raise FileNotFoundError(f"Private key file '{key_file}' not found locally. Please provide it.")
+
+            print(f"🔑 Using local private key file: {key_file}")
+
+        return key_name
     def create_ec2_instance(self, cred_info: CredentialInfo, instance_type: str = None) -> Dict:
         """Create EC2 instance with specified configuration, avoiding unsupported AZs"""
         try:
@@ -540,7 +568,7 @@ class EC2InstanceManager:
 
             # Create security group
             security_group_id = self.create_security_group(ec2_client, cred_info, suffix)
-            key_name = self.ensure_key_pair(region)
+            key_name = self.ensure_key_pair(region,credential=cred_info)
 
             # Get AMI for region
             ami_mapping = self.ami_config.get('region_ami_mapping', {})

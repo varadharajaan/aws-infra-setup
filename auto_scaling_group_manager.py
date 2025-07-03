@@ -1153,6 +1153,7 @@ class AutoScalingGroupManager:
             spot_allocation_strategy='capacity-optimized' if strategy in ['spot', 'mixed'] else None,
             on_demand_percentage=instance_selections.get('on_demand_percentage', 50) if strategy == 'mixed' else None
         )
+
     def prompt_capacity_settings(self) -> Tuple[int, int, int]:
         """Prompt user for ASG capacity settings"""
         print("\n" + "="*50)
@@ -1252,7 +1253,6 @@ class AutoScalingGroupManager:
             
         except Exception as e:
             self.log_operation('WARNING', f"Failed to load unsupported AZs from mapping file: {str(e)}")
-
 
     def attach_scheduled_actions(self, asg_client, asg_name: str, region: str) -> bool:
         """Attach scheduled scaling actions directly to the ASG with conflict handling"""

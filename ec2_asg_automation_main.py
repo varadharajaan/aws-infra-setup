@@ -15,8 +15,10 @@ import string
 import concurrent.futures
 import time
 import boto3
+import  threading
 
 class EC2ASGAutomation:
+    keypair_lock = threading.Lock()
     def __init__(self):
         self.current_user = 'varadharajaan'
         self.current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -31,21 +33,46 @@ class EC2ASGAutomation:
         print(f"🕒 Time: {self.current_time}")
         print("="*60)
 
-    def ensure_key_pair(self, region):
+    def ensure_key_pair(self, region, credential=None):
+        import botocore
+
         key_name = self.keypair_name
         key_file = f"{key_name}.pem"
-        if not os.path.exists(key_file):
-            print(f"🔑 Key file {key_file} not found. Creating new key pair...")
-            ec2 = boto3.client('ec2', region_name=region)
-            key_pair = ec2.create_key_pair(KeyName=key_name)
-            with open(key_file, 'w') as f:
-                f.write(key_pair['KeyMaterial'])
-            os.chmod(key_file, 0o400)
-            print(f"✅ Key pair created and saved as {key_file}")
-        else:
-            print(f"🔑 Using existing key file: {key_file}")
-        return key_name
+        public_key_file = f"{key_name}.pub"
 
+        # Use credential if provided, else default
+        if credential:
+            ec2 = boto3.client(
+                'ec2',
+                aws_access_key_id=credential.access_key,
+                aws_secret_access_key=credential.secret_key,
+                region_name=region
+            )
+        else:
+            ec2 = boto3.client('ec2', region_name=region)
+
+        with self.keypair_lock:
+            try:
+                ec2.describe_key_pairs(KeyNames=[key_name])
+                print(f"🔑 Key pair '{key_name}' already exists in region {region}")
+            except botocore.exceptions.ClientError as e:
+                if e.response['Error']['Code'] == 'InvalidKeyPair.NotFound':
+                    print(f"🔑 Key pair '{key_name}' not found in region {region}. Importing public key...")
+                    if not os.path.exists(public_key_file):
+                        raise FileNotFoundError(f"Public key file '{public_key_file}' not found.")
+                    with open(public_key_file, 'r') as pubf:
+                        public_key_material = pubf.read()
+                    ec2.import_key_pair(KeyName=key_name, PublicKeyMaterial=public_key_material)
+                    print(f"✅ Imported public key as key pair '{key_name}' in region {region}")
+                else:
+                    raise
+
+            if not os.path.exists(key_file):
+                raise FileNotFoundError(f"Private key file '{key_file}' not found locally. Please provide it.")
+
+            print(f"🔑 Using local private key file: {key_file}")
+
+        return key_name
     @staticmethod
     def generate_random_suffix(length=4):
         """Generate a random alphanumeric suffix of specified length"""
@@ -356,7 +383,7 @@ class EC2ASGAutomation:
             print(f"\n🔄 Processing User {user_index}/{total_users}: {account_name} - {username}")
             print("-" * 50)
             region = credential.regions[0]
-            key_name = self.ensure_key_pair(region)
+            key_name = self.ensure_key_pair(region,credential)
 
             result = {
                 'user_index': user_index,

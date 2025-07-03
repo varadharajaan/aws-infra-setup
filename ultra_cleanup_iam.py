@@ -153,7 +153,9 @@ class UltraIAMCleanupManager:
             iam_client = boto3.client(
                 'iam',
                 aws_access_key_id=access_key,
-                aws_secret_access_key=secret_key
+                aws_secret_access_key=secret_key,
+                region_name='us-east-1'
+
             )
             
             # Test the connection

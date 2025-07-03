@@ -6,6 +6,7 @@ import sys
 import os
 import time
 from datetime import datetime
+import concurrent.futures
 from botocore.exceptions import ClientError, BotoCoreError
 
 class UltraEC2CleanupManager:
@@ -934,39 +935,39 @@ class UltraEC2CleanupManager:
             self.log_operation('ERROR', f"❌ Failed to save ultra cleanup report: {e}")
             return None
 
-    def run(self):
-        """Main execution method - sequential (no threading)"""
+    def run_concurrent(self):
+        """Main execution method - now parallelized per account-region"""
         try:
             self.log_operation('INFO', "🚨 STARTING ULTRA EC2 CLEANUP SESSION 🚨")
-            
+
             print("🚨" * 30)
-            print("💥 ULTRA EC2 CLEANUP - SEQUENTIAL 💥")
+            print("💥 ULTRA EC2 CLEANUP - PARALLEL 💥")
             print("🚨" * 30)
             print(f"📅 Execution Date/Time: {self.current_time} UTC")
             print(f"👤 Executed by: {self.current_user}")
             print(f"📋 Log File: {self.log_filename}")
-            
+
             # STEP 1: Display available accounts and select accounts to process
             accounts = self.config_data['accounts']
-            
+
             print(f"\n🏦 AVAILABLE AWS ACCOUNTS:")
             print("=" * 80)
-            
+
             account_list = []
-            
+
             for i, (account_name, account_data) in enumerate(accounts.items(), 1):
                 account_id = account_data.get('account_id', 'Unknown')
                 email = account_data.get('email', 'Unknown')
-                
+
                 account_list.append({
                     'name': account_name,
                     'account_id': account_id,
                     'email': email,
                     'data': account_data
                 })
-                
+
                 print(f"  {i}. {account_name}: {account_id} ({email})")
-            
+
             # Selection prompt
             print("\nAccount Selection Options:")
             print("  • Single accounts: 1,3,5")
@@ -974,14 +975,14 @@ class UltraEC2CleanupManager:
             print("  • Mixed: 1-2,4")
             print("  • All accounts: 'all' or press Enter")
             print("  • Cancel: 'cancel' or 'quit'")
-            
+
             selection = input("\n🔢 Select accounts to process: ").strip().lower()
-            
+
             if selection in ['cancel', 'quit']:
                 self.log_operation('INFO', "EC2 cleanup cancelled by user")
                 print("❌ Cleanup cancelled")
                 return
-            
+
             # Process account selection
             selected_accounts = {}
             if not selection or selection == 'all':
@@ -1003,77 +1004,310 @@ class UltraEC2CleanupManager:
                             if num < 1 or num > len(account_list):
                                 raise ValueError(f"Selection {part} out of bounds (1-{len(account_list)})")
                             parts.append(num)
-                    
+
                     # Get selected account data
                     for idx in parts:
-                        account = account_list[idx-1]
+                        account = account_list[idx - 1]
                         selected_accounts[account['name']] = account['data']
-                    
+
                     if not selected_accounts:
                         raise ValueError("No valid accounts selected")
-                    
+
                     self.log_operation('INFO', f"Selected accounts: {list(selected_accounts.keys())}")
                     print(f"✅ Selected {len(selected_accounts)} accounts: {', '.join(selected_accounts.keys())}")
-                    
+
                 except ValueError as e:
                     self.log_operation('ERROR', f"Invalid account selection: {e}")
                     print(f"❌ Invalid selection: {e}")
                     return
-            
+
             regions = self.user_regions
-            
+
             # STEP 2: Calculate total operations and confirm
             total_operations = len(selected_accounts) * len(regions)
-            
+
             print(f"\n🎯 CLEANUP CONFIGURATION")
             print("=" * 80)
             print(f"🏦 Selected accounts: {len(selected_accounts)}")
             print(f"🌍 Regions per account: {len(regions)}")
             print(f"📋 Total operations: {total_operations}")
             print("=" * 80)
-            
-            # Simplified confirmation process
+
             print(f"\n⚠️  WARNING: This will delete ALL EC2 instances and security groups")
-            print(f"    across {len(selected_accounts)} accounts in {len(regions)} regions ({total_operations} operations)")
+            print(
+                f"    across {len(selected_accounts)} accounts in {len(regions)} regions ({total_operations} operations)")
             print(f"    This action CANNOT be undone!")
-            
-            # First confirmation - simple y/n
+
             confirm1 = input(f"\nContinue with cleanup? (y/n): ").strip().lower()
             self.log_operation('INFO', f"First confirmation: '{confirm1}'")
-            
+
             if confirm1 not in ['y', 'yes']:
                 self.log_operation('INFO', "Ultra cleanup cancelled by user")
                 print("❌ Cleanup cancelled")
                 return
-            
-            # Second confirmation - final check
+
             confirm2 = input(f"Are you sure? Type 'yes' to confirm: ").strip().lower()
             self.log_operation('INFO', f"Final confirmation: '{confirm2}'")
-            
+
             if confirm2 != 'yes':
                 self.log_operation('INFO', "Ultra cleanup cancelled at final confirmation")
                 print("❌ Cleanup cancelled")
                 return
-            
-            # STEP 3: Start the cleanup sequentially
+
+            # STEP 3: Start the cleanup in parallel
             print(f"\n💥 STARTING CLEANUP...")
-            self.log_operation('INFO', f"🚨 CLEANUP INITIATED - {len(selected_accounts)} accounts, {len(regions)} regions")
-            
+            self.log_operation('INFO',
+                               f"🚨 CLEANUP INITIATED - {len(selected_accounts)} accounts, {len(regions)} regions")
+
             start_time = time.time()
-            
+
             successful_tasks = 0
             failed_tasks = 0
-            
+
             # Create tasks list
             tasks = []
             for account_name, account_data in selected_accounts.items():
                 for region in regions:
                     tasks.append((account_name, account_data, region))
-            
+
+            # Parallel execution using ThreadPoolExecutor
+            max_workers = min(8, len(tasks)) if tasks else 1
+            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+                future_to_task = {
+                    executor.submit(self.cleanup_account_region, account_name, account_data, region): (account_name,
+                                                                                                       region)
+                    for account_name, account_data, region in tasks
+                }
+                for i, future in enumerate(concurrent.futures.as_completed(future_to_task), 1):
+                    account_name, region = future_to_task[future]
+                    print(f"\n[{i}/{len(tasks)}] Finished {account_name} in {region}...")
+                    try:
+                        success = future.result()
+                        if success:
+                            successful_tasks += 1
+                        else:
+                            failed_tasks += 1
+                    except Exception as e:
+                        failed_tasks += 1
+                        self.log_operation('ERROR', f"Task failed for {account_name} ({region}): {e}")
+                        print(f"❌ Task failed for {account_name} ({region}): {e}")
+
+            end_time = time.time()
+            total_time = int(end_time - start_time)
+
+            # STEP 4: Display final results
+            print(f"\n💥" + "=" * 25 + " CLEANUP COMPLETE " + "=" * 25)
+            print(f"⏱️  Total execution time: {total_time} seconds")
+            print(f"✅ Successful operations: {successful_tasks}")
+            print(f"❌ Failed operations: {failed_tasks}")
+            print(f"💻 Instances deleted: {len(self.cleanup_results['deleted_instances'])}")
+            print(f"🛡️  Security groups deleted: {len(self.cleanup_results['deleted_security_groups'])}")
+            print(f"⏭️  Resources skipped: {len(self.cleanup_results['skipped_resources'])}")
+            print(f"❌ Failed deletions: {len(self.cleanup_results['failed_deletions'])}")
+
+            self.log_operation('INFO', f"CLEANUP COMPLETED")
+            self.log_operation('INFO', f"Execution time: {total_time} seconds")
+            self.log_operation('INFO', f"Instances deleted: {len(self.cleanup_results['deleted_instances'])}")
+            self.log_operation('INFO',
+                               f"Security groups deleted: {len(self.cleanup_results['deleted_security_groups'])}")
+
+            # STEP 5: Show account summary
+            if self.cleanup_results['deleted_instances'] or self.cleanup_results['deleted_security_groups']:
+                print(f"\n📊 Deletion Summary by Account:")
+
+                # Group by account
+                account_summary = {}
+                for instance in self.cleanup_results['deleted_instances']:
+                    account = instance['account_name']
+                    if account not in account_summary:
+                        account_summary[account] = {'instances': 0, 'security_groups': 0, 'regions': set()}
+                    account_summary[account]['instances'] += 1
+                    account_summary[account]['regions'].add(instance['region'])
+
+                for sg in self.cleanup_results['deleted_security_groups']:
+                    account = sg['account_name']
+                    if account not in account_summary:
+                        account_summary[account] = {'instances': 0, 'security_groups': 0, 'regions': set()}
+                    account_summary[account]['security_groups'] += 1
+                    account_summary[account]['regions'].add(sg['region'])
+
+                for account, summary in account_summary.items():
+                    regions_list = ', '.join(sorted(summary['regions']))
+                    print(f"   🏦 {account}:")
+                    print(f"      💻 Instances: {summary['instances']}")
+                    print(f"      🛡️  Security Groups: {summary['security_groups']}")
+                    print(f"      🌍 Regions: {regions_list}")
+
+            # STEP 6: Show failures if any
+            if self.cleanup_results['failed_deletions']:
+                print(f"\n❌ Failed Deletions:")
+                for failure in self.cleanup_results['failed_deletions'][:10]:  # Show first 10
+                    print(
+                        f"   • {failure['resource_type']} {failure['resource_id']} in {failure['account_name']} ({failure['region']})")
+                    print(f"     Error: {failure['error']}")
+
+                if len(self.cleanup_results['failed_deletions']) > 10:
+                    remaining = len(self.cleanup_results['failed_deletions']) - 10
+                    print(f"   ... and {remaining} more failures (see detailed report)")
+
+            # Save comprehensive report
+            print(f"\n📄 Saving cleanup report...")
+            report_file = self.save_cleanup_report()
+            if report_file:
+                print(f"✅ Cleanup report saved to: {report_file}")
+
+            print(f"✅ Session log saved to: {self.log_filename}")
+
+            print(f"\n💥 CLEANUP COMPLETE! 💥")
+            print("🚨" * 30)
+
+        except Exception as e:
+            self.log_operation('ERROR', f"FATAL ERROR in cleanup execution: {str(e)}")
+            print(f"\n❌ FATAL ERROR: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
+
+    def run(self):
+        """Main execution method - sequential (no threading)"""
+        try:
+            self.log_operation('INFO', "🚨 STARTING ULTRA EC2 CLEANUP SESSION 🚨")
+
+            print("🚨" * 30)
+            print("💥 ULTRA EC2 CLEANUP - SEQUENTIAL 💥")
+            print("🚨" * 30)
+            print(f"📅 Execution Date/Time: {self.current_time} UTC")
+            print(f"👤 Executed by: {self.current_user}")
+            print(f"📋 Log File: {self.log_filename}")
+
+            # STEP 1: Display available accounts and select accounts to process
+            accounts = self.config_data['accounts']
+
+            print(f"\n🏦 AVAILABLE AWS ACCOUNTS:")
+            print("=" * 80)
+
+            account_list = []
+
+            for i, (account_name, account_data) in enumerate(accounts.items(), 1):
+                account_id = account_data.get('account_id', 'Unknown')
+                email = account_data.get('email', 'Unknown')
+
+                account_list.append({
+                    'name': account_name,
+                    'account_id': account_id,
+                    'email': email,
+                    'data': account_data
+                })
+
+                print(f"  {i}. {account_name}: {account_id} ({email})")
+
+            # Selection prompt
+            print("\nAccount Selection Options:")
+            print("  • Single accounts: 1,3,5")
+            print("  • Ranges: 1-3")
+            print("  • Mixed: 1-2,4")
+            print("  • All accounts: 'all' or press Enter")
+            print("  • Cancel: 'cancel' or 'quit'")
+
+            selection = input("\n🔢 Select accounts to process: ").strip().lower()
+
+            if selection in ['cancel', 'quit']:
+                self.log_operation('INFO', "EC2 cleanup cancelled by user")
+                print("❌ Cleanup cancelled")
+                return
+
+            # Process account selection
+            selected_accounts = {}
+            if not selection or selection == 'all':
+                selected_accounts = accounts
+                self.log_operation('INFO', f"All accounts selected: {len(accounts)}")
+                print(f"✅ Selected all {len(accounts)} accounts")
+            else:
+                try:
+                    # Parse selection
+                    parts = []
+                    for part in selection.split(','):
+                        if '-' in part:
+                            start, end = map(int, part.split('-'))
+                            if start < 1 or end > len(account_list):
+                                raise ValueError(f"Range {part} out of bounds (1-{len(account_list)})")
+                            parts.extend(range(start, end + 1))
+                        else:
+                            num = int(part)
+                            if num < 1 or num > len(account_list):
+                                raise ValueError(f"Selection {part} out of bounds (1-{len(account_list)})")
+                            parts.append(num)
+
+                    # Get selected account data
+                    for idx in parts:
+                        account = account_list[idx-1]
+                        selected_accounts[account['name']] = account['data']
+
+                    if not selected_accounts:
+                        raise ValueError("No valid accounts selected")
+
+                    self.log_operation('INFO', f"Selected accounts: {list(selected_accounts.keys())}")
+                    print(f"✅ Selected {len(selected_accounts)} accounts: {', '.join(selected_accounts.keys())}")
+
+                except ValueError as e:
+                    self.log_operation('ERROR', f"Invalid account selection: {e}")
+                    print(f"❌ Invalid selection: {e}")
+                    return
+
+            regions = self.user_regions
+
+            # STEP 2: Calculate total operations and confirm
+            total_operations = len(selected_accounts) * len(regions)
+
+            print(f"\n🎯 CLEANUP CONFIGURATION")
+            print("=" * 80)
+            print(f"🏦 Selected accounts: {len(selected_accounts)}")
+            print(f"🌍 Regions per account: {len(regions)}")
+            print(f"📋 Total operations: {total_operations}")
+            print("=" * 80)
+
+            # Simplified confirmation process
+            print(f"\n⚠️  WARNING: This will delete ALL EC2 instances and security groups")
+            print(f"    across {len(selected_accounts)} accounts in {len(regions)} regions ({total_operations} operations)")
+            print(f"    This action CANNOT be undone!")
+
+            # First confirmation - simple y/n
+            confirm1 = input(f"\nContinue with cleanup? (y/n): ").strip().lower()
+            self.log_operation('INFO', f"First confirmation: '{confirm1}'")
+
+            if confirm1 not in ['y', 'yes']:
+                self.log_operation('INFO', "Ultra cleanup cancelled by user")
+                print("❌ Cleanup cancelled")
+                return
+
+            # Second confirmation - final check
+            confirm2 = input(f"Are you sure? Type 'yes' to confirm: ").strip().lower()
+            self.log_operation('INFO', f"Final confirmation: '{confirm2}'")
+
+            if confirm2 != 'yes':
+                self.log_operation('INFO', "Ultra cleanup cancelled at final confirmation")
+                print("❌ Cleanup cancelled")
+                return
+
+            # STEP 3: Start the cleanup sequentially
+            print(f"\n💥 STARTING CLEANUP...")
+            self.log_operation('INFO', f"🚨 CLEANUP INITIATED - {len(selected_accounts)} accounts, {len(regions)} regions")
+
+            start_time = time.time()
+
+            successful_tasks = 0
+            failed_tasks = 0
+
+            # Create tasks list
+            tasks = []
+            for account_name, account_data in selected_accounts.items():
+                for region in regions:
+                    tasks.append((account_name, account_data, region))
+
             # Process each task sequentially
             for i, (account_name, account_data, region) in enumerate(tasks, 1):
                 print(f"\n[{i}/{len(tasks)}] Processing {account_name} in {region}...")
-                
+
                 try:
                     success = self.cleanup_account_region(account_name, account_data, region)
                     if success:
@@ -1084,10 +1318,10 @@ class UltraEC2CleanupManager:
                     failed_tasks += 1
                     self.log_operation('ERROR', f"Task failed for {account_name} ({region}): {e}")
                     print(f"❌ Task failed for {account_name} ({region}): {e}")
-            
+
             end_time = time.time()
             total_time = int(end_time - start_time)
-            
+
             # STEP 4: Display final results
             print(f"\n💥" + "="*25 + " CLEANUP COMPLETE " + "="*25)
             print(f"⏱️  Total execution time: {total_time} seconds")
@@ -1097,16 +1331,16 @@ class UltraEC2CleanupManager:
             print(f"🛡️  Security groups deleted: {len(self.cleanup_results['deleted_security_groups'])}")
             print(f"⏭️  Resources skipped: {len(self.cleanup_results['skipped_resources'])}")
             print(f"❌ Failed deletions: {len(self.cleanup_results['failed_deletions'])}")
-            
+
             self.log_operation('INFO', f"CLEANUP COMPLETED")
             self.log_operation('INFO', f"Execution time: {total_time} seconds")
             self.log_operation('INFO', f"Instances deleted: {len(self.cleanup_results['deleted_instances'])}")
             self.log_operation('INFO', f"Security groups deleted: {len(self.cleanup_results['deleted_security_groups'])}")
-            
+
             # STEP 5: Show account summary
             if self.cleanup_results['deleted_instances'] or self.cleanup_results['deleted_security_groups']:
                 print(f"\n📊 Deletion Summary by Account:")
-                
+
                 # Group by account
                 account_summary = {}
                 for instance in self.cleanup_results['deleted_instances']:
@@ -1115,43 +1349,43 @@ class UltraEC2CleanupManager:
                         account_summary[account] = {'instances': 0, 'security_groups': 0, 'regions': set()}
                     account_summary[account]['instances'] += 1
                     account_summary[account]['regions'].add(instance['region'])
-                
+
                 for sg in self.cleanup_results['deleted_security_groups']:
                     account = sg['account_name']
                     if account not in account_summary:
                         account_summary[account] = {'instances': 0, 'security_groups': 0, 'regions': set()}
                     account_summary[account]['security_groups'] += 1
                     account_summary[account]['regions'].add(sg['region'])
-                
+
                 for account, summary in account_summary.items():
                     regions_list = ', '.join(sorted(summary['regions']))
                     print(f"   🏦 {account}:")
                     print(f"      💻 Instances: {summary['instances']}")
                     print(f"      🛡️  Security Groups: {summary['security_groups']}")
                     print(f"      🌍 Regions: {regions_list}")
-            
+
             # STEP 6: Show failures if any
             if self.cleanup_results['failed_deletions']:
                 print(f"\n❌ Failed Deletions:")
                 for failure in self.cleanup_results['failed_deletions'][:10]:  # Show first 10
                     print(f"   • {failure['resource_type']} {failure['resource_id']} in {failure['account_name']} ({failure['region']})")
                     print(f"     Error: {failure['error']}")
-                
+
                 if len(self.cleanup_results['failed_deletions']) > 10:
                     remaining = len(self.cleanup_results['failed_deletions']) - 10
                     print(f"   ... and {remaining} more failures (see detailed report)")
-            
+
             # Save comprehensive report
             print(f"\n📄 Saving cleanup report...")
             report_file = self.save_cleanup_report()
             if report_file:
                 print(f"✅ Cleanup report saved to: {report_file}")
-            
+
             print(f"✅ Session log saved to: {self.log_filename}")
-            
+
             print(f"\n💥 CLEANUP COMPLETE! 💥")
             print("🚨" * 30)
-            
+
         except Exception as e:
             self.log_operation('ERROR', f"FATAL ERROR in cleanup execution: {str(e)}")
             print(f"\n❌ FATAL ERROR: {e}")

@@ -696,7 +696,8 @@ class EKSAutomation:
         from datetime import datetime, timedelta
 
         region = credentials.regions[0]
-        cache_file = f"quota_cache_{region}_{credentials.account_id}.pkl"
+        os.makedirs("cache", exist_ok=True)
+        cache_file = f"cache/quota_cache_{region}_{credentials.account_id}.pkl"
         cache_duration = timedelta(hours=1)  # Cache for 1 hour
 
         # Check if cache exists and is valid
