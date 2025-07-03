@@ -2650,7 +2650,7 @@ def main():
     print("=" * 60)
 
     try:
-        cluster_names= ['eks-cluster-account01_clouduser01-us-east-1-wxie']
+        cluster_names= ['eks-cluster-account01_clouduser01-us-east-1-rtip']
         continuation = EKSClusterContinuationFromErrors()
         #cluster_names = continuation.select_clusters_from_eks_accounts()
         #success = continuation.continue_cluster_setup_from_errors()

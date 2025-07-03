@@ -79,7 +79,7 @@ def main():
         "us-east-1", "us-east-2", "us-west-1", "us-west-2", "ap-south-1"
     ])
 
-    regions += [r for r in ["eu-north-1", "eu-central-1", "eu-west-1", "eu-west-2", "eu-west-3"] if r not in regions]
+    regions += [r for r in ["eu-north-1", "eu-central-1", "eu-west-1", "eu-west-2", "eu-west-3", "ca-central-1"] if r not in regions]
 
     ami_mapping = {}
     print("\n🔄 Fetching latest Amazon Linux 3 AMIs:")

@@ -7927,6 +7927,9 @@ class EKSClusterManager:
                 cluster_name, region, access_key, secret_key
             )
             components_status['cloudwatch_agent'] = cloudwatch_agent_success
+        else:
+            print("\n🔍 Step 4: Skipping CloudWatch agent deployment as per user preference.")
+            components_status['cloudwatch_agent'] = False
 
         # 5. Setup CloudWatch alarms
         print("\n🚨 Step 5: Setting up CloudWatch alarms...")
@@ -7979,7 +7982,8 @@ class EKSClusterManager:
                 f"node-protection-monitor-{cluster_name}",
                 f"node-protection-{cluster_name}",
                 f"eks-node-monitor-{cluster_name.split('-')[-1]}",  # Using cluster suffix
-                f"node-monitor-{cluster_name.split('-')[-1]}"
+                f"node-monitor-{cluster_name.split('-')[-1]}",
+                f"node-protection-monitor-{cluster_name.split('-')[-1]}",
             ]
 
             monitoring_found = False

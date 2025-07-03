@@ -1590,12 +1590,11 @@ Examples:
         # with open(report_file, 'w', encoding='utf-8') as f:
         #     json.dump(instance_result, f, indent=2)
 
-        output_file = account_dir / f"{instance_id}_{account}_{extracted_username}_command_output.txt"
+        output_file = account_dir / f"{account}_{extracted_username}_command_output.txt"
         with open(output_file, 'w', encoding='utf-8') as f:
             f.write(f"Command Outputs for Instance: {instance_id}\n")
             f.write(f"Account: {account}\n")
-            f.write(f"Username: {instance_result.get('username', 'N/A')}\n")
-            f.write(f"Extracted Username: {extracted_username}\n")
+            f.write(f"Username: {account}_{extracted_username}\n")
             f.write(f"Cluster: {instance_result.get('cluster_name', 'N/A')}\n")
             f.write(f"ASG Name: {instance_result.get('asg_name', 'N/A')}\n")
             f.write(f"Instance Source: {self.instance_source}\n")
