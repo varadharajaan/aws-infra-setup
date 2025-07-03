@@ -378,9 +378,8 @@ class UltraEKSCleanupManager:
             print(f"   ❌ Failed to delete Lambda functions: {error_msg}")
             return False
 
-
     def delete_all_lambda_functions(self, access_key, secret_key, region, cluster_name):
-        """Delete Lambda functions related to the EKS cluster with improved safety checks."""
+        """Delete Lambda functions related to the EKS cluster, including node protection functions."""
         try:
             lambda_client = boto3.client(
                 'lambda',
@@ -388,25 +387,22 @@ class UltraEKSCleanupManager:
                 aws_secret_access_key=secret_key,
                 region_name=region
             )
-        
-            # Get all Lambda functions
-            paginator = lambda_client.get_paginator('list_functions')
-        
+
             deleted_functions = []
             skipped_functions = []
-        
-            # Extract meaningful parts from cluster name for better matching
-            cluster_parts = self.extract_cluster_identifiers(cluster_name)
-            cluster_suffix = cluster_name.split('-')[-1]
-        
+
+            # Get all Lambda functions
+            paginator = lambda_client.get_paginator('list_functions')
+
             for page in paginator.paginate():
                 for function in page['Functions']:
                     function_name = function['FunctionName']
-                
-                    # Skip common/shared Lambda functions
+                    function_arn = function['FunctionArn']
+
+                    # Skip shared/common functions
                     if any(pattern in function_name.lower() for pattern in [
-                        'common-', 'shared-', 'global-', 'admin-', 'monitoring-',
-                        'centrallogging', 'security', 'costoptimization'
+                        'common-', 'shared-', 'global-', 'admin-', 'all-', 'multi-',
+                        'bastion', 'jumpbox', 'cicd', 'pipeline'
                     ]):
                         self.log_operation('INFO', f"⚠️ Skipping shared Lambda function: {function_name}")
                         skipped_functions.append(function_name)
@@ -416,73 +412,543 @@ class UltraEKSCleanupManager:
                             'reason': 'Appears to be a shared resource'
                         })
                         continue
-                
-                    # Check if function is related to EKS cluster - require STRONG matching
+
+                    # Check if function is related to this cluster
                     is_cluster_related = False
-                
-                    # Method 1: Direct cluster name match 
-                    if cluster_name.lower() in function_name.lower():
-                        is_cluster_related = True
-                
-                    # Method 2: Check if function has specific cluster suffix
-                    # Only delete if the function has the EXACT cluster suffix - make this stricter
-                    if not is_cluster_related and len(cluster_suffix) >= 4:
-                        if f"-{cluster_suffix}" in function_name or f"_{cluster_suffix}" in function_name:
+                    cluster_suffix = cluster_name.split('-')[-1]
+
+                    # Check function name patterns for cluster relation
+                    cluster_patterns = [
+                        cluster_name.lower(),
+                        f"{cluster_name.lower()}-",
+                        f"-{cluster_name.lower()}-",
+                        f"-{cluster_name.lower()}",
+                        f"{cluster_suffix}-",
+                        f"-{cluster_suffix}"
+                    ]
+
+                    # **NEW: Check for node protection function patterns**
+                    node_protection_patterns = [
+                        f"{cluster_name.lower()}-node-protection",
+                        f"node-protection-{cluster_name.lower()}",
+                        f"{cluster_name.lower()}-nodegroup-monitor",
+                        f"nodegroup-protection-{cluster_name.lower()}",
+                        f"{cluster_suffix}-node-protection",
+                        f"node-protection-{cluster_suffix}",
+                        f"{cluster_name.lower()}-no-delete-monitor",
+                        f"no-delete-monitor-{cluster_name.lower()}"
+                    ]
+
+                    # Combine all patterns
+                    all_patterns = cluster_patterns + node_protection_patterns
+
+                    for pattern in all_patterns:
+                        if pattern in function_name.lower():
                             is_cluster_related = True
-                
-                    # Method 3: Check function tags for direct relation to this cluster
+                            break
+
+                    # Check function description
                     if not is_cluster_related:
                         try:
-                            tags_response = lambda_client.list_tags(Resource=function['FunctionArn'])
-                            tags = tags_response.get('Tags', {})
-                        
-                            # Only delete if tags DIRECTLY reference THIS cluster
-                            for key, value in tags.items():
-                                if (key.lower() in ['cluster', 'clustername', 'eks-cluster'] and 
-                                    value.lower() == cluster_name.lower()):
-                                    is_cluster_related = True
-                                    break
-                            
-                                # Match for kubernetes.io/cluster/EXACT-CLUSTER-NAME tag
-                                if key.lower() == f'kubernetes.io/cluster/{cluster_name.lower()}':
-                                    is_cluster_related = True
-                                    break
-                        except Exception as tag_error:
-                            self.log_operation('WARNING', f"Could not check tags for Lambda function {function_name}: {tag_error}")
-                
-                    if is_cluster_related:
-                        # Final safety check - don't delete functions with "all" in their name
-                        # as they might be used by multiple clusters
-                        if 'all' in function_name.lower() or 'multi' in function_name.lower():
-                            self.log_operation('INFO', f"⚠️ Skipping potential multi-cluster Lambda function: {function_name}")
-                            skipped_functions.append(function_name)
-                            self.cleanup_results['skipped_resources'].append({
-                                'resource_type': 'Lambda function',
-                                'resource_id': function_name,
-                                'reason': 'Potential multi-cluster resource'
-                            })
-                            continue
-                        
+                            function_config = lambda_client.get_function(FunctionName=function_name)
+                            description = function_config.get('Configuration', {}).get('Description', '').lower()
+
+                            if (cluster_name.lower() in description or
+                                    f"cluster {cluster_suffix}" in description or
+                                    "node protection" in description and cluster_name.lower() in description):
+                                is_cluster_related = True
+                        except Exception:
+                            pass
+
+                    # Check environment variables for cluster reference
+                    if not is_cluster_related:
                         try:
-                            self.log_operation('INFO', f"🗑️  Deleting Lambda function {function_name} related to cluster {cluster_name}")
+                            function_config = lambda_client.get_function(FunctionName=function_name)
+                            env_vars = function_config.get('Configuration', {}).get('Environment', {}).get('Variables',
+                                                                                                           {})
+
+                            for var_name, var_value in env_vars.items():
+                                if (var_name.upper() in ['CLUSTER_NAME', 'EKS_CLUSTER', 'TARGET_CLUSTER'] and
+                                        var_value.lower() == cluster_name.lower()):
+                                    is_cluster_related = True
+                                    break
+                                elif cluster_name.lower() in str(var_value).lower():
+                                    is_cluster_related = True
+                                    break
+                        except Exception:
+                            pass
+
+                    # Check function tags
+                    if not is_cluster_related:
+                        try:
+                            tags = lambda_client.list_tags(Resource=function_arn).get('Tags', {})
+
+                            for tag_key, tag_value in tags.items():
+                                tag_key_lower = tag_key.lower()
+                                tag_value_lower = tag_value.lower()
+
+                                # **NEW: Check for node protection tags**
+                                if ((tag_key_lower in ['cluster', 'eks-cluster',
+                                                       'clustername'] and tag_value_lower == cluster_name.lower()) or
+                                        (
+                                                tag_key_lower == 'purpose' and 'node-protection' in tag_value_lower and cluster_name.lower() in tag_value_lower) or
+                                        (tag_key_lower == 'function-type' and 'nodegroup-monitor' in tag_value_lower) or
+                                        tag_key_lower == f'kubernetes.io/cluster/{cluster_name.lower()}'):
+                                    is_cluster_related = True
+                                    break
+                        except Exception:
+                            pass
+
+                    if is_cluster_related:
+                        try:
+                            # **NEW: Remove EventBridge triggers before deleting function**
+                            self.remove_lambda_eventbridge_triggers(lambda_client, function_name, cluster_name,
+                                                                    access_key, secret_key, region)
+
+                            self.log_operation('INFO',
+                                               f"🗑️  Deleting Lambda function {function_name} related to cluster {cluster_name}")
                             lambda_client.delete_function(FunctionName=function_name)
                             deleted_functions.append(function_name)
                             self.log_operation('INFO', f"✅ Deleted Lambda function {function_name}")
+
                         except Exception as delete_error:
-                            self.log_operation('ERROR', f"Failed to delete Lambda function {function_name}: {delete_error}")
-        
-            if deleted_functions:
-                self.log_operation('INFO', f"Deleted {len(deleted_functions)} Lambda functions for cluster {cluster_name}")
-            if skipped_functions:
-                self.log_operation('INFO', f"Skipped {len(skipped_functions)} Lambda functions that appear to be shared resources")
-        
+                            self.log_operation('ERROR',
+                                               f"Failed to delete Lambda function {function_name}: {delete_error}")
+
+            if deleted_functions or skipped_functions:
+                self.log_operation('INFO',
+                                   f"Deleted {len(deleted_functions)} Lambda functions and skipped {len(skipped_functions)} for cluster {cluster_name}")
+                if skipped_functions:
+                    print(f"   ⚠️ Skipped {len(skipped_functions)} Lambda functions that appear to be shared")
+
             if not deleted_functions and not skipped_functions:
                 self.log_operation('INFO', f"No Lambda functions found related to cluster {cluster_name}")
-            
+
             return True
-        
+
         except Exception as e:
             self.log_operation('ERROR', f"Failed to delete Lambda functions for cluster {cluster_name}: {e}")
+            return False
+
+    def remove_lambda_eventbridge_triggers(self, lambda_client, function_name, cluster_name, access_key, secret_key,
+                                           region):
+        """Remove EventBridge triggers for a Lambda function before deletion."""
+        try:
+            events_client = boto3.client(
+                'events',
+                aws_access_key_id=access_key,
+                aws_secret_access_key=secret_key,
+                region_name=region
+            )
+
+            # Get the function's policy to find EventBridge triggers
+            try:
+                policy_response = lambda_client.get_policy(FunctionName=function_name)
+                # Parse policy to find EventBridge rules (this is a simplified approach)
+                # In practice, we'll also check EventBridge rules directly
+            except Exception:
+                pass
+
+            # **NEW: Find and remove EventBridge rules that target this function**
+            try:
+                rules = events_client.list_rules().get('Rules', [])
+
+                for rule in rules:
+                    rule_name = rule.get('Name')
+
+                    # Check if rule is related to node protection for this cluster
+                    node_protection_rule_patterns = [
+                        f"{cluster_name.lower()}-node-protection",
+                        f"node-protection-{cluster_name.lower()}",
+                        f"{cluster_name.lower()}-nodegroup-monitor",
+                        f"nodegroup-monitor-{cluster_name.lower()}",
+                        f"{cluster_name.split('-')[-1]}-node-protection"
+                    ]
+
+                    rule_is_related = False
+                    for pattern in node_protection_rule_patterns:
+                        if pattern in rule_name.lower():
+                            rule_is_related = True
+                            break
+
+                    if rule_is_related:
+                        # Check if this rule targets our Lambda function
+                        try:
+                            targets = events_client.list_targets_by_rule(Rule=rule_name).get('Targets', [])
+
+                            for target in targets:
+                                target_arn = target.get('Arn', '')
+                                if function_name in target_arn:
+                                    # Remove the target
+                                    events_client.remove_targets(
+                                        Rule=rule_name,
+                                        Ids=[target.get('Id')]
+                                    )
+                                    self.log_operation('INFO', f"Removed EventBridge target for rule {rule_name}")
+
+                                    # Delete the rule if it has no more targets
+                                    remaining_targets = events_client.list_targets_by_rule(Rule=rule_name).get(
+                                        'Targets', [])
+                                    if not remaining_targets:
+                                        events_client.delete_rule(Name=rule_name)
+                                        self.log_operation('INFO', f"Deleted EventBridge rule {rule_name}")
+
+                                    break
+                        except Exception as target_error:
+                            self.log_operation('WARNING', f"Error processing rule {rule_name}: {target_error}")
+
+            except Exception as events_error:
+                self.log_operation('WARNING',
+                                   f"Error cleaning up EventBridge rules for {function_name}: {events_error}")
+
+        except Exception as e:
+            self.log_operation('WARNING', f"Error removing EventBridge triggers for {function_name}: {e}")
+
+    def delete_related_event_rules(self, access_key, secret_key, region, cluster_name):
+        """Delete EventBridge rules related to the EKS cluster, including node protection rules."""
+        try:
+            events_client = boto3.client(
+                'events',
+                aws_access_key_id=access_key,
+                aws_secret_access_key=secret_key,
+                region_name=region
+            )
+
+            deleted_rules = []
+            skipped_rules = []
+
+            # Get all EventBridge rules
+            rules = events_client.list_rules().get('Rules', [])
+
+            for rule in rules:
+                rule_name = rule.get('Name')
+
+                # Skip shared/common rules
+                if any(pattern in rule_name.lower() for pattern in [
+                    'common-', 'shared-', 'global-', 'admin-', 'all-', 'multi-',
+                    'aws-', 'default'
+                ]):
+                    self.log_operation('INFO', f"⚠️ Skipping shared EventBridge rule: {rule_name}")
+                    skipped_rules.append(rule_name)
+                    self.cleanup_results['skipped_resources'].append({
+                        'resource_type': 'EventBridge rule',
+                        'resource_id': rule_name,
+                        'reason': 'Appears to be a shared or system resource'
+                    })
+                    continue
+
+                # Check if rule is related to this cluster
+                is_cluster_related = False
+                cluster_suffix = cluster_name.split('-')[-1]
+
+                # **ENHANCED: Check for node protection rule patterns**
+                cluster_rule_patterns = [
+                    cluster_name.lower(),
+                    f"{cluster_name.lower()}-",
+                    f"-{cluster_name.lower()}-",
+                    f"-{cluster_name.lower()}",
+                    f"{cluster_suffix}-",
+                    f"-{cluster_suffix}",
+                    # Node protection specific patterns
+                    f"{cluster_name.lower()}-node-protection",
+                    f"node-protection-{cluster_name.lower()}",
+                    f"{cluster_name.lower()}-nodegroup-monitor",
+                    f"nodegroup-monitor-{cluster_name.lower()}",
+                    f"{cluster_name.lower()}-no-delete-monitor",
+                    f"no-delete-monitor-{cluster_name.lower()}",
+                    f"{cluster_suffix}-node-protection",
+                    f"node-protection-{cluster_suffix}"
+                ]
+
+                for pattern in cluster_rule_patterns:
+                    if pattern in rule_name.lower():
+                        is_cluster_related = True
+                        break
+
+                # Check rule description
+                if not is_cluster_related:
+                    rule_description = rule.get('Description', '').lower()
+                    if (cluster_name.lower() in rule_description or
+                            f"cluster {cluster_suffix}" in rule_description or
+                            ("node protection" in rule_description and cluster_name.lower() in rule_description)):
+                        is_cluster_related = True
+
+                # **NEW: Check rule targets for cluster-related Lambda functions**
+                if not is_cluster_related:
+                    try:
+                        targets = events_client.list_targets_by_rule(Rule=rule_name).get('Targets', [])
+
+                        for target in targets:
+                            target_arn = target.get('Arn', '')
+
+                            # Check if target is a Lambda function related to our cluster
+                            if 'lambda' in target_arn and cluster_name.lower() in target_arn.lower():
+                                is_cluster_related = True
+                                break
+                            elif 'lambda' in target_arn and f"{cluster_suffix}" in target_arn.lower():
+                                is_cluster_related = True
+                                break
+                    except Exception:
+                        pass
+
+                if is_cluster_related:
+                    try:
+                        # Remove all targets first
+                        targets = events_client.list_targets_by_rule(Rule=rule_name).get('Targets', [])
+                        if targets:
+                            target_ids = [target.get('Id') for target in targets]
+                            events_client.remove_targets(Rule=rule_name, Ids=target_ids)
+                            self.log_operation('INFO', f"Removed targets from EventBridge rule {rule_name}")
+
+                        # Delete the rule
+                        self.log_operation('INFO',
+                                           f"🗑️  Deleting EventBridge rule {rule_name} related to cluster {cluster_name}")
+                        events_client.delete_rule(Name=rule_name)
+                        deleted_rules.append(rule_name)
+                        self.log_operation('INFO', f"✅ Deleted EventBridge rule {rule_name}")
+
+                    except Exception as delete_error:
+                        self.log_operation('ERROR', f"Failed to delete EventBridge rule {rule_name}: {delete_error}")
+
+            if deleted_rules or skipped_rules:
+                self.log_operation('INFO',
+                                   f"Deleted {len(deleted_rules)} EventBridge rules and skipped {len(skipped_rules)} for cluster {cluster_name}")
+                if skipped_rules:
+                    print(f"   ⚠️ Skipped {len(skipped_rules)} EventBridge rules that appear to be shared")
+
+            if not deleted_rules and not skipped_rules:
+                self.log_operation('INFO', f"No EventBridge rules found related to cluster {cluster_name}")
+
+            return True
+
+        except Exception as e:
+            self.log_operation('ERROR', f"Failed to delete EventBridge rules for cluster {cluster_name}: {e}")
+            return False
+
+    def delete_all_iam_roles_policies(self, access_key, secret_key, region, cluster_name):
+        """Delete IAM roles and policies related to the EKS cluster, including node protection resources."""
+        try:
+            iam_client = boto3.client(
+                'iam',
+                aws_access_key_id=access_key,
+                aws_secret_access_key=secret_key,
+                region_name=region
+            )
+
+            deleted_roles = []
+            deleted_policies = []
+            skipped_roles = []
+            skipped_policies = []
+
+            # Delete IAM roles related to the cluster
+            role_paginator = iam_client.get_paginator('list_roles')
+
+            for page in role_paginator.paginate():
+                for role in page['Roles']:
+                    role_name = role['RoleName']
+
+                    # Skip AWS service roles and shared roles
+                    if (role_name.startswith('AWSServiceRoleFor') or
+                            role_name.startswith('aws-service-role') or
+                            role_name.startswith('service-role')):
+                        continue
+
+                    # Skip commonly shared roles
+                    if any(pattern in role_name.lower() for pattern in [
+                        'common-', 'shared-', 'bastion', 'jumpbox', 'admin',
+                        'master', 'gitlab', 'jenkins', 'cicd', 'global-',
+                        'cross-account', 'federated'
+                    ]):
+                        self.log_operation('INFO', f"⚠️ Skipping potentially shared role: {role_name}")
+                        skipped_roles.append(role_name)
+                        self.cleanup_results['skipped_resources'].append({
+                            'resource_type': 'IAM role',
+                            'resource_id': role_name,
+                            'reason': 'Appears to be a shared resource'
+                        })
+                        continue
+
+                    # Check if role is related to this cluster
+                    is_cluster_related = False
+                    cluster_suffix = cluster_name.split('-')[-1]
+
+                    # **ENHANCED: Check for node protection role patterns**
+                    cluster_role_patterns = [
+                        cluster_name.lower(),
+                        f"{cluster_name.lower()}-",
+                        f"-{cluster_name.lower()}-",
+                        f"-{cluster_name.lower()}",
+                        f"{cluster_suffix}-",
+                        f"-{cluster_suffix}",
+                        # Node protection specific patterns
+                        f"{cluster_name.lower()}-node-protection-role",
+                        f"node-protection-{cluster_name.lower()}-role",
+                        f"{cluster_name.lower()}-nodegroup-monitor-role",
+                        f"nodegroup-monitor-{cluster_name.lower()}-role",
+                        f"{cluster_name.lower()}-lambda-execution-role",
+                        f"lambda-execution-{cluster_name.lower()}-role",
+                        f"{cluster_suffix}-node-protection-role",
+                        f"node-protection-{cluster_suffix}-role"
+                    ]
+
+                    for pattern in cluster_role_patterns:
+                        if pattern in role_name.lower():
+                            is_cluster_related = True
+                            break
+
+                    # Check role tags
+                    if not is_cluster_related:
+                        try:
+                            tags = iam_client.list_role_tags(RoleName=role_name).get('Tags', [])
+
+                            for tag in tags:
+                                tag_key = tag.get('Key', '').lower()
+                                tag_value = tag.get('Value', '').lower()
+
+                                # **NEW: Check for node protection tags**
+                                if ((tag_key in ['cluster', 'eks-cluster',
+                                                 'clustername'] and tag_value == cluster_name.lower()) or
+                                        (
+                                                tag_key == 'purpose' and 'node-protection' in tag_value and cluster_name.lower() in tag_value) or
+                                        (
+                                                tag_key == 'function-type' and 'lambda-execution' in tag_value and cluster_name.lower() in tag_value) or
+                                        tag_key == f'kubernetes.io/cluster/{cluster_name.lower()}'):
+                                    is_cluster_related = True
+                                    break
+                        except Exception:
+                            pass
+
+                    if is_cluster_related:
+                        # Check if this might be shared by looking at policies
+                        might_be_shared = False
+
+                        # Check if role has policies that suggest it's shared
+                        try:
+                            attached_policies = iam_client.list_attached_role_policies(RoleName=role_name)
+                            for policy in attached_policies['AttachedPolicies']:
+                                policy_name = policy['PolicyName']
+                                if any(shared_term in policy_name.lower() for shared_term in [
+                                    'common', 'shared', 'global', 'all', 'clusters', 'multi'
+                                ]):
+                                    might_be_shared = True
+                                    break
+                        except Exception:
+                            pass
+
+                        if might_be_shared:
+                            self.log_operation('INFO', f"⚠️ Skipping potentially shared role {role_name}")
+                            skipped_roles.append(role_name)
+                            self.cleanup_results['skipped_resources'].append({
+                                'resource_type': 'IAM role',
+                                'resource_id': role_name,
+                                'reason': 'Appears to be shared across clusters based on attached policies'
+                            })
+                            continue
+
+                        try:
+                            # Detach managed policies first
+                            attached_policies = iam_client.list_attached_role_policies(RoleName=role_name)
+                            for policy in attached_policies['AttachedPolicies']:
+                                iam_client.detach_role_policy(RoleName=role_name, PolicyArn=policy['PolicyArn'])
+
+                            # Delete inline policies
+                            inline_policies = iam_client.list_role_policies(RoleName=role_name)
+                            for policy_name in inline_policies['PolicyNames']:
+                                iam_client.delete_role_policy(RoleName=role_name, PolicyName=policy_name)
+
+                            # Delete the role
+                            self.log_operation('INFO',
+                                               f"🗑️  Deleting IAM role {role_name} related to cluster {cluster_name}")
+                            iam_client.delete_role(RoleName=role_name)
+                            deleted_roles.append(role_name)
+                            self.log_operation('INFO', f"✅ Deleted IAM role {role_name}")
+
+                        except Exception as delete_error:
+                            self.log_operation('ERROR', f"Failed to delete IAM role {role_name}: {delete_error}")
+
+            # Delete customer-managed policies related to the cluster
+            policy_paginator = iam_client.get_paginator('list_policies')
+
+            for page in policy_paginator.paginate(Scope='Local'):  # Only customer-managed policies
+                for policy in page['Policies']:
+                    policy_name = policy['PolicyName']
+                    policy_arn = policy['Arn']
+
+                    # Skip shared/common policies
+                    if any(pattern in policy_name.lower() for pattern in [
+                        'common-', 'shared-', 'global-', 'admin-', 'all-', 'multi-'
+                    ]):
+                        self.log_operation('INFO', f"⚠️ Skipping shared policy: {policy_name}")
+                        skipped_policies.append(policy_name)
+                        self.cleanup_results['skipped_resources'].append({
+                            'resource_type': 'IAM policy',
+                            'resource_id': policy_name,
+                            'reason': 'Appears to be a shared resource'
+                        })
+                        continue
+
+                    # **ENHANCED: Check for node protection policy patterns**
+                    cluster_policy_patterns = [
+                        cluster_name.lower(),
+                        f"{cluster_name.lower()}-",
+                        f"-{cluster_name.lower()}-",
+                        f"-{cluster_name.lower()}",
+                        f"{cluster_suffix}-",
+                        f"-{cluster_suffix}",
+                        # Node protection specific patterns
+                        f"{cluster_name.lower()}-node-protection-policy",
+                        f"node-protection-{cluster_name.lower()}-policy",
+                        f"{cluster_name.lower()}-lambda-policy",
+                        f"lambda-policy-{cluster_name.lower()}",
+                        f"{cluster_suffix}-node-protection-policy",
+                        f"node-protection-{cluster_suffix}-policy"
+                    ]
+
+                    # Only delete if policy explicitly references THIS cluster
+                    is_policy_related = False
+                    for pattern in cluster_policy_patterns:
+                        if pattern in policy_name.lower():
+                            is_policy_related = True
+                            break
+
+                    if is_policy_related:
+                        try:
+                            # Get all policy versions and delete non-default versions first
+                            versions = iam_client.list_policy_versions(PolicyArn=policy_arn)['Versions']
+                            for version in versions:
+                                if not version['IsDefaultVersion']:
+                                    iam_client.delete_policy_version(
+                                        PolicyArn=policy_arn,
+                                        VersionId=version['VersionId']
+                                    )
+
+                            # Delete the policy
+                            self.log_operation('INFO',
+                                               f"🗑️  Deleting IAM policy {policy_name} related to cluster {cluster_name}")
+                            iam_client.delete_policy(PolicyArn=policy_arn)
+                            deleted_policies.append(policy_name)
+                            self.log_operation('INFO', f"✅ Deleted IAM policy {policy_name}")
+
+                        except Exception as delete_error:
+                            self.log_operation('ERROR', f"Failed to delete IAM policy {policy_name}: {delete_error}")
+
+            if deleted_roles or deleted_policies:
+                self.log_operation('INFO',
+                                   f"Deleted {len(deleted_roles)} IAM roles and {len(deleted_policies)} policies for cluster {cluster_name}")
+
+            if skipped_roles or skipped_policies:
+                self.log_operation('INFO',
+                                   f"Skipped {len(skipped_roles)} IAM roles and {len(skipped_policies)} policies")
+                print(
+                    f"   ⚠️ Skipped {len(skipped_roles)} IAM roles and {len(skipped_policies)} policies that appear to be shared")
+
+            if not deleted_roles and not deleted_policies and not skipped_roles and not skipped_policies:
+                self.log_operation('INFO', f"No IAM roles/policies found related to cluster {cluster_name}")
+
+            return True
+
+        except Exception as e:
+            self.log_operation('ERROR', f"Failed to delete IAM resources for cluster {cluster_name}: {e}")
             return False
 
     def extract_cluster_identifiers(self, cluster_name):

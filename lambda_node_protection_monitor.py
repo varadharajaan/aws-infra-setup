@@ -156,12 +156,9 @@ class LambdaNodeProtectionMonitor:
 
 def main():
     """Main function for local testing"""
-    if len(sys.argv) != 2:
-        print("Usage: python lambda_note_protection_monitor.py <cluster_name>")
-        print("Example: python lambda_note_protection_monitor.py eks-cluster-account01_clouduser01-us-east-1-igku")
-        sys.exit(1)
 
-    cluster_name = sys.argv[1]
+
+    cluster_name = 'eks-cluster-account01_clouduser01-us-east-1-wxie'
 
     monitor = LambdaNodeProtectionMonitor()
     try:

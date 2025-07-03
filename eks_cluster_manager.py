@@ -3255,25 +3255,55 @@ class EKSClusterManager:
                 "Version": "2012-10-17",
                 "Statement": [
                     {
+                        "Sid": "CloudWatchLogsAccess",
                         "Effect": "Allow",
                         "Action": [
                             "logs:CreateLogGroup",
                             "logs:CreateLogStream",
                             "logs:PutLogEvents"
                         ],
-                        "Resource": f"arn:aws:logs:{region}:{account_id}:*"
+                        "Resource": "arn:aws:logs:{{region}}:{{account_id}}:*"
                     },
                     {
+                        "Sid": "EKSClusterAccess",
                         "Effect": "Allow",
                         "Action": [
                             "eks:ListNodegroups",
                             "eks:DescribeNodegroup",
-                            "eks:DescribeCluster"
+                            "eks:DescribeCluster",
+                            "eks:ListClusters"
                         ],
                         "Resource": [
-                            f"arn:aws:eks:{region}:{account_id}:cluster/{cluster_name}",
-                            f"arn:aws:eks:{region}:{account_id}:nodegroup/{cluster_name}/*"
+                            "arn:aws:eks:{{region}}:{{account_id}}:cluster/{{cluster_name}}",
+                            "arn:aws:eks:{{region}}:{{account_id}}:nodegroup/{{cluster_name}}/*"
                         ]
+                    },
+                    {
+                        "Sid": "EC2InstanceAccess",
+                        "Effect": "Allow",
+                        "Action": [
+                            "ec2:DescribeInstances",
+                            "ec2:CreateTags",
+                            "ec2:DeleteTags",
+                            "ec2:DescribeTags"
+                        ],
+                        "Resource": "*"
+                    },
+                    {
+                        "Sid": "AutoScalingAccess",
+                        "Effect": "Allow",
+                        "Action": [
+                            "autoscaling:DescribeAutoScalingGroups"
+                        ],
+                        "Resource": "*"
+                    },
+                    {
+                        "Sid": "STSAccess",
+                        "Effect": "Allow",
+                        "Action": [
+                            "sts:GetCallerIdentity"
+                        ],
+                        "Resource": "*"
                     }
                 ]
             }
@@ -3497,16 +3527,38 @@ class EKSClusterManager:
             role_arn = f"arn:aws:iam::{account_id}:role/{role_name}"
 
             # 2. Create Lambda function
-            lambda_code = self._get_node_protection_lambda_template().replace('{{cluster_name}}', cluster_name).replace(
-                '{{region}}', region)
+            # Generate current UTC date and time
+            current_utc = datetime.utcnow()
+            current_date = current_utc.strftime('%Y-%m-%d')
+            current_time = current_utc.strftime('%H:%M:%S')
+
+            lambda_code = (
+                self._get_node_protection_lambda_template()
+                .replace('{{cluster_name}}', cluster_name)
+                .replace('{{region}}', region)
+                .replace('{{access_key}}', admin_access_key)
+                .replace('{{secret_key}}', admin_secret_key)
+                .replace('{{current_date}}', current_date)
+                .replace('{{current_time}}', current_time)
+                .replace('{{current_user}}', 'varadharajaan')
+            )
 
             import zipfile
             import tempfile
             import os
-            with tempfile.NamedTemporaryFile(suffix='.zip', delete=False) as temp_zip:
-                with zipfile.ZipFile(temp_zip.name, 'w') as zip_file:
+
+            # Create temp file with delete=False and close it properly
+            temp_zip = tempfile.NamedTemporaryFile(suffix='.zip', delete=False)
+            temp_zip_path = temp_zip.name
+            temp_zip.close()  # Close the file handle
+
+            try:
+                # Create the zip file
+                with zipfile.ZipFile(temp_zip_path, 'w') as zip_file:
                     zip_file.writestr('lambda_function.py', lambda_code)
-                with open(temp_zip.name, 'rb') as zip_data:
+
+                # Read and upload the zip file
+                with open(temp_zip_path, 'rb') as zip_data:
                     try:
                         lambda_client.create_function(
                             FunctionName=function_name,
@@ -3520,8 +3572,8 @@ class EKSClusterManager:
                                 'Variables': {
                                     'CLUSTER_NAME': cluster_name,
                                     'REGION': region,
-                                    'AWS_ACCESS_KEY_ID': admin_access_key,
-                                    'AWS_SECRET_ACCESS_KEY': admin_secret_key
+                                    'NEW_AWS_ACCESS_KEY_ID': admin_access_key,
+                                    'NEW_AWS_SECRET_ACCESS_KEY': admin_secret_key
                                 }
                             }
                         )
@@ -3533,11 +3585,17 @@ class EKSClusterManager:
                             ZipFile=zip_data.read()
                         )
                         self.print_colored(Colors.CYAN, f"   📝 Lambda function {function_name} updated")
-                os.unlink(temp_zip.name)
+
+            finally:
+                # Clean up the temp file
+                try:
+                    os.unlink(temp_zip_path)
+                except OSError:
+                    pass  # File might already be deleted
 
             # 3. Create EventBridge rule for EC2 termination (not schedule)
             lambda_arn = f"arn:aws:lambda:{region}:{account_id}:function:{function_name}"
-            self.create_node_termination_eventbridge_rule(region, account_id, lambda_arn, nodegroup_names)
+            self.create_node_termination_eventbridge_rule(region, account_id, lambda_arn, nodegroup_names, admin_access_key, admin_secret_key)
 
             self.print_colored(Colors.GREEN, f"✅ Node protection monitoring event rule setup completed!")
             self.print_colored(Colors.CYAN, f"   📋 Function: {function_name}")
@@ -3550,17 +3608,386 @@ class EKSClusterManager:
             self.print_colored(Colors.RED, f"❌ Node protection monitoring setup failed: {str(e)}")
             return False
 
+    def create_node_termination_eventbridge_rule(self, region: str, account_id: str, lambda_arn: str,
+                                                 nodegroup_names: List[str], admin_access_key, admin_secret_key) -> bool:
+        """Create EventBridge rule to trigger Lambda when EC2 instances in nodegroups are terminated"""
+        try:
+            # Extract cluster suffix for naming
+            cluster_suffix = lambda_arn.split('-')[-1]
+            rule_name = f"node-termination-monitor-{cluster_suffix}"
+
+            # Use the same session context for both services
+            admin_session = boto3.Session(
+                aws_access_key_id=admin_access_key,
+                aws_secret_access_key=admin_secret_key,
+                region_name=region
+            )
+
+            events_client = admin_session.client('events', region_name=region)
+            lambda_client = admin_session.client('lambda', region_name=region)
+
+            # Verify account context
+            sts_client = admin_session.client('sts')
+            current_account = sts_client.get_caller_identity()['Account']
+
+            if current_account != account_id:
+                self.print_colored(Colors.RED, f"❌ Account mismatch: Current={current_account}, Expected={account_id}")
+                return False
+
+            # Create event pattern
+            event_pattern = {
+                "source": ["aws.ec2"],
+                "detail-type": ["EC2 Instance State-change Notification"],
+                "detail": {
+                    "state": ["terminated", "shutting-down"]
+                }
+            }
+
+            # Create the rule
+            try:
+                events_client.put_rule(
+                    Name=rule_name,
+                    EventPattern=json.dumps(event_pattern),
+                    State='ENABLED',
+                    Description=f'Monitor EC2 terminations for EKS nodegroups: {", ".join(nodegroup_names)}'
+                )
+                self.print_colored(Colors.GREEN, f"   ✅ EventBridge rule {rule_name} created")
+            except Exception as e:
+                if "already exists" in str(e):
+                    self.print_colored(Colors.CYAN, f"   📝 EventBridge rule {rule_name} already exists")
+                else:
+                    raise e
+
+            # Construct proper ARNs
+            rule_arn = f"arn:aws:events:{region}:{current_account}:rule/{rule_name}"
+            statement_id = f"AllowEventBridge-{cluster_suffix}"
+
+            # Add Lambda permission - try with different approaches
+            try:
+                # Method 1: Standard permission
+                lambda_client.add_permission(
+                    FunctionName=lambda_arn,
+                    StatementId=statement_id,
+                    Action='lambda:InvokeFunction',
+                    Principal='events.amazonaws.com',
+                    SourceArn=rule_arn
+                )
+                self.print_colored(Colors.GREEN, f"   ✅ Lambda permission added for EventBridge")
+            except lambda_client.exceptions.ResourceConflictException:
+                self.print_colored(Colors.CYAN, f"   📝 Lambda permission already exists")
+            except Exception as e:
+                if "Cross-account access" in str(e):
+                    # Method 2: Remove and re-add permission
+                    try:
+                        lambda_client.remove_permission(
+                            FunctionName=lambda_arn,
+                            StatementId=statement_id
+                        )
+                        time.sleep(2)
+                        lambda_client.add_permission(
+                            FunctionName=lambda_arn,
+                            StatementId=statement_id,
+                            Action='lambda:InvokeFunction',
+                            Principal='events.amazonaws.com',
+                            SourceArn=rule_arn
+                        )
+                        self.print_colored(Colors.GREEN, f"   ✅ Lambda permission recreated successfully")
+                    except Exception as e2:
+                        self.print_colored(Colors.YELLOW, f"   ⚠️ Permission issue: {str(e2)}")
+                        # Continue anyway - the rule might still work
+                else:
+                    raise e
+
+            # Add Lambda as target
+            events_client.put_targets(
+                Rule=rule_name,
+                Targets=[
+                    {
+                        'Id': '1',
+                        'Arn': lambda_arn,
+                        'InputTransformer': {
+                            'InputPathsMap': {
+                                'instance_id': '$.detail.instance-id',
+                                'state': '$.detail.state',
+                                'region': '$.region',
+                                'account': '$.account'
+                            },
+                            'InputTemplate': json.dumps({
+                                'instance_id': '<instance_id>',
+                                'state': '<state>',
+                                'region': '<region>',
+                                'account': '<account>',
+                                'nodegroup_names': nodegroup_names,
+                                'source': 'eventbridge-termination'
+                            })
+                        }
+                    }
+                ]
+            )
+
+            self.print_colored(Colors.GREEN, f"   ✅ Lambda target added to EventBridge rule")
+            return True
+
+        except Exception as e:
+            self.log_operation('ERROR', f"Failed to create EventBridge rule: {str(e)}")
+            self.print_colored(Colors.RED, f"❌ Failed to create EventBridge rule: {str(e)}")
+            return False
+
     def _get_node_protection_lambda_template(self) -> str:
         """Get the node protection Lambda function template"""
         # Read the lambda template file we created above
         try:
-            with open('lambda_node_protection_monitor.py', 'r') as f:
+            with open('lambda_node_protection_template.py', 'r', encoding="utf-8") as f:
                 return f.read()
         except FileNotFoundError:
             # Return the inline template if file not found
             return '''
     # Insert the complete lambda function code here
     # (The code from lambda_node_protection_monitor.py above)
+    '''
+
+    def _get_node_protection_lambda_template_new(self):
+        """
+        Returns the complete Lambda template for node protection monitoring
+        """
+        return '''#!/usr/bin/env python3
+    """
+    EKS Node Protection Lambda Function
+    Monitors and ensures at least one node per nodegroup has NO_DELETE protection
+    """
+
+    import boto3
+    import json
+    import logging
+    import os
+    from datetime import datetime
+
+    # Configure logging
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+
+    def lambda_handler(event, context):
+        """
+        Lambda handler for node protection monitoring
+        """
+        try:
+            logger.info(f"Node protection Lambda triggered at {datetime.utcnow()}")
+            logger.info(f"Event: {json.dumps(event, default=str)}")
+
+            # Configuration from environment or hardcoded values
+            cluster_name = "{{cluster_name}}"
+            region = "{{region}}"
+
+            # AWS credentials (in production, use IAM roles instead)
+            access_key = "{{aws_access_key_id}}"
+            secret_key = "{{aws_secret_access_key}}"
+
+            # Create AWS clients
+            session = boto3.Session(
+                aws_access_key_id=access_key,
+                aws_secret_access_key=secret_key,
+                region_name=region
+            )
+
+            eks_client = session.client('eks')
+            ec2_client = session.client('ec2')
+
+            # Get all nodegroups for the cluster
+            nodegroups_response = eks_client.list_nodegroups(clusterName=cluster_name)
+            nodegroup_names = nodegroups_response.get('nodegroups', [])
+
+            if not nodegroup_names:
+                logger.warning(f"No nodegroups found for cluster {cluster_name}")
+                return {
+                    'statusCode': 200,
+                    'body': json.dumps({
+                        'message': f'No nodegroups found for cluster {cluster_name}',
+                        'cluster': cluster_name,
+                        'timestamp': datetime.utcnow().isoformat()
+                    })
+                }
+
+            logger.info(f"Found {len(nodegroup_names)} nodegroups: {nodegroup_names}")
+
+            results = {}
+
+            # Process each nodegroup
+            for nodegroup_name in nodegroup_names:
+                try:
+                    result = process_nodegroup_protection(
+                        eks_client, ec2_client, cluster_name, nodegroup_name
+                    )
+                    results[nodegroup_name] = result
+                    logger.info(f"Nodegroup {nodegroup_name}: {result['status']}")
+
+                except Exception as e:
+                    error_msg = f"Failed to process nodegroup {nodegroup_name}: {str(e)}"
+                    logger.error(error_msg)
+                    results[nodegroup_name] = {
+                        'status': 'error',
+                        'message': error_msg
+                    }
+
+            # Summary
+            successful = sum(1 for r in results.values() if r['status'] == 'success')
+            total = len(results)
+
+            logger.info(f"Node protection check completed: {successful}/{total} nodegroups processed successfully")
+
+            return {
+                'statusCode': 200,
+                'body': json.dumps({
+                    'message': f'Node protection monitoring completed for cluster {cluster_name}',
+                    'cluster': cluster_name,
+                    'nodegroups_processed': total,
+                    'successful': successful,
+                    'results': results,
+                    'timestamp': datetime.utcnow().isoformat()
+                }, default=str)
+            }
+
+        except Exception as e:
+            error_msg = f"Lambda execution failed: {str(e)}"
+            logger.error(error_msg)
+            return {
+                'statusCode': 500,
+                'body': json.dumps({
+                    'error': error_msg,
+                    'timestamp': datetime.utcnow().isoformat()
+                })
+            }
+
+    def process_nodegroup_protection(eks_client, ec2_client, cluster_name, nodegroup_name):
+        """
+        Process node protection for a specific nodegroup
+        """
+        try:
+            # Get nodegroup details
+            nodegroup_response = eks_client.describe_nodegroup(
+                clusterName=cluster_name,
+                nodegroupName=nodegroup_name
+            )
+
+            nodegroup = nodegroup_response['nodegroup']
+
+            # Get Auto Scaling Group name
+            asg_name = None
+            if 'resources' in nodegroup and 'autoScalingGroups' in nodegroup['resources']:
+                asg_list = nodegroup['resources']['autoScalingGroups']
+                if asg_list:
+                    asg_name = asg_list[0]['name']
+
+            if not asg_name:
+                return {
+                    'status': 'error',
+                    'message': 'No Auto Scaling Group found for nodegroup'
+                }
+
+            # Get instances in the ASG
+            autoscaling_client = boto3.client('autoscaling', region_name=eks_client.meta.region_name)
+            asg_response = autoscaling_client.describe_auto_scaling_groups(
+                AutoScalingGroupNames=[asg_name]
+            )
+
+            if not asg_response['AutoScalingGroups']:
+                return {
+                    'status': 'error',
+                    'message': f'Auto Scaling Group {asg_name} not found'
+                }
+
+            asg = asg_response['AutoScalingGroups'][0]
+            instances = asg.get('Instances', [])
+
+            if not instances:
+                return {
+                    'status': 'warning',
+                    'message': 'No instances found in nodegroup'
+                }
+
+            # Get instance IDs
+            instance_ids = [instance['InstanceId'] for instance in instances if instance['LifecycleState'] == 'InService']
+
+            if not instance_ids:
+                return {
+                    'status': 'warning',
+                    'message': 'No instances in service'
+                }
+
+            # Check current protection status
+            instances_with_protection = []
+            instances_without_protection = []
+
+            for instance_id in instance_ids:
+                # Get instance tags
+                instance_response = ec2_client.describe_instances(InstanceIds=[instance_id])
+
+                if not instance_response['Reservations']:
+                    continue
+
+                instance = instance_response['Reservations'][0]['Instances'][0]
+                tags = instance.get('Tags', [])
+
+                # Check for NO_DELETE tag
+                has_no_delete = any(tag['Key'] == 'kubernetes.io/cluster-autoscaler/node-template/label/protection' 
+                                  and tag['Value'] == 'NO_DELETE' for tag in tags)
+
+                if has_no_delete:
+                    instances_with_protection.append(instance_id)
+                else:
+                    instances_without_protection.append(instance_id)
+
+            logger.info(f"Nodegroup {nodegroup_name}: {len(instances_with_protection)} protected, {len(instances_without_protection)} unprotected")
+
+            # Ensure at least one instance has NO_DELETE protection
+            if not instances_with_protection and instances_without_protection:
+                # Apply NO_DELETE to the first available instance
+                target_instance = instances_without_protection[0]
+
+                try:
+                    # Add the NO_DELETE tag
+                    ec2_client.create_tags(
+                        Resources=[target_instance],
+                        Tags=[
+                            {
+                                'Key': 'kubernetes.io/cluster-autoscaler/node-template/label/protection',
+                                'Value': 'NO_DELETE'
+                            }
+                        ]
+                    )
+
+                    logger.info(f"Applied NO_DELETE protection to instance {target_instance} in nodegroup {nodegroup_name}")
+
+                    return {
+                        'status': 'success',
+                        'message': f'Applied NO_DELETE protection to instance {target_instance}',
+                        'protected_instance': target_instance,
+                        'total_instances': len(instance_ids)
+                    }
+
+                except Exception as e:
+                    return {
+                        'status': 'error',
+                        'message': f'Failed to apply protection to {target_instance}: {str(e)}'
+                    }
+
+            elif instances_with_protection:
+                return {
+                    'status': 'success',
+                    'message': f'Protection already exists on {len(instances_with_protection)} instances',
+                    'protected_instances': instances_with_protection,
+                    'total_instances': len(instance_ids)
+                }
+            else:
+                return {
+                    'status': 'warning',
+                    'message': 'No instances available for protection'
+                }
+
+        except Exception as e:
+            return {
+                'status': 'error',
+                'message': f'Failed to process nodegroup {nodegroup_name}: {str(e)}'
+            }
     '''
 
     def apply_no_delete_to_matching_nodegroups(self, cluster_name, region, access_key, secret_key):
@@ -3682,7 +4109,7 @@ class EKSClusterManager:
             # Process each node
             count = 0
             for node in nodes_data['items']:
-                if count >= 2:
+                if count >= 1:
                     break
                 node_name = node['metadata']['name']
                 node_labels = node['metadata'].get('labels', {})
@@ -3878,6 +4305,7 @@ class EKSClusterManager:
             return {
                 'success': True,
                 'message': 'NO_DELETE labels applied and verified successfully',
+                'all_nodegroups': all_nodegroups,
                 'nodegroups_processed': len(matching_nodegroups),
                 'nodes_labeled': results['newly_labeled'],
                 'nodes_already_labeled': results['already_labeled'],
@@ -8649,12 +9077,12 @@ class EKSClusterManager:
                 # Setup automated monitoring
                 self.print_colored(Colors.YELLOW, f"\n⏰ Setting up automated node protection monitoring...")
                 monitoring_setup = self.setup_node_protection_monitoring(
-                    cluster_name, region, access_key, secret_key
+                    cluster_name, region, access_key, secret_key, nodegroup_names
                 )
 
                 if monitoring_setup:
                     self.print_colored(Colors.GREEN, f"✅ Automated node protection monitoring enabled")
-                    self.print_colored(Colors.CYAN, f"   📋 Lambda will run every 5 minutes to ensure node protection")
+                    self.print_colored(Colors.CYAN, f"   📋 Lambda will run every time a ec2 is terminated to ensure node protection")
                 else:
                     self.print_colored(Colors.YELLOW,
                                        f"⚠️ Automated monitoring setup failed - manual monitoring required")

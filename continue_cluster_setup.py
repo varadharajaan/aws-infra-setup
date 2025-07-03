@@ -1633,10 +1633,35 @@ class EKSClusterContinuationFromErrors:
                     )
                 elif choice_num == 11:
                     self.print_colored(Colors.CYAN, "\n🔒 Setting up node protection with NO_DELETE labels...")
-                    self.eks_manager.apply_no_delete_to_matching_nodegroups(cluster_name, region, access_key,
-                                                                            secret_key)
+
                     self.eks_manager.protect_nodes_with_no_delete_label(cluster_name, region, access_key, secret_key)
-                    changed = True
+
+
+
+                    # Apply initial node protection
+                    protection_result = self.eks_manager.apply_no_delete_to_matching_nodegroups(
+                        cluster_name, region, access_key, secret_key
+                    )
+
+                    nodegroup_names = protection_result.get('all_nodegroups', [])
+
+                    if protection_result.get('success'):
+                        self.print_colored(Colors.GREEN, f"✅ Initial node protection applied")
+
+                        # Setup automated monitoring
+                        self.print_colored(Colors.YELLOW, f"\n⏰ Setting up automated node protection monitoring...")
+                        monitoring_setup = self.eks_manager.setup_node_protection_monitoring(
+                            cluster_name, region, access_key, secret_key, nodegroup_names
+                        )
+
+                        if monitoring_setup:
+                            self.print_colored(Colors.GREEN, f"✅ Automated node protection monitoring enabled")
+                            self.print_colored(Colors.CYAN,
+                                               f"   📋 Lambda will run every time a ec2 is terminated to ensure node protection")
+                        else:
+                            self.print_colored(Colors.YELLOW,
+                                               f"⚠️ Automated monitoring setup failed - manual monitoring required")
+
                 elif choice_num == 12:
                     self.print_colored(Colors.CYAN, "\n🔒 Configuring custom cloudwatch agent...")
                     if False:
@@ -1648,10 +1673,10 @@ class EKSClusterContinuationFromErrors:
                 else:
                     self.print_colored(Colors.RED, f"❌ Invalid choice: {choice_num}")
 
-                # Only re-analyze and show status if something changed
-                if changed:
-                    self.analyze_existing_components(cluster_name, region, access_key, secret_key)
-                    self.display_cluster_status()
+                # # Only re-analyze and show status if something changed
+                # if changed:
+                #     self.analyze_existing_components(cluster_name, region, access_key, secret_key)
+                #     self.display_cluster_status()
 
                 continue_choice = input("\nContinue configuring this cluster? (Y/n): ").strip().lower()
                 if continue_choice == 'n':
@@ -2625,9 +2650,9 @@ def main():
     print("=" * 60)
 
     try:
-        #cluster_names= ['eks-cluster-account01_clouduser01-us-east-1-igku']
+        cluster_names= ['eks-cluster-account01_clouduser01-us-east-1-wxie']
         continuation = EKSClusterContinuationFromErrors()
-        cluster_names = continuation.select_clusters_from_eks_accounts()
+        #cluster_names = continuation.select_clusters_from_eks_accounts()
         #success = continuation.continue_cluster_setup_from_errors()
         success = continuation.reconfigure_cluster(cluster_names)
 
