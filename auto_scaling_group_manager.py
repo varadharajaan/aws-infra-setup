@@ -1282,32 +1282,32 @@ class AutoScalingGroupManager:
             unique_start_time = tomorrow.replace(
                 hour=0, minute=0, second=0, microsecond=0
             ) + timedelta(seconds=offset_seconds)
-        
-            # Business hours (8 AM IST = 2:30 AM UTC)
+
+            # Business hours (12 PM IST = 6:30 AM UTC)
             scale_up_name = f"{asg_name}-scale-up"
             asg_client.put_scheduled_update_group_action(
                 AutoScalingGroupName=asg_name,
                 ScheduledActionName=scale_up_name,
                 StartTime=unique_start_time,
-                Recurrence="30 2 * * 1-5",  # 2 AM UTC (8 AM IST), Monday-Friday
+                Recurrence="30 6 * * 1-5",  # 6:30 AM UTC (12:00 PM IST), Monday-Friday
                 MinSize=1,
                 MaxSize=3,
                 DesiredCapacity=1
             )
-            print(f"✅ Created scale-up action: {scale_up_name} (starts at 8:00 AM IST on weekdays)")
-        
-            # After business hours (7 PM IST = 1:30 PM UTC)
+            print(f"✅ Created scale-up action: {scale_up_name} (starts at 12:00 PM IST on weekdays)")
+
+            # After business hours (9 PM IST = 3:30 PM UTC)
             scale_down_name = f"{asg_name}-scale-down"
             asg_client.put_scheduled_update_group_action(
                 AutoScalingGroupName=asg_name,
                 ScheduledActionName=scale_down_name,
                 StartTime=unique_start_time + timedelta(minutes=1),  # Ensure different start time
-                Recurrence="30 13 * * 1-5",  # 1 PM UTC (7 PM IST), Monday-Friday
+                Recurrence="30 15 * * 1-5",  # 3:30 PM UTC (9:00 PM IST), Monday-Friday
                 MinSize=0,
                 MaxSize=3,
                 DesiredCapacity=0
             )
-            print(f"✅ Created scale-down action: {scale_down_name} (starts at 7:00 PM IST on weekdays)")
+            print(f"✅ Created scale-down action: {scale_down_name} (starts at 9:00 PM IST on weekdays)")
             print(f"🗓️ Scaling actions will begin tomorrow and repeat on weekdays thereafter")
         
             print(f"✅ Scheduled scaling actions attached to ASG {asg_name}")

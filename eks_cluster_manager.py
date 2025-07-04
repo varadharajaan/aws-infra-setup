@@ -14,7 +14,7 @@ import textwrap
 import boto3
 
 from datetime import datetime
-from typing import Dict
+from typing import Dict, Optional
 
 import yaml
 
@@ -856,9 +856,8 @@ class EKSClusterManager:
 
             # ASK USER FOR SCALING TIMES OR USE DEFAULTS
             self.print_colored(Colors.CYAN, "\n   🕒 Set scheduled scaling times (IST timezone):")
-            self.print_colored(Colors.CYAN, "   Default scale-up: 8:30 AM IST (3:00 AM UTC)")
-            self.print_colored(Colors.CYAN, "   Default scale-down: 6:30 PM IST (1:00 PM UTC)")
-
+            self.print_colored(Colors.CYAN, "   Default scale-up: 12:00 PM IST (6:30 AM UTC)")
+            self.print_colored(Colors.CYAN, "   Default scale-down: 9:00 PM IST (3:30 PM UTC)")
             #change_times = input("   Change default scaling times? (y/N): ").strip().lower()
             change_times = 'n'
 
@@ -873,13 +872,13 @@ class EKSClusterManager:
 
                 # For simplicity, you'd need to add proper time parsing here
                 # This is a simplified version - use defaults for now
-                scale_up_cron = "0 2 * * ? *"  # 2:00 AM UTC = 7:30 AM IST
-                scale_down_cron = "0 13 * * ? *"  # 1:00 PM UTC = 6:30 PM IST
+                scale_up_cron = "30 6 * * ? *"  # 6:30 AM UTC = 12:00 PM IST
+                scale_down_cron = "30 15 * * ? *"  # 3:30 PM UTC = 9:00 PM IST
             else:
-                scale_up_time = "7:30 AM IST"
-                scale_up_cron = "0 2 * * ? *"  # 2:00 AM UTC = 7:30 AM IST
-                scale_down_time = "6:30 PM IST"
-                scale_down_cron = "0 13 * * ? *"  # 1:00 PM UTC = 6:30 PM IST
+                scale_up_time = "12:00 PM IST"
+                scale_up_cron = "30 6 * * ? *"  # 6:30 AM UTC = 12:00 PM IST
+                scale_down_time = "9:00 PM IST"
+                scale_down_cron = "30 15 * * ? *"  # 3:30 PM UTC = 9:00 PM IST
 
             # ASK USER FOR SCALING SIZES OR USE DEFAULTS
             self.print_colored(Colors.CYAN, "\n   [SYSTEM] Set node scaling parameters:")
@@ -3210,258 +3209,101 @@ class EKSClusterManager:
                     'success_items': []
                 }
 
-    def setup_node_protection_monitoring_5mins(self, cluster_name: str, region: str, admin_access_key: str,
-                                         admin_secret_key: str) -> bool:
+    def create_kubectl_awscli_layer(self, lambda_client, layer_name: str = "kubectl-layer") -> Optional[str]:
         """
-        Setup automated node protection monitoring with Lambda and EventBridge
+        Create a Lambda layer with kubectl only (removed AWS CLI)
         """
         try:
-            self.log_operation('INFO', f"Setting up node protection monitoring for cluster {cluster_name}")
-            self.print_colored(Colors.YELLOW, f"🔧 Setting up node protection monitoring...")
+            self.print_colored(Colors.CYAN, "   📦 Creating kubectl Lambda layer...")
 
-            # Create AWS session
-            admin_session = boto3.Session(
-                aws_access_key_id=admin_access_key,
-                aws_secret_access_key=admin_secret_key,
-                region_name=region
-            )
-
-            lambda_client = admin_session.client('lambda')
-            events_client = admin_session.client('events')
-            iam_client = admin_session.client('iam')
-            sts_client = admin_session.client('sts')
-
-            # Get account ID
-            account_id = sts_client.get_caller_identity()['Account']
-
-            # Function names
-            function_name = f"node-protection-monitor-{cluster_name}"
-            role_name = f"NodeProtectionMonitorRole-{cluster_name}"
-            rule_name = f"node-protection-schedule-{cluster_name}"
-
-            # 1. Create IAM role for Lambda
-            trust_policy = {
-                "Version": "2012-10-17",
-                "Statement": [
-                    {
-                        "Effect": "Allow",
-                        "Principal": {"Service": "lambda.amazonaws.com"},
-                        "Action": "sts:AssumeRole"
-                    }
-                ]
-            }
-
-            lambda_policy = {
-                "Version": "2012-10-17",
-                "Statement": [
-                    {
-                        "Sid": "CloudWatchLogsAccess",
-                        "Effect": "Allow",
-                        "Action": [
-                            "logs:CreateLogGroup",
-                            "logs:CreateLogStream",
-                            "logs:PutLogEvents"
-                        ],
-                        "Resource": "arn:aws:logs:{{region}}:{{account_id}}:*"
-                    },
-                    {
-                        "Sid": "EKSClusterAccess",
-                        "Effect": "Allow",
-                        "Action": [
-                            "eks:ListNodegroups",
-                            "eks:DescribeNodegroup",
-                            "eks:DescribeCluster",
-                            "eks:ListClusters"
-                        ],
-                        "Resource": [
-                            "arn:aws:eks:{{region}}:{{account_id}}:cluster/{{cluster_name}}",
-                            "arn:aws:eks:{{region}}:{{account_id}}:nodegroup/{{cluster_name}}/*"
-                        ]
-                    },
-                    {
-                        "Sid": "EC2InstanceAccess",
-                        "Effect": "Allow",
-                        "Action": [
-                            "ec2:DescribeInstances",
-                            "ec2:CreateTags",
-                            "ec2:DeleteTags",
-                            "ec2:DescribeTags"
-                        ],
-                        "Resource": "*"
-                    },
-                    {
-                        "Sid": "AutoScalingAccess",
-                        "Effect": "Allow",
-                        "Action": [
-                            "autoscaling:DescribeAutoScalingGroups"
-                        ],
-                        "Resource": "*"
-                    },
-                    {
-                        "Sid": "STSAccess",
-                        "Effect": "Allow",
-                        "Action": [
-                            "sts:GetCallerIdentity"
-                        ],
-                        "Resource": "*"
-                    }
-                ]
-            }
-
-            try:
-                # Create IAM role
-                iam_client.create_role(
-                    RoleName=role_name,
-                    AssumeRolePolicyDocument=json.dumps(trust_policy),
-                    Description=f"Role for node protection monitoring Lambda - {cluster_name}"
-                )
-
-                # Attach basic execution role
-                iam_client.attach_role_policy(
-                    RoleName=role_name,
-                    PolicyArn='arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
-                )
-
-                # Create and attach custom policy
-                policy_name = f"NodeProtectionMonitorPolicy-{cluster_name}"
-                try:
-                    iam_client.create_policy(
-                        PolicyName=policy_name,
-                        PolicyDocument=json.dumps(lambda_policy),
-                        Description=f"Policy for node protection monitoring - {cluster_name}"
-                    )
-
-                    iam_client.attach_role_policy(
-                        RoleName=role_name,
-                        PolicyArn=f"arn:aws:iam::{account_id}:policy/{policy_name}"
-                    )
-                except iam_client.exceptions.EntityAlreadyExistsException:
-                    self.print_colored(Colors.CYAN, f"   Policy {policy_name} already exists")
-                    iam_client.attach_role_policy(
-                        RoleName=role_name,
-                        PolicyArn=f"arn:aws:iam::{account_id}:policy/{policy_name}"
-                    )
-
-            except iam_client.exceptions.EntityAlreadyExistsException:
-                self.print_colored(Colors.CYAN, f"   IAM role {role_name} already exists")
-
-            # Wait for role to be available
-            import time
-            time.sleep(10)
-
-            role_arn = f"arn:aws:iam::{account_id}:role/{role_name}"
-
-            # 2. Create Lambda function
-            lambda_code = self._get_node_protection_lambda_template().replace('{{cluster_name}}', cluster_name).replace(
-                '{{region}}', region)
-
-            # Create deployment package
-            import zipfile
             import tempfile
+            import zipfile
+            import urllib.request
+            import os
+            import stat
 
-            with tempfile.NamedTemporaryFile(suffix='.zip', delete=False) as temp_zip:
-                with zipfile.ZipFile(temp_zip.name, 'w') as zip_file:
-                    zip_file.writestr('lambda_function.py', lambda_code)
+            # Create temporary directory
+            with tempfile.TemporaryDirectory() as temp_dir:
+                layer_dir = os.path.join(temp_dir, "layer")
+                bin_dir = os.path.join(layer_dir, "bin")
+                os.makedirs(bin_dir, exist_ok=True)
 
-                with open(temp_zip.name, 'rb') as zip_data:
-                    try:
-                        lambda_client.create_function(
-                            FunctionName=function_name,
-                            Runtime='python3.9',
-                            Role=role_arn,
-                            Handler='lambda_function.lambda_handler',
-                            Code={'ZipFile': zip_data.read()},
-                            Description=f'Node protection monitoring for EKS cluster {cluster_name}',
-                            Timeout=300,
-                            Environment={
-                                'Variables': {
-                                    'CLUSTER_NAME': cluster_name,
-                                    'REGION': region,
-                                    'AWS_ACCESS_KEY_ID': admin_access_key,
-                                    'AWS_SECRET_ACCESS_KEY': admin_secret_key
-                                }
-                            }
-                        )
-                        self.print_colored(Colors.GREEN, f"   ✅ Lambda function {function_name} created")
-                    except lambda_client.exceptions.ResourceConflictException:
-                        # Update existing function
-                        lambda_client.update_function_code(
-                            FunctionName=function_name,
-                            ZipFile=zip_data.read()
-                        )
-                        self.print_colored(Colors.CYAN, f"   📝 Lambda function {function_name} updated")
+                # Download kubectl
+                self.print_colored(Colors.BLUE, "   📥 Downloading kubectl...")
+                kubectl_url = "https://dl.k8s.io/release/v1.28.0/bin/linux/amd64/kubectl"
+                kubectl_path = os.path.join(bin_dir, "kubectl")
 
-                # Clean up temp file
-                os.unlink(temp_zip.name)
+                urllib.request.urlretrieve(kubectl_url, kubectl_path)
 
-            # 3. Create EventBridge rule for 5-minute schedule
-            try:
-                events_client.put_rule(
-                    Name=rule_name,
-                    ScheduleExpression='rate(5 minutes)',
-                    Description=f'Schedule for node protection monitoring - {cluster_name}',
-                    State='ENABLED'
-                )
-                self.print_colored(Colors.GREEN, f"   ✅ EventBridge rule {rule_name} created")
-            except Exception as e:
-                self.print_colored(Colors.YELLOW, f"   EventBridge rule might already exist: {e}")
+                # Make kubectl executable
+                os.chmod(kubectl_path, stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)
+                self.print_colored(Colors.GREEN, "   [OK] kubectl downloaded and made executable")
 
-            # 4. Add Lambda permission for EventBridge
-            function_arn = f"arn:aws:lambda:{region}:{account_id}:function:{function_name}"
-            rule_arn = f"arn:aws:events:{region}:{account_id}:rule/{rule_name}"
+                # Create zip file
+                zip_path = os.path.join(temp_dir, "kubectl-layer.zip")
 
-            try:
-                lambda_client.add_permission(
-                    FunctionName=function_name,
-                    StatementId=f'EventBridgeInvoke-{cluster_name}',
-                    Action='lambda:InvokeFunction',
-                    Principal='events.amazonaws.com',
-                    SourceArn=rule_arn
-                )
-            except lambda_client.exceptions.ResourceConflictException:
-                self.print_colored(Colors.CYAN, f"   Permission already exists for EventBridge")
+                with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                    # Add kubectl
+                    zipf.write(kubectl_path, "bin/kubectl")
 
-            # 5. Add target to EventBridge rule
-            events_client.put_targets(
-                Rule=rule_name,
-                Targets=[
-                    {
-                        'Id': '1',
-                        'Arn': function_arn,
-                        'Input': json.dumps({
-                            'cluster_name': cluster_name,
-                            'region': region,
-                            'source': 'eventbridge-schedule'
-                        })
-                    }
-                ]
-            )
+                    # Add a simple bootstrap script
+                    bootstrap_script = """#!/bin/bash
+    export PATH="/opt/bin:$PATH"
+    """
+                    bootstrap_path = os.path.join(temp_dir, "bootstrap")
+                    with open(bootstrap_path, 'w') as f:
+                        f.write(bootstrap_script)
+                    os.chmod(bootstrap_path, 0o755)
+                    zipf.write(bootstrap_path, "bootstrap")
 
-            self.print_colored(Colors.GREEN, f"✅ Node protection monitoring setup completed!")
-            self.print_colored(Colors.CYAN, f"   📋 Function: {function_name}")
-            self.print_colored(Colors.CYAN, f"   ⏰ Schedule: Every 5 minutes")
-            self.print_colored(Colors.CYAN, f"   🎯 Target: {cluster_name}")
+                # Read zip file
+                with open(zip_path, 'rb') as f:
+                    zip_content = f.read()
 
-            return True
+                # Check if layer already exists
+                try:
+                    existing_layers = lambda_client.list_layers()
+                    layer_exists = any(layer['LayerName'] == layer_name for layer in existing_layers.get('Layers', []))
+
+                    if layer_exists:
+                        self.print_colored(Colors.YELLOW,
+                                           f"   ⚠️  Layer {layer_name} already exists, using existing version")
+                        # Get the latest version
+                        layer_versions = lambda_client.list_layer_versions(LayerName=layer_name)
+                        if layer_versions.get('LayerVersions'):
+                            latest_version = layer_versions['LayerVersions'][0]
+                            return latest_version['LayerVersionArn']
+
+                    # Create new layer
+                    self.print_colored(Colors.BLUE, f"   📦 Publishing kubectl layer...")
+
+                    response = lambda_client.publish_layer_version(
+                        LayerName=layer_name,
+                        Description="kubectl binary for EKS operations",
+                        Content={'ZipFile': zip_content},
+                        CompatibleRuntimes=['python3.9', 'python3.10', 'python3.11'],
+                        CompatibleArchitectures=['x86_64']
+                    )
+
+                    layer_arn = response['LayerVersionArn']
+                    self.print_colored(Colors.GREEN, f"   ✅ kubectl layer created: {layer_arn}")
+
+                    return layer_arn
+
+                except Exception as e:
+                    self.print_colored(Colors.RED, f"   ❌ Failed to create kubectl layer: {str(e)}")
+                    return None
 
         except Exception as e:
-            self.log_operation('ERROR', f"Failed to setup node protection monitoring: {str(e)}")
-            self.print_colored(Colors.RED, f"❌ Node protection monitoring setup failed: {str(e)}")
-            return False
+            self.print_colored(Colors.RED, f"[ERROR] Failed to create kubectl layer: {str(e)}")
+            return None
 
-    def setup_node_protection_monitoring(self, cluster_name: str, region: str, admin_access_key: str,
-                                         admin_secret_key: str, nodegroup_names: list) -> bool:
+    def create_minimal_kubectl_layer(self, region: str, admin_access_key: str, admin_secret_key: str) -> str:
         """
-        Setup node protection monitoring Lambda, triggered by EC2 termination for specific EKS nodegroups.
+        Alternative: Create a minimal layer with just kubectl (much smaller and more reliable).
         """
         try:
-            self.log_operation('INFO', f"Setting up node protection monitoring for cluster {cluster_name}")
-            self.print_colored(Colors.YELLOW, f"🔧 Setting up node protection monitoring...")
-
-            # Extract 4-char suffix from cluster name
-            suffix = cluster_name.split('-')[-1]
-            function_name = f"node-protection-monitor-eks-{suffix}"
-            role_name = f"NodeProtectionMonitorRole-{suffix}"
+            self.print_colored(Colors.YELLOW, f"🔧 Creating minimal kubectl layer...")
 
             # Create AWS session
             import boto3
@@ -3472,13 +3314,131 @@ class EKSClusterManager:
             )
 
             lambda_client = admin_session.client('lambda')
-            iam_client = admin_session.client('iam')
-            sts_client = admin_session.client('sts')
+            layer_name = "kubectl-minimal-layer"
+
+            # Check if layer already exists
+            try:
+                response = lambda_client.list_layer_versions(LayerName=layer_name, MaxItems=1)
+                if response.get('LayerVersions'):
+                    latest_version = response['LayerVersions'][0]
+                    layer_arn = latest_version['LayerVersionArn']
+                    self.print_colored(Colors.CYAN, f"   📦 Using existing minimal layer: {layer_arn}")
+                    return layer_arn
+            except lambda_client.exceptions.ResourceNotFoundException:
+                pass
+
+            import tempfile
+            import os
+            import zipfile
+            import urllib.request
+            import shutil
+
+            # Create temp directory
+            temp_dir = tempfile.mkdtemp()
+            layer_dir = os.path.join(temp_dir, 'layer')
+            bin_dir = os.path.join(layer_dir, 'bin')
+            os.makedirs(bin_dir, exist_ok=True)
+
+            try:
+                # Download only kubectl
+                self.print_colored(Colors.CYAN, f"   ⬇️  Downloading kubectl...")
+                kubectl_url = "https://dl.k8s.io/release/v1.28.0/bin/linux/amd64/kubectl"
+                kubectl_path = os.path.join(bin_dir, 'kubectl')
+
+                urllib.request.urlretrieve(kubectl_url, kubectl_path)
+                os.chmod(kubectl_path, 0o755)
+
+                kubectl_size_mb = os.path.getsize(kubectl_path) / 1024 / 1024
+                self.print_colored(Colors.GREEN, f"   ✅ kubectl downloaded ({kubectl_size_mb:.1f} MB)")
+
+                # Create zip
+                temp_zip = tempfile.NamedTemporaryFile(suffix='.zip', delete=False)
+                temp_zip_path = temp_zip.name
+                temp_zip.close()
+
+                with zipfile.ZipFile(temp_zip_path, 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as zip_file:
+                    for root, dirs, files in os.walk(layer_dir):
+                        for file in files:
+                            file_path = os.path.join(root, file)
+                            arcname = os.path.relpath(file_path, layer_dir)
+                            zip_file.write(file_path, arcname)
+
+                layer_size_mb = os.path.getsize(temp_zip_path) / 1024 / 1024
+                self.print_colored(Colors.CYAN, f"   📏 Layer size: {layer_size_mb:.1f} MB")
+
+                # Upload
+                self.print_colored(Colors.CYAN, f"   ⬆️  Uploading minimal layer...")
+
+                with open(temp_zip_path, 'rb') as zip_data:
+                    response = lambda_client.publish_layer_version(
+                        LayerName=layer_name,
+                        Description='Minimal Lambda layer with kubectl only',
+                        Content={'ZipFile': zip_data.read()},
+                        CompatibleRuntimes=['python3.9', 'python3.8', 'python3.10', 'python3.11'],
+                        CompatibleArchitectures=['x86_64']
+                    )
+
+                    layer_arn = response['LayerVersionArn']
+                    self.print_colored(Colors.GREEN, f"   ✅ Minimal layer created: {layer_arn}")
+                    return layer_arn
+
+            finally:
+                try:
+                    shutil.rmtree(temp_dir)
+                    os.unlink(temp_zip_path)
+                except OSError:
+                    pass
+
+        except Exception as e:
+            self.print_colored(Colors.RED, f"❌ Minimal layer creation failed: {str(e)}")
+            return None
+
+    def setup_node_protection_monitoring(self, cluster_name: str, region: str, admin_access_key: str,
+                                                   admin_secret_key: str, nodegroup_names: list) -> bool:
+        """
+        Setup optimized node protection monitoring with kubectl-only layer (no AWS CLI)
+        """
+        try:
+            # Extract suffix from cluster name
+            cluster_suffix = cluster_name.split('-')[-1] if '-' in cluster_name else cluster_name
+
+            # Get current datetime dynamically
+            current_datetime = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+
+            self.log_operation('INFO',
+                               f"Setting up optimized node protection monitoring for cluster {cluster_name} (suffix: {cluster_suffix})")
+
+            # Create Lambda client
+            lambda_client = boto3.client('lambda', region_name=region,
+                                         aws_access_key_id=admin_access_key,
+                                         aws_secret_access_key=admin_secret_key)
+
+            # Create IAM client for role management
+            iam_client = boto3.client('iam', region_name=region,
+                                      aws_access_key_id=admin_access_key,
+                                      aws_secret_access_key=admin_secret_key)
 
             # Get account ID
+            sts_client = boto3.client('sts', region_name=region,
+                                      aws_access_key_id=admin_access_key,
+                                      aws_secret_access_key=admin_secret_key)
             account_id = sts_client.get_caller_identity()['Account']
 
-            # 1. Create IAM role for Lambda
+            # Step 1: Create only kubectl layer (much smaller, ~15MB)
+            self.print_colored(Colors.CYAN, "   📦 Creating kubectl layer (optimized)...")
+
+            kubectl_layer_arn = self.create_kubectl_only_layer(lambda_client)
+
+            if not kubectl_layer_arn:
+                self.print_colored(Colors.RED, "   ❌ Failed to create kubectl layer")
+                return False
+
+            self.print_colored(Colors.GREEN, f"   ✅ kubectl layer created: {kubectl_layer_arn}")
+
+            # Step 2: Create IAM role with new naming convention
+            role_name = f"NodeProtectionMonitorRole-{cluster_suffix}"
+            self.print_colored(Colors.CYAN, f"   🔑 Creating IAM role: {role_name}")
+
             trust_policy = {
                 "Version": "2012-10-17",
                 "Statement": [
@@ -3489,85 +3449,193 @@ class EKSClusterManager:
                     }
                 ]
             }
-            lambda_policy = {
+
+            try:
+                iam_client.create_role(
+                    RoleName=role_name,
+                    AssumeRolePolicyDocument=json.dumps(trust_policy),
+                    Description=f"Role for optimized Lambda node protection monitoring - {cluster_name} (suffix: {cluster_suffix})"
+                )
+                self.print_colored(Colors.GREEN, f"   ✅ Created IAM role: {role_name}")
+            except iam_client.exceptions.EntityAlreadyExistsException:
+                self.print_colored(Colors.YELLOW, f"   ⚠️  IAM role already exists: {role_name}")
+
+            # Attach policies
+            policies = [
+                "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+                "arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess",
+                "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy",
+                "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"
+            ]
+
+            for policy_arn in policies:
+                try:
+                    iam_client.attach_role_policy(RoleName=role_name, PolicyArn=policy_arn)
+                    self.print_colored(Colors.GREEN, f"   ✅ Attached policy: {policy_arn}")
+                except Exception as e:
+                    self.print_colored(Colors.YELLOW, f"   ⚠️  Policy may already be attached: {policy_arn}")
+
+            # Enhanced inline policy for EKS and EC2 access
+            inline_policy = {
                 "Version": "2012-10-17",
                 "Statement": [
                     {
                         "Effect": "Allow",
                         "Action": [
-                            "eks:DescribeNodegroup",
-                            "eks:UpdateNodegroupConfig",
+                            "ec2:CreateTags",
+                            "ec2:DeleteTags",
                             "ec2:DescribeInstances",
-                            "logs:CreateLogGroup",
-                            "logs:CreateLogStream",
-                            "logs:PutLogEvents"
+                            "ec2:DescribeTags",
+                            "autoscaling:DescribeAutoScalingGroups",
+                            "autoscaling:DescribeAutoScalingInstances",
+                            "eks:DescribeCluster",
+                            "eks:DescribeNodegroup",
+                            "eks:ListNodegroups",
+                            "sts:GetCallerIdentity",
+                            "sts:GeneratePresignedUrl"
                         ],
                         "Resource": "*"
                     }
                 ]
             }
+
             try:
-                iam_client.create_role(
-                    RoleName=role_name,
-                    AssumeRolePolicyDocument=json.dumps(trust_policy),
-                    Description="Role for EKS node protection Lambda"
-                )
                 iam_client.put_role_policy(
                     RoleName=role_name,
-                    PolicyName="NodeProtectionLambdaPolicy",
-                    PolicyDocument=json.dumps(lambda_policy)
+                    PolicyName="OptimizedNodeProtectionPolicy",
+                    PolicyDocument=json.dumps(inline_policy)
                 )
-                self.print_colored(Colors.GREEN, f"   ✅ IAM role {role_name} created")
-            except iam_client.exceptions.EntityAlreadyExistsException:
-                self.print_colored(Colors.CYAN, f"   📝 IAM role {role_name} already exists")
+                self.print_colored(Colors.GREEN, f"   ✅ Created optimized inline policy")
+            except Exception as e:
+                self.print_colored(Colors.YELLOW, f"   ⚠️  Inline policy may already exist: {str(e)}")
 
-            # Wait for role to be available
-            import time
-            time.sleep(10)
             role_arn = f"arn:aws:iam::{account_id}:role/{role_name}"
 
-            # 2. Create Lambda function
-            # Generate current UTC date and time
-            current_utc = datetime.utcnow()
-            current_date = current_utc.strftime('%Y-%m-%d')
-            current_time = current_utc.strftime('%H:%M:%S')
+            # Wait for role to be ready
+            self.print_colored(Colors.CYAN, f"   ⏱️  Waiting for IAM role to be ready...")
+            time.sleep(10)
 
-            lambda_code = (
-                self._get_node_protection_lambda_template()
-                .replace('{{cluster_name}}', cluster_name)
-                .replace('{{region}}', region)
-                .replace('{{access_key}}', admin_access_key)
-                .replace('{{secret_key}}', admin_secret_key)
-                .replace('{{current_date}}', current_date)
-                .replace('{{current_time}}', current_time)
-                .replace('{{current_user}}', 'varadharajaan')
-            )
+            # Step 3: Create optimized Lambda function with template replacement
+            function_name = f"node-protection-monitor-eks-{cluster_suffix}"
+            self.print_colored(Colors.CYAN, f"   🚀 Creating optimized Lambda function: {function_name}")
 
-            import zipfile
+            # Read Lambda template and replace variables with proper encoding
+            try:
+                # Read template file with explicit UTF-8 encoding
+                with open('lambda_node_protection_template.py', 'r', encoding='utf-8') as f:
+                    lambda_template = f.read()
+
+                self.print_colored(Colors.GREEN, f"   ✅ Lambda template loaded successfully with UTF-8 encoding")
+
+                # Replace template variables with actual values
+                lambda_code = lambda_template.replace('{{CLUSTER_NAME}}', cluster_name)
+                lambda_code = lambda_code.replace('{{REGION}}', region)
+                lambda_code = lambda_code.replace('{{ACCESS_KEY}}', admin_access_key)
+                lambda_code = lambda_code.replace('{{SECRET_KEY}}', admin_secret_key)
+                lambda_code = lambda_code.replace('{{CURRENT_DATETIME}}', current_datetime)
+                lambda_code = lambda_code.replace('{{CURRENT_USER}}', self.current_user)
+
+                self.print_colored(Colors.GREEN, f"   ✅ Template variables replaced successfully")
+                self.print_colored(Colors.CYAN, f"   📅 Generated: {current_datetime} UTC by {self.current_user}")
+
+            except FileNotFoundError:
+                self.print_colored(Colors.RED,
+                                   f"   ❌ Lambda template file 'lambda_node_protection_template.py' not found")
+                return False
+            except UnicodeDecodeError as e:
+                self.print_colored(Colors.RED, f"   ❌ Unicode decode error reading template file: {str(e)}")
+                self.print_colored(Colors.YELLOW,
+                                   f"   ⚠️  Template file may have encoding issues. Please save it as UTF-8.")
+                return False
+            except Exception as e:
+                self.print_colored(Colors.RED, f"   ❌ Failed to read Lambda template: {str(e)}")
+                return False
+
+            # Create proper Lambda deployment package as ZIP
             import tempfile
+            import zipfile
             import os
 
-            # Create temp file with delete=False and close it properly
-            temp_zip = tempfile.NamedTemporaryFile(suffix='.zip', delete=False)
-            temp_zip_path = temp_zip.name
-            temp_zip.close()  # Close the file handle
-
             try:
-                # Create the zip file
-                with zipfile.ZipFile(temp_zip_path, 'w') as zip_file:
-                    zip_file.writestr('lambda_function.py', lambda_code)
+                with tempfile.TemporaryDirectory() as temp_dir:
+                    # Create the lambda function file
+                    lambda_file_path = os.path.join(temp_dir, 'lambda_function.py')
+                    with open(lambda_file_path, 'w', encoding='utf-8') as f:
+                        f.write(lambda_code)
 
-                # Read and upload the zip file
-                with open(temp_zip_path, 'rb') as zip_data:
+                    # Create ZIP file for Lambda
+                    zip_path = os.path.join(temp_dir, 'lambda_function.zip')
+                    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                        zip_file.write(lambda_file_path, 'lambda_function.py')
+
+                    # Read the ZIP file as bytes
+                    with open(zip_path, 'rb') as zip_file:
+                        lambda_zip_content = zip_file.read()
+
+                    self.print_colored(Colors.GREEN,
+                                       f"   ✅ Lambda deployment package created: {len(lambda_zip_content)} bytes")
+
+            except Exception as e:
+                self.print_colored(Colors.RED, f"   ❌ Failed to create Lambda deployment package: {str(e)}")
+                return False
+
+            # Check if function exists
+            function_exists = False
+            try:
+                lambda_client.get_function(FunctionName=function_name)
+                function_exists = True
+                self.print_colored(Colors.YELLOW, f"   ⚠️  Lambda function already exists: {function_name}")
+            except lambda_client.exceptions.ResourceNotFoundException:
+                self.print_colored(Colors.CYAN, f"   📝 Creating new optimized Lambda function...")
+
+            if not function_exists:
+                try:
+                    lambda_client.create_function(
+                        FunctionName=function_name,
+                        Runtime='python3.9',
+                        Role=role_arn,
+                        Handler='lambda_function.lambda_handler',
+                        Code={'ZipFile': lambda_zip_content},
+                        Description=f'Optimized node protection monitoring for EKS cluster {cluster_name} (suffix: {cluster_suffix}) - No AWS CLI dependency',
+                        Timeout=180,
+                        MemorySize=256,
+                        Layers=[kubectl_layer_arn],
+                        Environment={
+                            'Variables': {
+                                'CLUSTER_NAME': cluster_name,
+                                'REGION': region,
+                                'NEW_AWS_ACCESS_KEY_ID': admin_access_key,
+                                'NEW_AWS_SECRET_ACCESS_KEY': admin_secret_key
+                            }
+                        }
+                    )
+                    self.print_colored(Colors.GREEN, f"   ✅ Created optimized Lambda function: {function_name}")
+                except Exception as e:
+                    self.print_colored(Colors.RED, f"   ❌ Failed to create Lambda function: {str(e)}")
+                    return False
+            else:
+                # Update existing function
+                max_retries = 3
+                for attempt in range(max_retries):
                     try:
-                        lambda_client.create_function(
+                        # Update function code with proper ZIP package
+                        lambda_client.update_function_code(
                             FunctionName=function_name,
-                            Runtime='python3.9',
+                            ZipFile=lambda_zip_content
+                        )
+
+                        # Wait for update to complete
+                        time.sleep(5)
+
+                        # Update function configuration
+                        lambda_client.update_function_configuration(
+                            FunctionName=function_name,
                             Role=role_arn,
                             Handler='lambda_function.lambda_handler',
-                            Code={'ZipFile': zip_data.read()},
-                            Description=f'Node protection monitoring for EKS cluster {cluster_name}',
-                            Timeout=300,
+                            Description=f'Optimized node protection monitoring for EKS cluster {cluster_name} (suffix: {cluster_suffix}) - Updated at {current_datetime}',
+                            Timeout=180,
+                            MemorySize=256,
+                            Layers=[kubectl_layer_arn],
                             Environment={
                                 'Variables': {
                                     'CLUSTER_NAME': cluster_name,
@@ -3577,36 +3645,335 @@ class EKSClusterManager:
                                 }
                             }
                         )
-                        self.print_colored(Colors.GREEN, f"   ✅ Lambda function {function_name} created")
+
+                        self.print_colored(Colors.GREEN, f"   ✅ Updated optimized Lambda function: {function_name}")
+                        break
+
                     except lambda_client.exceptions.ResourceConflictException:
-                        zip_data.seek(0)
-                        lambda_client.update_function_code(
-                            FunctionName=function_name,
-                            ZipFile=zip_data.read()
-                        )
-                        self.print_colored(Colors.CYAN, f"   📝 Lambda function {function_name} updated")
+                        if attempt < max_retries - 1:
+                            self.print_colored(Colors.YELLOW,
+                                               f"   ⚠️  Function update in progress, retrying in {10 * (attempt + 1)} seconds...")
+                            time.sleep(10 * (attempt + 1))
+                        else:
+                            self.print_colored(Colors.RED,
+                                               f"   ❌ Failed to update Lambda function after {max_retries} attempts")
+                            return False
+                    except Exception as e:
+                        self.print_colored(Colors.RED, f"   ❌ Failed to update Lambda function: {str(e)}")
+                        return False
 
-            finally:
-                # Clean up the temp file
-                try:
-                    os.unlink(temp_zip_path)
-                except OSError:
-                    pass  # File might already be deleted
+            # Step 4: Create EventBridge rule with new naming convention
+            events_client = boto3.client('events', region_name=region,
+                                         aws_access_key_id=admin_access_key,
+                                         aws_secret_access_key=admin_secret_key)
 
-            # 3. Create EventBridge rule for EC2 termination (not schedule)
-            lambda_arn = f"arn:aws:lambda:{region}:{account_id}:function:{function_name}"
-            self.create_node_termination_eventbridge_rule(region, account_id, lambda_arn, nodegroup_names, admin_access_key, admin_secret_key)
+            rule_name = f"node-protection-monitor-eks-{cluster_suffix}-rule"
+            self.print_colored(Colors.CYAN, f"   📅 Creating EventBridge rule: {rule_name}")
 
-            self.print_colored(Colors.GREEN, f"✅ Node protection monitoring event rule setup completed!")
+            # Create event pattern for EC2 instance state changes
+            event_pattern = {
+                "source": ["aws.ec2"],
+                "detail-type": ["EC2 Instance State-change Notification"],
+                "detail": {
+                    "state": ["terminated", "running"]
+                }
+            }
+
+            try:
+                events_client.put_rule(
+                    Name=rule_name,
+                    EventPattern=json.dumps(event_pattern),
+                    State='ENABLED',
+                    Description=f'Optimized node protection monitoring for EKS cluster {cluster_name} (suffix: {cluster_suffix})'
+                )
+                self.print_colored(Colors.GREEN, f"   ✅ Created EventBridge rule: {rule_name}")
+            except Exception as e:
+                self.print_colored(Colors.YELLOW, f"   ⚠️  EventBridge rule may already exist: {str(e)}")
+
+            # Step 5: Add Lambda permission for EventBridge
+            self.print_colored(Colors.CYAN, f"   🔒 Adding Lambda permission for EventBridge...")
+
+            try:
+                lambda_client.add_permission(
+                    FunctionName=function_name,
+                    StatementId=f"AllowEventBridge-{cluster_suffix}",
+                    Action='lambda:InvokeFunction',
+                    Principal='events.amazonaws.com',
+                    SourceArn=f"arn:aws:events:{region}:{account_id}:rule/{rule_name}"
+                )
+                self.print_colored(Colors.GREEN, f"   ✅ Added Lambda permission for EventBridge")
+            except lambda_client.exceptions.ResourceConflictException:
+                self.print_colored(Colors.YELLOW, f"   ⚠️  Lambda permission already exists")
+            except Exception as e:
+                self.print_colored(Colors.RED, f"   ❌ Failed to add Lambda permission: {str(e)}")
+
+            # Step 6: Create EventBridge target
+            self.print_colored(Colors.CYAN, f"   🎯 Creating EventBridge target...")
+
+            try:
+                events_client.put_targets(
+                    Rule=rule_name,
+                    Targets=[
+                        {
+                            'Id': '1',
+                            'Arn': f"arn:aws:lambda:{region}:{account_id}:function:{function_name}",
+                            'InputTransformer': {
+                                'InputPathsMap': {
+                                    'instance_id': '$.detail.instance-id',
+                                    'state': '$.detail.state'
+                                },
+                                'InputTemplate': json.dumps({
+                                    'cluster_name': cluster_name,
+                                    'region': region,
+                                    'instance_id': '<instance_id>',
+                                    'state': '<state>',
+                                    'nodegroup_names': nodegroup_names
+                                })
+                            }
+                        }
+                    ]
+                )
+                self.print_colored(Colors.GREEN, f"   ✅ Created EventBridge target")
+            except Exception as e:
+                self.print_colored(Colors.RED, f"   ❌ Failed to create EventBridge target: {str(e)}")
+                return False
+
+            # Step 7: Test the Lambda function
+            self.print_colored(Colors.CYAN, f"   🧪 Testing optimized Lambda function...")
+
+            test_event = {
+                'cluster_name': cluster_name,
+                'region': region,
+                'test_mode': True
+            }
+
+            # sleep for 1 mins
+            time.sleep(60)
+
+            try:
+                response = lambda_client.invoke(
+                    FunctionName=function_name,
+                    InvocationType='RequestResponse',
+                    Payload=json.dumps(test_event)
+                )
+
+                response_payload = json.loads(response['Payload'].read())
+
+                if response.get('StatusCode') == 200:
+                    self.print_colored(Colors.GREEN, f"   ✅ Lambda function test successful")
+                    self.print_colored(Colors.CYAN,
+                                       f"   📊 Test result: {response_payload.get('statusCode', 'Unknown')}")
+                else:
+                    self.print_colored(Colors.YELLOW, f"   ⚠️  Lambda function test returned non-200 status")
+
+            except Exception as e:
+                self.print_colored(Colors.YELLOW,
+                                   f"   ⚠️  Lambda function test failed (this is often normal): {str(e)}")
+
+            # # Step 8: Create scheduled trigger for regular monitoring
+            # self.print_colored(Colors.CYAN, f"   ⏰ Creating scheduled monitoring rule...")
+            #
+            # schedule_rule_name = f"node-protection-monitor-eks-{cluster_suffix}-schedule"
+            #
+            # try:
+            #     events_client.put_rule(
+            #         Name=schedule_rule_name,
+            #         ScheduleExpression='rate(5 minutes)',
+            #         State='ENABLED',
+            #         Description=f'Scheduled optimized node protection monitoring for EKS cluster {cluster_name} (suffix: {cluster_suffix})'
+            #     )
+            #
+            #     # Add permission for scheduled rule
+            #     lambda_client.add_permission(
+            #         FunctionName=function_name,
+            #         StatementId=f"AllowScheduledEventBridge-{cluster_suffix}",
+            #         Action='lambda:InvokeFunction',
+            #         Principal='events.amazonaws.com',
+            #         SourceArn=f"arn:aws:events:{region}:{account_id}:rule/{schedule_rule_name}"
+            #     )
+            #
+            #     # Create target for scheduled rule
+            #     events_client.put_targets(
+            #         Rule=schedule_rule_name,
+            #         Targets=[
+            #             {
+            #                 'Id': '1',
+            #                 'Arn': f"arn:aws:lambda:{region}:{account_id}:function:{function_name}",
+            #                 'Input': json.dumps({
+            #                     'cluster_name': cluster_name,
+            #                     'region': region,
+            #                     'scheduled_check': True,
+            #                     'nodegroup_names': nodegroup_names
+            #                 })
+            #             }
+            #         ]
+            #     )
+            #
+            #     self.print_colored(Colors.GREEN, f"   ✅ Created scheduled monitoring rule (5-minute interval)")
+
+            except lambda_client.exceptions.ResourceConflictException:
+                self.print_colored(Colors.YELLOW, f"   ⚠️  Scheduled monitoring rule already exists")
+            except Exception as e:
+                self.print_colored(Colors.YELLOW, f"   ⚠️  Failed to create scheduled monitoring: {str(e)}")
+
+            self.print_colored(Colors.GREEN, f"✅ Optimized node protection monitoring setup completed!")
             self.print_colored(Colors.CYAN, f"   📋 Function: {function_name}")
-            self.print_colored(Colors.CYAN, f"   🎯 Target Nodegroups: {nodegroup_names}")
+            self.print_colored(Colors.CYAN, f"   🔑 Role: {role_name}")
+            self.print_colored(Colors.CYAN, f"   📦 Layer: kubectl only (~15MB vs 70MB)")
+            self.print_colored(Colors.CYAN, f"   🔧 Method: Boto3 kubeconfig generation")
+            self.print_colored(Colors.CYAN, f"   ⏱️  Timeout: 180s (optimized)")
+            self.print_colored(Colors.CYAN, f"   💾 Memory: 256MB (optimized)")
+            self.print_colored(Colors.CYAN, f"   🎯 Monitoring: {len(nodegroup_names)} nodegroups")
+            self.print_colored(Colors.CYAN, f"   🏷️  Cluster Suffix: {cluster_suffix}")
+            self.print_colored(Colors.CYAN, f"   📅 Generated: {current_datetime} UTC by {self.current_user}")
+            self.print_colored(Colors.CYAN, f"   📝 Encoding: UTF-8 (prevents charmap errors)")
+            self.print_colored(Colors.CYAN, f"   📦 Package: Proper ZIP format (prevents unzip errors)")
 
             return True
 
         except Exception as e:
-            self.log_operation('ERROR', f"Failed to setup node protection monitoring: {str(e)}")
-            self.print_colored(Colors.RED, f"❌ Node protection monitoring setup failed: {str(e)}")
+            self.log_operation('ERROR', f"Failed to setup optimized node protection monitoring: {str(e)}")
+            self.print_colored(Colors.RED, f"❌ Optimized node protection monitoring setup failed: {str(e)}")
             return False
+
+    def create_kubectl_only_layer(self, lambda_client):
+        """
+        Create a kubectl-only layer (much smaller than combined layer)
+        """
+        try:
+            self.print_colored(Colors.CYAN, "   📦 Creating kubectl-only layer...")
+
+            # Create minimal kubectl layer
+            import tempfile
+            import zipfile
+            import os
+
+            with tempfile.TemporaryDirectory() as temp_dir:
+                # Create layer structure
+                layer_dir = os.path.join(temp_dir, 'kubectl-layer')
+                bin_dir = os.path.join(layer_dir, 'bin')
+                os.makedirs(bin_dir, exist_ok=True)
+
+                # Download kubectl binary
+                kubectl_url = "https://dl.k8s.io/release/v1.28.2/bin/linux/amd64/kubectl"
+                kubectl_path = os.path.join(bin_dir, 'kubectl')
+
+                self.print_colored(Colors.CYAN, f"   📥 Downloading kubectl from {kubectl_url}")
+
+                import urllib.request
+                urllib.request.urlretrieve(kubectl_url, kubectl_path)
+                os.chmod(kubectl_path, 0o755)
+
+                # Create zip file
+                zip_path = os.path.join(temp_dir, 'kubectl-layer.zip')
+                with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                    for root, dirs, files in os.walk(layer_dir):
+                        for file in files:
+                            file_path = os.path.join(root, file)
+                            arc_path = os.path.relpath(file_path, layer_dir)
+                            zip_file.write(file_path, arc_path)
+
+                # Upload layer
+                with open(zip_path, 'rb') as zip_file:
+                    layer_response = lambda_client.publish_layer_version(
+                        LayerName='kubectl-only-layer',
+                        Description='kubectl binary for EKS operations (optimized)',
+                        Content={'ZipFile': zip_file.read()},
+                        CompatibleRuntimes=['python3.9', 'python3.8'],
+                        CompatibleArchitectures=['x86_64']
+                    )
+
+                layer_arn = layer_response['LayerVersionArn']
+                self.print_colored(Colors.GREEN, f"   ✅ kubectl-only layer created: {layer_arn}")
+
+                return layer_arn
+
+        except Exception as e:
+            self.print_colored(Colors.RED, f"   ❌ Failed to create kubectl-only layer: {str(e)}")
+            return None
+
+    def create_kubectl_pyyaml_layer(self, lambda_client):
+        """
+        Create a kubectl + PyYAML layer (still much smaller than AWS CLI)
+        """
+        try:
+            self.print_colored(Colors.CYAN, "   📦 Creating kubectl + PyYAML layer...")
+
+            import tempfile
+            import zipfile
+            import os
+            import subprocess
+
+            with tempfile.TemporaryDirectory() as temp_dir:
+                # Create layer structure
+                layer_dir = os.path.join(temp_dir, 'kubectl-pyyaml-layer')
+                bin_dir = os.path.join(layer_dir, 'bin')
+                python_dir = os.path.join(layer_dir, 'python')
+                os.makedirs(bin_dir, exist_ok=True)
+                os.makedirs(python_dir, exist_ok=True)
+
+                # Download kubectl binary
+                kubectl_url = "https://dl.k8s.io/release/v1.28.2/bin/linux/amd64/kubectl"
+                kubectl_path = os.path.join(bin_dir, 'kubectl')
+
+                self.print_colored(Colors.CYAN, f"   📥 Downloading kubectl from {kubectl_url}")
+
+                import urllib.request
+                urllib.request.urlretrieve(kubectl_url, kubectl_path)
+                os.chmod(kubectl_path, 0o755)
+
+                # Install PyYAML using pip
+                self.print_colored(Colors.CYAN, f"   📦 Installing PyYAML...")
+
+                try:
+                    subprocess.run([
+                        'pip', 'install', 'pyyaml>=6.0.0',
+                        '--target', python_dir,
+                        '--no-deps',
+                        '--platform', 'linux_x86_64',
+                        '--implementation', 'cp',
+                        '--python-version', '3.9',
+                        '--only-binary=:all:'
+                    ], check=True, capture_output=True)
+
+                    self.print_colored(Colors.GREEN, f"   ✅ PyYAML installed successfully")
+
+                except subprocess.CalledProcessError as e:
+                    self.print_colored(Colors.RED, f"   ❌ Failed to install PyYAML: {e.stderr.decode()}")
+                    return None
+
+                # Create zip file
+                zip_path = os.path.join(temp_dir, 'kubectl-pyyaml-layer.zip')
+                with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                    for root, dirs, files in os.walk(layer_dir):
+                        for file in files:
+                            file_path = os.path.join(root, file)
+                            arc_path = os.path.relpath(file_path, layer_dir)
+                            zip_file.write(file_path, arc_path)
+
+                # Check layer size
+                layer_size = os.path.getsize(zip_path)
+                layer_size_mb = layer_size / (1024 * 1024)
+                self.print_colored(Colors.CYAN, f"   📊 Layer size: {layer_size_mb:.2f} MB")
+
+                # Upload layer
+                with open(zip_path, 'rb') as zip_file:
+                    layer_response = lambda_client.publish_layer_version(
+                        LayerName='kubectl-pyyaml-layer',
+                        Description='kubectl binary + PyYAML for EKS operations (optimized)',
+                        Content={'ZipFile': zip_file.read()},
+                        CompatibleRuntimes=['python3.9', 'python3.8'],
+                        CompatibleArchitectures=['x86_64']
+                    )
+
+                layer_arn = layer_response['LayerVersionArn']
+                self.print_colored(Colors.GREEN, f"   ✅ kubectl + PyYAML layer created: {layer_arn}")
+
+                return layer_arn
+
+        except Exception as e:
+            self.print_colored(Colors.RED, f"   ❌ Failed to create kubectl + PyYAML layer: {str(e)}")
+            return None
 
     def create_node_termination_eventbridge_rule(self, region: str, account_id: str, lambda_arn: str,
                                                  nodegroup_names: List[str], admin_access_key, admin_secret_key) -> bool:
@@ -3639,9 +4006,13 @@ class EKSClusterManager:
                 "source": ["aws.ec2"],
                 "detail-type": ["EC2 Instance State-change Notification"],
                 "detail": {
-                    "state": ["terminated", "shutting-down"]
+                    "state": ["running", "terminated"]
                 }
             }
+
+            # Log the event pattern
+            self.logger.info("Event pattern updated to trigger on EC2 instance creation and deletion events:")
+            self.logger.info(json.dumps(event_pattern, indent=2))
 
             # Create the rule
             try:
@@ -3732,263 +4103,6 @@ class EKSClusterManager:
             self.log_operation('ERROR', f"Failed to create EventBridge rule: {str(e)}")
             self.print_colored(Colors.RED, f"❌ Failed to create EventBridge rule: {str(e)}")
             return False
-
-    def _get_node_protection_lambda_template(self) -> str:
-        """Get the node protection Lambda function template"""
-        # Read the lambda template file we created above
-        try:
-            with open('lambda_node_protection_template.py', 'r', encoding="utf-8") as f:
-                return f.read()
-        except FileNotFoundError:
-            # Return the inline template if file not found
-            return '''
-    # Insert the complete lambda function code here
-    # (The code from lambda_node_protection_monitor.py above)
-    '''
-
-    def _get_node_protection_lambda_template_new(self):
-        """
-        Returns the complete Lambda template for node protection monitoring
-        """
-        return '''#!/usr/bin/env python3
-    """
-    EKS Node Protection Lambda Function
-    Monitors and ensures at least one node per nodegroup has NO_DELETE protection
-    """
-
-    import boto3
-    import json
-    import logging
-    import os
-    from datetime import datetime
-
-    # Configure logging
-    logger = logging.getLogger()
-    logger.setLevel(logging.INFO)
-
-    def lambda_handler(event, context):
-        """
-        Lambda handler for node protection monitoring
-        """
-        try:
-            logger.info(f"Node protection Lambda triggered at {datetime.utcnow()}")
-            logger.info(f"Event: {json.dumps(event, default=str)}")
-
-            # Configuration from environment or hardcoded values
-            cluster_name = "{{cluster_name}}"
-            region = "{{region}}"
-
-            # AWS credentials (in production, use IAM roles instead)
-            access_key = "{{aws_access_key_id}}"
-            secret_key = "{{aws_secret_access_key}}"
-
-            # Create AWS clients
-            session = boto3.Session(
-                aws_access_key_id=access_key,
-                aws_secret_access_key=secret_key,
-                region_name=region
-            )
-
-            eks_client = session.client('eks')
-            ec2_client = session.client('ec2')
-
-            # Get all nodegroups for the cluster
-            nodegroups_response = eks_client.list_nodegroups(clusterName=cluster_name)
-            nodegroup_names = nodegroups_response.get('nodegroups', [])
-
-            if not nodegroup_names:
-                logger.warning(f"No nodegroups found for cluster {cluster_name}")
-                return {
-                    'statusCode': 200,
-                    'body': json.dumps({
-                        'message': f'No nodegroups found for cluster {cluster_name}',
-                        'cluster': cluster_name,
-                        'timestamp': datetime.utcnow().isoformat()
-                    })
-                }
-
-            logger.info(f"Found {len(nodegroup_names)} nodegroups: {nodegroup_names}")
-
-            results = {}
-
-            # Process each nodegroup
-            for nodegroup_name in nodegroup_names:
-                try:
-                    result = process_nodegroup_protection(
-                        eks_client, ec2_client, cluster_name, nodegroup_name
-                    )
-                    results[nodegroup_name] = result
-                    logger.info(f"Nodegroup {nodegroup_name}: {result['status']}")
-
-                except Exception as e:
-                    error_msg = f"Failed to process nodegroup {nodegroup_name}: {str(e)}"
-                    logger.error(error_msg)
-                    results[nodegroup_name] = {
-                        'status': 'error',
-                        'message': error_msg
-                    }
-
-            # Summary
-            successful = sum(1 for r in results.values() if r['status'] == 'success')
-            total = len(results)
-
-            logger.info(f"Node protection check completed: {successful}/{total} nodegroups processed successfully")
-
-            return {
-                'statusCode': 200,
-                'body': json.dumps({
-                    'message': f'Node protection monitoring completed for cluster {cluster_name}',
-                    'cluster': cluster_name,
-                    'nodegroups_processed': total,
-                    'successful': successful,
-                    'results': results,
-                    'timestamp': datetime.utcnow().isoformat()
-                }, default=str)
-            }
-
-        except Exception as e:
-            error_msg = f"Lambda execution failed: {str(e)}"
-            logger.error(error_msg)
-            return {
-                'statusCode': 500,
-                'body': json.dumps({
-                    'error': error_msg,
-                    'timestamp': datetime.utcnow().isoformat()
-                })
-            }
-
-    def process_nodegroup_protection(eks_client, ec2_client, cluster_name, nodegroup_name):
-        """
-        Process node protection for a specific nodegroup
-        """
-        try:
-            # Get nodegroup details
-            nodegroup_response = eks_client.describe_nodegroup(
-                clusterName=cluster_name,
-                nodegroupName=nodegroup_name
-            )
-
-            nodegroup = nodegroup_response['nodegroup']
-
-            # Get Auto Scaling Group name
-            asg_name = None
-            if 'resources' in nodegroup and 'autoScalingGroups' in nodegroup['resources']:
-                asg_list = nodegroup['resources']['autoScalingGroups']
-                if asg_list:
-                    asg_name = asg_list[0]['name']
-
-            if not asg_name:
-                return {
-                    'status': 'error',
-                    'message': 'No Auto Scaling Group found for nodegroup'
-                }
-
-            # Get instances in the ASG
-            autoscaling_client = boto3.client('autoscaling', region_name=eks_client.meta.region_name)
-            asg_response = autoscaling_client.describe_auto_scaling_groups(
-                AutoScalingGroupNames=[asg_name]
-            )
-
-            if not asg_response['AutoScalingGroups']:
-                return {
-                    'status': 'error',
-                    'message': f'Auto Scaling Group {asg_name} not found'
-                }
-
-            asg = asg_response['AutoScalingGroups'][0]
-            instances = asg.get('Instances', [])
-
-            if not instances:
-                return {
-                    'status': 'warning',
-                    'message': 'No instances found in nodegroup'
-                }
-
-            # Get instance IDs
-            instance_ids = [instance['InstanceId'] for instance in instances if instance['LifecycleState'] == 'InService']
-
-            if not instance_ids:
-                return {
-                    'status': 'warning',
-                    'message': 'No instances in service'
-                }
-
-            # Check current protection status
-            instances_with_protection = []
-            instances_without_protection = []
-
-            for instance_id in instance_ids:
-                # Get instance tags
-                instance_response = ec2_client.describe_instances(InstanceIds=[instance_id])
-
-                if not instance_response['Reservations']:
-                    continue
-
-                instance = instance_response['Reservations'][0]['Instances'][0]
-                tags = instance.get('Tags', [])
-
-                # Check for NO_DELETE tag
-                has_no_delete = any(tag['Key'] == 'kubernetes.io/cluster-autoscaler/node-template/label/protection' 
-                                  and tag['Value'] == 'NO_DELETE' for tag in tags)
-
-                if has_no_delete:
-                    instances_with_protection.append(instance_id)
-                else:
-                    instances_without_protection.append(instance_id)
-
-            logger.info(f"Nodegroup {nodegroup_name}: {len(instances_with_protection)} protected, {len(instances_without_protection)} unprotected")
-
-            # Ensure at least one instance has NO_DELETE protection
-            if not instances_with_protection and instances_without_protection:
-                # Apply NO_DELETE to the first available instance
-                target_instance = instances_without_protection[0]
-
-                try:
-                    # Add the NO_DELETE tag
-                    ec2_client.create_tags(
-                        Resources=[target_instance],
-                        Tags=[
-                            {
-                                'Key': 'kubernetes.io/cluster-autoscaler/node-template/label/protection',
-                                'Value': 'NO_DELETE'
-                            }
-                        ]
-                    )
-
-                    logger.info(f"Applied NO_DELETE protection to instance {target_instance} in nodegroup {nodegroup_name}")
-
-                    return {
-                        'status': 'success',
-                        'message': f'Applied NO_DELETE protection to instance {target_instance}',
-                        'protected_instance': target_instance,
-                        'total_instances': len(instance_ids)
-                    }
-
-                except Exception as e:
-                    return {
-                        'status': 'error',
-                        'message': f'Failed to apply protection to {target_instance}: {str(e)}'
-                    }
-
-            elif instances_with_protection:
-                return {
-                    'status': 'success',
-                    'message': f'Protection already exists on {len(instances_with_protection)} instances',
-                    'protected_instances': instances_with_protection,
-                    'total_instances': len(instance_ids)
-                }
-            else:
-                return {
-                    'status': 'warning',
-                    'message': 'No instances available for protection'
-                }
-
-        except Exception as e:
-            return {
-                'status': 'error',
-                'message': f'Failed to process nodegroup {nodegroup_name}: {str(e)}'
-            }
-    '''
 
     def apply_no_delete_to_matching_nodegroups(self, cluster_name, region, access_key, secret_key):
         """Apply NO_DELETE labels to all nodes in nodegroups matching nodegroup-*-ondemand pattern"""
@@ -9065,6 +9179,7 @@ class EKSClusterManager:
                 cluster_name, region, username, access_key, secret_key
             )
 
+            # Step 9: Ensure only one node per nodegroup always NO_DELETE label using lambda function
             print("\n🔒 Step 9: Ensure only one node per nodegroup always NO_DELETE label using lambda function...")
 
             # Apply initial node protection
@@ -9073,7 +9188,7 @@ class EKSClusterManager:
                 cluster_name, region, access_key, secret_key
             )
 
-            nodegroup_names = [ng['name'] for ng in nodegroup_configs]
+            nodegroup_names = nodegroups_created
 
             if protection_result.get('success'):
                 self.print_colored(Colors.GREEN, f"✅ Initial node protection applied")

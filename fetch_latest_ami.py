@@ -90,7 +90,7 @@ def main():
 
     print("\n✅ Latest Amazon Linux 3 AMI Mapping:")
     for region, ami in ami_mapping.items():
-        print(f"{region}: {ami}")
+        print(f'    "{region}": "{ami}",')
 
 if __name__ == "__main__":
     main()

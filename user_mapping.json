@@ -1,86 +1,82 @@
 {
   "metadata": {
-    "last_updated": "2025-07-02 12:00:00",
+    "last_updated": "2025-07-04 12:45:00",
     "updated_by": "varadharajaan",
     "total_users": 15,
     "organization": "Baker Hughes",
-    "version": "1.0",
+    "version": "1.2",
     "training_event": {
       "course": "Kubernetes Advance Training",
       "location": "Online",
       "dates": "July 09th,10th & 11th 2025",
-      "mode": "In-Person"
+      "mode": "Online"
     }
   },
   "user_mappings": {
     "account01_clouduser01": {
-      "first_name": "Aiswarya",
-      "last_name": "Issac",
-      "email": "Aiswarya.Issac@bakerhughes.com"
+      "first_name": "Furkan Sertap",
+      "last_name": "Katman",
+      "email": "FURKANSertap.KATMAN@bakerhughes.com"
     },
     "account01_clouduser02": {
-      "first_name": "Greeshma",
-      "last_name": "Madhav",
-      "email": "Greeshma.Madhav@bakerhughes.com"
+      "first_name": "Niklas",
+      "last_name": "Fiedler",
+      "email": "Niklas.Fiedler@bakerhughes.com"
     },
     "account01_clouduser03": {
-      "first_name": "Vishnu",
-      "last_name": "T S Thachangat",
-      "email": "VishnuTS.Thachangat@bakerhughes.com"
+      "first_name": "A N M Asif",
+      "last_name": "Hossain",
+      "email": "Asif.Hossain@bakerhughes.com"
     },
     "account01_clouduser04": {
-      "first_name": "Joseph",
-      "last_name": "Varghese",
-      "email": "Joseph.Varghese@bakerhughes.com"
+      "first_name": "Udo",
+      "last_name": "Klarhoefer",
+      "email": "udo.klarhoefer@bakerhughes.com"
     },
     "account01_clouduser05": {
-      "first_name": "Hari",
-      "last_name": "Kumar",
-      "email": "Hari.Kumar@bakerhughes.com"
+      "first_name": "Marco V",
+      "last_name": "Holst",
+      "email": "Marco.VanDerHolst@bakerhughes.com"
     },
-
-
     "account02_clouduser01": {
-      "first_name": "Munish",
-      "last_name": "Gupta",
-      "email": "Munish.Gupta@bakerhughes.com"
+      "first_name": "Pieter",
+      "last_name": "Kroes",
+      "email": "Pieter.Kroes@bakerhughes.com"
     },
     "account02_clouduser02": {
-      "first_name": "Amrendra",
-      "last_name": "Kumar",
-      "email": "Amrendra.Kumar@bakerhughes.com"
+      "first_name": "Damon",
+      "last_name": "Luck",
+      "email": "Damon.Luck@bakerhughes.com"
     },
     "account02_clouduser03": {
-      "first_name": "Arun",
-      "last_name": "Davis",
-      "email": "Arun.Davis@bakerhughes.com"
+      "first_name": "Spencer",
+      "last_name": "Allen",
+      "email": "Spencer.Allen@bakerhughes.com"
     },
     "account02_clouduser04": {
-      "first_name": "Nithin",
-      "last_name": "Ramakrishnan",
-      "email": "Nithin.Ramakrishnan@bakerhughes.com"
+      "first_name": "Arend",
+      "last_name": "Veenstra",
+      "email": "Arnt.Veenstra@bakerhughes.com"
     },
     "account02_clouduser05": {
-      "first_name": "Athul",
-      "last_name": "Raj",
-      "email": "AthulRaj.TS@bakerhughes.com"
+      "first_name": "Alexander",
+      "last_name": "Zabluda",
+      "email": "Alexander.Zabluda@bakerhughes.com"
     },
-
-
     "account03_clouduser01": {
-      "first_name": "Martin",
-      "last_name": "Jacob",
-      "email": "Martin.Jacob@bakerhughes.com"
+      "first_name": "Dusan",
+      "last_name": "Hrbaty",
+      "email": "Dusan.Hrbaty@bakerhughes.com"
     },
     "account03_clouduser02": {
-      "first_name": "Neethu",
-      "last_name": "Haridas",
-      "email": "Neethu.Haridas@bakerhughes.com"
+      "first_name": "Monjurul",
+      "last_name": "Habib",
+      "email": "Monjurul.Habib@bakerhughes.com"
     },
     "account03_clouduser03": {
-      "first_name": "Abhinav",
-      "last_name": "G Nath",
-      "email": "Abhinav.GNath@bakerhughes.com"
+      "first_name": "Bandar",
+      "last_name": "AlMonajed",
+      "email": "Bandar.AlMonajed@bakerhughes.com"
     },
     "account03_clouduser04": {
       "first_name": "Amarjeet",
@@ -111,7 +107,7 @@
     "total_accounts": 3,
     "active_accounts": 3,
     "total_users": 15,
-    "last_sync": "2025-02-07 12:00:00",
+    "last_sync": "2025-07-04 12:45:00",
     "created_by": "varadharajaan",
     "purpose": "K8S Advance Training - July 2025"
   }

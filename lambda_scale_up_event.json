@@ -9,14 +9,14 @@
     },
     {
       "name": "nodegroup-1-spot",
-      "desired_size": 2,
+      "desired_size": 1,
       "min_size": 1,
       "max_size": 3
     },
     {
       "name": "nodegroup-2",
       "desired_size": 1,
-      "min_size": 2,
+      "min_size": 1,
       "max_size": 4
     }
   ]

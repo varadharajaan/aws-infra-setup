@@ -1637,7 +1637,6 @@ class EKSClusterContinuationFromErrors:
                     self.eks_manager.protect_nodes_with_no_delete_label(cluster_name, region, access_key, secret_key)
 
 
-
                     # Apply initial node protection
                     protection_result = self.eks_manager.apply_no_delete_to_matching_nodegroups(
                         cluster_name, region, access_key, secret_key

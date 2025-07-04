@@ -1,10 +1,16 @@
 {
   "region_ami_mapping": {
-    "us-east-1": "ami-0953476d60561c955",
-    "us-east-2": "ami-06c8f2ec674c67112",
-    "us-west-1": "ami-07706bb32254a7fe5",
-    "us-west-2": "ami-04999cd8f2624f834",
-    "ap-south-1": "ami-0af9569868786b23a"
+    "us-east-1": "ami-0fd26c36a83ae0088",
+    "us-east-2": "ami-0c373e44f012305af",
+    "us-west-1": "ami-034c30ea932272b9b",
+    "us-west-2": "ami-0897831b586e1015f",
+    "ap-south-1": "ami-0f9eda62922c0d4f8",
+    "eu-north-1": "ami-0d4a872ae9552d8b2",
+    "eu-central-1": "ami-058d53f28163986eb",
+    "eu-west-1": "ami-0a7f9fa6f8781184d",
+    "eu-west-2": "ami-0bdc581854a627d2b",
+    "eu-west-3": "ami-0864cfc771a8e433e",
+    "ca-central-1": "ami-0e91b97386d7741b1"
   },
   "allowed_instance_types": [
     "t2.small",

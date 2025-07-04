@@ -1429,7 +1429,7 @@ Examples:
 
     def process_instance(self, instance, instruction_file_info):
         """Process a single instance with user instructions for both demouser and ec2-user"""
-        logger.info(f"Processing instance {instance['instance_id']} in account {instance['account']}")
+        logger.info(f"Processing instance {instance['instance_id']} in ASG {instance['asg_name']} for account {instance['account']}")
 
         # Prepare output file path
         account = instance['account']
@@ -1590,7 +1590,7 @@ Examples:
         # with open(report_file, 'w', encoding='utf-8') as f:
         #     json.dump(instance_result, f, indent=2)
 
-        output_file = account_dir / f"{account}_{extracted_username}_command_output.txt"
+        output_file = account_dir / f"{instance_id}_{account}_{extracted_username}_command_output.txt"
         with open(output_file, 'w', encoding='utf-8') as f:
             f.write(f"Command Outputs for Instance: {instance_id}\n")
             f.write(f"Account: {account}\n")
@@ -1798,7 +1798,11 @@ Examples:
         extracted_username = self.extract_username_from_cluster(cluster_name)
         account_dir = Path(self.reports_path) / account / 'instances'
         account_dir.mkdir(parents=True, exist_ok=True)
+        # Save in account directory (existing location)
         html_file = account_dir / f"{instance_id}_{account}_{extracted_username}_report.html"
+
+        # Also save in current directory where ec2_ssh_connector.py is located
+        current_dir_html_file = Path(f"{instance_id}_{account}_{extracted_username}_report.html")
 
         demouser_ssh = f"ssh demouser@{instance_result.get('instance_ip', 'N/A')} (password: demouser@123)"
         ec2user_ssh = f"ssh -i k8s_demo_key.pem ec2-user@{instance_result.get('instance_ip', 'N/A')}"
@@ -1861,10 +1865,16 @@ Examples:
     </html>
     """
 
+        # Write to account directory
         with open(html_file, 'w', encoding='utf-8') as f:
             f.write(html_content)
 
-        logger.info(f"HTML report saved: {html_file}")
+        # Write to current directory as well
+        with open(current_dir_html_file, 'w', encoding='utf-8') as f:
+            f.write(html_content)
+
+        logger.info(f"HTML report saved to account directory: {html_file}")
+        logger.info(f"HTML report saved to current directory: {current_dir_html_file}")
 
     def run_automation(self):
         """Main automation workflow with smart mapping"""
