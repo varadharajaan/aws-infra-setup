@@ -25,6 +25,7 @@ names
 random-word-gen
 random-word
 nltk
+awscli
 
 # JSON handling (built-in, but listing for completeness)
 # json - built-in module

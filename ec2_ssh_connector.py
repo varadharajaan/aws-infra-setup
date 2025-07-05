@@ -7,12 +7,11 @@ Automates the process of connecting EC2 instances to EKS clusters
 import json
 import os
 import sys
-import subprocess
 import paramiko
 import boto3
 import logging
 import argparse
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from collections import defaultdict
 import re

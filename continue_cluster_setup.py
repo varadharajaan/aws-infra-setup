@@ -2518,11 +2518,11 @@ class EKSClusterContinuationFromErrors:
                         self.print_colored(Colors.RED, f"❌ Could not access cluster {cluster_name}, skipping")
                         continue
 
-                    # Analyze existing components
-                    self.analyze_existing_components(cluster_name, region, access_key, secret_key)
-
                     # Configure the cluster
                     success = self.configure_single_cluster(cluster_name, region, access_key, secret_key)
+
+                    # Analyze existing components
+                    # self.analyze_existing_components(cluster_name, region, access_key, secret_key)
 
                     if success:
                         successful_reconfigures += 1
