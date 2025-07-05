@@ -44,6 +44,7 @@ class LambdaNodeProtectionMonitor:
             'instances_scanned': 0,
             'protection_applied': 0,
             'protection_removed': 0,
+            'protection_maintained': 0,  # Added this line
             'errors_encountered': 0,
             'warnings_issued': 0
         }
@@ -72,6 +73,7 @@ class LambdaNodeProtectionMonitor:
         self.logger.info(f"📊 Instances Scanned: {self.execution_stats['instances_scanned']}")
         self.logger.info(f"🛡️  Protection Applied: {self.execution_stats['protection_applied']}")
         self.logger.info(f"🔓 Protection Removed: {self.execution_stats['protection_removed']}")
+        self.logger.info(f"🔒 Protection Maintained: {self.execution_stats['protection_maintained']}")
         self.logger.info(f"❌ Errors: {self.execution_stats['errors_encountered']}")
         self.logger.info(f"⚠️  Warnings: {self.execution_stats['warnings_issued']}")
         self.logger.info(f"✅ Status: {'SUCCESS' if success else 'FAILED'}")
@@ -370,8 +372,7 @@ class LambdaNodeProtectionMonitor:
             self.logger.error(f"❌ Failed to create AWS clients: {str(e)}")
             raise
 
-    def run_protection_monitor_logic(self, cluster_name: str, region: str, access_key: str = None,
-                                     secret_key: str = None):
+    def run_protection_monitor_logic(self, cluster_name: str, region: str, access_key: str = None, secret_key: str = None):
         """
         Main protection monitoring logic with optimized approach
         """
@@ -571,7 +572,7 @@ class LambdaNodeProtectionMonitor:
                     self.execution_stats['errors_encountered'] += 1
 
             elif len(all_protected_instances) == 1:
-                # Perfect state
+                # Perfect state - one instance already protected
                 target_instance_info = all_protected_instances[0]
                 self.logger.info(f"🎯 Perfect state: {target_instance_info['instance_id']} already protected")
 
@@ -579,6 +580,9 @@ class LambdaNodeProtectionMonitor:
                 results[target_ng]['status'] = 'success'
                 results[target_ng]['message'] = f'Perfect state - one instance protected'
                 results[target_ng]['action_taken'] = 'no_action_needed'
+
+                # Count maintained protection
+                self.execution_stats['protection_maintained'] += 1
 
             elif len(all_protected_instances) > 1:
                 # Too many protected, remove excess
@@ -610,12 +614,13 @@ class LambdaNodeProtectionMonitor:
                         self.logger.error(f"❌ Failed to remove protection from {instance_id}: {str(e)}")
                         self.execution_stats['errors_encountered'] += 1
 
-                # Update the kept instance's nodegroup
+                # Update the kept instance's nodegroup and count maintained protection
                 keep_ng = target_instance_info['nodegroup']
                 if results[keep_ng]['status'] != 'error':
                     results[keep_ng]['status'] = 'success'
                     results[keep_ng]['message'] = f'Kept protection on {target_instance_info["instance_id"]}'
                     results[keep_ng]['action_taken'] = 'protection_kept'
+                    self.execution_stats['protection_maintained'] += 1
 
             # PHASE 3: Annotate Kubernetes node
             if target_instance_info:
@@ -656,7 +661,8 @@ class LambdaNodeProtectionMonitor:
                     'region': region,
                     'protection_actions': {
                         'applied': self.execution_stats['protection_applied'],
-                        'removed': self.execution_stats['protection_removed']
+                        'removed': self.execution_stats['protection_removed'],
+                        'maintained': self.execution_stats['protection_maintained']
                     },
                     'execution_stats': self.execution_stats,
                     'timestamp': datetime.utcnow().isoformat() + 'Z',
@@ -697,6 +703,9 @@ def lambda_handler(event, context):
         logger.info(f"📅 Template generated: 2025-07-04 13:50:34 UTC")
         logger.info(f"🎯 Target cluster: {{CLUSTER_NAME}}")
         logger.info(f"🌍 Target region: {{REGION}}")
+
+        # print the event triggered from eventbridge
+        logger.info(f"🔍 Event data: {json.dumps(event, indent=2)}")
 
         # Get parameters from template injection or event
         cluster_name = '{{CLUSTER_NAME}}' if '{{CLUSTER_NAME}}' != '{{CLUSTER_NAME}}' else event.get(

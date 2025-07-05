@@ -1634,13 +1634,12 @@ class EKSClusterContinuationFromErrors:
                 elif choice_num == 11:
                     self.print_colored(Colors.CYAN, "\n🔒 Setting up node protection with NO_DELETE labels...")
 
-                    self.eks_manager.protect_nodes_with_no_delete_label(cluster_name, region, access_key, secret_key)
-
-
                     # Apply initial node protection
                     protection_result = self.eks_manager.apply_no_delete_to_matching_nodegroups(
                         cluster_name, region, access_key, secret_key
                     )
+
+                    self.eks_manager.protect_nodes_with_no_delete_label(cluster_name, region, access_key, secret_key)
 
                     nodegroup_names = protection_result.get('all_nodegroups', [])
 
@@ -2517,12 +2516,10 @@ class EKSClusterContinuationFromErrors:
                     if not self.verify_cluster_exists(cluster_name, region, access_key, secret_key):
                         self.print_colored(Colors.RED, f"❌ Could not access cluster {cluster_name}, skipping")
                         continue
+                    self.print_colored(Colors.GREEN, f"✅ Cluster {cluster_name} is accessible")
 
                     # Configure the cluster
                     success = self.configure_single_cluster(cluster_name, region, access_key, secret_key)
-
-                    # Analyze existing components
-                    # self.analyze_existing_components(cluster_name, region, access_key, secret_key)
 
                     if success:
                         successful_reconfigures += 1
