@@ -104,7 +104,7 @@ class TestEKSClusterManager(unittest.TestCase):
             ["subnet-1", "subnet-2"],
             "AL2023_x86_64_STANDARD",
             ["c6a.large", "c5a.large"],
-            0, 1, 8
+            1, 1, 8
         )
         
         self.assertTrue(result)
