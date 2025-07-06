@@ -1283,18 +1283,18 @@ class AutoScalingGroupManager:
                 hour=0, minute=0, second=0, microsecond=0
             ) + timedelta(seconds=offset_seconds)
 
-            # Business hours (12 PM IST = 6:30 AM UTC)
+            # Business hours (11 AM IST = 5:30 AM UTC)
             scale_up_name = f"{asg_name}-scale-up"
             asg_client.put_scheduled_update_group_action(
                 AutoScalingGroupName=asg_name,
                 ScheduledActionName=scale_up_name,
                 StartTime=unique_start_time,
-                Recurrence="30 6 * * 1-5",  # 6:30 AM UTC (12:00 PM IST), Monday-Friday
+                Recurrence="30 5 * * *",  # 5:30 AM UTC (11:00 AM IST), All days
                 MinSize=1,
                 MaxSize=3,
                 DesiredCapacity=1
             )
-            print(f"✅ Created scale-up action: {scale_up_name} (starts at 12:00 PM IST on weekdays)")
+            print(f"✅ Created scale-up action: {scale_up_name} (starts at 11:00 AM IST on weekdays)")
 
             # After business hours (9 PM IST = 3:30 PM UTC)
             scale_down_name = f"{asg_name}-scale-down"
@@ -1302,7 +1302,7 @@ class AutoScalingGroupManager:
                 AutoScalingGroupName=asg_name,
                 ScheduledActionName=scale_down_name,
                 StartTime=unique_start_time + timedelta(minutes=1),  # Ensure different start time
-                Recurrence="30 15 * * 1-5",  # 3:30 PM UTC (9:00 PM IST), Monday-Friday
+                Recurrence="30 15 * * *",  # 3:30 PM UTC (9:00 PM IST), All days
                 MinSize=0,
                 MaxSize=3,
                 DesiredCapacity=0

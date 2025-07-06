@@ -215,48 +215,6 @@ class IAMUserManager:
             self.logger.error(f"Error checking policies for group {group_name}: {e}")
             raise
 
-
-    def create_restriction_policy(self, region):
-        """Create a policy that restricts access to the specified region"""
-        return {
-            "Version": "2012-10-17",
-            "Statement": [
-                {
-                    "Sid": "DenyIfNotInRegion",
-                    "Effect": "Deny",
-                    "Action": "*",
-                    "Resource": "*",
-                    "Condition": {
-                        "StringNotEquals": {
-                            "aws:RequestedRegion": region
-                        }
-                    }
-                },
-                {
-                    "Sid": "AllowCreateLaunchTemplate",
-                    "Effect": "Allow",
-                    "Action": [
-                        "ec2:CreateLaunchTemplate",
-                        "ec2:CreateLaunchTemplateVersion"
-                    ],
-                    "Resource": "*"
-                },
-                {
-                    "Sid": "DenyIfDisallowedInstanceType",
-                    "Effect": "Deny",
-                    "Action": [
-                        "ec2:RunInstances"
-                    ],
-                    "Resource": "arn:aws:ec2:*:*:instance/*",
-                    "Condition": {
-                        "StringNotEquals": {
-                            "ec2:InstanceType": self.user_settings['allowed_instance_types']
-                        }
-                    }
-                }
-            ]
-        }
-
     def create_restriction_policy_for_user(self, region):
         """Create a policy that restricts access to a specific region for a user,
         always including us-east-1 as allowed."""

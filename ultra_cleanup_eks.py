@@ -829,6 +829,558 @@ class UltraCleanupEKSManager:
     def delete_all_cloudwatch_alarms(self, access_key: str, secret_key: str, region: str, cluster_name: str) -> bool:
         """
         Delete all CloudWatch alarms associated with an EKS cluster
+        This includes composite alarms, basic alarms, and cost alarms
+        FIXED: Now properly handles composite alarm dependencies
+
+        Date: 2025-07-06 04:29:28 UTC
+        Author: varadharajaan
+        """
+        try:
+            self.log_operation('INFO',
+                               f"🚨 Starting COMPLETE deletion of ALL CloudWatch alarms for cluster {cluster_name}")
+            print(f"🗑️  Deleting ALL CloudWatch alarms for cluster {cluster_name}...")
+
+            # Create CloudWatch client
+            session = boto3.Session(
+                aws_access_key_id=access_key,
+                aws_secret_access_key=secret_key,
+                region_name=region
+            )
+
+            cloudwatch_client = session.client('cloudwatch')
+
+            # Track deletion statistics
+            total_deleted = 0
+            failed_deletions = 0
+            max_retries = 3
+
+            # STEP 1: Find and delete composite alarms FIRST (they depend on metric alarms)
+            print(f"   🔍 Step 1: Finding and deleting composite alarms for cluster {cluster_name}...")
+            composite_deleted = self.delete_composite_alarms_for_cluster_fixed(cloudwatch_client, cluster_name)
+            total_deleted += composite_deleted
+
+            # STEP 2: Wait for AWS to process composite alarm deletions
+            if composite_deleted > 0:
+                print(f"   ⏳ Waiting 5 seconds for AWS to process composite alarm deletions...")
+                time.sleep(5)
+
+            # STEP 3: Find and delete basic metric alarms with retry logic
+            for retry in range(max_retries):
+                print(
+                    f"   🔍 Step 2: Finding and deleting metric alarms for cluster {cluster_name} (attempt {retry + 1})...")
+                basic_deleted = self.delete_basic_alarms_for_cluster_fixed(cloudwatch_client, cluster_name)
+                total_deleted += basic_deleted
+
+                if basic_deleted == 0:
+                    break  # No more alarms to delete
+
+                if retry < max_retries - 1:
+                    print(f"   ⏳ Waiting 3 seconds before next attempt...")
+                    time.sleep(3)
+
+            # STEP 4: Find and delete cost alarms
+            print(f"   🔍 Step 3: Finding and deleting cost monitoring alarms for cluster {cluster_name}...")
+            cost_deleted = self.delete_cost_alarms_for_cluster_fixed(cloudwatch_client, cluster_name)
+            total_deleted += cost_deleted
+
+            # STEP 5: Final cleanup - delete any remaining alarms with cluster tags
+            print(f"   🔍 Step 4: Final cleanup - finding tagged alarms for cluster {cluster_name}...")
+            tagged_deleted = self.delete_tagged_alarms_for_cluster_fixed(cloudwatch_client, cluster_name)
+            total_deleted += tagged_deleted
+
+            # STEP 6: Verify no alarms remain
+            remaining_alarms = self.count_remaining_cluster_alarms(cloudwatch_client, cluster_name)
+            if remaining_alarms > 0:
+                self.print_colored(Colors.YELLOW,
+                                   f"   ⚠️  {remaining_alarms} alarms still remain - attempting final cleanup...")
+                final_deleted = self.force_delete_remaining_cluster_alarms(cloudwatch_client, cluster_name)
+                total_deleted += final_deleted
+
+            # Summary
+            if total_deleted > 0:
+                self.print_colored(Colors.GREEN,
+                                   f"   ✅ Successfully deleted {total_deleted} CloudWatch alarms for {cluster_name}")
+                self.log_operation('INFO',
+                                   f"Successfully deleted {total_deleted} CloudWatch alarms for cluster {cluster_name}")
+            else:
+                self.print_colored(Colors.YELLOW, f"   ⚠️  No CloudWatch alarms found for cluster {cluster_name}")
+                self.log_operation('INFO', f"No CloudWatch alarms found for cluster {cluster_name}")
+
+            if failed_deletions > 0:
+                self.print_colored(Colors.YELLOW, f"   ⚠️  {failed_deletions} alarms failed to delete")
+                self.log_operation('WARNING', f"{failed_deletions} alarms failed to delete for cluster {cluster_name}")
+
+            return failed_deletions == 0
+
+        except Exception as e:
+            error_msg = str(e)
+            self.log_operation('ERROR', f"Failed to delete CloudWatch alarms for {cluster_name}: {error_msg}")
+            self.print_colored(Colors.RED, f"   ❌ Failed to delete CloudWatch alarms: {error_msg}")
+            return False
+
+    def delete_composite_alarms_for_cluster_fixed(self, cloudwatch_client, cluster_name: str) -> int:
+        """Delete composite alarms associated with the cluster - FIXED version"""
+        try:
+            deleted_count = 0
+
+            # Get ALL composite alarms (CloudWatch doesn't have direct filtering)
+            paginator = cloudwatch_client.get_paginator('describe_alarms')
+
+            for page in paginator.paginate(AlarmTypes=['CompositeAlarm']):
+                composite_alarms = page.get('CompositeAlarms', [])
+
+                cluster_composite_alarms = []
+
+                for alarm in composite_alarms:
+                    alarm_name = alarm['AlarmName']
+
+                    # Enhanced cluster matching patterns
+                    is_cluster_related = self.is_alarm_related_to_cluster(alarm_name, cluster_name)
+
+                    if not is_cluster_related:
+                        # Check alarm description for cluster reference
+                        alarm_description = alarm.get('AlarmDescription', '')
+                        if cluster_name.lower() in alarm_description.lower():
+                            is_cluster_related = True
+
+                    if not is_cluster_related:
+                        # Check alarm rule for cluster references
+                        alarm_rule = alarm.get('AlarmRule', '')
+                        if cluster_name.lower() in alarm_rule.lower():
+                            is_cluster_related = True
+
+                    if is_cluster_related:
+                        cluster_composite_alarms.append(alarm_name)
+
+                # Delete found composite alarms
+                if cluster_composite_alarms:
+                    print(f"      🗑️  Deleting {len(cluster_composite_alarms)} composite alarms...")
+
+                    for alarm_name in cluster_composite_alarms:
+                        try:
+                            self.log_operation('INFO', f"🗑️  Deleting composite alarm: {alarm_name}")
+                            print(f"         🗑️  Deleting composite alarm: {alarm_name}")
+
+                            cloudwatch_client.delete_alarms(AlarmNames=[alarm_name])
+                            deleted_count += 1
+
+                            self.log_operation('INFO', f"✅ Deleted composite alarm: {alarm_name}")
+                            print(f"         ✅ Deleted composite alarm: {alarm_name}")
+
+                            # Small delay to avoid throttling
+                            time.sleep(0.2)
+
+                        except Exception as e:
+                            error_msg = str(e)
+                            print(f"         ❌ Failed to delete composite alarm {alarm_name}: {error_msg}")
+                            self.log_operation('ERROR', f"Failed to delete composite alarm {alarm_name}: {error_msg}")
+
+            if deleted_count > 0:
+                self.log_operation('INFO', f"Deleted {deleted_count} composite alarms for cluster {cluster_name}")
+
+            return deleted_count
+
+        except Exception as e:
+            self.log_operation('ERROR', f"Error deleting composite alarms: {str(e)}")
+            return 0
+
+    def delete_basic_alarms_for_cluster_fixed(self, cloudwatch_client, cluster_name: str) -> int:
+        """Delete basic metric alarms associated with the cluster - FIXED version"""
+        try:
+            deleted_count = 0
+
+            # Get ALL metric alarms
+            paginator = cloudwatch_client.get_paginator('describe_alarms')
+
+            for page in paginator.paginate(AlarmTypes=['MetricAlarm']):
+                metric_alarms = page.get('MetricAlarms', [])
+
+                cluster_metric_alarms = []
+
+                for alarm in metric_alarms:
+                    alarm_name = alarm['AlarmName']
+
+                    # Enhanced cluster matching
+                    is_cluster_related = self.is_alarm_related_to_cluster(alarm_name, cluster_name)
+
+                    if not is_cluster_related:
+                        # Check alarm description for cluster reference
+                        alarm_description = alarm.get('AlarmDescription', '')
+                        if cluster_name.lower() in alarm_description.lower():
+                            is_cluster_related = True
+
+                    if not is_cluster_related:
+                        # Check dimensions for cluster name
+                        dimensions = alarm.get('Dimensions', [])
+                        for dimension in dimensions:
+                            dim_name = dimension.get('Name', '')
+                            dim_value = dimension.get('Value', '')
+
+                            # Check for various dimension patterns
+                            if (dim_name == 'ClusterName' and dim_value == cluster_name) or \
+                                    (dim_name == 'NodegroupName' and cluster_name in dim_value) or \
+                                    (cluster_name in dim_value):
+                                is_cluster_related = True
+                                break
+
+                    if not is_cluster_related:
+                        # Check metric name and namespace for EKS patterns
+                        namespace = alarm.get('Namespace', '')
+                        metric_name = alarm.get('MetricName', '')
+
+                        if 'ContainerInsights' in namespace and cluster_name in str(dimensions):
+                            is_cluster_related = True
+
+                    if is_cluster_related:
+                        cluster_metric_alarms.append(alarm_name)
+
+                # Delete found metric alarms in batches (CloudWatch allows up to 100 per call)
+                if cluster_metric_alarms:
+                    print(f"      🗑️  Deleting {len(cluster_metric_alarms)} metric alarms...")
+
+                    # Delete in batches of 10 to avoid issues
+                    for i in range(0, len(cluster_metric_alarms), 10):
+                        batch = cluster_metric_alarms[i:i + 10]
+
+                        try:
+                            # Try batch deletion first
+                            cloudwatch_client.delete_alarms(AlarmNames=batch)
+
+                            for alarm_name in batch:
+                                print(f"         ✅ Deleted metric alarm: {alarm_name}")
+                                self.log_operation('INFO', f"Deleted metric alarm: {alarm_name}")
+                                deleted_count += 1
+
+                            # Small delay between batches
+                            time.sleep(0.5)
+
+                        except Exception as batch_error:
+                            # If batch fails, try individual deletion
+                            print(f"         ⚠️  Batch deletion failed, trying individual deletion...")
+                            self.log_operation('WARNING', f"Batch deletion failed: {str(batch_error)}")
+
+                            for alarm_name in batch:
+                                try:
+                                    cloudwatch_client.delete_alarms(AlarmNames=[alarm_name])
+                                    print(f"         ✅ Deleted metric alarm (individual): {alarm_name}")
+                                    self.log_operation('INFO', f"Deleted metric alarm (individual): {alarm_name}")
+                                    deleted_count += 1
+                                    time.sleep(0.2)
+                                except Exception as individual_error:
+                                    error_msg = str(individual_error)
+                                    if "CompositeAlarm" in error_msg:
+                                        print(
+                                            f"         ⚠️  Metric alarm {alarm_name} is still referenced by composite alarm - will retry")
+                                        self.log_operation('WARNING',
+                                                           f"Metric alarm {alarm_name} still referenced by composite alarm")
+                                    else:
+                                        print(f"         ❌ Failed to delete metric alarm {alarm_name}: {error_msg}")
+                                        self.log_operation('ERROR',
+                                                           f"Failed to delete metric alarm {alarm_name}: {error_msg}")
+
+            return deleted_count
+
+        except Exception as e:
+            self.log_operation('ERROR', f"Error deleting metric alarms: {str(e)}")
+            return 0
+
+    def delete_cost_alarms_for_cluster_fixed(self, cloudwatch_client, cluster_name: str) -> int:
+        """Delete cost monitoring alarms associated with the cluster - FIXED version"""
+        try:
+            deleted_count = 0
+
+            # Get ALL metric alarms (cost alarms are metric alarms in AWS/Billing namespace)
+            paginator = cloudwatch_client.get_paginator('describe_alarms')
+
+            for page in paginator.paginate(AlarmTypes=['MetricAlarm']):
+                metric_alarms = page.get('MetricAlarms', [])
+
+                cost_alarms = []
+
+                for alarm in metric_alarms:
+                    alarm_name = alarm['AlarmName']
+
+                    # Check for cost-related alarm names
+                    if self.is_cost_alarm_for_cluster(alarm_name, cluster_name):
+                        cost_alarms.append(alarm_name)
+                        continue
+
+                    # Check if it's a billing alarm with cluster reference
+                    namespace = alarm.get('Namespace', '')
+                    metric_name = alarm.get('MetricName', '')
+
+                    if namespace == 'AWS/Billing' and metric_name == 'EstimatedCharges':
+                        alarm_description = alarm.get('AlarmDescription', '')
+                        if cluster_name.lower() in alarm_description.lower():
+                            cost_alarms.append(alarm_name)
+
+                    # Check for Cost Explorer alarms
+                    if namespace in ['AWS/Billing', 'CostExplorer'] and cluster_name.lower() in alarm_name.lower():
+                        cost_alarms.append(alarm_name)
+
+                # Delete found cost alarms
+                if cost_alarms:
+                    print(f"      🗑️  Deleting {len(cost_alarms)} cost monitoring alarms...")
+
+                    for alarm_name in cost_alarms:
+                        try:
+                            cloudwatch_client.delete_alarms(AlarmNames=[alarm_name])
+                            print(f"         ✅ Deleted cost alarm: {alarm_name}")
+                            self.log_operation('INFO', f"Deleted cost alarm: {alarm_name}")
+                            deleted_count += 1
+
+                            # Small delay to avoid throttling
+                            time.sleep(0.2)
+
+                        except Exception as e:
+                            print(f"         ❌ Failed to delete cost alarm {alarm_name}: {str(e)}")
+                            self.log_operation('ERROR', f"Failed to delete cost alarm {alarm_name}: {str(e)}")
+
+            return deleted_count
+
+        except Exception as e:
+            self.log_operation('ERROR', f"Error deleting cost alarms: {str(e)}")
+            return 0
+
+    def delete_tagged_alarms_for_cluster_fixed(self, cloudwatch_client, cluster_name: str) -> int:
+        """Delete alarms that are tagged with the cluster name - FIXED version"""
+        try:
+            deleted_count = 0
+
+            # Get all alarms (both metric and composite)
+            all_alarm_arns = []
+
+            # Get metric alarms
+            paginator = cloudwatch_client.get_paginator('describe_alarms')
+            for page in paginator.paginate(AlarmTypes=['MetricAlarm']):
+                metric_alarms = page.get('MetricAlarms', [])
+                all_alarm_arns.extend([alarm['AlarmArn'] for alarm in metric_alarms])
+
+            # Get composite alarms
+            for page in paginator.paginate(AlarmTypes=['CompositeAlarm']):
+                composite_alarms = page.get('CompositeAlarms', [])
+                all_alarm_arns.extend([alarm['AlarmArn'] for alarm in composite_alarms])
+
+            if not all_alarm_arns:
+                return 0
+
+            # Check tags for each alarm individually
+            tagged_alarms = []
+
+            for resource_arn in all_alarm_arns:
+                try:
+                    # Use the correct parameter name: ResourceARN
+                    response = cloudwatch_client.list_tags_for_resource(
+                        ResourceARN=resource_arn
+                    )
+
+                    tags = response.get('Tags', [])
+
+                    # Check if any tag references the cluster
+                    for tag in tags:
+                        tag_key = tag.get('Key', '')
+                        tag_value = tag.get('Value', '')
+
+                        if (tag_key == 'Cluster' and tag_value == cluster_name) or \
+                                (tag_key == 'ClusterName' and tag_value == cluster_name) or \
+                                (tag_key == 'EKSCluster' and tag_value == cluster_name) or \
+                                (cluster_name.lower() in tag_value.lower()) or \
+                                (tag_key.lower() == f'kubernetes.io/cluster/{cluster_name.lower()}'):
+                            # Extract alarm name from ARN
+                            alarm_name = resource_arn.split(':')[-1]
+                            tagged_alarms.append(alarm_name)
+                            break
+
+                    # Small delay between tag requests to avoid throttling
+                    time.sleep(0.05)
+
+                except Exception as e:
+                    alarm_name = resource_arn.split(':')[-1] if ':' in resource_arn else resource_arn
+                    self.log_operation('WARNING', f"Failed to check tags for alarm {alarm_name}: {str(e)}")
+
+            # Delete tagged alarms
+            if tagged_alarms:
+                print(f"      🗑️  Deleting {len(tagged_alarms)} tagged alarms...")
+
+                for alarm_name in tagged_alarms:
+                    try:
+                        cloudwatch_client.delete_alarms(AlarmNames=[alarm_name])
+                        print(f"         ✅ Deleted tagged alarm: {alarm_name}")
+                        self.log_operation('INFO', f"Deleted tagged alarm: {alarm_name}")
+                        deleted_count += 1
+
+                        # Small delay to avoid throttling
+                        time.sleep(0.2)
+
+                    except Exception as e:
+                        print(f"         ❌ Failed to delete tagged alarm {alarm_name}: {str(e)}")
+                        self.log_operation('ERROR', f"Failed to delete tagged alarm {alarm_name}: {str(e)}")
+
+            return deleted_count
+
+        except Exception as e:
+            self.log_operation('ERROR', f"Error deleting tagged alarms: {str(e)}")
+            return 0
+
+    def count_remaining_cluster_alarms(self, cloudwatch_client, cluster_name: str) -> int:
+        """Count how many alarms still remain for the cluster"""
+        try:
+            remaining_count = 0
+
+            # Count metric alarms
+            paginator = cloudwatch_client.get_paginator('describe_alarms')
+            for page in paginator.paginate(AlarmTypes=['MetricAlarm']):
+                for alarm in page.get('MetricAlarms', []):
+                    if self.is_alarm_related_to_cluster(alarm['AlarmName'], cluster_name):
+                        remaining_count += 1
+
+            # Count composite alarms
+            for page in paginator.paginate(AlarmTypes=['CompositeAlarm']):
+                for alarm in page.get('CompositeAlarms', []):
+                    if self.is_alarm_related_to_cluster(alarm['AlarmName'], cluster_name):
+                        remaining_count += 1
+
+            return remaining_count
+
+        except Exception as e:
+            self.log_operation('ERROR', f"Error counting remaining alarms: {str(e)}")
+            return 0
+
+    def force_delete_remaining_cluster_alarms(self, cloudwatch_client, cluster_name: str) -> int:
+        """Force delete any remaining cluster alarms"""
+        try:
+            deleted_count = 0
+
+            # Get ALL remaining alarms
+            all_alarms = []
+
+            paginator = cloudwatch_client.get_paginator('describe_alarms')
+
+            # Get composite alarms first
+            for page in paginator.paginate(AlarmTypes=['CompositeAlarm']):
+                for alarm in page.get('CompositeAlarms', []):
+                    if self.is_alarm_related_to_cluster(alarm['AlarmName'], cluster_name):
+                        all_alarms.append(('composite', alarm['AlarmName']))
+
+            # Get metric alarms
+            for page in paginator.paginate(AlarmTypes=['MetricAlarm']):
+                for alarm in page.get('MetricAlarms', []):
+                    if self.is_alarm_related_to_cluster(alarm['AlarmName'], cluster_name):
+                        all_alarms.append(('metric', alarm['AlarmName']))
+
+            # Force delete all remaining alarms
+            for alarm_type, alarm_name in all_alarms:
+                try:
+                    print(f"      🔥 FORCE deleting {alarm_type} alarm: {alarm_name}")
+                    cloudwatch_client.delete_alarms(AlarmNames=[alarm_name])
+                    deleted_count += 1
+                    self.log_operation('INFO', f"FORCE deleted {alarm_type} alarm: {alarm_name}")
+                    time.sleep(0.3)  # Longer delay for force deletion
+                except Exception as e:
+                    print(f"      ❌ Failed to force delete {alarm_type} alarm {alarm_name}: {str(e)}")
+                    self.log_operation('ERROR', f"Failed to force delete {alarm_type} alarm {alarm_name}: {str(e)}")
+
+            return deleted_count
+
+        except Exception as e:
+            self.log_operation('ERROR', f"Error in force deletion: {str(e)}")
+            return 0
+
+    def is_alarm_related_to_cluster(self, alarm_name: str, cluster_name: str) -> bool:
+        """Enhanced method to check if an alarm is related to the specified cluster"""
+        alarm_name_lower = alarm_name.lower()
+        cluster_name_lower = cluster_name.lower()
+
+        # Direct cluster name match
+        if cluster_name_lower in alarm_name_lower:
+            return True
+
+        # Common alarm naming patterns
+        alarm_patterns = [
+            f"{cluster_name_lower}-",
+            f"-{cluster_name_lower}-",
+            f"-{cluster_name_lower}",
+            cluster_name_lower.replace("-", "_"),
+            cluster_name_lower.replace("_", "-"),
+            cluster_name_lower.replace("-", "")
+        ]
+
+        for pattern in alarm_patterns:
+            if pattern in alarm_name_lower:
+                return True
+
+        # Check for cluster suffix patterns (last part of cluster name)
+        cluster_parts = cluster_name_lower.split('-')
+        if len(cluster_parts) > 1:
+            cluster_suffix = cluster_parts[-1]
+            if len(cluster_suffix) >= 4:  # Only check suffixes that are meaningful
+                suffix_patterns = [
+                    f"-{cluster_suffix}-",
+                    f"-{cluster_suffix}",
+                    f"{cluster_suffix}-"
+                ]
+
+                for pattern in suffix_patterns:
+                    if pattern in alarm_name_lower:
+                        return True
+
+        # Check for EKS-specific patterns
+        eks_patterns = [
+            f"eks-{cluster_name_lower}",
+            f"eks-cluster-{cluster_name_lower}",
+            f"{cluster_name_lower}-pod-",
+            f"{cluster_name_lower}-node-",
+            f"{cluster_name_lower}-container-"
+        ]
+
+        for pattern in eks_patterns:
+            if pattern in alarm_name_lower:
+                return True
+
+        return False
+
+    def is_cost_alarm_for_cluster(self, alarm_name: str, cluster_name: str) -> bool:
+        """Enhanced method to check if an alarm is a cost alarm for the specified cluster"""
+        # Cost alarm naming patterns
+        cost_patterns = [
+            f"{cluster_name.lower()}-daily-cost",
+            f"{cluster_name.lower()}-cost",
+            f"{cluster_name.lower()}-ec2-cost",
+            f"{cluster_name.lower()}-ebs-cost",
+            f"{cluster_name.lower()}-billing",
+            f"cost-{cluster_name.lower()}",
+            f"billing-{cluster_name.lower()}",
+            f"budget-{cluster_name.lower()}"
+        ]
+
+        alarm_name_lower = alarm_name.lower()
+
+        for pattern in cost_patterns:
+            if pattern in alarm_name_lower:
+                return True
+
+        # Check for cluster suffix in cost alarms
+        cluster_parts = cluster_name.split('-')
+        if len(cluster_parts) > 1:
+            cluster_suffix = cluster_parts[-1]
+            if len(cluster_suffix) >= 4:
+                suffix_cost_patterns = [
+                    f"{cluster_suffix}-daily-cost",
+                    f"{cluster_suffix}-cost",
+                    f"cost-{cluster_suffix}",
+                    f"billing-{cluster_suffix}"
+                ]
+
+                for pattern in suffix_cost_patterns:
+                    if pattern.lower() in alarm_name_lower:
+                        return True
+
+        return False
+
+    ##############
+    def delete_all_cloudwatch_alarms_bk(self, access_key: str, secret_key: str, region: str, cluster_name: str) -> bool:
+        """
+        Delete all CloudWatch alarms associated with an EKS cluster
         This includes basic alarms, composite alarms, and cost alarms
         """
         try:
@@ -1111,7 +1663,7 @@ class UltraCleanupEKSManager:
 
         return False
 
-    def is_cost_alarm_for_cluster(self, alarm_name: str, cluster_name: str) -> bool:
+    def is_cost_alarm_for_cluster_bk(self, alarm_name: str, cluster_name: str) -> bool:
         """Check if an alarm is a cost alarm for the specified cluster"""
         # Cost alarm naming patterns
         cost_patterns = [
@@ -1221,6 +1773,8 @@ class UltraCleanupEKSManager:
         except Exception as e:
             self.log_operation('ERROR', f"Error deleting tagged alarms: {str(e)}")
             return 0
+
+    ##########
 
     def delete_eks_scrapers(self, access_key, secret_key, region, cluster_name):
         """

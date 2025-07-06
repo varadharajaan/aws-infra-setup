@@ -501,7 +501,7 @@ def lambda_handler(event, context):
     "asg_name": "burst-capacity-asg",
     "direction": "up",
     "region": "us-east-1",
-    "ist_time": "12:00 PM IST"
+    "ist_time": "11:00 AM IST"
 }
 
 8. 🌍 CROSS-REGION EVENT (EU West):

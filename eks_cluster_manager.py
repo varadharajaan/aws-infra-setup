@@ -6562,7 +6562,7 @@ class EKSClusterManager:
 
             # ASK USER FOR SCALING TIMES OR USE DEFAULTS
             self.print_colored(Colors.CYAN, "\n   🕒 Set scheduled scaling times (IST timezone):")
-            self.print_colored(Colors.CYAN, "   Default scale-up: 12:00 PM IST (6:30 AM UTC)")
+            self.print_colored(Colors.CYAN, "   Default scale-up: 11:00 AM IST (5:30 AM UTC)")
             self.print_colored(Colors.CYAN, "   Default scale-down: 9:00 PM IST (3:30 PM UTC)")
             #change_times = input("   Change default scaling times? (y/N): ").strip().lower()
             change_times = 'n'
@@ -6578,11 +6578,11 @@ class EKSClusterManager:
 
                 # For simplicity, you'd need to add proper time parsing here
                 # This is a simplified version - use defaults for now
-                scale_up_cron = "30 6 * * ? *"  # 6:30 AM UTC = 12:00 PM IST
+                scale_up_cron = "30 5 * * ? *"  # 5:30 AM UTC = 11:00 AM IST
                 scale_down_cron = "30 15 * * ? *"  # 3:30 PM UTC = 9:00 PM IST
             else:
-                scale_up_time = "12:00 PM IST"
-                scale_up_cron = "30 6 * * ? *"  # 6:30 AM UTC = 12:00 PM IST
+                scale_up_time = "11:00 AM IST"
+                scale_up_cron = "30 5 * * ? *"  # 5:30 AM UTC = 11:00 AM IST
                 scale_down_time = "9:00 PM IST"
                 scale_down_cron = "30 15 * * ? *"  # 3:30 PM UTC = 9:00 PM IST
 
@@ -6726,7 +6726,7 @@ class EKSClusterManager:
                         f.write(self._get_multi_nodegroup_lambda_template())
 
                 # Read the template
-                with open(template_file, 'r') as f:
+                with open(template_file, 'r', encoding='utf-8') as f:
                     lambda_template = f.read()
 
                 # Replace placeholders
@@ -6935,8 +6935,8 @@ class EKSClusterManager:
 
             # Step 1: Get user input for scale up/down times
             self.print_colored(Colors.CYAN, "\n   🕒 Set scheduled scaling times (IST timezone):")
-            print("   Default scale-up: 8:30 AM IST (3:00 AM UTC)")
-            print("   Default scale-down: 6:30 PM IST (1:00 PM UTC)")
+            print("   Default scale-up: 11:00 AM IST (5:30 AM UTC)")
+            print("   Default scale-down: 9:00 PM IST (3:30 PM UTC)")
 
             change_times = False
             #change_times = input("   Change default scaling times? (y/N): ").strip().lower() in ['y', 'yes']
@@ -6945,8 +6945,8 @@ class EKSClusterManager:
                 while True:
                     scale_up_time = input("   Enter scale-up time (format: HH:MM AM/PM IST): ").strip()
                     if not scale_up_time:
-                        scale_up_time = "8:30 AM IST"
-                        scale_up_cron = "0 3 * * ? *"  # 3:00 AM UTC = 8:30 AM IST
+                        scale_up_time = "11:00 AM IST"
+                        scale_up_cron = "30 5 * * ? *"  # 5:30 AM UTC = 11:00 AM IST (weekdays only)
                         break
         
                     try:
@@ -6986,15 +6986,15 @@ class EKSClusterManager:
                     except ValueError:
                         self.print_colored(Colors.YELLOW, "   ⚠️  Invalid time format. Please use format like '6:30 PM IST'")
             else:
-                # scale_up_time = "12:00 PM IST"
-                # scale_up_cron = "30 6 * * ? *"  # 6:30 AM UTC = 12:00 PM IST
+                # scale_up_time = "11:00 AM IST"
+                # scale_up_cron = "30 5 * * ? *"  # 5:30 AM UTC = 11:00 AM IST
                 # scale_down_time = "9:00 PM IST"
                 # scale_down_cron = "30 15 * * ? *"  # 3:30 PM UTC = 9:00 PM IST
 
-                scale_up_time = "12:00 PM IST"
-                scale_up_cron = "30 6 * * 1-5"  # 6:30 AM UTC = 12:00 PM IST (weekdays only)
+                scale_up_time = "11:00 AM IST"
+                scale_up_cron = "30 5 * * ? *"  # 6:30 AM UTC = 11:00 AM IST
                 scale_down_time = "9:00 PM IST"
-                scale_down_cron = "30 15 * * 1-5"  # 3:30 PM UTC = 9:00 PM IST (weekdays only)
+                scale_down_cron = "30 15 * * ? *"  # 3:30 PM UTC = 9:00 PM IST
 
             # Step 2: Get user input for scaling sizes
             self.print_colored(Colors.CYAN, "\n   💻 Set node scaling parameters:")
@@ -7139,11 +7139,11 @@ class EKSClusterManager:
                 # If still not found, create it
                 if not os.path.exists(template_file):
                     self.log_operation('INFO', f"Creating lambda template file: {template_file}")
-                    with open(template_file, 'w') as f:
+                    with open(template_file, 'w', encoding='utf-8') as f:
                         f.write(self._get_multi_nodegroup_lambda_template())
     
                 # Read the template
-                with open(template_file, 'r') as f:
+                with open(template_file, 'r', encoding='utf-8') as f:
                     lambda_template = f.read()
     
                 # Replace placeholders using replace() method instead of format()
@@ -7301,6 +7301,17 @@ class EKSClusterManager:
             self.log_operation('ERROR', f"Failed to setup multi-nodegroup scheduled scaling: {error_msg}")
             self.print_colored(Colors.RED, f"❌ Scheduled scaling setup failed: {error_msg}")
             return False
+
+    # Correct IST to UTC conversion for EventBridge
+    def convert_ist_to_utc_cron(ist_hour, ist_minute):
+        """Convert IST time to UTC cron expression"""
+        #convert_ist_to_utc_cron(12, 0)   # 12:00 PM IST
+        utc_hour = (ist_hour - 5) % 24  # IST is UTC+5:30, simplified to +5
+        utc_minute = ist_minute - 30 if ist_minute >= 30 else ist_minute + 30
+        if ist_minute < 30:
+            utc_hour = (utc_hour - 1) % 24
+
+        return f"cron({utc_minute} {utc_hour} * * ? *)"
 
     def get_lambda_scaling_template(self) -> str:
         """Get the Lambda function template code as a string"""
@@ -8101,7 +8112,6 @@ class EKSClusterManager:
                 'verification_timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             }
         }
-
 
         # Create session clients
         session = boto3.Session(

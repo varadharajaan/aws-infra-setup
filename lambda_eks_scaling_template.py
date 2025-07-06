@@ -666,7 +666,7 @@ def lambda_handler(event, context):
 7. ⚡ BURST SCALING EVENT (High Traffic):
 {
     "action": "burst_scale",
-    "ist_time": "12:00 PM IST",
+    "ist_time": "11:00 AM IST",
     "nodegroups": [
         {
             "name": "eks-nodegroup-web-tier",

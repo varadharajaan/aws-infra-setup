@@ -1808,6 +1808,22 @@ Examples:
 
         def render_commands(title, results):
             html = f'<details><summary><b>{escape(title)}</b></summary><div style="margin-left:1em">'
+
+            # First, show essential commands (like nodegroup listing) that should be visible
+            essential_commands = ['aws eks list-nodegroups', 'kubectl get nodes', 'kubectl get pods']
+
+            # Show essential commands first (expanded)
+            for result in results:
+                if any(cmd in result['command'] for cmd in essential_commands):
+                    html += f"<div style='margin-bottom:1em; border-left: 3px solid #28a745; padding-left: 10px;'>"
+                    html += f"<b>Command #{result['command_number']}:</b> <code>{escape(result['command'])}</code><br>"
+                    html += f"<b>Status:</b> {'<span style=\"color:green\">SUCCESS</span>' if result['success'] else '<span style=\"color:red\">FAILED</span>'} (exit code: {result['exit_code']})<br>"
+                    if result['output'].strip():
+                        html += f"<b>Output:</b><pre>{escape(result['output'][:500])}{('...' if len(result['output']) > 500 else '')}</pre>"
+                    html += "</div>"
+
+            # Then show all other commands collapsed
+            html += '<details style="margin-top: 1em;"><summary><b>Show All Commands</b></summary><div style="margin-left:1em">'
             for result in results:
                 html += f"<div style='margin-bottom:1em;'><b>Command #{result['command_number']}:</b> <code>{escape(result['command'])}</code><br>"
                 html += f"<b>Status:</b> {'<span style=\"color:green\">SUCCESS</span>' if result['success'] else '<span style=\"color:red\">FAILED</span>'} (exit code: {result['exit_code']})<br>"
@@ -1816,6 +1832,8 @@ Examples:
                 if result['error'].strip():
                     html += f"<b>Error:</b><pre style='color:red'>{escape(result['error'])}</pre>"
                 html += "</div>"
+            html += "</div></details>"
+
             html += "</div></details>"
             return html
 

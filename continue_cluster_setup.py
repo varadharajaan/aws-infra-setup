@@ -1551,8 +1551,8 @@ class EKSClusterContinuationFromErrors:
                         self.print_colored('RED', f"❌ Cluster {cluster_name} verification failed")
                         continue
 
-                    # Analyze existing components
-                    #self.analyze_existing_components(cluster_name, region, admin_access_key, admin_secret_key)
+                    #Analyze existing components
+                    self.analyze_existing_components(cluster_name, region, admin_access_key, admin_secret_key)
 
                     # Main configuration loop for this cluster
                     print(f"\n🔧 Starting configuration for {cluster_name}...")
@@ -1592,7 +1592,7 @@ class EKSClusterContinuationFromErrors:
         """Configure a single cluster interactively"""
         try:
             # Show status once at the start
-            self.display_cluster_status()
+            self.display_cluster_status()  # ← Fixed indentation
 
             while True:
                 changed = False
@@ -2518,6 +2518,8 @@ class EKSClusterContinuationFromErrors:
                         continue
                     self.print_colored(Colors.GREEN, f"✅ Cluster {cluster_name} is accessible")
 
+                    self.analyze_existing_components(cluster_name, region, access_key, secret_key)
+
                     # Configure the cluster
                     success = self.configure_single_cluster(cluster_name, region, access_key, secret_key)
 
@@ -2646,7 +2648,7 @@ def main():
     print("=" * 60)
 
     try:
-        cluster_names= ['eks-cluster-account01_clouduser01-us-east-1-rtip']
+        cluster_names= ['eks-cluster-account01_clouduser01-us-east-1-kubg']
         continuation = EKSClusterContinuationFromErrors()
         #cluster_names = continuation.select_clusters_from_eks_accounts()
         #success = continuation.continue_cluster_setup_from_errors()

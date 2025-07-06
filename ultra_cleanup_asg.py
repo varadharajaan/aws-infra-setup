@@ -1,12 +1,13 @@
 ﻿#!/usr/bin/env python3
 
-import os
-import json
 import boto3
+import json
+import sys
+import os
 import time
 from datetime import datetime
-from typing import Dict, List, Optional, Any
-from botocore.exceptions import ClientError, BotoCoreError
+from botocore.exceptions import ClientError
+from typing import List, Dict, Any, Set, Tuple
 from root_iam_credential_manager import AWSCredentialManager, Colors
 
 
@@ -15,13 +16,14 @@ class UltraCleanupASGManager:
     Tool to perform comprehensive cleanup of Auto Scaling Group resources across AWS accounts.
 
     Manages deletion of:
-    - Auto Scaling Groups (ASGs)
-    - Launch Templates associated with ASGs
+    - Auto Scaling Groups
     - Scaling Policies
     - Scheduled Actions
+    - CloudWatch Alarms (associated with ASGs)
+    - Launch Templates (if specified)
 
     Author: varadharajaan
-    Created: 2025-07-05
+    Created: 2025-07-06
     """
 
     def __init__(self, config_dir: str = None):
@@ -49,10 +51,14 @@ class UltraCleanupASGManager:
             'accounts_processed': [],
             'regions_processed': [],
             'deleted_asgs': [],
+            'deleted_alarms': [],
             'failed_deletions': [],
             'skipped_asgs': [],
             'errors': []
         }
+
+        # Store discovered ASGs
+        self.all_asgs = []
 
     def print_colored(self, color: str, message: str):
         """Print colored message to console"""
@@ -156,6 +162,112 @@ class UltraCleanupASGManager:
             self.log_operation('ERROR', f"Failed to create ASG client for {region}: {e}")
             raise
 
+    def create_cloudwatch_client(self, access_key, secret_key, region):
+        """Create CloudWatch client using account credentials"""
+        try:
+            cloudwatch_client = boto3.client(
+                'cloudwatch',
+                aws_access_key_id=access_key,
+                aws_secret_access_key=secret_key,
+                region_name=region
+            )
+
+            # Test the connection
+            cloudwatch_client.describe_alarms(MaxRecords=1)
+            return cloudwatch_client
+
+        except Exception as e:
+            self.log_operation('ERROR', f"Failed to create CloudWatch client for {region}: {e}")
+            raise
+
+    def delete_asg_related_alarms(self, access_key, secret_key, region, asg_name):
+        """Delete CloudWatch alarms related to the ASG"""
+        try:
+            self.log_operation('INFO', f"🔍 Searching for CloudWatch alarms related to ASG: {asg_name}")
+            print(f"   🔍 Searching for CloudWatch alarms related to ASG: {asg_name}...")
+
+            cloudwatch_client = self.create_cloudwatch_client(access_key, secret_key, region)
+
+            deleted_alarms = []
+
+            # Get all alarms
+            paginator = cloudwatch_client.get_paginator('describe_alarms')
+
+            for page in paginator.paginate():
+                for alarm in page.get('MetricAlarms', []):
+                    alarm_name = alarm['AlarmName']
+
+                    # Check if alarm is related to this ASG
+                    is_asg_related = False
+
+                    # Method 1: Check alarm name patterns
+                    asg_patterns = [
+                        asg_name,  # Direct match
+                        f"{asg_name}-",  # ASG name as prefix
+                        f"-{asg_name}-",  # ASG name in middle
+                        f"-{asg_name}",  # ASG name as suffix
+                    ]
+
+                    for pattern in asg_patterns:
+                        if pattern.lower() in alarm_name.lower():
+                            is_asg_related = True
+                            self.log_operation('INFO', f"Found alarm by name pattern: {alarm_name}")
+                            break
+
+                    # Method 2: Check alarm dimensions for AutoScalingGroupName
+                    if not is_asg_related:
+                        for dimension in alarm.get('Dimensions', []):
+                            if (dimension.get('Name') == 'AutoScalingGroupName' and
+                                    dimension.get('Value') == asg_name):
+                                is_asg_related = True
+                                self.log_operation('INFO', f"Found alarm by dimension: {alarm_name}")
+                                break
+
+                    # Method 3: Check alarm description for ASG name
+                    if not is_asg_related:
+                        description = alarm.get('AlarmDescription', '')
+                        if asg_name.lower() in description.lower():
+                            is_asg_related = True
+                            self.log_operation('INFO', f"Found alarm by description: {alarm_name}")
+
+                    if is_asg_related:
+                        try:
+                            self.log_operation('INFO', f"🗑️  Deleting CloudWatch alarm: {alarm_name}")
+                            print(f"      🗑️  Deleting CloudWatch alarm: {alarm_name}")
+
+                            cloudwatch_client.delete_alarms(AlarmNames=[alarm_name])
+                            deleted_alarms.append(alarm_name)
+
+                            # Record the deletion
+                            self.cleanup_results['deleted_alarms'].append({
+                                'alarm_name': alarm_name,
+                                'asg_name': asg_name,
+                                'region': region,
+                                'deleted_at': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                            })
+
+                            self.log_operation('INFO', f"✅ Deleted CloudWatch alarm: {alarm_name}")
+                            print(f"      ✅ Deleted CloudWatch alarm: {alarm_name}")
+
+                        except Exception as delete_error:
+                            self.log_operation('ERROR', f"Failed to delete alarm {alarm_name}: {delete_error}")
+                            print(f"      ❌ Failed to delete alarm {alarm_name}: {delete_error}")
+
+            # Summary
+            if deleted_alarms:
+                self.log_operation('INFO', f"Deleted {len(deleted_alarms)} CloudWatch alarms for ASG {asg_name}")
+                print(f"   ✅ Deleted {len(deleted_alarms)} CloudWatch alarms for ASG {asg_name}")
+            else:
+                self.log_operation('INFO', f"No CloudWatch alarms found for ASG {asg_name}")
+                print(f"   ℹ️ No CloudWatch alarms found for ASG {asg_name}")
+
+            return True
+
+        except Exception as e:
+            self.log_operation('ERROR', f"Failed to delete CloudWatch alarms for ASG {asg_name}: {e}")
+            print(f"   ❌ Failed to delete CloudWatch alarms: {e}")
+            return False
+
     def get_all_asgs_in_region(self, asg_client, region, account_info):
         """Get all Auto Scaling Groups in a specific region"""
         try:
@@ -173,7 +285,6 @@ class UltraCleanupASGManager:
                     min_size = asg['MinSize']
                     max_size = asg['MaxSize']
                     desired_capacity = asg['DesiredCapacity']
-                    instance_count = len(asg.get('Instances', []))
 
                     # Get ASG name from tags
                     asg_name_tag = asg_name
@@ -187,9 +298,9 @@ class UltraCleanupASGManager:
                             created_time = tag['Value']
                         elif tag['Key'] == 'Creator':
                             creator = tag['Value']
-                        elif tag['Key'] == 'CreatedAt':
+                        elif tag['Key'] == 'CreatedAt':  # Added for compatibility with ASG creation script
                             created_time = tag['Value']
-                        elif tag['Key'] == 'CreatedBy':
+                        elif tag['Key'] == 'CreatedBy':  # Added for compatibility with ASG creation script
                             creator = tag['Value']
 
                     # Get launch template info
@@ -199,6 +310,9 @@ class UltraCleanupASGManager:
                     if 'LaunchTemplate' in asg:
                         launch_template_id = asg['LaunchTemplate'].get('LaunchTemplateId')
                         launch_template_name = asg['LaunchTemplate'].get('LaunchTemplateName')
+
+                    # Format instance count
+                    instance_count = len(asg.get('Instances', []))
 
                     asg_info = {
                         'asg_name': asg_name,
@@ -212,7 +326,8 @@ class UltraCleanupASGManager:
                         'launch_template_id': launch_template_id,
                         'launch_template_name': launch_template_name,
                         'region': region,
-                        'account_info': account_info
+                        'account_info': account_info,
+                        'asg_obj': asg  # Store full ASG object for later use
                     }
 
                     asgs.append(asg_info)
@@ -225,20 +340,30 @@ class UltraCleanupASGManager:
         except Exception as e:
             account_name = account_info.get('account_key', 'Unknown')
             self.log_operation('ERROR', f"Error getting ASGs in {region} ({account_name}): {e}")
-            print(f"   ❌ Error getting ASGs in {region}: {e}")
+            print(f"   ❌ Error scanning {region} ({account_name}): {e}")
             return []
 
-    def delete_asg(self, asg_client, asg_info):
-        """Delete an Auto Scaling Group"""
+    def delete_asg(self, asg_info):
+        """Delete an Auto Scaling Group and its related resources"""
         try:
             asg_name = asg_info['asg_name']
             region = asg_info['region']
             account_name = asg_info['account_info'].get('account_key', 'Unknown')
 
             self.log_operation('INFO', f"🗑️  Deleting ASG {asg_name} in {region} ({account_name})")
-            print(f"   🗑️  Deleting ASG {asg_name}...")
+            print(f"🗑️  Deleting ASG {asg_name} in {region} ({account_name})...")
 
-            # Step 1: Delete scheduled actions (if any)
+            # Get account credentials
+            access_key = asg_info['account_info']['access_key']
+            secret_key = asg_info['account_info']['secret_key']
+
+            # Create ASG client
+            asg_client = self.create_asg_client(access_key, secret_key, region)
+
+            # Step 1: Delete CloudWatch alarms related to this ASG
+            self.delete_asg_related_alarms(access_key, secret_key, region, asg_name)
+
+            # Step 2: Delete scheduled actions (if any)
             try:
                 self.log_operation('INFO', f"🕒 Checking for scheduled actions...")
                 print(f"   🕒 Checking for scheduled actions...")
@@ -265,7 +390,7 @@ class UltraCleanupASGManager:
                 self.log_operation('WARNING', f"⚠️ Warning: Failed to clean up scheduled actions: {e}")
                 print(f"   ⚠️ Warning: Failed to clean up scheduled actions: {e}")
 
-            # Step 2: Check and delete any scaling policies
+            # Step 3: Check and delete any scaling policies
             try:
                 self.log_operation('INFO', f"📊 Checking for scaling policies...")
                 print(f"   📊 Checking for scaling policies...")
@@ -292,7 +417,7 @@ class UltraCleanupASGManager:
                 self.log_operation('WARNING', f"⚠️ Warning: Failed to clean up scaling policies: {e}")
                 print(f"   ⚠️ Warning: Failed to clean up scaling policies: {e}")
 
-            # Step 3: Delete the ASG with ForceDelete to terminate instances
+            # Step 4: Delete the ASG with ForceDelete to terminate instances
             self.log_operation('INFO', f"💥 Deleting Auto Scaling Group with Force option")
             print(f"   💥 Deleting Auto Scaling Group with Force option...")
 
@@ -334,7 +459,7 @@ class UltraCleanupASGManager:
             return False
 
     def cleanup_account_region(self, account_info, region):
-        """Clean up ASG resources in a specific account and region"""
+        """Clean up all ASG resources in a specific account and region"""
         try:
             access_key = account_info['access_key']
             secret_key = account_info['secret_key']
@@ -345,70 +470,44 @@ class UltraCleanupASGManager:
             print(f"\n🧹 Starting ASG cleanup for {account_key} ({account_id}) in {region}")
 
             # Create ASG client
-            asg_client = self.create_asg_client(access_key, secret_key, region)
+            try:
+                asg_client = self.create_asg_client(access_key, secret_key, region)
+            except Exception as client_error:
+                self.log_operation('ERROR', f"Could not create ASG client for {region}: {client_error}")
+                print(f"   ❌ Could not create ASG client for {region}: {client_error}")
+                return False
 
-            # Get all ASGs in the region
+            # Get all ASGs
             asgs = self.get_all_asgs_in_region(asg_client, region, account_info)
 
-            # Add region summary to results
+            if not asgs:
+                self.log_operation('INFO', f"No ASGs found in {account_key} ({region})")
+                print(f"   ✓ No ASGs found in {account_key} ({region})")
+                return True
+
+            # Record region summary
             region_summary = {
                 'account_key': account_key,
                 'account_id': account_id,
                 'region': region,
                 'asgs_found': len(asgs)
             }
-
             self.cleanup_results['regions_processed'].append(region_summary)
 
             self.log_operation('INFO', f"📊 {account_key} ({region}) ASG resources summary:")
-            self.log_operation('INFO', f"   📦 Auto Scaling Groups: {len(asgs)}")
+            self.log_operation('INFO', f"   📦 ASGs: {len(asgs)}")
 
-            print(f"   📊 ASG resources found: {len(asgs)} ASGs")
+            print(f"   📊 ASG resources found: {len(asgs)} Auto Scaling Groups")
 
-            if not asgs:
-                self.log_operation('INFO', f"No ASG resources found in {account_key} ({region})")
-                print(f"   ✅ No ASG resources to clean up in {region}")
-                return True
+            # Add to all_asgs for later processing
+            self.all_asgs.extend(asgs)
 
-            # Delete ASGs sequentially
-            if asgs:
-                self.log_operation('INFO', f"🗑️  Deleting {len(asgs)} ASGs in {account_key} ({region}) sequentially")
-                print(f"\n   🗑️  Deleting {len(asgs)} ASGs sequentially...")
-
-                deleted_count = 0
-                failed_count = 0
-
-                for i, asg in enumerate(asgs, 1):
-                    asg_name = asg['asg_name']
-                    print(f"   [{i}/{len(asgs)}] Processing ASG {asg_name}...")
-
-                    try:
-                        success = self.delete_asg(asg_client, asg)
-                        if success:
-                            deleted_count += 1
-                        else:
-                            failed_count += 1
-                    except Exception as e:
-                        failed_count += 1
-                        self.log_operation('ERROR', f"Error deleting ASG {asg_name}: {e}")
-                        print(f"   ❌ Error deleting ASG {asg_name}: {e}")
-
-                print(f"   ✅ Deleted {deleted_count} ASGs, ❌ Failed: {failed_count}")
-
-                # Wait for ASGs to be deleted
-                if deleted_count > 0:
-                    self.log_operation('INFO', f"⏳ Waiting 30 seconds for {deleted_count} ASGs to be deleted...")
-                    print(f"   ⏳ Waiting 30 seconds for ASGs to be deleted...")
-                    time.sleep(30)
-
-            self.log_operation('INFO', f"✅ ASG cleanup completed for {account_key} ({region})")
-            print(f"\n   ✅ ASG cleanup completed for {account_key} ({region})")
             return True
 
         except Exception as e:
             account_key = account_info.get('account_key', 'Unknown')
-            self.log_operation('ERROR', f"Error cleaning up ASG resources in {account_key} ({region}): {e}")
-            print(f"   ❌ Error cleaning up ASG resources in {account_key} ({region}): {e}")
+            self.log_operation('ERROR', f"Error discovering ASG resources in {account_key} ({region}): {e}")
+            print(f"   ❌ Error discovering ASG resources in {account_key} ({region}): {e}")
             self.cleanup_results['errors'].append({
                 'account_info': account_info,
                 'region': region,
@@ -416,7 +515,7 @@ class UltraCleanupASGManager:
             })
             return False
 
-    def select_regions_interactive(self) -> Optional[List[str]]:
+    def select_regions_interactive(self) -> List[str]:
         """Interactive region selection."""
         self.print_colored(Colors.YELLOW, "\n🌍 Available AWS Regions:")
         self.print_colored(Colors.YELLOW, "=" * 80)
@@ -434,7 +533,8 @@ class UltraCleanupASGManager:
 
         while True:
             try:
-                choice = input(f"Select regions (1-{len(self.user_regions)}, comma-separated, range, or 'all') or 'q' to quit: ").strip()
+                choice = input(
+                    f"Select regions (1-{len(self.user_regions)}, comma-separated, range, or 'all') or 'q' to quit: ").strip()
 
                 if choice.lower() == 'q':
                     return None
@@ -449,7 +549,8 @@ class UltraCleanupASGManager:
                     continue
 
                 selected_regions = [self.user_regions[i - 1] for i in selected_indices]
-                self.print_colored(Colors.GREEN, f"✅ Selected {len(selected_regions)} regions: {', '.join(selected_regions)}")
+                self.print_colored(Colors.GREEN,
+                                   f"✅ Selected {len(selected_regions)} regions: {', '.join(selected_regions)}")
                 return selected_regions
 
             except Exception as e:
@@ -463,6 +564,7 @@ class UltraCleanupASGManager:
 
             # Calculate statistics
             total_asgs_deleted = len(self.cleanup_results['deleted_asgs'])
+            total_alarms_deleted = len(self.cleanup_results['deleted_alarms'])
             total_failed = len(self.cleanup_results['failed_deletions'])
             total_skipped = len(self.cleanup_results['skipped_asgs'])
 
@@ -475,13 +577,26 @@ class UltraCleanupASGManager:
                 region = asg['region']
 
                 if account not in deletions_by_account:
-                    deletions_by_account[account] = {'asgs': 0, 'regions': set()}
+                    deletions_by_account[account] = {'asgs': 0, 'alarms': 0, 'regions': set()}
                 deletions_by_account[account]['asgs'] += 1
                 deletions_by_account[account]['regions'].add(region)
 
                 if region not in deletions_by_region:
-                    deletions_by_region[region] = {'asgs': 0}
+                    deletions_by_region[region] = {'asgs': 0, 'alarms': 0}
                 deletions_by_region[region]['asgs'] += 1
+
+            for alarm in self.cleanup_results['deleted_alarms']:
+                account = alarm.get('account_name',
+                                    'Unknown')  # This might need adjustment based on how we store account info
+                region = alarm['region']
+
+                if account not in deletions_by_account:
+                    deletions_by_account[account] = {'asgs': 0, 'alarms': 0, 'regions': set()}
+                deletions_by_account[account]['alarms'] += 1
+
+                if region not in deletions_by_region:
+                    deletions_by_region[region] = {'asgs': 0, 'alarms': 0}
+                deletions_by_region[region]['alarms'] += 1
 
             report_data = {
                 "metadata": {
@@ -500,6 +615,7 @@ class UltraCleanupASGManager:
                     "total_regions_processed": len(
                         set(rp['region'] for rp in self.cleanup_results['regions_processed'])),
                     "total_asgs_deleted": total_asgs_deleted,
+                    "total_alarms_deleted": total_alarms_deleted,
                     "total_failed_deletions": total_failed,
                     "total_skipped_asgs": total_skipped,
                     "deletions_by_account": deletions_by_account,
@@ -508,6 +624,7 @@ class UltraCleanupASGManager:
                 "detailed_results": {
                     "regions_processed": self.cleanup_results['regions_processed'],
                     "deleted_asgs": self.cleanup_results['deleted_asgs'],
+                    "deleted_alarms": self.cleanup_results['deleted_alarms'],
                     "failed_deletions": self.cleanup_results['failed_deletions'],
                     "skipped_asgs": self.cleanup_results['skipped_asgs'],
                     "errors": self.cleanup_results['errors']
@@ -530,7 +647,7 @@ class UltraCleanupASGManager:
             self.log_operation('INFO', "🚨 STARTING ULTRA ASG CLEANUP SESSION 🚨")
 
             self.print_colored(Colors.YELLOW, "🚨" * 30)
-            self.print_colored(Colors.RED, "💥 ULTRA ASG CLEANUP - SEQUENTIAL 💥")
+            self.print_colored(Colors.RED, "💥 ULTRA AUTO SCALING GROUP CLEANUP 💥")
             self.print_colored(Colors.YELLOW, "🚨" * 30)
             self.print_colored(Colors.WHITE, f"📅 Execution Date/Time: {self.current_time} UTC")
             self.print_colored(Colors.WHITE, f"👤 Executed by: {self.current_user}")
@@ -551,7 +668,7 @@ class UltraCleanupASGManager:
                 self.print_colored(Colors.RED, "❌ No regions selected, exiting...")
                 return
 
-            # STEP 3: Calculate total operations and confirm
+            # STEP 3: Calculate total operations and discover ASGs
             total_operations = len(selected_accounts) * len(selected_regions)
 
             self.print_colored(Colors.YELLOW, f"\n🎯 ASG CLEANUP CONFIGURATION")
@@ -562,86 +679,144 @@ class UltraCleanupASGManager:
             self.print_colored(Colors.WHITE, f"📋 Total operations: {total_operations}")
             self.print_colored(Colors.YELLOW, "=" * 80)
 
-            # Show what will be cleaned up
-            self.print_colored(Colors.RED, f"\n⚠️  WARNING: This will delete ALL of the following ASG resources:")
-            self.print_colored(Colors.WHITE, f"    • Auto Scaling Groups (ASGs)")
-            self.print_colored(Colors.WHITE, f"    • EC2 Instances within ASGs")
-            self.print_colored(Colors.WHITE, f"    • Scaling Policies")
-            self.print_colored(Colors.WHITE, f"    • Scheduled Actions")
-            self.print_colored(Colors.WHITE, f"    across {len(selected_accounts)} accounts in {len(selected_regions)} regions ({total_operations} operations)")
+            # STEP 4: Discover ASGs across all selected accounts and regions
+            self.print_colored(Colors.CYAN,
+                               f"\n🔍 Discovering ASGs across {len(selected_accounts)} accounts and {len(selected_regions)} regions...")
+
+            for account_info in selected_accounts:
+                account_key = account_info.get('account_key', 'Unknown')
+                self.print_colored(Colors.PURPLE, f"\n⚙️  Processing account: {account_key}")
+                for region in selected_regions:
+                    print(f"   🌍 Scanning region: {region}")
+                    try:
+                        self.cleanup_account_region(account_info, region)
+                    except Exception as e:
+                        self.log_operation('ERROR', f"Error processing {account_key} ({region}): {e}")
+                        print(f"   ❌ Error processing {account_key} ({region}): {e}")
+
+            if not self.all_asgs:
+                self.print_colored(Colors.RED, "\n❌ No Auto Scaling Groups found. Nothing to clean up.")
+                return
+
+            # STEP 5: Display all ASGs for selection
+            self.print_colored(Colors.YELLOW, "\n" + "=" * 80)
+            self.print_colored(Colors.YELLOW, "📋 ALL AUTO SCALING GROUPS ACROSS ACCOUNTS")
+            self.print_colored(Colors.YELLOW, "=" * 80)
+
+            # Display ASGs with more informative headers
+            print(f"{'#':<4} {'ASG Name':<40} {'Size':<15} {'Instances':<10} {'Account':<15} {'Region'}")
+            print("-" * 100)
+
+            for i, asg in enumerate(self.all_asgs, 1):
+                asg_name = asg['asg_name']
+                min_size = asg['min_size']
+                max_size = asg['max_size']
+                desired = asg['desired_capacity']
+                instances = asg['instance_count']
+                account_name = asg['account_info'].get('account_key', 'Unknown')
+                region = asg['region']
+
+                size_info = f"{min_size}/{desired}/{max_size}"
+                print(f"{i:<4} {asg_name:<40} {size_info:<15} {instances:<10} {account_name:<15} {region}")
+
+            # STEP 6: Prompt user for ASG selection
+            self.print_colored(Colors.YELLOW, "\nASG Selection Options:")
+            self.print_colored(Colors.WHITE, "  • Single ASGs: 1,3,5")
+            self.print_colored(Colors.WHITE, "  • Ranges: 1-3")
+            self.print_colored(Colors.WHITE, "  • Mixed: 1-3,5,7-9")
+            self.print_colored(Colors.WHITE, "  • All ASGs: 'all' or press Enter")
+            self.print_colored(Colors.WHITE, "  • Cancel: 'cancel' or 'quit'")
+
+            selection = input("\n🔢 Select ASGs to delete: ").strip().lower()
+
+            if selection in ['cancel', 'quit']:
+                self.log_operation('INFO', "ASG cleanup cancelled by user")
+                self.print_colored(Colors.RED, "❌ Cleanup cancelled")
+                return
+
+            # STEP 7: Parse ASG selection
+            selected_asgs = []
+
+            if not selection or selection == 'all':
+                selected_asgs = self.all_asgs.copy()
+                self.log_operation('INFO', f"All ASGs selected: {len(self.all_asgs)}")
+                self.print_colored(Colors.GREEN, f"✅ Selected all {len(self.all_asgs)} Auto Scaling Groups")
+            else:
+                try:
+                    indices = self.cred_manager._parse_selection(selection, len(self.all_asgs))
+                    selected_asgs = [self.all_asgs[i - 1] for i in indices]
+                    self.log_operation('INFO', f"Selected {len(selected_asgs)} ASGs")
+                    self.print_colored(Colors.GREEN, f"✅ Selected {len(selected_asgs)} Auto Scaling Groups")
+                except ValueError as e:
+                    self.log_operation('ERROR', f"Invalid selection: {e}")
+                    self.print_colored(Colors.RED, f"❌ Invalid selection: {e}")
+                    return
+
+            # STEP 8: Confirm deletion
+            self.print_colored(Colors.RED, f"\n⚠️  WARNING: This will delete the following resources:")
+            self.print_colored(Colors.WHITE, f"    • {len(selected_asgs)} Auto Scaling Groups")
+            self.print_colored(Colors.WHITE, f"    • Associated CloudWatch Alarms")
+            self.print_colored(Colors.WHITE, f"    • Scaling Policies and Scheduled Actions")
+            self.print_colored(Colors.WHITE, f"    • All EC2 instances within the ASGs")
             self.print_colored(Colors.RED, f"    This action CANNOT be undone!")
 
-            # First confirmation - simple y/n
-            confirm1 = input(f"\nContinue with ASG cleanup? (y/n): ").strip().lower()
-            self.log_operation('INFO', f"First confirmation: '{confirm1}'")
+            confirm = input("\nType 'yes' to confirm deletion: ").strip().lower()
+            self.log_operation('INFO', f"Deletion confirmation: '{confirm}'")
 
-            if confirm1 not in ['y', 'yes']:
-                self.log_operation('INFO', "Ultra ASG cleanup cancelled by user")
+            if confirm != 'yes':
+                self.log_operation('INFO', "ASG cleanup cancelled at confirmation")
                 self.print_colored(Colors.RED, "❌ Cleanup cancelled")
                 return
 
-            # Second confirmation - final check
-            confirm2 = input(f"Are you sure? Type 'yes' to confirm: ").strip().lower()
-            self.log_operation('INFO', f"Final confirmation: '{confirm2}'")
-
-            if confirm2 != 'yes':
-                self.log_operation('INFO', "Ultra ASG cleanup cancelled at final confirmation")
-                self.print_colored(Colors.RED, "❌ Cleanup cancelled")
-                return
-
-            # STEP 4: Start the cleanup sequentially
-            self.print_colored(Colors.RED, f"\n💥 STARTING ASG CLEANUP...")
-            self.log_operation('INFO', f"🚨 ASG CLEANUP INITIATED - {len(selected_accounts)} accounts, {len(selected_regions)} regions")
+            # STEP 9: Delete selected ASGs
+            self.print_colored(Colors.RED, f"\n🗑️  Deleting {len(selected_asgs)} Auto Scaling Groups...")
 
             start_time = time.time()
+            successful = 0
+            failed = 0
 
-            successful_tasks = 0
-            failed_tasks = 0
+            # Process each ASG sequentially
+            for i, asg in enumerate(selected_asgs, 1):
+                asg_name = asg['asg_name']
+                account_name = asg['account_info'].get('account_key', 'Unknown')
+                region = asg['region']
 
-            # Create tasks list
-            tasks = []
-            for account_info in selected_accounts:
-                for region in selected_regions:
-                    tasks.append((account_info, region))
-
-            # Process each task sequentially
-            for i, (account_info, region) in enumerate(tasks, 1):
-                account_key = account_info.get('account_key', 'Unknown')
-                self.print_colored(Colors.CYAN, f"\n[{i}/{len(tasks)}] Processing {account_key} in {region}...")
+                self.print_colored(Colors.CYAN,
+                                   f"\n[{i}/{len(selected_asgs)}] Processing ASG: {asg_name} in {account_name} ({region})")
 
                 try:
-                    success = self.cleanup_account_region(account_info, region)
-                    if success:
-                        successful_tasks += 1
+                    result = self.delete_asg(asg)
+                    if result:
+                        successful += 1
                     else:
-                        failed_tasks += 1
+                        failed += 1
                 except Exception as e:
-                    failed_tasks += 1
-                    self.log_operation('ERROR', f"Task failed for {account_key} ({region}): {e}")
-                    self.print_colored(Colors.RED, f"❌ Task failed for {account_key} ({region}): {e}")
+                    failed += 1
+                    self.log_operation('ERROR', f"Error deleting ASG {asg_name}: {e}")
+                    self.print_colored(Colors.RED, f"❌ Error deleting ASG {asg_name}: {e}")
 
             end_time = time.time()
             total_time = int(end_time - start_time)
 
-            # STEP 5: Display final results
-            self.print_colored(Colors.YELLOW, f"\n💥" + "="*25 + " ASG CLEANUP COMPLETE " + "="*25)
+            # STEP 10: Display results
+            self.print_colored(Colors.YELLOW, f"\n💥" + "=" * 25 + " ASG CLEANUP COMPLETE " + "=" * 25)
             self.print_colored(Colors.WHITE, f"⏱️  Total execution time: {total_time} seconds")
-            self.print_colored(Colors.GREEN, f"✅ Successful operations: {successful_tasks}")
-            self.print_colored(Colors.RED, f"❌ Failed operations: {failed_tasks}")
-            self.print_colored(Colors.WHITE, f"📦 Auto Scaling Groups deleted: {len(self.cleanup_results['deleted_asgs'])}")
-            self.print_colored(Colors.RED, f"❌ Failed deletions: {len(self.cleanup_results['failed_deletions'])}")
+            self.print_colored(Colors.GREEN, f"✅ Successfully deleted: {successful} ASGs")
+            self.print_colored(Colors.RED, f"❌ Failed to delete: {failed} ASGs")
+            self.print_colored(Colors.WHITE, f"📦 Total ASGs deleted: {len(self.cleanup_results['deleted_asgs'])}")
+            self.print_colored(Colors.WHITE, f"🔔 Total alarms deleted: {len(self.cleanup_results['deleted_alarms'])}")
 
             self.log_operation('INFO', f"ASG CLEANUP COMPLETED")
             self.log_operation('INFO', f"Execution time: {total_time} seconds")
-            self.log_operation('INFO', f"Auto Scaling Groups deleted: {len(self.cleanup_results['deleted_asgs'])}")
+            self.log_operation('INFO', f"ASGs deleted: {len(self.cleanup_results['deleted_asgs'])}")
+            self.log_operation('INFO', f"Alarms deleted: {len(self.cleanup_results['deleted_alarms'])}")
 
-            # STEP 6: Show account summary
+            # STEP 11: Show account summary
             if self.cleanup_results['deleted_asgs']:
                 self.print_colored(Colors.YELLOW, f"\n📊 Deletion Summary by Account:")
 
-                # Group by account
+                # Group deletions by account
                 account_summary = {}
-
                 for asg in self.cleanup_results['deleted_asgs']:
                     account = asg['account_info'].get('account_key', 'Unknown')
                     if account not in account_summary:
@@ -652,22 +827,10 @@ class UltraCleanupASGManager:
                 for account, summary in account_summary.items():
                     regions_list = ', '.join(sorted(summary['regions']))
                     self.print_colored(Colors.PURPLE, f"   🏦 {account}:")
-                    self.print_colored(Colors.WHITE, f"      📦 Auto Scaling Groups: {summary['asgs']}")
+                    self.print_colored(Colors.WHITE, f"      📦 ASGs deleted: {summary['asgs']}")
                     self.print_colored(Colors.WHITE, f"      🌍 Regions: {regions_list}")
 
-            # STEP 7: Show failures if any
-            if self.cleanup_results['failed_deletions']:
-                self.print_colored(Colors.RED, f"\n❌ Failed Deletions:")
-                for failure in self.cleanup_results['failed_deletions'][:10]:  # Show first 10
-                    account_key = failure['account_info'].get('account_key', 'Unknown')
-                    self.print_colored(Colors.WHITE, f"   • {failure['resource_type']} {failure['resource_id']} in {account_key} ({failure['region']})")
-                    self.print_colored(Colors.WHITE, f"     Error: {failure['error']}")
-
-                if len(self.cleanup_results['failed_deletions']) > 10:
-                    remaining = len(self.cleanup_results['failed_deletions']) - 10
-                    self.print_colored(Colors.WHITE, f"   ... and {remaining} more failures (see detailed report)")
-
-            # Save comprehensive report
+            # Save cleanup report
             self.print_colored(Colors.CYAN, f"\n📄 Saving ASG cleanup report...")
             report_file = self.save_cleanup_report()
             if report_file:
