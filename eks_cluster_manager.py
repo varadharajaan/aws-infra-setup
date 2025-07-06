@@ -810,30 +810,63 @@ class EKSClusterManager:
             return False
         return True
 
-
-    def ensure_ec2_key_pair(self, ec2_client, key_name: str, save_dir: str = ".") -> str:
+    def ensure_ec2_key_pair(self, ec2_client, key_name: str = "k8s_demo_key", key_dir: str = ".") -> str:
         """
-        Ensure the EC2 key pair exists. If not, create it and save the private key.
+        Ensure the EC2 key pair exists by importing the existing public key.
+        If it doesn't exist, import the public key material from local file.
         Returns the key name.
         """
         try:
-            # Check if key exists
+            # Check if key exists in AWS
             response = ec2_client.describe_key_pairs(KeyNames=[key_name])
-            self.log_operation('INFO', f"EC2 key pair '{key_name}' already exists.")
+            self.log_operation('INFO', f"EC2 key pair '{key_name}' already exists in AWS.")
             return key_name
         except ec2_client.exceptions.ClientError as e:
             if "InvalidKeyPair.NotFound" in str(e):
-                # Create the key pair
-                key_pair = ec2_client.create_key_pair(KeyName=key_name)
-                private_key = key_pair['KeyMaterial']
-                key_path = os.path.join(save_dir, f"{key_name}.pem")
-                with open(key_path, "w") as f:
-                    f.write(private_key)
-                os.chmod(key_path, 0o400)
-                self.log_operation('INFO', f"Created EC2 key pair '{key_name}' and saved private key to {key_path}")
-                return key_name
+                self.log_operation('INFO', f"Key pair '{key_name}' not found in AWS, importing from local file...")
+
+                # Look for public key file
+                public_key_path = os.path.join(key_dir, f"{key_name}.pub")
+
+                try:
+                    # Check if public key file exists
+                    if not os.path.exists(public_key_path):
+                        self.log_operation('ERROR', f"Public key file not found: {public_key_path}")
+                        raise FileNotFoundError(f"Public key file not found: {public_key_path}")
+
+                    # Read the public key file
+                    with open(public_key_path, 'r') as f:
+                        public_key_material = f.read().strip()
+
+                    # Validate public key format
+                    if not public_key_material.startswith(('ssh-rsa', 'ssh-ed25519', 'ecdsa-sha2-')):
+                        raise ValueError("Invalid public key format")
+
+                    # Import the public key to AWS
+                    ec2_client.import_key_pair(
+                        KeyName=key_name,
+                        PublicKeyMaterial=public_key_material
+                    )
+
+                    self.log_operation('INFO',
+                                       f"Successfully imported public key '{public_key_path}' as EC2 key pair '{key_name}'")
+                    self.print_colored(Colors.GREEN, f"✅ Imported public key as EC2 key pair '{key_name}'")
+                    return key_name
+
+                except FileNotFoundError:
+                    self.log_operation('ERROR', f"Public key file not found: {public_key_path}")
+                    self.print_colored(Colors.RED, f"❌ Public key file not found: {public_key_path}")
+                    raise
+                except ValueError as ve:
+                    self.log_operation('ERROR', f"Invalid public key format: {str(ve)}")
+                    self.print_colored(Colors.RED, f"❌ Invalid public key format in {public_key_path}")
+                    raise
+                except Exception as upload_error:
+                    self.log_operation('ERROR', f"Error importing public key: {str(upload_error)}")
+                    self.print_colored(Colors.RED, f"❌ Error importing public key: {str(upload_error)}")
+                    raise
             else:
-                self.log_operation('ERROR', f"Error checking/creating key pair: {str(e)}")
+                self.log_operation('ERROR', f"Error checking key pair: {str(e)}")
                 raise
 
     def setup_cloudwatch_alarms_multi_nodegroup(self, cluster_name: str, region: str, cloudwatch_client, nodegroup_names: List[str], account_id: str) -> bool:
@@ -2611,8 +2644,6 @@ class EKSClusterManager:
                         user_env['AWS_ACCESS_KEY_ID'] = user_data.get('access_key', '')
                         user_env['AWS_SECRET_ACCESS_KEY'] = user_data.get('secret_key', '')
                         user_env['AWS_DEFAULT_REGION'] = region
-                        user_env['AWS_PROFILE'] = user_data.get('username', username)
-
 
                         # Update kubeconfig with user credentials
                         user_update_cmd = [
@@ -3465,36 +3496,36 @@ class EKSClusterManager:
                 return False
 
             # Step 7: Test the Lambda function
-            self.print_colored(Colors.CYAN, f"   🧪 Testing optimized Lambda function...")
-
-            test_event = {
-                'cluster_name': cluster_name,
-                'region': region,
-                'test_mode': True
-            }
-
-            # sleep for 1 mins
-            time.sleep(60)
-
-            try:
-                response = lambda_client.invoke(
-                    FunctionName=function_name,
-                    InvocationType='RequestResponse',
-                    Payload=json.dumps(test_event)
-                )
-
-                response_payload = json.loads(response['Payload'].read())
-
-                if response.get('StatusCode') == 200:
-                    self.print_colored(Colors.GREEN, f"   ✅ Lambda function test successful")
-                    self.print_colored(Colors.CYAN,
-                                       f"   📊 Test result: {response_payload.get('statusCode', 'Unknown')}")
-                else:
-                    self.print_colored(Colors.YELLOW, f"   ⚠️  Lambda function test returned non-200 status")
-
-            except Exception as e:
-                self.print_colored(Colors.YELLOW,
-                                   f"   ⚠️  Lambda function test failed (this is often normal): {str(e)}")
+            # self.print_colored(Colors.CYAN, f"   🧪 STEP 7: Testing optimized Lambda function...")
+            #
+            # test_event = {
+            #     'cluster_name': cluster_name,
+            #     'region': region,
+            #     'test_mode': True
+            # }
+            #
+            # # sleep for 1 mins
+            # time.sleep(60)
+            #
+            # try:
+            #     response = lambda_client.invoke(
+            #         FunctionName=function_name,
+            #         InvocationType='RequestResponse',
+            #         Payload=json.dumps(test_event)
+            #     )
+            #
+            #     response_payload = json.loads(response['Payload'].read())
+            #
+            #     if response.get('StatusCode') == 200:
+            #         self.print_colored(Colors.GREEN, f"   ✅ Lambda function test successful")
+            #         self.print_colored(Colors.CYAN,
+            #                            f"   📊 Test result: {response_payload.get('statusCode', 'Unknown')}")
+            #     else:
+            #         self.print_colored(Colors.YELLOW, f"   ⚠️  Lambda function test returned non-200 status")
+            #
+            # except Exception as e:
+            #     self.print_colored(Colors.YELLOW,
+            #                        f"   ⚠️  Lambda function test failed (this is often normal): {str(e)}")
 
             # # Step 8: Create scheduled trigger for regular monitoring
             # self.print_colored(Colors.CYAN, f"   ⏰ Creating scheduled monitoring rule...")
@@ -6588,8 +6619,8 @@ class EKSClusterManager:
 
             # ASK USER FOR SCALING SIZES OR USE DEFAULTS
             self.print_colored(Colors.CYAN, "\n   [SYSTEM] Set node scaling parameters:")
-            self.print_colored(Colors.CYAN, "   Default scale-up: min=1, desired=1, max=3")
-            self.print_colored(Colors.CYAN, "   Default scale-down: min=0, desired=0, max=3")
+            self.print_colored(Colors.CYAN, "   Default scale-up: min=1, desired=1, max=8")
+            self.print_colored(Colors.CYAN, "   Default scale-down: min=0, desired=0, max=8")
 
             change_sizes = 'n'
             #change_sizes = input("   Change default scaling sizes? (y/N): ").strip().lower()
@@ -8216,6 +8247,7 @@ class EKSClusterManager:
                 f"eks-node-monitor-{cluster_name.split('-')[-1]}",  # Using cluster suffix
                 f"node-monitor-{cluster_name.split('-')[-1]}",
                 f"node-protection-monitor-{cluster_name.split('-')[-1]}",
+                f"node-protection-monitor-eks-{cluster_name.split('-')[-1]}"
             ]
 
             monitoring_found = False
