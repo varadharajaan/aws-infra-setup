@@ -2040,7 +2040,7 @@ class EKSClusterContinuationFromErrors:
             # Validate values
             if min_size < 0 or desired_size < 0 or max_size < 0:
                 print("❌ Negative values are not allowed. Using defaults.")
-                min_size, desired_size, max_size = 1, 1, 3
+                min_size, desired_size, max_size = 0, 1, 8
 
             if min_size > desired_size or desired_size > max_size:
                 print("❌ Invalid values (should be min ≤ desired ≤ max). Adjusting...")
@@ -2050,7 +2050,7 @@ class EKSClusterContinuationFromErrors:
 
         except ValueError:
             print("❌ Invalid number format. Using defaults.")
-            min_size, desired_size, max_size = 1, 1, 3
+            min_size, desired_size, max_size = 0, 1, 8
 
         # Instance selections based on strategy
         instance_selections = {}

@@ -6610,12 +6610,12 @@ class EKSClusterManager:
                 except ValueError:
                     self.print_colored(Colors.RED, "   ❌ Invalid input. Using default values.")
                     # Use default values
-                    scale_up_min, scale_up_desired, scale_up_max = 1, 1, 3
-                    scale_down_min, scale_down_desired, scale_down_max = 0, 0, 3
+                    scale_up_min, scale_up_desired, scale_up_max = 0, 1, 8
+                    scale_down_min, scale_down_desired, scale_down_max = 0, 0, 8
             else:
                 # Use the values you actually want as defaults
-                scale_up_min, scale_up_desired, scale_up_max = 1, 1, 3
-                scale_down_min, scale_down_desired, scale_down_max = 0, 0, 3
+                scale_up_min, scale_up_desired, scale_up_max = 0, 1, 8
+                scale_down_min, scale_down_desired, scale_down_max = 0, 0, 8
 
             # Check if current nodes exceed scale-down configuration
             max_current_desired = max([config['current_desired'] for config in nodegroup_configs.values()])
@@ -7017,8 +7017,8 @@ class EKSClusterManager:
                     # Validate input
                     if scale_up_min < 0 or scale_up_desired < 0 or scale_up_max < 0 or scale_down_min < 0 or scale_down_desired < 0 or scale_down_max < 0:
                         self.print_colored(Colors.YELLOW, "   ⚠️  Negative values not allowed, using defaults.")
-                        scale_up_min, scale_up_desired, scale_up_max = 1, 1, 3
-                        scale_down_min, scale_down_desired, scale_down_max = 0, 0, 3
+                        scale_up_min, scale_up_desired, scale_up_max = 0, 1, 8
+                        scale_down_min, scale_down_desired, scale_down_max = 0, 0, 8
         
                     if scale_up_min > scale_up_desired or scale_up_desired > scale_up_max:
                         self.print_colored(Colors.YELLOW, "   ⚠️  Invalid scale-up values (should be min ≤ desired ≤ max), adjusting...")
@@ -7034,11 +7034,11 @@ class EKSClusterManager:
         
                 except ValueError:
                     self.print_colored(Colors.YELLOW, "   ⚠️  Invalid number format, using defaults.")
-                    scale_up_min, scale_up_desired, scale_up_max = 1, 1, 3
-                    scale_down_min, scale_down_desired, scale_down_max = 0, 0, 3
+                    scale_up_min, scale_up_desired, scale_up_max = 0, 1, 8
+                    scale_down_min, scale_down_desired, scale_down_max = 0, 0, 8
             else:
-                scale_up_min, scale_up_desired, scale_up_max = 1, 1, 3
-                scale_down_min, scale_down_desired, scale_down_max = 0, 0, 3
+                scale_up_min, scale_up_desired, scale_up_max = 0, 1, 8
+                scale_down_min, scale_down_desired, scale_down_max = 0, 0, 8
 
             # Check if any nodegroup current size is greater than new scale down size
             size_reduction_detected = False
