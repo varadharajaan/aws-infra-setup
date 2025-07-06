@@ -9251,12 +9251,12 @@ class EKSClusterManager:
 
             # Step 6: Configure Auth ConfigMap for user access
             self.print_colored(Colors.CYAN, "   🔑 Configuring user access...")
-            auth_configured = self.configure_aws_auth_configmap(
-                cluster_name, region, account_id, config, access_key, secret_key
-            )
+            # auth_configured = self.configure_aws_auth_configmap(
+            #     cluster_name, region, account_id, config, access_key, secret_key
+            # )
 
-            # auth_configured = self.enable_cluster_access_modes(cluster_name, region, account_id, config,
-            #                                                    admin_access_key, admin_secret_key)
+            auth_configured = self.enable_cluster_access_modes(cluster_name, region, account_id, config,
+                                                            access_key, secret_key)
 
             # Step 7: Create nodegroups based on strategy
             self.print_colored(Colors.CYAN, f"   🚀 Creating nodegroups with {strategy} strategy...")
