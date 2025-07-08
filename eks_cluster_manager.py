@@ -30,6 +30,7 @@ from jinja2 import Environment, FileSystemLoader
 import logging
 from logging.handlers import RotatingFileHandler
 from complete_autoscaler_deployment import CompleteAutoscalerDeployer
+from timing_utils import timing_decorator, add_timing_methods
 
 
 class Colors:
@@ -43,6 +44,7 @@ class Colors:
     WHITE = '\033[1;37m'
     NC = '\033[0m'  # No Color
 
+#@add_timing_methods
 class EKSClusterManager:
     def __init__(self, config_file=None, current_user='varadharajaan'):
             """Initialize the EKS Cluster Manager"""
@@ -4834,7 +4836,6 @@ class EKSClusterManager:
         except Exception:
             return 2  # Default fallback
         
-    ####
     def install_essential_addons(self, eks_client, cluster_name: str, region:str, admin_access_key: str, admin_secret_key: str, account_id:str ) -> bool:
         """Install essential EKS add-ons including EFS CSI driver with proper credentials"""
         try:
@@ -5020,6 +5021,7 @@ class EKSClusterManager:
             self.print_colored(Colors.RED, f"❌ Add-ons installation failed: {str(e)}")
 
             return False
+
     def attach_csi_policies_to_node_role(self, iam_client, account_id: str) -> bool:
         """Attach all required CSI policies including custom aws_csi_policy.json to NodeInstanceRole"""
         try:
@@ -5170,7 +5172,7 @@ class EKSClusterManager:
             self.log_operation('ERROR', f"Failed to load custom CSI policy from {policy_file}: {str(e)}")
             self.print_colored(Colors.RED, f"   ❌ Failed to load custom CSI policy: {str(e)}")
             return None
-####
+
     def verify_user_access(self, cluster_name: str, region: str, username: str, access_key: str,
                            secret_key: str) -> bool:
         """Verify user access to the cluster and check cluster endpoint configuration"""
@@ -5867,7 +5869,6 @@ class EKSClusterManager:
             self.log_operation('ERROR', f"Failed to create composite alarms: {str(e)}")
             return False
 
-
     def create_composite_alarms_v1(self, cloudwatch_client, cluster_name: str, alarm_configs: list) -> bool:
         """Create composite alarms for critical conditions"""
         try:
@@ -6150,8 +6151,6 @@ class EKSClusterManager:
             self.print_colored('GREEN', f"[DEBUG {stage}] nodegroup_configs is set: {len(nodegroup_configs)} configs")
             for i, config in enumerate(nodegroup_configs):
                 self.print_colored('CYAN', f"  Config {i+1}: {config.get('name')}, strategy: {config.get('strategy')}")
-    
- ########
 
     def get_cloudwatch_configmap_manifest_fixed(self, config: dict, cluster_name: str, region: str) -> str:
             """Get CloudWatch ConfigMap manifest with safely quoted JSON"""
@@ -6232,6 +6231,7 @@ class EKSClusterManager:
                 self.log_operation('ERROR', f"Failed to apply Kubernetes manifest: {str(e)}")
 
             return False
+
     def wait_for_daemonset_ready_fixed(self, cluster_name: str, region: str, access_key: str, secret_key: str, namespace: str, daemonset_name: str, timeout: int = 300) -> bool:
             """Wait for DaemonSet to be ready with improved error handling"""
             try:
@@ -6353,6 +6353,7 @@ class EKSClusterManager:
             except Exception as e:
                 self.log_operation('ERROR', f"Failed to deploy CloudWatch agent: {str(e)}")
                 return False
+
     def deploy_cloudwatch_agent_fixed(self, cluster_name: str, region: str, access_key: str, secret_key: str, account_id: str) -> bool:
             """Deploy CloudWatch agent as DaemonSet with proper handling of existing resources"""
             try:

@@ -154,6 +154,7 @@ get-pipx.py
 user_mini_instructions_*
 reports/*
 aws_bkk/*
+./aws_bkk/*
 sanitized_iam_users_credentials*
 user_mapping*
 user_mapping.json

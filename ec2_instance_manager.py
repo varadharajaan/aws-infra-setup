@@ -511,46 +511,95 @@ class EC2InstanceManager:
             print(f"❌ Error creating security group: {e}")
             raise
 
+
     def ensure_key_pair(self, region, credential=None):
+        """
+        Ensure the EC2 key pair exists by importing the existing public key.
+        If it doesn't exist, import the public key material from local file.
+        Returns the key name.
+        """
         import botocore
 
         key_name = self.keypair_name
-        key_file = f"{key_name}.pem"
-        public_key_file = f"{key_name}.pub"
+        key_dir = "."  # Current directory
 
         # Use credential if provided, else default
         if credential:
-            ec2 = boto3.client(
+            ec2_client = boto3.client(
                 'ec2',
                 aws_access_key_id=credential.access_key,
                 aws_secret_access_key=credential.secret_key,
                 region_name=region
             )
         else:
-            ec2 = boto3.client('ec2', region_name=region)
+            ec2_client = boto3.client('ec2', region_name=region)
 
         with self.keypair_lock:
             try:
-                ec2.describe_key_pairs(KeyNames=[key_name])
+                # Check if key exists in AWS
+                response = ec2_client.describe_key_pairs(KeyNames=[key_name])
+                self.log_operation('INFO', f"EC2 key pair '{key_name}' already exists in AWS.")
                 print(f"🔑 Key pair '{key_name}' already exists in region {region}")
+                return key_name
             except botocore.exceptions.ClientError as e:
-                if e.response['Error']['Code'] == 'InvalidKeyPair.NotFound':
+                if "InvalidKeyPair.NotFound" in str(e):
+                    self.log_operation('INFO', f"Key pair '{key_name}' not found in AWS, importing from local file...")
                     print(f"🔑 Key pair '{key_name}' not found in region {region}. Importing public key...")
-                    if not os.path.exists(public_key_file):
-                        raise FileNotFoundError(f"Public key file '{public_key_file}' not found.")
-                    with open(public_key_file, 'r') as pubf:
-                        public_key_material = pubf.read()
-                    ec2.import_key_pair(KeyName=key_name, PublicKeyMaterial=public_key_material)
-                    print(f"✅ Imported public key as key pair '{key_name}' in region {region}")
+
+                    # Look for public key file
+                    public_key_path = os.path.join(key_dir, f"{key_name}.pub")
+
+                    try:
+                        # Check if public key file exists
+                        if not os.path.exists(public_key_path):
+                            self.log_operation('ERROR', f"Public key file not found: {public_key_path}")
+                            raise FileNotFoundError(f"Public key file not found: {public_key_path}")
+
+                        # Read the public key file
+                        with open(public_key_path, 'r') as f:
+                            public_key_material = f.read().strip()
+
+                        # Validate public key format
+                        if not public_key_material.startswith(('ssh-rsa', 'ssh-ed25519', 'ecdsa-sha2-')):
+                            raise ValueError("Invalid public key format")
+
+                        # Import the public key to AWS
+                        ec2_client.import_key_pair(
+                            KeyName=key_name,
+                            PublicKeyMaterial=public_key_material
+                        )
+
+                        self.log_operation('INFO',
+                                           f"Successfully imported public key '{public_key_path}' as EC2 key pair '{key_name}'")
+                        print(f"✅ Imported public key as EC2 key pair '{key_name}' in region {region}")
+                        return key_name
+
+                    except FileNotFoundError:
+                        self.log_operation('ERROR', f"Public key file not found: {public_key_path}")
+                        print(f"❌ Public key file not found: {public_key_path}")
+                        raise
+                    except ValueError as ve:
+                        self.log_operation('ERROR', f"Invalid public key format: {str(ve)}")
+                        print(f"❌ Invalid public key format in {public_key_path}")
+                        raise
+                    except Exception as upload_error:
+                        self.log_operation('ERROR', f"Error importing public key: {str(upload_error)}")
+                        print(f"❌ Error importing public key: {str(upload_error)}")
+                        raise
                 else:
+                    self.log_operation('ERROR', f"Error checking key pair: {str(e)}")
                     raise
 
-            if not os.path.exists(key_file):
-                raise FileNotFoundError(f"Private key file '{key_file}' not found locally. Please provide it.")
+            # Check if private key file exists locally (for verification)
+            private_key_file = f"{key_name}.pem"
+            if not os.path.exists(private_key_file):
+                self.log_operation('WARNING', f"Private key file '{private_key_file}' not found locally.")
+                print(f"⚠️ Warning: Private key file '{private_key_file}' not found locally.")
+            else:
+                print(f"🔑 Using local private key file: {private_key_file}")
 
-            print(f"🔑 Using local private key file: {key_file}")
+            return key_name
 
-        return key_name
     def create_ec2_instance(self, cred_info: CredentialInfo, instance_type: str = None) -> Dict:
         """Create EC2 instance with specified configuration, avoiding unsupported AZs"""
         try:
