@@ -149,7 +149,7 @@ class EKSAutomation:
 
             # Get EKS configuration from mapping file
             eks_config = self.get_eks_config()
-            default_version = eks_config.get("default_version", "1.27")
+            default_version = eks_config.get("default_version", "1.28")
             default_ami_type = eks_config.get("ami_type", "AL2_x86_64")
 
             print(f"📋 EKS Default Settings:")

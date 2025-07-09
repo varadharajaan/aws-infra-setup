@@ -1,0 +1,25 @@
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8smaxreplicacount
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sMaxReplicaCount
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8smaxreplicacount
+
+        kinds := {"Deployment", "StatefulSet", "ReplicaSet"}
+
+        violation[{"msg": msg}] {
+          kind := input.review.kind.kind
+          kind == kinds[_]
+
+          replicas := input.review.object.spec.replicas
+          replicas > 3
+
+          msg := sprintf("%s %q has too many replicas: %v. Max allowed is 3.", [kind, input.review.object.metadata.name, replicas])
+        }

@@ -599,11 +599,11 @@ class IAMUserManager:
     def display_account_menu(self):
         """Display account selection menu with mapping information"""
         print("\n📋 Available AWS Accounts:")
-        
+
         # Show accounts with mappings
         accounts_with_mappings = []
         accounts_without_mappings = []
-        
+
         for i, (account_name, config) in enumerate(self.aws_accounts.items(), 1):
             user_count = len(self.get_users_for_account(account_name))
             if user_count > 0:
@@ -612,75 +612,119 @@ class IAMUserManager:
             else:
                 print(f"  {i}. {account_name} ({config['account_id']}) - {config['email']} [⚠️  NO USERS MAPPED]")
                 accounts_without_mappings.append(account_name)
-        
+
         print(f"  {len(self.aws_accounts) + 1}. All accounts with mappings ({len(accounts_with_mappings)} accounts)")
         print(f"  {len(self.aws_accounts) + 2}. All accounts (including unmapped)")
-        
+
         if accounts_without_mappings:
             print(f"\n⚠️  Warning: {len(accounts_without_mappings)} accounts have no user mappings:")
             for account in accounts_without_mappings:
                 print(f"     - {account}")
             print("   These accounts will be skipped unless you explicitly select them.")
-        
+
+        print(f"\n💡 Selection Options:")
+        print(f"   • Single account: 1")
+        print(f"   • Multiple accounts: 1,3,5")
+        print(f"   • Range: 1-3")
+        print(f"   • Mixed: 1,3-5,7")
+        print(f"   • All with mappings: {len(self.aws_accounts) + 1}")
+        print(f"   • All accounts: {len(self.aws_accounts) + 2}")
+
         while True:
             try:
-                choice = input(f"\n🔢 Select account(s) to process (1-{len(self.aws_accounts) + 2}) or range (e.g., 1-3): ").strip()
-                
-                # Handle range input like "1-2"
-                if '-' in choice:
-                    try:
-                        start, end = choice.split('-')
-                        start_num = int(start.strip())
-                        end_num = int(end.strip())
-                        
-                        if start_num < 1 or end_num > len(self.aws_accounts) or start_num > end_num:
-                            print(f"❌ Invalid range. Please enter a range between 1 and {len(self.aws_accounts)}")
-                            continue
-                        
-                        # Return list of account names for the range
-                        account_names = list(self.aws_accounts.keys())
-                        selected_accounts = account_names[start_num-1:end_num]
-                        
-                        # Warn about unmapped accounts in range
-                        unmapped_in_selection = [acc for acc in selected_accounts if acc in accounts_without_mappings]
-                        if unmapped_in_selection:
-                            confirm = input(f"⚠️  Selected range includes accounts with no mappings: {unmapped_in_selection}. Continue? (y/N): ").lower().strip()
-                            if confirm != 'y':
-                                continue
-                        
-                        return selected_accounts
-                        
-                    except ValueError:
-                        print("❌ Invalid range format. Use format like '1-3'")
-                        continue
-                
-                # Handle single number input
-                choice_num = int(choice)
-                
-                if choice_num == len(self.aws_accounts) + 1:
+                choice = input(f"\n🔢 Select account(s) to process: ").strip()
+
+                # Handle special cases first
+                if choice == str(len(self.aws_accounts) + 1):
                     # All accounts with mappings
                     return accounts_with_mappings
-                elif choice_num == len(self.aws_accounts) + 2:
+                elif choice == str(len(self.aws_accounts) + 2):
                     # All accounts
                     if accounts_without_mappings:
-                        confirm = input(f"⚠️  This includes {len(accounts_without_mappings)} accounts with no mappings. Continue? (y/N): ").lower().strip()
+                        confirm = input(
+                            f"⚠️  This includes {len(accounts_without_mappings)} accounts with no mappings. Continue? (y/N): ").lower().strip()
                         if confirm != 'y':
                             continue
                     return list(self.aws_accounts.keys())
-                elif 1 <= choice_num <= len(self.aws_accounts):
-                    selected_account = list(self.aws_accounts.keys())[choice_num - 1]
-                    
-                    # Warn if selected account has no mappings
-                    if selected_account in accounts_without_mappings:
-                        confirm = input(f"⚠️  Account '{selected_account}' has no user mappings. Continue? (y/N): ").lower().strip()
-                        if confirm != 'y':
-                            continue
-                    
-                    return [selected_account]
+
+                # Parse the selection
+                selected_accounts = self.parse_account_selection(choice)
+
+                if not selected_accounts:
+                    print(f"❌ Invalid selection. Please try again.")
+                    continue
+
+                # Validate all selections are within range
+                account_names = list(self.aws_accounts.keys())
+                invalid_selections = [num for num in selected_accounts if num < 1 or num > len(self.aws_accounts)]
+
+                if invalid_selections:
+                    print(
+                        f"❌ Invalid account numbers: {invalid_selections}. Please enter numbers between 1 and {len(self.aws_accounts)}")
+                    continue
+
+                # Convert numbers to account names
+                selected_account_names = [account_names[num - 1] for num in selected_accounts]
+
+                # Remove duplicates while preserving order
+                selected_account_names = list(dict.fromkeys(selected_account_names))
+
+                # Warn about unmapped accounts in selection
+                unmapped_in_selection = [acc for acc in selected_account_names if acc in accounts_without_mappings]
+                if unmapped_in_selection:
+                    print(
+                        f"⚠️  Selected accounts include {len(unmapped_in_selection)} with no mappings: {unmapped_in_selection}")
+                    confirm = input(f"Continue? (y/N): ").lower().strip()
+                    if confirm != 'y':
+                        continue
+
+                print(f"✅ Selected accounts: {selected_account_names}")
+                return selected_account_names
+
+            except ValueError as e:
+                print(f"❌ Invalid input format: {e}")
+                continue
+
+    def parse_account_selection(self, selection):
+        """Parse account selection string supporting single, comma-separated, ranges, and mixed formats"""
+        try:
+            selected_numbers = []
+
+            # Split by comma first
+            parts = [part.strip() for part in selection.split(',')]
+
+            for part in parts:
+                if '-' in part:
+                    # Handle range like "1-3"
+                    try:
+                        start, end = part.split('-')
+                        start_num = int(start.strip())
+                        end_num = int(end.strip())
+
+                        if start_num > end_num:
+                            raise ValueError(f"Invalid range: {part} (start > end)")
+
+                        # Add all numbers in range
+                        selected_numbers.extend(range(start_num, end_num + 1))
+
+                    except ValueError as e:
+                        if "Invalid range" in str(e):
+                            raise e
+                        else:
+                            raise ValueError(f"Invalid range format: {part}")
                 else:
-                    print(f"❌ Invalid choice. Please enter a number between 1 and {len(self.aws_accounts) + 2}")
-            except ValueError:
-                print("❌ Invalid input. Please enter a number or range (e.g., 1-3).")
+                    # Handle single number
+                    try:
+                        num = int(part)
+                        selected_numbers.append(num)
+                    except ValueError:
+                        raise ValueError(f"Invalid number: {part}")
+
+            return selected_numbers
+
+        except Exception as e:
+            print(f"❌ Error parsing selection: {e}")
+            return []
 
     def save_credentials_to_file(self, all_created_users):
         """Save user credentials to a JSON file and create Excel with correct column order"""
