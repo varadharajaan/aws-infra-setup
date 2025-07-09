@@ -251,6 +251,7 @@ class EC2ASGAutomation:
         # Ask user to select instances
         print(f"\nPlease select instances for global use (1-{len(sorted_instances)}):")
         print("Enter comma-separated numbers (e.g., 1,3,5) or 'all' for all instances:")
+        print("Or enter 'cus' to specify custom instance types:")
 
         while True:
             try:
@@ -259,6 +260,24 @@ class EC2ASGAutomation:
                 if user_input.lower() == 'all':
                     selected_indices = list(range(len(sorted_instances)))
                     break
+                elif user_input.lower() == 'cus' or user_input.lower() == 'custom':
+                    print("\nEnter custom instance types (comma-separated):")
+                    print("Example: t3.micro,t3.small,m5.large")
+                    custom_input = input("Custom types: ").strip()
+
+                    if custom_input:
+                        custom_types = [t.strip() for t in custom_input.split(',') if t.strip()]
+                        if custom_types:
+                            print(f"✅ Selected {len(custom_types)} custom instance type(s):")
+                            for i, instance_type in enumerate(custom_types, 1):
+                                print(f"   {i}. {instance_type}")
+                            return {'on-demand': custom_types}
+                        else:
+                            print("❌ No valid custom types entered. Please try again.")
+                            continue
+                    else:
+                        print("❌ No custom types entered. Please try again.")
+                        continue
                 elif user_input.lower() in ['quit', 'exit', 'q']:
                     print("❌ Selection cancelled.")
                     return {'on-demand': []}
@@ -275,7 +294,7 @@ class EC2ASGAutomation:
                         continue
 
             except ValueError:
-                print("❌ Invalid input. Please enter comma-separated numbers or 'all'")
+                print("❌ Invalid input. Please enter comma-separated numbers, 'all', or 'custom'")
                 continue
             except KeyboardInterrupt:
                 print("\n❌ Selection cancelled.")

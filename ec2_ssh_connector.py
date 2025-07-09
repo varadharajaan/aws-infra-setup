@@ -240,7 +240,7 @@ Examples:
                 if "InvalidInstanceID.NotFound" in str(e):
                     logger.error(f"One or more instances not found in region {region}")
                     # Try other common regions
-                    common_regions = ['us-west-2', 'us-west-1', 'eu-west-1', 'ap-south-1']
+                    common_regions = ['us-east-1', 'us-east-2', 'us-west-1', 'us-west-2', 'ap-south-1', 'eu-central-1', 'eu-west-1']
                     for try_region in common_regions:
                         if try_region != region:
                             try:
