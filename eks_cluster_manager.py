@@ -7179,7 +7179,16 @@ class EKSClusterManager:
                     lambda_template = f.read()
     
                 # Replace placeholders using replace() method instead of format()
-                lambda_code = lambda_template.replace('{{cluster_name}}', cluster_name).replace('{{region}}', region).replace('{{CURRENT_USER}}', 'varadharajan').replace('{{CURRENT_DATETIME',timestamp = datetime.now().strftime("%Y%m%d-%H%M%S"))
+                # Get current timestamp for replacement
+                timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+
+                # Replace placeholders in template with actual values
+                lambda_code = (lambda_template
+                               .replace('{{cluster_name}}', cluster_name)
+                               .replace('{{region}}', region)
+                               .replace('{{CURRENT_USER}}', self.current_user)
+                               .replace('{{CURRENT_DATETIME}}', timestamp))
+
                 self.log_operation('INFO', f"Loaded Lambda template from file: {template_file}")
     
             except Exception as e:
