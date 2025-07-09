@@ -471,14 +471,21 @@ class EC2ASGAutomation:
 
     # In create_launch_template_for_user
     def create_launch_template_for_user(self, credential: CredentialInfo, global_config: dict, key_name: str) -> str:
+        """
+        Create a launch template for the ASG.
+        Always uses the first selected instance type from either on-demand or spot,
+        because the ASG's MixedInstancesPolicy will override the type list.
+        """
         from ec2_instance_manager import InstanceConfig
         import boto3
 
+        # Get AMI for region
         ami_mapping = self.ec2_manager.ami_config.get('region_ami_mapping', {})
         ami_id = ami_mapping.get(credential.regions[0])
         if not ami_id:
             raise ValueError(f"No AMI found for region: {credential.regions[0]}")
 
+        # Prepare userdata
         enhanced_userdata = self.ec2_manager.prepare_userdata_with_aws_config(
             self.ec2_manager.userdata_script,
             credential.access_key,
@@ -486,12 +493,23 @@ class EC2ASGAutomation:
             credential.regions[0]
         )
 
+        # Use first selected instance type from on-demand or spot for the launch template
+        instance_types = []
+        if 'asg_instance_selections' in global_config:
+            selections = global_config['asg_instance_selections']
+            if selections.get('on-demand'):
+                instance_types = selections['on-demand']
+            elif selections.get('spot'):
+                instance_types = selections['spot']
+        launch_template_instance_type = instance_types[0] if instance_types else global_config.get('instance_type',
+                                                                                                   't3.micro')
+
         instance_config = InstanceConfig(
-            instance_type=global_config.get('instance_type', 't3.micro'),
+            instance_type=launch_template_instance_type,
             ami_id=ami_id,
             region=credential.regions[0],
             userdata_script=enhanced_userdata,
-            key_name=key_name  # Pass the key name here
+            key_name=key_name
         )
 
         ec2_client = boto3.client(
@@ -501,12 +519,13 @@ class EC2ASGAutomation:
             region_name=credential.regions[0]
         )
 
-        # Ensure security groups are created and fetched
+        # Create the launch template
         launch_template_id = self.ec2_manager.create_launch_template(
             ec2_client, credential, instance_config
         )
 
         return launch_template_id
+
 
     def run_automation(self):
         """Main automation flow with multi-user processing"""

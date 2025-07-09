@@ -1012,22 +1012,48 @@ Examples:
         print(f"\n=== Extracting ASG Information ===")
 
         for file_info in self.selected_asg_files:
+            file_path = file_info['path']
+
             try:
-                with open(file_info['path'], 'r') as f:
-                    asg_data = json.load(f)
+                # Ensure file exists and is readable
+                if not file_path.exists():
+                    logger.error(f"File does not exist: {file_path}")
+                    continue
 
-                    asg_config = asg_data.get('asg_configuration', {})
-                    asg_name = asg_config.get('name', 'Unknown')
+                # Convert to string path for Windows compatibility
+                file_path_str = str(file_path)
 
-                    asgs.append({
-                        'name': asg_name,
-                        'account': file_info['account'],
-                        'file_path': file_info['path'],
-                        'config': asg_config
-                    })
+                # Add small delay to prevent file handle conflicts
+                time.sleep(0.01)
 
-            except (json.JSONDecodeError, FileNotFoundError) as e:
-                logger.error(f"Error reading ASG file {file_info['path']}: {e}")
+                # Read file with explicit error handling
+                with open(file_path_str, 'r', encoding='utf-8') as f:
+                    content = f.read()
+
+                # Parse JSON separately
+                asg_data = json.loads(content)
+
+                asg_config = asg_data.get('asg_configuration', {})
+                asg_name = asg_config.get('name', 'Unknown')
+
+                asgs.append({
+                    'name': asg_name,
+                    'account': file_info['account'],
+                    'file_path': file_info['path'],
+                    'config': asg_config
+                })
+
+            except PermissionError as e:
+                logger.error(f"Permission denied reading ASG file {file_path}: {e}")
+                continue
+            except OSError as e:
+                logger.error(f"OS error reading ASG file {file_path}: {e}")
+                continue
+            except json.JSONDecodeError as e:
+                logger.error(f"Invalid JSON in ASG file {file_path}: {e}")
+                continue
+            except Exception as e:
+                logger.error(f"Unexpected error reading ASG file {file_path}: {e}")
                 continue
 
         # Show summary by account
@@ -1805,7 +1831,7 @@ Examples:
         html_file = account_dir / f"{instance_id}_{account}_{extracted_username}_report.html"
 
         # Also save in current directory where ec2_ssh_connector.py is located
-        current_dir_html_file = Path(f"{instance_id}_{account}_{extracted_username}_report.html")
+        current_dir_html_file = Path(f"{account}_{extracted_username}_report.html")
 
         demouser_ssh = f"ssh demouser@{instance_result.get('instance_ip', 'N/A')} (password: demouser@123)"
         ec2user_ssh = f"ssh -i k8s_demo_key.pem ec2-user@{instance_result.get('instance_ip', 'N/A')}"

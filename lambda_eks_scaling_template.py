@@ -467,9 +467,8 @@ def lambda_handler(event, context):
         logger.info(f"📥 Event received: {json.dumps(event, indent=2)}")
 
         # Get configuration from template injection or event
-        cluster_name = '{{cluster_name}}' if '{{cluster_name}}' != '{{cluster_name}}' else event.get(
-            'cluster_name') or os.environ.get('CLUSTER_NAME')
-        region = '{{region}}' if '{{region}}' != '{{region}}' else event.get('region') or os.environ.get('AWS_REGION')
+        cluster_name = cluster_name = "{{ cluster_name }}" if "{{ cluster_name }}" != "" else event.get("cluster_name") or os.environ.get("CLUSTER_NAME")
+        region = '{{region}}' if '{{region}}' != "" else event.get('region') or os.environ.get('REGION')
 
         # Validate required parameters
         if not cluster_name:

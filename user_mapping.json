@@ -13,27 +13,27 @@
     }
   },
   "user_mappings": {
-    "account01_clouduser01": {
+    "account04_clouduser01": {
       "first_name": "Furkan Sertap",
       "last_name": "Katman",
       "email": "FURKANSertap.KATMAN@bakerhughes.com"
     },
-    "account01_clouduser02": {
+    "account04_clouduser02": {
       "first_name": "Niklas",
       "last_name": "Fiedler",
       "email": "Niklas.Fiedler@bakerhughes.com"
     },
-    "account01_clouduser03": {
+    "account05_clouduser03": {
       "first_name": "A N M Asif",
       "last_name": "Hossain",
       "email": "Asif.Hossain@bakerhughes.com"
     },
-    "account01_clouduser04": {
-      "first_name": "Udo",
-      "last_name": "Klarhoefer",
-      "email": "udo.klarhoefer@bakerhughes.com"
+    "account05_clouduser04": {
+      "first_name": "Nitesh",
+      "last_name": "Nayee",
+      "email": "Nitesh.Nayee@bakerhughes.com"
     },
-    "account01_clouduser05": {
+    "account04_clouduser05": {
       "first_name": "Marco V",
       "last_name": "Holst",
       "email": "Marco.VanDerHolst@bakerhughes.com"
