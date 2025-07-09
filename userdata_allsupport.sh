@@ -11,6 +11,10 @@ echo "Enabling Docker..."
 sudo systemctl enable --now docker
 sudo usermod -aG docker ec2-user
 
+# Add EC2 Instance Connect
+echo "Installing EC2 Instance Connect..."
+sudo dnf install -y ec2-instance-connect
+
 echo "Creating user 'demouser' with password login..."
 sudo useradd -m demouser
 echo "demouser:demouser@123" | sudo chpasswd
