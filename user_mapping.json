@@ -13,31 +13,6 @@
     }
   },
   "user_mappings": {
-    "account04_clouduser01": {
-      "first_name": "Furkan Sertap",
-      "last_name": "Katman",
-      "email": "FURKANSertap.KATMAN@bakerhughes.com"
-    },
-    "account04_clouduser02": {
-      "first_name": "Niklas",
-      "last_name": "Fiedler",
-      "email": "Niklas.Fiedler@bakerhughes.com"
-    },
-    "account03_clouduser06": {
-      "first_name": "A N M Asif",
-      "last_name": "Hossain",
-      "email": "Asif.Hossain@bakerhughes.com"
-    },
-    "account03_clouduser07": {
-      "first_name": "Nitesh",
-      "last_name": "Nayee",
-      "email": "Nitesh.Nayee@bakerhughes.com"
-    },
-    "account04_clouduser05": {
-      "first_name": "Marco V",
-      "last_name": "Holst",
-      "email": "Marco.VanDerHolst@bakerhughes.com"
-    },
     "account02_clouduser01": {
       "first_name": "Pieter",
       "last_name": "Kroes",
@@ -63,6 +38,16 @@
       "last_name": "Zabluda",
       "email": "Alexander.Zabluda@bakerhughes.com"
     },
+    "account04_clouduser01": {
+      "first_name": "Furkan Sertap",
+      "last_name": "Katman",
+      "email": "FURKANSertap.KATMAN@bakerhughes.com"
+    },
+    "account04_clouduser02": {
+      "first_name": "Niklas",
+      "last_name": "Fiedler",
+      "email": "Niklas.Fiedler@bakerhughes.com"
+    },
     "account03_clouduser01": {
       "first_name": "Dusan",
       "last_name": "Hrbaty",
@@ -84,9 +69,19 @@
       "email": "amarjeet.arora@asreet-tech.com"
     },
     "account03_clouduser05": {
-      "first_name": "Varadharajan",
-      "last_name": "Damotharan",
-      "email": "varathu09@gmail.com"
+      "first_name": "Marco V",
+      "last_name": "Holst",
+      "email": "Marco.VanDerHolst@bakerhughes.com"
+    },
+    "account03_clouduser06": {
+      "first_name": "A N M Asif",
+      "last_name": "Hossain",
+      "email": "Asif.Hossain@bakerhughes.com"
+    },
+    "account03_clouduser07": {
+      "first_name": "Nitesh",
+      "last_name": "Nayee",
+      "email": "Nitesh.Nayee@bakerhughes.com"
     }
   },
   "account_distribution": {

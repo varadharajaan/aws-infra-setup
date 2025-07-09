@@ -282,7 +282,7 @@ class UltraCleanupASGManager:
             for page in paginator.paginate():
                 for asg in page['AutoScalingGroups']:
                     asg_name = asg['AutoScalingGroupName']
-                    if asg_name starts with('eks-') or asg_name.startswith('k8s-'):
+                    if asg_name.startswith('eks-') or asg_name.startswith('k8s-'):
                         self.log_operation('INFO', f"Skipping ASG {asg_name} as it is an EKS or K8s managed ASG")
                         print(f"   ℹ️ Skipping ASG {asg_name} as it is an EKS or K8s managed ASG")
                         continue
@@ -864,7 +864,6 @@ def main():
     except Exception as e:
         print(f"❌ Unexpected error: {e}")
         exit(1)
-
 
 if __name__ == "__main__":
     main()

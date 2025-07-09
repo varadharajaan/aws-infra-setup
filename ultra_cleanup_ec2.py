@@ -239,7 +239,12 @@ class UltraCleanupEC2Manager:
 
                     # Skip default security groups
                     if sg_name == 'default':
+                        self.log_operation('DEBUG', f"Skipping default security group {sg_id} ({sg_name})")
                         continue
+                    # Before deleting a security group check if this exists
+                    if sg_name == 'eks-cluster-sg':
+                        self.log_operation('INFO', f"Skipping and **DONT DELETE** EKS cluster SG which has private access to EC2: {sg_name}")
+                        continue  # Skip deletion for this SG
 
                     sg_info = {
                         'group_id': sg_id,
