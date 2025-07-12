@@ -241,10 +241,13 @@ class UltraCleanupEC2Manager:
                     if sg_name == 'default':
                         self.log_operation('DEBUG', f"Skipping default security group {sg_id} ({sg_name})")
                         continue
-                    # Before deleting a security group check if this exists
-                    if sg_name == 'eks-cluster-sg':
-                        self.log_operation('INFO', f"Skipping and **DONT DELETE** EKS cluster SG which has private access to EC2: {sg_name}")
-                        continue  # Skip deletion for this SG
+
+                    # Enhanced EKS security group protection
+                    if self.is_eks_related_security_group(sg, ec2_client, region):
+                        self.log_operation('WARNING',
+                                           f"🛡️ PROTECTED: Skipping EKS-related security group {sg_id} ({sg_name})")
+                        print(f"   🛡️ PROTECTED: Skipping EKS security group {sg_name}")
+                        continue
 
                     sg_info = {
                         'group_id': sg_id,
@@ -253,14 +256,16 @@ class UltraCleanupEC2Manager:
                         'vpc_id': vpc_id,
                         'region': region,
                         'account_info': account_info,
-                        'is_attached': False,  # Will be updated later
+                        'is_attached': False,
                         'attached_instances': []
                     }
 
                     security_groups.append(sg_info)
 
-            self.log_operation('INFO', f"🛡️  Found {len(security_groups)} security groups in {region} ({account_name})")
-            print(f"   🛡️  Found {len(security_groups)} security groups in {region} ({account_name})")
+            self.log_operation('INFO',
+                               f"🛡️  Found {len(security_groups)} security groups in {region} ({account_name}) (after EKS filtering)")
+            print(
+                f"   🛡️  Found {len(security_groups)} security groups in {region} ({account_name}) (after EKS filtering)")
 
             return security_groups
 
@@ -269,6 +274,175 @@ class UltraCleanupEC2Manager:
             self.log_operation('ERROR', f"Error getting security groups in {region} ({account_name}): {e}")
             print(f"   ❌ Error getting security groups in {region}: {e}")
             return []
+
+    def is_eks_related_security_group(self, sg, ec2_client, region):
+        """Comprehensive check if security group is related to EKS"""
+        sg_id = sg['GroupId']
+        sg_name = sg['GroupName']
+        description = sg['Description'].lower()
+
+        try:
+            # 1. Check security group name patterns
+            eks_name_patterns = [
+                'eks-cluster-sg',
+                'eks-nodegroup-',
+                'eks-cluster-',
+                'eksctl-',
+                'EKS',
+                'eks',
+                'nodegroup'
+            ]
+
+            for pattern in eks_name_patterns:
+                if pattern.lower() in sg_name.lower():
+                    self.log_operation('INFO', f"🎯 EKS pattern match in name: {sg_name} contains '{pattern}'")
+                    return True
+
+            # 2. Check security group description
+            eks_description_patterns = [
+                'eks',
+                'nodegroup',
+                'cluster',
+                'kubernetes',
+                'k8s',
+                'worker node',
+                'managed node'
+            ]
+
+            for pattern in eks_description_patterns:
+                if pattern in description:
+                    self.log_operation('INFO',
+                                       f"🎯 EKS pattern match in description: {description} contains '{pattern}'")
+                    return True
+
+            # 3. Check if security group is used by Launch Templates
+            if self.is_security_group_used_by_launch_template(ec2_client, sg_id):
+                self.log_operation('WARNING',
+                                   f"🚀 Security group {sg_id} is used by Launch Template - likely EKS nodegroup")
+                return True
+
+            # 4. Check if security group is used by Auto Scaling Groups
+            if self.is_security_group_used_by_asg(ec2_client, sg_id, region):
+                self.log_operation('WARNING',
+                                   f"📈 Security group {sg_id} is used by Auto Scaling Group - likely EKS nodegroup")
+                return True
+
+            # 5. Check tags for EKS indicators
+            for tag in sg.get('Tags', []):
+                tag_key = tag['Key'].lower()
+                tag_value = tag['Value'].lower()
+
+                eks_tag_patterns = [
+                    'kubernetes.io/cluster/',
+                    'eks:cluster-name',
+                    'eks:nodegroup-name',
+                    'eksctl.io/',
+                    'alpha.eksctl.io/',
+                    'kubernetes.io/created-for/pvc/namespace'
+                ]
+
+                for pattern in eks_tag_patterns:
+                    if pattern in tag_key or pattern in tag_value:
+                        self.log_operation('INFO', f"🏷️ EKS tag found: {tag_key}={tag_value}")
+                        return True
+
+            return False
+
+        except Exception as e:
+            self.log_operation('ERROR', f"Error checking if security group {sg_id} is EKS-related: {e}")
+            # If we can't determine, err on the side of caution
+            return True
+
+    def is_security_group_used_by_launch_template(self, ec2_client, sg_id):
+        """Check if security group is used by any Launch Template"""
+        try:
+            paginator = ec2_client.get_paginator('describe_launch_templates')
+
+            for page in paginator.paginate():
+                for lt in page['LaunchTemplates']:
+                    lt_id = lt['LaunchTemplateId']
+
+                    # Get launch template versions
+                    try:
+                        versions_response = ec2_client.describe_launch_template_versions(
+                            LaunchTemplateId=lt_id
+                        )
+
+                        for version in versions_response['LaunchTemplateVersions']:
+                            launch_template_data = version.get('LaunchTemplateData', {})
+                            security_group_ids = launch_template_data.get('SecurityGroupIds', [])
+                            security_groups = launch_template_data.get('SecurityGroups', [])
+
+                            # Check security group IDs
+                            if sg_id in security_group_ids:
+                                self.log_operation('WARNING',
+                                                   f"🚀 Security group {sg_id} found in Launch Template {lt_id}")
+                                return True
+
+                            # Check security group names
+                            for sg_name in security_groups:
+                                if sg_id == sg_name:  # Sometimes names are used instead of IDs
+                                    self.log_operation('WARNING',
+                                                       f"🚀 Security group {sg_id} found in Launch Template {lt_id}")
+                                    return True
+
+                    except Exception as version_error:
+                        self.log_operation('DEBUG',
+                                           f"Could not check launch template {lt_id} versions: {version_error}")
+                        continue
+
+            return False
+
+        except Exception as e:
+            self.log_operation('ERROR', f"Error checking launch templates for security group {sg_id}: {e}")
+            return True  # Err on the side of caution
+
+    def is_security_group_used_by_asg(self, ec2_client, sg_id, region):
+        """Check if security group is used by any Auto Scaling Group"""
+        try:
+            # Create Auto Scaling client
+            asg_client = boto3.client(
+                'autoscaling',
+                aws_access_key_id=ec2_client._request_signer._credentials.access_key,
+                aws_secret_access_key=ec2_client._request_signer._credentials.secret_key,
+                region_name=region
+            )
+
+            paginator = asg_client.get_paginator('describe_auto_scaling_groups')
+
+            for page in paginator.paginate():
+                for asg in page['AutoScalingGroups']:
+                    asg_name = asg['AutoScalingGroupName']
+
+                    # Check if ASG uses Launch Template
+                    if 'LaunchTemplate' in asg:
+                        lt_id = asg['LaunchTemplate']['LaunchTemplateId']
+                        if self.is_security_group_used_by_launch_template(ec2_client, sg_id):
+                            self.log_operation('WARNING',
+                                               f"📈 Security group {sg_id} used by ASG {asg_name} via Launch Template {lt_id}")
+                            return True
+
+                    # Check instances in ASG for security groups
+                    for instance in asg.get('Instances', []):
+                        instance_id = instance['InstanceId']
+                        try:
+                            instance_response = ec2_client.describe_instances(InstanceIds=[instance_id])
+                            for reservation in instance_response['Reservations']:
+                                for inst in reservation['Instances']:
+                                    for sg in inst.get('SecurityGroups', []):
+                                        if sg['GroupId'] == sg_id:
+                                            self.log_operation('WARNING',
+                                                               f"📈 Security group {sg_id} used by ASG {asg_name} instance {instance_id}")
+                                            return True
+                        except Exception as inst_error:
+                            self.log_operation('DEBUG', f"Could not check instance {instance_id}: {inst_error}")
+                            continue
+
+            return False
+
+        except Exception as e:
+            self.log_operation('ERROR', f"Error checking Auto Scaling Groups for security group {sg_id}: {e}")
+            return True  # Err on the side of caution
 
     def correlate_instances_and_security_groups(self, instances, security_groups):
         """Correlate instances with their security groups"""

@@ -1283,7 +1283,7 @@ class EKSClusterManager:
     def create_eks_control_plane(self, eks_client, cluster_name: str, eks_version: str, eks_role_arn: str, subnet_ids: List[str], security_group_id: str) -> bool:
         """Create EKS control plane with CloudWatch logging enabled"""
         try:
-            supported_versions = ["1.26", "1.27", "1.28", "1.29", "1.30", "1.31", "1.32"]
+            supported_versions = ["1.26", "1.27", "1.28", "1.29", "1.30", "1.31", "1.32", "1.33"]
             if not any(eks_version.startswith(v) for v in supported_versions):
                 print(f"⚠️ Warning: EKS version {eks_version} may not be fully supported")
                 proceed = input(f"Proceed with version {eks_version}? (y/N): ").strip().lower()
@@ -2275,8 +2275,18 @@ class EKSClusterManager:
                 cluster_name, region, account_id, user_data, admin_access_key, admin_secret_key
             )
 
-            # Step 2: Enable API access
-            api_success = self._enable_api_access(eks_client, cluster_name, user_arn, username)
+            # Step 2: Enable API access only if supported
+            auth_mode = eks_client.describe_cluster(name=cluster_name)['cluster'].get('accessConfig', {}).get(
+                'authenticationMode', 'CONFIG_MAP')
+
+            if auth_mode in ['API', 'API_AND_CONFIG_MAP']:
+                api_success = self._enable_api_access(eks_client, cluster_name, user_arn, username)
+            else:
+                api_success = False
+                self.log_operation('INFO',
+                                   f"API access not supported for cluster {cluster_name} (auth mode: {auth_mode})")
+                self.print_colored(Colors.YELLOW,
+                                   f"⚠️ Skipping API access setup: cluster uses ConfigMap authentication only")
 
             # Return success if at least one method worked
             if configmap_success and api_success:
@@ -2409,6 +2419,7 @@ class EKSClusterManager:
                 username = user_data.get('username', 'unknown')
                 user_arn = f"arn:aws:iam::{account_id}:user/{username}"
                 root_arn = f"arn:aws:iam::{account_id}:root"
+                praveen_arn = f"arn:aws:iam::{account_id}:user/praveen"
 
                 users_to_add.extend([
                     {
@@ -2420,7 +2431,12 @@ class EKSClusterManager:
                         'userarn': root_arn,
                         'username': 'root-user',
                         'groups': ['system:masters']
-                    }
+                    },
+                    {
+                        'userarn': praveen_arn,
+                        'username': 'praveen',
+                        'groups': ['system:masters']
+                    },
                 ])
                 principals_to_add.extend([user_arn, root_arn])
 
@@ -4851,7 +4867,7 @@ class EKSClusterManager:
             
                 self.log_operation('INFO', f"Detected EKS version: {eks_version}")
             except Exception as e:
-                eks_version = "1.28"
+                eks_version = "1.33"
                 self.log_operation('WARNING', f"Could not detect EKS version, using default {eks_version}: {str(e)}")
 
             # Always create a session with explicit credentials
@@ -7452,7 +7468,7 @@ class EKSClusterManager:
                 eks_version = cluster_info['cluster']['version']
                 self.log_operation('INFO', f"Detected EKS version: {eks_version}")
             except Exception as e:
-                eks_version = "1.28"  # Default to latest version if we can't detect
+                eks_version = "1.33"  # Default to latest version if we can't detect
                 self.log_operation('WARNING', f"Could not detect EKS version, using default {eks_version}: {str(e)}")
         
             # 1. Install Amazon EFS CSI Driver
@@ -7460,8 +7476,16 @@ class EKSClusterManager:
                 self.print_colored(Colors.CYAN, f"   📦 Installing Amazon EFS CSI Driver...")
             
                 # Get appropriate addon version based on EKS version
+                if eks_version.startswith('1.33'):
+                    addon_version = 'v2.1.9-eksbuild.1'
                 if eks_version.startswith('1.32'):
-                    addon_version = 'v1.8.0-eksbuild.1'
+                    addon_version = 'v2.1.9-eksbuild.1'
+                if eks_version.startswith('1.31'):
+                    addon_version = 'v2.1.9-eksbuild.1'
+                if eks_version.startswith('1.30'):
+                    addon_version = 'v2.1.9-eksbuild.1'
+                if eks_version.startswith('1.29'):
+                    addon_version = 'v2.1.9-eksbuild.1'
                 if eks_version.startswith('1.28'):
                     addon_version = 'v1.7.0-eksbuild.1'
                 elif eks_version.startswith('1.27'):
@@ -7671,8 +7695,16 @@ class EKSClusterManager:
                 self.print_colored(Colors.CYAN, f"   📦 Installing Amazon EKS Pod Identity Agent...")
             
                 # Get appropriate addon version based on EKS version
+                if eks_version.startswith('1.33'):
+                    identity_version = 'v1.3.8-eksbuild.1'
                 if eks_version.startswith('1.32'):
-                    identity_version = 'v1.2.0-eksbuild.1'
+                    identity_version = 'v1.3.8-eksbuild.1'
+                if eks_version.startswith('1.31'):
+                    identity_version = 'v1.3.8-eksbuild.1'
+                if eks_version.startswith('1.30'):
+                    identity_version = 'v1.3.8-eksbuild.1'
+                if eks_version.startswith('1.29'):
+                    identity_version = 'v1.3.8-eksbuild.1'
                 if eks_version.startswith('1.28'):
                     identity_version = 'v1.1.0-eksbuild.1'
                 else:
@@ -8189,8 +8221,6 @@ class EKSClusterManager:
             )
             components_status['scheduled_scaling'] = scheduling_success
 
-        # 4. Deploy CloudWatch agent
-        # if self.should_deploy_cloudwatch_agent():
         if False:  # Always skip for now
             print("\n🔍 Step 4: Deploying CloudWatch agent...")
             from custom_cloudwatch_agent_deployer import CustomCloudWatchAgentDeployer
@@ -8203,119 +8233,136 @@ class EKSClusterManager:
             print("\n🔍 Step 4: Skipping CloudWatch agent deployment as per user preference.")
             components_status['cloudwatch_agent'] = False
 
-        # 5. Setup CloudWatch alarms
-        print("\n🚨 Step 5: Setting up CloudWatch alarms...")
-        cloudwatch_alarms_success = self.setup_cloudwatch_alarms_multi_nodegroup(
-            cluster_name, region, cloudwatch_client, nodegroups_created, account_id
-        )
-        components_status['cloudwatch_alarms'] = cloudwatch_alarms_success
+        if False:
+            # 5. Setup CloudWatch alarms
+            print("\n🚨 Step 5: Setting up CloudWatch alarms...")
+            cloudwatch_alarms_success = self.setup_cloudwatch_alarms_multi_nodegroup(
+                cluster_name, region, cloudwatch_client, nodegroups_created, account_id
+            )
+            components_status['cloudwatch_alarms'] = cloudwatch_alarms_success
 
-        # 6. Setup cost monitoring alarms
-        print("\n💰 Step 6: Setting up cost monitoring alarms...")
-        cost_alarms_success = self.setup_cost_alarms(
-            cluster_name, region, cloudwatch_client, account_id
-        )
-        components_status['cost_alarms'] = cost_alarms_success
-
-        # 7. NEW: Verify Node Protection Status
-        print("\n🛡️ Step 7: Verifying node protection status...")
-        try:
-            protection_status = self.verify_node_protection_status(cluster_name, region, access_key, secret_key)
-
-            if protection_status:
-                components_status['node_protection']['enabled'] = protection_status.get('protected_nodes', 0) > 0
-                components_status['node_protection']['protected_nodegroups'] = protection_status.get(
-                    'protected_nodegroups', [])
-                components_status['node_protection']['protected_nodes_count'] = protection_status.get('protected_nodes',
-                                                                                                      0)
-
-                # Display node protection status
-                if components_status['node_protection']['enabled']:
-                    self.print_colored(Colors.GREEN,
-                                       f"   ✅ Node protection enabled: {protection_status.get('protected_nodes', 0)} nodes protected")
-                    for ng in protection_status.get('protected_nodegroups', []):
-                        self.print_colored(Colors.CYAN, f"      - Protected nodegroup: {ng}")
-                else:
-                    self.print_colored(Colors.YELLOW, f"   ⚠️ No node protection found")
-            else:
-                self.print_colored(Colors.YELLOW, f"   ⚠️ Could not verify node protection status")
-
-        except Exception as e:
-            self.log_operation('WARNING', f"Could not verify node protection: {str(e)}")
-            self.print_colored(Colors.YELLOW, f"   ⚠️ Node protection verification failed: {str(e)}")
-
-        # 8. NEW: Check for Node Protection Monitoring Lambda
-        print("\n🔍 Step 8: Checking node protection monitoring setup...")
-        try:
-            lambda_client = session.client('lambda')
-
-            # Check for various possible Lambda function names
-            possible_function_names = [
-                f"node-protection-monitor-{cluster_name}",
-                f"node-protection-{cluster_name}",
-                f"eks-node-monitor-{cluster_name.split('-')[-1]}",  # Using cluster suffix
-                f"node-monitor-{cluster_name.split('-')[-1]}",
-                f"node-protection-monitor-{cluster_name.split('-')[-1]}",
-                f"node-protection-monitor-eks-{cluster_name.split('-')[-1]}"
-            ]
-
-            monitoring_found = False
-            for function_name in possible_function_names:
-                try:
-                    lambda_response = lambda_client.get_function(FunctionName=function_name)
-                    monitoring_found = True
-                    components_status['node_protection']['monitoring_setup'] = True
-                    self.print_colored(Colors.GREEN, f"   ✅ Node protection monitoring Lambda found: {function_name}")
-
-                    # Log additional details about the Lambda function
-                    last_modified = lambda_response['Configuration'].get('LastModified', 'Unknown')
-                    runtime = lambda_response['Configuration'].get('Runtime', 'Unknown')
-                    self.print_colored(Colors.CYAN, f"      - Last Modified: {last_modified}")
-                    self.print_colored(Colors.CYAN, f"      - Runtime: {runtime}")
-                    break
-
-                except lambda_client.exceptions.ResourceNotFoundException:
-                    continue
-
-            if not monitoring_found:
-                components_status['node_protection']['monitoring_setup'] = False
-                self.print_colored(Colors.YELLOW, f"   ⚠️ No node protection monitoring Lambda found")
-                self.print_colored(Colors.CYAN, f"      - Searched for: {', '.join(possible_function_names)}")
-
-        except Exception as e:
-            self.log_operation('WARNING', f"Could not check node protection monitoring: {str(e)}")
-            self.print_colored(Colors.YELLOW, f"   ⚠️ Node protection monitoring check failed: {str(e)}")
-
-        # 9. Verify all other components (existing functionality)
-        print("\n🔍 Step 9: Verifying all components...")
-        verification_results = self.verify_enhanced_cluster_components(
-            cluster_name, region, access_key, secret_key, account_id
-        )
-
-        # Update components status with verification results
-        for key in components_status:
-            if key != 'node_protection' and key in verification_results and verification_results[key]:
-                # If verification confirms it's working, keep it as is
-                # If verification says it's not working but setup reported success,
-                # we'll trust the verification (more reliable)
-                if not verification_results[key]:
-                    components_status[key] = False
-
-        # 10. Final Node Protection Summary
-        print("\n🛡️ Final Node Protection Summary:")
-        node_protection = components_status['node_protection']
-        if node_protection['enabled']:
-            self.print_colored(Colors.GREEN, f"   ✅ Protection Status: ENABLED")
-            self.print_colored(Colors.GREEN, f"   ✅ Protected Nodes: {node_protection['protected_nodes_count']}")
-            self.print_colored(Colors.GREEN,
-                               f"   ✅ Protected Nodegroups: {len(node_protection['protected_nodegroups'])}")
-            if node_protection['monitoring_setup']:
-                self.print_colored(Colors.GREEN, f"   ✅ Monitoring Lambda: ACTIVE")
-            else:
-                self.print_colored(Colors.YELLOW, f"   ⚠️ Monitoring Lambda: NOT FOUND")
+            # 6. Setup cost monitoring alarms
+            print("\n💰 Step 6: Setting up cost monitoring alarms...")
+            cost_alarms_success = self.setup_cost_alarms(
+                cluster_name, region, cloudwatch_client, account_id
+            )
+            components_status['cost_alarms'] = cost_alarms_success
         else:
-            self.print_colored(Colors.YELLOW, f"   ⚠️ Protection Status: NOT ENABLED")
-            self.print_colored(Colors.YELLOW, f"   ⚠️ Consider enabling node protection for critical workloads")
+            print("\n🚨 Step 5: Skipping CloudWatch alarms setup as per user preference.")
+            components_status['cloudwatch_alarms'] = False
+            print("\n💰 Step 6: Skipping cost monitoring alarms setup as per user preference.")
+            components_status['cost_alarms'] = False
+
+        if False:
+            # 7. NEW: Verify Node Protection Status
+            print("\n🛡️ Step 7: Verifying node protection status...")
+            try:
+                protection_status = self.verify_node_protection_status(cluster_name, region, access_key, secret_key)
+
+                if protection_status:
+                    components_status['node_protection']['enabled'] = protection_status.get('protected_nodes', 0) > 0
+                    components_status['node_protection']['protected_nodegroups'] = protection_status.get(
+                        'protected_nodegroups', [])
+                    components_status['node_protection']['protected_nodes_count'] = protection_status.get('protected_nodes',
+                                                                                                          0)
+                    # Display node protection status
+                    if components_status['node_protection']['enabled']:
+                        self.print_colored(Colors.GREEN,
+                                           f"   ✅ Node protection enabled: {protection_status.get('protected_nodes', 0)} nodes protected")
+                        for ng in protection_status.get('protected_nodegroups', []):
+                            self.print_colored(Colors.CYAN, f"      - Protected nodegroup: {ng}")
+                    else:
+                        self.print_colored(Colors.YELLOW, f"   ⚠️ No node protection found")
+                else:
+                    self.print_colored(Colors.YELLOW, f"   ⚠️ Could not verify node protection status")
+
+            except Exception as e:
+                self.log_operation('WARNING', f"Could not verify node protection: {str(e)}")
+                self.print_colored(Colors.YELLOW, f"   ⚠️ Node protection verification failed: {str(e)}")
+        else:
+            print("\n🛡️ Step 7: Skipping node protection verification as per user preference.")
+
+        if False:
+            # 8. NEW: Check for Node Protection Monitoring Lambda
+            print("\n🔍 Step 8: Checking node protection monitoring setup...")
+            try:
+                lambda_client = session.client('lambda')
+
+                # Check for various possible Lambda function names
+                possible_function_names = [
+                    f"node-protection-monitor-{cluster_name}",
+                    f"node-protection-{cluster_name}",
+                    f"eks-node-monitor-{cluster_name.split('-')[-1]}",  # Using cluster suffix
+                    f"node-monitor-{cluster_name.split('-')[-1]}",
+                    f"node-protection-monitor-{cluster_name.split('-')[-1]}",
+                    f"node-protection-monitor-eks-{cluster_name.split('-')[-1]}"
+                ]
+
+                monitoring_found = False
+                for function_name in possible_function_names:
+                    try:
+                        lambda_response = lambda_client.get_function(FunctionName=function_name)
+                        monitoring_found = True
+                        components_status['node_protection']['monitoring_setup'] = True
+                        self.print_colored(Colors.GREEN, f"   ✅ Node protection monitoring Lambda found: {function_name}")
+
+                        # Log additional details about the Lambda function
+                        last_modified = lambda_response['Configuration'].get('LastModified', 'Unknown')
+                        runtime = lambda_response['Configuration'].get('Runtime', 'Unknown')
+                        self.print_colored(Colors.CYAN, f"      - Last Modified: {last_modified}")
+                        self.print_colored(Colors.CYAN, f"      - Runtime: {runtime}")
+                        break
+
+                    except lambda_client.exceptions.ResourceNotFoundException:
+                        continue
+
+                if not monitoring_found:
+                    components_status['node_protection']['monitoring_setup'] = False
+                    self.print_colored(Colors.YELLOW, f"   ⚠️ No node protection monitoring Lambda found")
+                    self.print_colored(Colors.CYAN, f"      - Searched for: {', '.join(possible_function_names)}")
+
+            except Exception as e:
+                self.log_operation('WARNING', f"Could not check node protection monitoring: {str(e)}")
+                self.print_colored(Colors.YELLOW, f"   ⚠️ Node protection monitoring check failed: {str(e)}")
+        else:
+            print("\n🔍 Step 8: Skipping node protection monitoring check as per user preference.")
+
+        if False:
+            # 9. Verify all other components (existing functionality)
+            print("\n🔍 Step 9: Verifying all components...")
+            verification_results = self.verify_enhanced_cluster_components(
+                cluster_name, region, access_key, secret_key, account_id
+            )
+
+            # Update components status with verification results
+            for key in components_status:
+                if key != 'node_protection' and key in verification_results and verification_results[key]:
+                    # If verification confirms it's working, keep it as is
+                    # If verification says it's not working but setup reported success,
+                    # we'll trust the verification (more reliable)
+                    if not verification_results[key]:
+                        components_status[key] = False
+        else:
+            print("\n🔍 Step 9: Skipping verification of all components as per user preference.")
+
+        if False:
+            # 10. Final Node Protection Summary
+            print("\n🛡️ Final Node Protection Summary:")
+            node_protection = components_status['node_protection']
+            if node_protection['enabled']:
+                self.print_colored(Colors.GREEN, f"   ✅ Protection Status: ENABLED")
+                self.print_colored(Colors.GREEN, f"   ✅ Protected Nodes: {node_protection['protected_nodes_count']}")
+                self.print_colored(Colors.GREEN,
+                                   f"   ✅ Protected Nodegroups: {len(node_protection['protected_nodegroups'])}")
+                if node_protection['monitoring_setup']:
+                    self.print_colored(Colors.GREEN, f"   ✅ Monitoring Lambda: ACTIVE")
+                else:
+                    self.print_colored(Colors.YELLOW, f"   ⚠️ Monitoring Lambda: NOT FOUND")
+            else:
+                self.print_colored(Colors.YELLOW, f"   ⚠️ Protection Status: NOT ENABLED")
+                self.print_colored(Colors.YELLOW, f"   ⚠️ Consider enabling node protection for critical workloads")
+        else:
+            print("\n🛡️ Final Node Protection Summary: Skipped as per user preference.")
 
         return components_status
 
@@ -8923,6 +8970,102 @@ class EKSClusterManager:
         """Basic logger for EKSClusterManager"""
         print(f"[{level}] {message}")
 
+    def add_name_tag_to_nodegroup_asg(self, cluster_name: str, nodegroup_name: str, strategy: str, region: str,
+                                      admin_access_key: str, admin_secret_key: str) -> bool:
+        """Find the ASG created by EKS nodegroup and add Name tag with auto-numbering to it"""
+        try:
+            # Create session with admin credentials
+            session = boto3.Session(
+                aws_access_key_id=admin_access_key,
+                aws_secret_access_key=admin_secret_key,
+                region_name=region
+            )
+
+            autoscaling_client = session.client('autoscaling')
+            eks_client = session.client('eks')
+
+            # Get nodegroup details to find the ASG
+            self.print_colored(Colors.CYAN, f"   🔍 Finding ASG for nodegroup {nodegroup_name}...")
+
+            nodegroup_response = eks_client.describe_nodegroup(
+                clusterName=cluster_name,
+                nodegroupName=nodegroup_name
+            )
+
+            # Get ASG name from nodegroup resources with validation
+            asg_name = None
+            resources = nodegroup_response['nodegroup'].get('resources', {})
+
+            # Verify we're getting the right ASG by checking multiple criteria
+            for asg_resource in resources.get('autoScalingGroups', []):
+                potential_asg_name = asg_resource.get('name')
+
+                # Verify this ASG belongs to our nodegroup by checking its tags
+                try:
+                    asg_details = autoscaling_client.describe_auto_scaling_groups(
+                        AutoScalingGroupNames=[potential_asg_name]
+                    )
+
+                    if asg_details['AutoScalingGroups']:
+                        asg_tags = {tag['Key']: tag['Value'] for tag in
+                                    asg_details['AutoScalingGroups'][0].get('Tags', [])}
+
+                        # Verify this ASG belongs to our specific nodegroup and cluster
+                        if (asg_tags.get('eks:nodegroup-name') == nodegroup_name and
+                                asg_tags.get('eks:cluster-name') == cluster_name):
+                            asg_name = potential_asg_name
+                            self.print_colored(Colors.GREEN, f"   ✅ Verified ASG belongs to nodegroup: {asg_name}")
+                            break
+
+                except Exception as e:
+                    self.print_colored(Colors.YELLOW, f"   ⚠️ Could not verify ASG {potential_asg_name}: {str(e)}")
+                    continue
+
+            if not asg_name:
+                self.print_colored(Colors.YELLOW, f"   ⚠️ No verified ASG found for nodegroup {nodegroup_name}")
+                return False
+
+            # Generate the short name for instances
+            short_name = self.generate_short_name(cluster_name, nodegroup_name)
+            base_instance_name = f"{short_name}-{strategy.lower()}"
+
+            # Create tags for the ASG (these will be applied to new instances)
+            tags_to_add = [
+                {
+                    'Key': 'Name',
+                    'Value': base_instance_name,
+                    'PropagateAtLaunch': True,
+                    'ResourceId': asg_name,
+                    'ResourceType': 'auto-scaling-group'
+                },
+                {
+                    'Key': 'ManagedBy',
+                    'Value': 'EKS-NodeGroup',
+                    'PropagateAtLaunch': True,
+                    'ResourceId': asg_name,
+                    'ResourceType': 'auto-scaling-group'
+                },
+                {
+                    'Key': 'NodegroupName',
+                    'Value': nodegroup_name,
+                    'PropagateAtLaunch': True,
+                    'ResourceId': asg_name,
+                    'ResourceType': 'auto-scaling-group'
+                }
+            ]
+
+            # Update ASG with tags
+            autoscaling_client.create_or_update_tags(Tags=tags_to_add)
+
+            self.print_colored(Colors.GREEN, f"   ✅ Added naming tags to verified ASG {asg_name}")
+            self.print_colored(Colors.GREEN, f"   📝 Instance base name: {base_instance_name}")
+
+            return True
+
+        except Exception as e:
+            self.print_colored(Colors.RED, f"   ❌ Failed to add Name tag to ASG: {str(e)}")
+            self.log_operation('ERROR', f"Failed to add Name tag to ASG for nodegroup {nodegroup_name}: {str(e)}")
+            return False
 
 ########
 
@@ -9203,7 +9346,7 @@ class EKSClusterManager:
             self.print_colored(Colors.CYAN, f"   🚀 Creating EKS control plane {cluster_name}...")
 
             # Set default EKS version - adjust based on your requirements
-            eks_version = config.get('eks_version', '1.28')
+            eks_version = config.get('eks_version', '1.33')
 
             # Create control plane with proper error handling and logging
             try:
@@ -9219,7 +9362,7 @@ class EKSClusterManager:
                 if not cluster_exists:
                     # Create the EKS cluster control plane
                     self.log_operation('INFO', f"Creating EKS control plane {cluster_name} with version {eks_version}")
-        
+
                     eks_client.create_cluster(
                         name=cluster_name,
                         version=eks_version,
@@ -9239,9 +9382,13 @@ class EKSClusterManager:
                                 }
                             ]
                         },
+                        accessConfig={
+                            'authenticationMode': 'API_AND_CONFIG_MAP'
+                            # 👈 This enables both API + aws-auth ConfigMap modes
+                        },
                         tags=self.generate_instance_tags(cluster_name, "control-plane", "managed")
                     )
-        
+
                     # Wait for cluster to be active
                     self.print_colored(Colors.CYAN, f"   ⏳ Waiting for cluster {cluster_name} to be active...")
                     waiter = eks_client.get_waiter('cluster_active')
@@ -9301,7 +9448,10 @@ class EKSClusterManager:
                         )
                         if success:
                             nodegroups_created.append(nodegroup_name)
-                
+                            self.add_name_tag_to_nodegroup_asg(cluster_name, nodegroup_name, strategy, region,
+                                                               admin_access_key, admin_secret_key)
+
+
                     elif strategy == 'spot':
                         # print in red color big log
                         success = self.create_spot_nodegroup(
@@ -9311,7 +9461,10 @@ class EKSClusterManager:
                         )
                         if success:
                             nodegroups_created.append(nodegroup_name)
-                
+                            self.add_name_tag_to_nodegroup_asg(cluster_name, nodegroup_name, strategy, region,
+                                                               admin_access_key, admin_secret_key)
+
+
                     elif strategy == 'mixed':
                         success = self.create_mixed_nodegroup(
                             eks_client, cluster_name, nodegroup_name, node_role_arn, selected_subnets,
@@ -9319,8 +9472,15 @@ class EKSClusterManager:
                         )
                         if success:
                             # For mixed strategy, we'll have two nodegroups
-                            nodegroups_created.append(f"{nodegroup_name}-ondemand")
-                            nodegroups_created.append(f"{nodegroup_name}-spot")
+                            mixed_ondemand_ng = f"{nodegroup_name}-ondemand"
+                            mixed_spot_ng = f"{nodegroup_name}-spot"
+                            nodegroups_created.append(mixed_ondemand_ng)
+                            nodegroups_created.append(mixed_spot_ng)
+                            # Add Name tags to both ASGs
+                            self.add_name_tag_to_nodegroup_asg(cluster_name, mixed_ondemand_ng, "on-demand", region,
+                                                               admin_access_key, admin_secret_key)
+                            self.add_name_tag_to_nodegroup_asg(cluster_name, mixed_spot_ng, "spot", region, admin_access_key,
+                                                               admin_secret_key)
         
                 if not nodegroups_created:
                     self.log_operation('ERROR', f"Failed to create nodegroups for cluster {cluster_name}")
@@ -9341,35 +9501,38 @@ class EKSClusterManager:
                 cluster_name, region, username, access_key, secret_key
             )
 
-            # Step 9: Ensure only one node per nodegroup always NO_DELETE label using lambda function
-            print("\n🔒 Step 9: Ensure only one node per nodegroup always NO_DELETE label using lambda function...")
+            if False:
+                # Step 9: Ensure only one node per nodegroup always NO_DELETE label using lambda function
+                print("\n🔒 Step 9: Ensure only one node per nodegroup always NO_DELETE label using lambda function...")
 
-            # Apply initial node protection
-            self.print_colored(Colors.YELLOW, f"\n🔒 Setting up initial node protection...")
-            protection_result = self.apply_no_delete_to_matching_nodegroups(
-                cluster_name, region, access_key, secret_key
-            )
-
-            self.print_colored(Colors.CYAN, f"   📋 Ensuring only one node per nodegroup has NO_DELETE label...")
-            self.protect_nodes_with_no_delete_label(cluster_name, region, access_key, secret_key)
-
-            nodegroup_names = nodegroups_created
-
-            if protection_result.get('success'):
-                self.print_colored(Colors.GREEN, f"✅ Initial node protection applied")
-
-                # Setup automated monitoring
-                self.print_colored(Colors.YELLOW, f"\n⏰ Setting up automated node protection monitoring...")
-                monitoring_setup = self.setup_node_protection_monitoring(
-                    cluster_name, region, access_key, secret_key, nodegroup_names
+                # Apply initial node protection
+                self.print_colored(Colors.YELLOW, f"\n🔒 Setting up initial node protection...")
+                protection_result = self.apply_no_delete_to_matching_nodegroups(
+                    cluster_name, region, access_key, secret_key
                 )
 
-                if monitoring_setup:
-                    self.print_colored(Colors.GREEN, f"✅ Automated node protection monitoring enabled")
-                    self.print_colored(Colors.CYAN, f"   📋 Lambda will run every time a ec2 is terminated to ensure node protection")
-                else:
-                    self.print_colored(Colors.YELLOW,
-                                       f"⚠️ Automated monitoring setup failed - manual monitoring required")
+                self.print_colored(Colors.CYAN, f"   📋 Ensuring only one node per nodegroup has NO_DELETE label...")
+                self.protect_nodes_with_no_delete_label(cluster_name, region, access_key, secret_key)
+
+                nodegroup_names = nodegroups_created
+
+                if protection_result.get('success'):
+                    self.print_colored(Colors.GREEN, f"✅ Initial node protection applied")
+
+                    # Setup automated monitoring
+                    self.print_colored(Colors.YELLOW, f"\n⏰ Setting up automated node protection monitoring...")
+                    monitoring_setup = self.setup_node_protection_monitoring(
+                        cluster_name, region, access_key, secret_key, nodegroup_names
+                    )
+
+                    if monitoring_setup:
+                        self.print_colored(Colors.GREEN, f"✅ Automated node protection monitoring enabled")
+                        self.print_colored(Colors.CYAN, f"   📋 Lambda will run every time a ec2 is terminated to ensure node protection")
+                    else:
+                        self.print_colored(Colors.YELLOW,
+                                           f"⚠️ Automated monitoring setup failed - manual monitoring required")
+            else:
+                self.print_colored(Colors.YELLOW, f"⚠️ Skipping node protection setup - manual monitoring required")
 
             # Step 10: Install essential add-ons if confirmed by user
             print("\n🔒 Step 10: Setting up add ons...")
@@ -9854,7 +10017,7 @@ class EKSClusterManager:
                 'install_addons': automation_options.get("install_addons", False),
                 'enable_container_insights': automation_options.get("enable_container_insights", False),
                 'ami_type': automation_options.get('ami_type', 'AL2_x86_64'),  # Default to Amazon Linux 2 x86_64',
-                'eks_version': automation_options.get('eks_version', '1.28')  # Default EKS version'
+                'eks_version': automation_options.get('eks_version', '1.33')  # Default EKS version'
             }
         
             # Explicitly add nodegroup_configs if it exists and is not None
@@ -9921,7 +10084,7 @@ class EKSClusterManager:
         self.setup_container_insights = automation_options.get('enable_container_insights', True)
     
         # Set up default EKS version and AMI type from automation options
-        eks_version = automation_options.get('eks_version', '1.28')
+        eks_version = automation_options.get('eks_version', '1.33')
         ami_type = automation_options.get('ami_type', 'AL2_x86_64')
     
         self.print_colored(Colors.YELLOW, f"\n👥 Creating clusters for {len(selected_users)} users")

@@ -44,7 +44,7 @@ class TestEKSClusterManager(unittest.TestCase):
         # Mock cluster configuration
         self.cluster_config = {
             'credential_info': self.credential_info,
-            'eks_version': "1.28",
+            'eks_version': "1.33",
             'ami_type': "AL2023_x86_64_STANDARD",
             'nodegroup_strategy': "spot",
             'instance_selections': {
@@ -75,7 +75,7 @@ class TestEKSClusterManager(unittest.TestCase):
         result = self.manager.create_eks_control_plane(
             mock_eks_client,
             "test-cluster",
-            "1.28",
+            "1.33",
             "arn:aws:iam::123456789012:role/eks-service-role",
             ["subnet-1", "subnet-2"],
             "sg-12345"

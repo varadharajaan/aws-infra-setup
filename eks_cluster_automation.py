@@ -149,7 +149,7 @@ class EKSAutomation:
 
             # Get EKS configuration from mapping file
             eks_config = self.get_eks_config()
-            default_version = eks_config.get("default_version", "1.28")
+            default_version = eks_config.get("default_version", "1.33")
             default_ami_type = eks_config.get("ami_type", "AL2_x86_64")
 
             print(f"📋 EKS Default Settings:")
@@ -172,7 +172,7 @@ class EKSAutomation:
                     eks_version = "1.32"
                     break
                 elif version_choice == '3':
-                    custom_version = input("Enter EKS version (e.g., 1.28): ").strip()
+                    custom_version = input("Enter EKS version (e.g., 1.33): ").strip()
                     if custom_version:
                         eks_version = custom_version
                         break

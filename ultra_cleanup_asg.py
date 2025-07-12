@@ -5,6 +5,7 @@ import json
 import sys
 import os
 import time
+import logging
 from datetime import datetime
 from botocore.exceptions import ClientError
 from typing import List, Dict, Any, Set, Tuple
@@ -59,6 +60,54 @@ class UltraCleanupASGManager:
 
         # Store discovered ASGs
         self.all_asgs = []
+
+    def setup_detailed_logging(self):
+        """Setup detailed logging to file and console."""
+        try:
+            os.makedirs(self.asg_dir, exist_ok=True)
+
+            # Save log file in the aws/asg directory
+            self.log_filename = f"{self.asg_dir}/ultra_asg_cleanup_log_{self.execution_timestamp}.log"
+
+            # Create logger for detailed operations
+            self.operation_logger = logging.getLogger('ultra_asg_cleanup')
+            self.operation_logger.setLevel(logging.INFO)
+
+            # Remove existing handlers to avoid duplicates
+            for handler in self.operation_logger.handlers[:]:
+                self.operation_logger.removeHandler(handler)
+
+            # File handler
+            file_handler = logging.FileHandler(self.log_filename, encoding='utf-8')
+            file_handler.setLevel(logging.INFO)
+
+            # Console handler
+            console_handler = logging.StreamHandler()
+            console_handler.setLevel(logging.INFO)
+
+            # Formatter
+            formatter = logging.Formatter(
+                '%(asctime)s - %(levelname)s - %(message)s'
+            )
+            file_handler.setFormatter(formatter)
+            console_handler.setFormatter(formatter)
+
+            self.operation_logger.addHandler(file_handler)
+            self.operation_logger.addHandler(console_handler)
+
+            # Log initial information
+            self.operation_logger.info("=" * 100)
+            self.operation_logger.info("🚨 ULTRA ASG CLEANUP SESSION STARTED 🚨")
+            self.operation_logger.info("=" * 100)
+            self.operation_logger.info(f"Execution Time: {self.current_time} UTC")
+            self.operation_logger.info(f"Executed By: {self.current_user}")
+            self.operation_logger.info(f"Config Dir: {self.config_dir}")
+            self.operation_logger.info(f"Log File: {self.log_filename}")
+            self.operation_logger.info("=" * 100)
+
+        except Exception as e:
+            self.print_colored(Colors.YELLOW, f"Warning: Could not setup detailed logging: {e}")
+            self.operation_logger = None
 
     def print_colored(self, color: str, message: str):
         """Print colored message to console"""
