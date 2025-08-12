@@ -4,8 +4,6 @@
 # Current User: varadharajaan
 # ================================================================================================
 
-
-
 param(
     [Parameter(Mandatory=$false)]
     [string]$Phase = "1",
@@ -28,664 +26,6 @@ param(
     [Parameter(Mandatory=$false)]
     [switch]$UseMSAL = $false
 )
-
-
-# ================================================================================================
-# TRANSCRIPT LOGGING - ADD THIS AT THE VERY BEGINNING OF YOUR SCRIPT
-# ================================================================================================
-
-# Create logs directory if it doesn't exist
-$logsDir = Join-Path $PSScriptRoot "Logs"
-if (-not (Test-Path $logsDir)) {
-    New-Item -ItemType Directory -Path $logsDir -Force | Out-Null
-}
-
-# Start transcript with timestamp
-$timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
-$transcriptFile = Join-Path $logsDir "ThemisScript_Transcript_$timestamp.log"
-
-try {
-    Start-Transcript -Path $transcriptFile -Append
-    Write-Host "📝 Console transcript logging started: $transcriptFile" -ForegroundColor Green
-} catch {
-    Write-Host "⚠️  Could not start transcript: $_" -ForegroundColor Yellow
-}
-
-# ================================================================================================
-# MISSING HELPER FUNCTIONS
-# ================================================================================================
-
-function Parse-FileTypes {
-    param([string]$FileTypeString)
-    
-    if ([string]::IsNullOrEmpty($FileTypeString)) {
-        return @("V1Daily")
-    }
-    
-    if ($FileTypeString -contains ',') {
-        return $FileTypeString -split ',' | ForEach-Object { $_.Trim() }
-    } else {
-        return @($FileTypeString)
-    }
-}
-
-function Load-ErrorFileForRetry {
-    param([string]$ErrorFilePath)
-    
-    try {
-        if (-not (Test-Path $ErrorFilePath)) {
-            Write-Log -Message "Error file not found: $ErrorFilePath" -Level "ERROR" -Color Red
-            return @()
-        }
-        
-        $retryData = Import-Csv -Path $ErrorFilePath
-        Write-Log -Message "Loaded $($retryData.Count) entries from error file" -Level "INFO" -Color Green
-        return $retryData
-        
-    } catch {
-        Write-Log -Message "Error loading retry file: $_" -Level "ERROR" -Color Red
-        return @()
-    }
-}
-
-function Save-ErrorFiles {
-    param(
-        [string]$OperationType,
-        [object]$Results
-    )
-    
-    try {
-        # Ensure error directory exists
-        if (-not (Test-Path $errorDir)) {
-            New-Item -ItemType Directory -Path $errorDir -Force | Out-Null
-        }
-        
-        $allResults = if ($Results -is [array]) { $Results } else { @($Results.ToArray()) }
-        $failures = $allResults | Where-Object { $_.Status -eq "Failed" }
-        
-        if ($failures.Count -gt 0) {
-            $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
-            $errorFile = Join-Path $errorDir "$OperationType-errors_$timestamp.csv"
-            
-            $failures | ForEach-Object {
-                [PSCustomObject]@{
-                    FileName = if ($_.FileName) { $_.FileName } else { "Unknown" }
-                    LocalPath = if ($_.LocalPath) { $_.LocalPath } else { "N/A" }
-                    VcUrl = if ($_.VcUrl) { $_.VcUrl } else { if ($_.DestinationUrl) { $_.DestinationUrl } else { "N/A" } }
-                    RelativePath = if ($_.RelativePath) { $_.RelativePath } else { if ($_.Path) { $_.Path } else { "N/A" } }
-                    Size = if ($_.Size) { $_.Size } else { "0 MB" }
-                    Status = $_.Status
-                    Details = if ($_.Details) { $_.Details } else { "No error details" }
-                    Time = if ($_.Time) { $_.Time } else { "0s" }
-                    CreationTime = if ($_.CreationDate) { $_.CreationDate } else { if ($_.CreationTime) { $_.CreationTime } else { "Unknown" } }
-                }
-            } | Export-Csv -Path $errorFile -NoTypeInformation -Encoding UTF8
-            
-            Write-Log -Message "$OperationType error file saved: $errorFile ($($failures.Count) failed files)" -Level "INFO" -Color Yellow
-            
-            # Also save retry file format
-            $retryFile = Join-Path $errorDir "$OperationType-retry_$timestamp.csv"
-            $failures | ForEach-Object {
-                [PSCustomObject]@{
-                    FileName = if ($_.FileName) { $_.FileName } else { "Unknown" }
-                    VcUrl = if ($OperationType -eq "Upload") { "LOCAL_FILE" } else { if ($_.VcUrl) { $_.VcUrl } else { "N/A" } }
-                    RelativePath = if ($_.RelativePath) { $_.RelativePath } else { if ($_.Path) { $_.Path } else { "N/A" } }
-                    CreationTime = if ($_.CreationDate) { $_.CreationDate } else { if ($_.CreationTime) { $_.CreationTime } else { "Unknown" } }
-                    Size = if ($_.Size) { $_.Size } else { "0 MB" }
-                    OriginalError = if ($_.Details) { $_.Details } else { "No error details" }
-                }
-            } | Export-Csv -Path $retryFile -NoTypeInformation -Encoding UTF8
-            
-            Write-Log -Message "$OperationType retry file saved: $retryFile" -Level "INFO" -Color Yellow
-            return $retryFile
-        } else {
-            Write-Log -Message "No failed $OperationType operations to save" -Level "INFO" -Color Green
-            return $null
-        }
-    } catch {
-        Write-Log -Message "Error saving $OperationType error files: $_" -Level "ERROR" -Color Red
-        return $null
-    }
-}
-
-# ================================================================================================
-# FAILURE REPORTING FUNCTIONS (WORKS FOR BOTH UPLOAD AND DOWNLOAD)
-# ================================================================================================
-
-function Show-ManualFailureReport {
-    param([string]$OperationType = "UPLOAD")
-    
-    # Handle both upload and download results
-    $allResults = if ($OperationType -eq "UPLOAD") {
-        @($global:UploadResults.ToArray())
-    } else {
-        @($global:DownloadResults.ToArray())
-    }
-    
-    $recentFailures = $allResults | Where-Object { 
-        $_.Status -eq "Failed" -and 
-        $_.FileName -and 
-        $_.Details
-    } | Select-Object -Last 10  # Show last 10 failures
-    
-    if ($recentFailures.Count -gt 0) {
-        Write-Host "`n" -ForegroundColor Yellow
-        Write-Host "========================================" -ForegroundColor Red
-        Write-Host "$OperationType FAILURE REPORT - $(Get-Date -Format 'HH:mm:ss')" -ForegroundColor Red
-        Write-Host "========================================" -ForegroundColor Red
-        Write-Host "Recent failures ($($recentFailures.Count) shown):" -ForegroundColor Yellow
-        
-        foreach ($failure in $recentFailures) {
-            $shortError = if ($failure.Details.Length -gt 80) { 
-                $failure.Details.Substring(0, 77) + "..." 
-            } else { 
-                $failure.Details 
-            }
-            Write-Host "  ✗ $($failure.FileName) - $shortError" -ForegroundColor Red
-        }
-        
-        Write-Host "========================================" -ForegroundColor Red
-        Write-Host ""
-    }
-}
-
-function Show-FinalFailureReport {
-    param([string]$OperationType = "UPLOAD")
-    
-    # Handle both upload and download results
-    $allResults = if ($OperationType -eq "UPLOAD") {
-        @($global:UploadResults.ToArray())
-    } else {
-        @($global:DownloadResults.ToArray())
-    }
-    
-    $allFailures = $allResults | Where-Object { $_.Status -eq "Failed" }
-    
-    if ($allFailures.Count -gt 0) {
-        Write-Host ""
-        Write-Host "========================================" -ForegroundColor Red
-        Write-Host "FINAL $OperationType FAILURE SUMMARY" -ForegroundColor Red  
-        Write-Host "========================================" -ForegroundColor Red
-        Write-Host "Total failures: $($allFailures.Count)" -ForegroundColor Yellow
-        
-        # Group failures by error type
-        $errorGroups = $allFailures | Group-Object { 
-            if ($_.Details -match "Access is denied|Access.*denied|Permission.*denied") { "Access Denied" }
-            elseif ($_.Details -match "authentication|Authentication") { "Authentication Error" }
-            elseif ($_.Details -match "not found|does not exist|Not found") { "File Not Found" }
-            elseif ($_.Details -match "timeout|timed out|Timeout") { "Timeout" }
-            elseif ($_.Details -match "Invalid command line argument") { "Command Syntax Error" }
-            elseif ($_.Details -match "network|connection|Network") { "Network Error" }
-            else { "Other Error" }
-        }
-        
-        foreach ($group in $errorGroups) {
-            Write-Host "  $($group.Name): $($group.Count) files" -ForegroundColor Yellow
-        }
-        
-        Write-Host "========================================" -ForegroundColor Red
-        Write-Host ""
-    }
-}
-
-# ================================================================================================
-# HTML REPORT GENERATION FUNCTIONS
-# ================================================================================================
-
-function Generate-HTMLReport {
-    param(
-        [string]$ReportType,
-        [array]$Results,
-        [string]$CustomPath = ""
-    )
-    
-    try {
-        $timestamp = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
-        $utcTime = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-        $currentUser = $env:USERNAME
-        
-        if ($CustomPath) {
-            $reportFile = $CustomPath
-        } else {
-            $reportFile = Join-Path $reportsDir "${ReportType}_Report_${timestamp}.html"
-        }
-        
-        # HTML Header with styling
-        $html = @"
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Themis $ReportType Report - $timestamp</title>
-    <style>
-        body { 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-            margin: 20px; 
-            background-color: #f5f7fa; 
-            color: #333;
-        }
-        .header { 
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-            color: white; 
-            padding: 20px; 
-            border-radius: 10px; 
-            margin-bottom: 20px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        }
-        .header h1 { 
-            margin: 0; 
-            font-size: 28px; 
-            font-weight: 300;
-        }
-        .header .subtitle { 
-            margin: 5px 0 0 0; 
-            opacity: 0.9; 
-            font-size: 14px;
-        }
-        .section { 
-            background: white; 
-            padding: 20px; 
-            margin-bottom: 20px; 
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        .section h2 { 
-            color: #4a5568; 
-            border-bottom: 2px solid #e2e8f0; 
-            padding-bottom: 10px;
-            margin-top: 0;
-        }
-        .stats-grid { 
-            display: grid; 
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); 
-            gap: 15px; 
-            margin: 20px 0;
-        }
-        .stat-card { 
-            background: #f7fafc; 
-            padding: 15px; 
-            border-radius: 8px; 
-            text-align: center;
-            border: 1px solid #e2e8f0;
-        }
-        .stat-number { 
-            font-size: 24px; 
-            font-weight: bold; 
-            color: #2d3748;
-        }
-        .stat-label { 
-            color: #718096; 
-            font-size: 14px; 
-            margin-top: 5px;
-        }
-        .success { color: #38a169; }
-        .error { color: #e53e3e; }
-        .warning { color: #d69e2e; }
-        table { 
-            width: 100%; 
-            border-collapse: collapse; 
-            margin-top: 15px;
-            background: white;
-        }
-        th, td { 
-            padding: 12px; 
-            text-align: left; 
-            border-bottom: 1px solid #e2e8f0;
-        }
-        th { 
-            background-color: #f7fafc; 
-            font-weight: 600; 
-            color: #4a5568;
-            position: sticky;
-            top: 0;
-        }
-        tr:hover { 
-            background-color: #f7fafc; 
-        }
-        .status-success { 
-            background-color: #c6f6d5; 
-            color: #22543d; 
-            padding: 4px 8px; 
-            border-radius: 4px; 
-            font-size: 12px; 
-            font-weight: bold;
-        }
-        .status-failed { 
-            background-color: #fed7d7; 
-            color: #742a2a; 
-            padding: 4px 8px; 
-            border-radius: 4px; 
-            font-size: 12px; 
-            font-weight: bold;
-        }
-        .status-skipped { 
-            background-color: #feebc8; 
-            color: #744210; 
-            padding: 4px 8px; 
-            border-radius: 4px; 
-            font-size: 12px; 
-            font-weight: bold;
-        }
-        .details-cell { 
-            max-width: 300px; 
-            overflow: hidden; 
-            text-overflow: ellipsis; 
-            white-space: nowrap;
-            cursor: pointer;
-        }
-        .details-cell:hover {
-            background-color: #f0f4f8;
-            white-space: normal;
-            overflow: visible;
-        }
-        .url-cell { 
-            max-width: 400px; 
-            overflow: hidden; 
-            text-overflow: ellipsis; 
-            white-space: nowrap;
-            font-family: monospace;
-            font-size: 11px;
-        }
-        .footer { 
-            text-align: center; 
-            color: #718096; 
-            font-size: 12px; 
-            margin-top: 30px;
-            padding: 20px;
-            border-top: 1px solid #e2e8f0;
-        }
-        .filter-controls {
-            margin: 15px 0;
-            padding: 15px;
-            background: #f7fafc;
-            border-radius: 8px;
-        }
-        .filter-controls input, .filter-controls select {
-            margin: 5px;
-            padding: 8px;
-            border: 1px solid #e2e8f0;
-            border-radius: 4px;
-        }
-        .collapsible-error {
-            cursor: pointer;
-            user-select: none;
-        }
-        .collapsible-error:hover {
-            background-color: #f0f4f8;
-        }
-    </style>
-</head>
-<body>
-    <div class="header">
-        <h1>🚀 Themis $ReportType Report</h1>
-        <div class="subtitle">
-            Generated: $utcTime UTC | User: $currentUser | Report Type: $ReportType
-        </div>
-    </div>
-"@
-
-        # Calculate statistics
-        $totalFiles = $Results.Count
-        $successCount = ($Results | Where-Object { $_.Status -eq "Success" }).Count
-        $failedCount = ($Results | Where-Object { $_.Status -eq "Failed" }).Count
-        $skippedCount = ($Results | Where-Object { $_.Status -eq "Skipped" }).Count
-        
-        $totalSize = 0
-        $totalTime = 0
-        foreach ($result in $Results) {
-            if ($result.Size -and $result.Size -match "(\d+\.?\d*)\s*MB") {
-                $totalSize += [double]$matches[1]
-            }
-            if ($result.Time -and $result.Time -match "(\d+\.?\d*)s") {
-                $totalTime += [double]$matches[1]
-            }
-        }
-        
-        $successRate = if ($totalFiles -gt 0) { [math]::Round(($successCount / $totalFiles) * 100, 1) } else { 0 }
-        
-        # Statistics section
-        $html += @"
-    <div class="section">
-        <h2>📊 $ReportType Statistics</h2>
-        <div class="stats-grid">
-            <div class="stat-card">
-                <div class="stat-number">$totalFiles</div>
-                <div class="stat-label">Total Files</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-number success">$successCount</div>
-                <div class="stat-label">Successful</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-number error">$failedCount</div>
-                <div class="stat-label">Failed</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-number warning">$skippedCount</div>
-                <div class="stat-label">Skipped</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-number">$([math]::Round($totalSize, 2)) MB</div>
-                <div class="stat-label">Total Data Size</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-number">$([math]::Round($totalTime, 1))s</div>
-                <div class="stat-label">Total Time</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-number">$successRate%</div>
-                <div class="stat-label">Success Rate</div>
-            </div>
-        </div>
-    </div>
-"@
-
-        # Results table
-        if ($Results.Count -gt 0) {
-            $html += @"
-    <div class="section">
-        <h2>📁 $ReportType Results</h2>
-        <div class="filter-controls">
-            <input type="text" id="fileFilter" placeholder="Filter by filename..." onkeyup="filterTable()">
-            <select id="statusFilter" onchange="filterTable()">
-                <option value="">All Status</option>
-                <option value="Success">Success Only</option>
-                <option value="Failed">Failed Only</option>
-                <option value="Skipped">Skipped Only</option>
-            </select>
-        </div>
-        <table id="resultsTable">
-            <thead>
-                <tr>
-                    <th>📄 File Name</th>
-                    <th>📊 Status</th>
-                    <th>📏 Size</th>
-                    <th>⏱️ Time</th>
-                    <th>🔗 URL</th>
-                    <th>📝 Details (Click to expand)</th>
-                </tr>
-            </thead>
-            <tbody>
-"@
-
-            foreach ($result in $Results) {
-                $statusClass = switch ($result.Status) {
-                    "Success" { "status-success" }
-                    "Failed" { "status-failed" }
-                    "Skipped" { "status-skipped" }
-                    default { "status-failed" }
-                }
-                
-                $fileName = if ($result.FileName) { [System.Web.HttpUtility]::HtmlEncode($result.FileName) } else { "Unknown" }
-                $status = if ($result.Status) { $result.Status } else { "Unknown" }
-                $size = if ($result.Size) { $result.Size } else { "0 MB" }
-                $time = if ($result.Time) { $result.Time } else { "0s" }
-                $vcUrl = if ($result.VcUrl) { [System.Web.HttpUtility]::HtmlEncode($result.VcUrl) } else { "N/A" }
-                $details = if ($result.Details) { [System.Web.HttpUtility]::HtmlEncode($result.Details) } else { "No details" }
-                
-                $html += @"
-                <tr>
-                    <td><strong>$fileName</strong></td>
-                    <td><span class="$statusClass">$status</span></td>
-                    <td>$size</td>
-                    <td>$time</td>
-                    <td class="url-cell" title="$vcUrl">$vcUrl</td>
-                    <td class="details-cell collapsible-error" title="Click to expand full error">$details</td>
-                </tr>
-"@
-            }
-
-            $html += @"
-            </tbody>
-        </table>
-    </div>
-"@
-        }
-
-        # Add JavaScript for filtering and collapsible errors
-        $html += @"
-    <script>
-        function filterTable() {
-            const fileFilter = document.getElementById('fileFilter').value.toLowerCase();
-            const statusFilter = document.getElementById('statusFilter').value;
-            const table = document.getElementById('resultsTable');
-            const tbody = table.getElementsByTagName('tbody')[0];
-            const rows = tbody.getElementsByTagName('tr');
-            
-            for (let i = 0; i < rows.length; i++) {
-                const row = rows[i];
-                const fileName = row.cells[0].textContent.toLowerCase();
-                const status = row.cells[1].textContent.trim();
-                
-                const fileMatch = fileName.includes(fileFilter);
-                const statusMatch = statusFilter === '' || status === statusFilter;
-                
-                if (fileMatch && statusMatch) {
-                    row.style.display = '';
-                } else {
-                    row.style.display = 'none';
-                }
-            }
-        }
-        
-        // Add click handlers for collapsible errors
-        document.addEventListener('DOMContentLoaded', function() {
-            const errorCells = document.querySelectorAll('.collapsible-error');
-            errorCells.forEach(cell => {
-                cell.addEventListener('click', function() {
-                    if (this.style.whiteSpace === 'normal') {
-                        this.style.whiteSpace = 'nowrap';
-                        this.style.overflow = 'hidden';
-                    } else {
-                        this.style.whiteSpace = 'normal';
-                        this.style.overflow = 'visible';
-                    }
-                });
-            });
-        });
-    </script>
-"@
-
-        # Footer
-        $html += @"
-    <div class="footer">
-        <p>Generated by Themis File Management Script | $utcTime UTC</p>
-        <p>Report saved to: $reportFile</p>
-    </div>
-</body>
-</html>
-"@
-
-        # Write HTML to file
-        $html | Out-File -FilePath $reportFile -Encoding UTF8
-        
-        Write-Log -Message "HTML report generated: $reportFile" -Level "SUCCESS" -Color Green
-        return $reportFile
-        
-    } catch {
-        Write-Log -Message "Error generating HTML report: $($_.Exception.Message)" -Level "ERROR" -Color Red
-        return $null
-    }
-}
-
-function Generate-PhaseReports {
-    param([hashtable]$AllPhaseData = @{})
-    
-    try {
-        # Generate download report if download results exist
-        if ($global:DownloadResults -and $global:DownloadResults.Count -gt 0) {
-            $downloadResults = @($global:DownloadResults.ToArray())
-            $downloadReport = Generate-HTMLReport -ReportType "Download" -Results $downloadResults
-            Write-Log -Message "Download report generated: $downloadReport" -Level "SUCCESS" -Color Green
-        }
-        
-        # Generate upload report if upload results exist
-        if ($global:UploadResults -and $global:UploadResults.Count -gt 0) {
-            $uploadResults = @($global:UploadResults.ToArray())
-            $uploadReport = Generate-HTMLReport -ReportType "Upload" -Results $uploadResults
-            Write-Log -Message "Upload report generated: $uploadReport" -Level "SUCCESS" -Color Green
-        }
-        
-        # Generate overall summary report
-        $allResults = @()
-        if ($global:DownloadResults) { $allResults += @($global:DownloadResults.ToArray()) }
-        if ($global:UploadResults) { $allResults += @($global:UploadResults.ToArray()) }
-        
-        if ($allResults.Count -gt 0) {
-            $summaryReport = Generate-HTMLReport -ReportType "Summary" -Results $allResults
-            Write-Log -Message "Summary report generated: $summaryReport" -Level "SUCCESS" -Color Green
-        }
-        
-    } catch {
-        Write-Log -Message "Error generating phase reports: $_" -Level "ERROR" -Color Red
-    }
-}
-
-# ================================================================================================
-# GLOBAL VARIABLES INITIALIZATION
-# ================================================================================================
-# Initialize directories if not already done
-if (-not $reportsDir) {
-    $reportsDir = Join-Path $PSScriptRoot "Reports"
-    if (-not (Test-Path $reportsDir)) {
-        New-Item -ItemType Directory -Path $reportsDir -Force | Out-Null
-    }
-}
-
-if (-not $errorDir) {
-    $errorDir = Join-Path $PSScriptRoot "Errors"  
-    if (-not (Test-Path $errorDir)) {
-        New-Item -ItemType Directory -Path $errorDir -Force | Out-Null
-    }
-}
-
-# ✅ FIXED: Initialize global result collections as dynamic lists
-if (-not $global:DownloadResults) {
-    $global:DownloadResults = [System.Collections.Generic.List[PSObject]]::new()
-}
-
-if (-not $global:UploadResults) {
-    $global:UploadResults = [System.Collections.Generic.List[PSObject]]::new()
-}
-
-# ✅ FIXED: Initialize PhaseSummaries as dynamic list, not fixed array
-if (-not $global:PhaseSummaries) {
-    $global:PhaseSummaries = [System.Collections.Generic.List[PSObject]]::new()
-}
-
-if (-not $global:PhaseResults) {
-    $global:PhaseResults = @{}
-}
-
-if (-not $global:ScriptStart) {
-    $global:ScriptStart = Get-Date
-}
-
-# ✅ NEW: Initialize other required global variables
-if (-not $global:CleanupInProgress) {
-    $global:CleanupInProgress = $false
-}
 
 
 
@@ -1622,201 +962,192 @@ function Phase1-ListAllFiles {
 # ================================================================================================
 
 function Phase2-DownloadToLocal {
-    param([hashtable]$PhaseData = @{})
+    $downloaded = 0
+    $failed = 0
+    $filtered = 0
+    $startTime = Get-Date
     
-    $phaseStart = Get-Date
-    Write-Log -Message "==== START PHASE: Phase2-DownloadToLocal ====" -Level "PHASE" -Color Magenta
+    # ✅ ADD GRACEFUL SHUTDOWN VARIABLES
+    $runspacePool = $null
+    $downloadJobs = @()
     
     try {
-        # Set destination and user
-        $user = "varadharajaan@microsoft.com"
-        Write-Log -Message "Phase 2: Parallel Download from Cosmos source" -Level "INFO" -Color Green
+        Write-Log -Message "==== START PHASE: Phase2-DownloadToLocal ====" -Level "PHASE" -Color Magenta
+        
+        $modeText = if ($RetryMode) { "RETRY MODE" } else { "NORMAL MODE" }
+        Write-Log -Message "Phase 2: Parallel download with multithreading ($modeText)" -Level "INFO" -Color Green
         Write-Log -Message "Max Threads: $MaxThreads" -Level "INFO" -Color Cyan
+        Write-Log -Message "Source: Cosmos VC" -Level "INFO" -Color Cyan
         Write-Log -Message "Destination: $localStagingDir" -Level "INFO" -Color Cyan
         Write-Log -Message "User: $user" -Level "INFO" -Color Cyan
         
-        # Initialize counters
-        $downloaded = 0
-        $failed = 0
-        $skipped = 0
+        $fileTypeFilters = Parse-FileTypes -FileTypeString $FileType
+        
+        # Simple date filtering based on filename patterns if DaysBack is specified
+        $dateFilterActive = $DaysBack -gt 0 -and -not $RetryMode
+        $cutoffDate = if ($dateFilterActive) { 
+            $cutoff = (Get-Date).AddDays(-$DaysBack)
+            Write-Log -Message "DaysBack filtering: $DaysBack days (files newer than $($cutoff.ToString('yyyy-MM-dd')))" -Level "INFO" -Color Yellow
+            $cutoff
+        } else { 
+            $filterText = if ($RetryMode) { "RETRY MODE - all error files will be processed" } else { "DaysBack filtering: DISABLED - downloading all files" }
+            Write-Log -Message $filterText -Level "INFO" -Color Green
+            [DateTime]::MinValue 
+        }
+        
+        Write-Log -Message "FileType specified: $($fileTypeFilters -join ',')" -Level "INFO" -Color DarkGreen
         
         $allDownloads = @()
         
-        # ✅ RETRY MODE LOGIC FOR DOWNLOADS
         if ($RetryMode -and -not [string]::IsNullOrEmpty($ErrorFile)) {
             Write-Log -Message "RETRY MODE: Loading files from error file..." -Level "INFO" -Color Magenta
+            $retryFiles = Load-ErrorFileForRetry -ErrorFilePath $ErrorFile
             
-            try {
-                if (-not (Test-Path $ErrorFile)) {
-                    Write-Log -Message "Error file not found: $ErrorFile" -Level "ERROR" -Color Red
-                    return @{ Downloaded = 0; Failed = 1; Skipped = 0; Error = "Error file not found" }
-                }
-                
-                $retryFiles = Import-Csv -Path $ErrorFile
-                Write-Log -Message "Loaded $($retryFiles.Count) entries from error file" -Level "INFO" -Color Green
-                
-                foreach ($retryFile in $retryFiles) {
-                    # Validate required fields
-                    if (-not $retryFile.FileName -or -not $retryFile.VcUrl) {
-                        Write-Log -Message "  Skipping invalid entry: missing FileName or VcUrl" -Level "WARN" -Color Yellow
-                        continue
-                    }
-                    
-                    # Determine local path for retry
-                    $localFilePath = ""
-                    if ($retryFile.LocalPath -and $retryFile.LocalPath -ne "N/A") {
-                        $localFilePath = $retryFile.LocalPath
-                    } else {
-                        # Reconstruct local path based on relative path
-                        $relativePath = if ($retryFile.RelativePath) { $retryFile.RelativePath.Trim('/') } else { "Counts/Count7511/Aggregates" }
-                        $localFilePath = Join-Path $localStagingDir $relativePath
-                        $localFilePath = Join-Path $localFilePath $retryFile.FileName
-                    }
-                    
-                    # Ensure directory exists
-                    $localDir = Split-Path $localFilePath -Parent
-                    if (-not (Test-Path $localDir)) {
-                        New-Item -ItemType Directory -Path $localDir -Force | Out-Null
+            foreach ($retryFile in $retryFiles) {
+                if ($retryFile.VcUrl -ne "LOCAL_FILE") {
+                    $localSubDir = Join-Path $localStagingDir $retryFile.RelativePath.TrimEnd('/')
+                    if (!(Test-Path $localSubDir)) {
+                        New-Item -ItemType Directory -Path $localSubDir -Force | Out-Null
                     }
                     
                     $allDownloads += [PSCustomObject]@{
-                        FileName = $retryFile.FileName
                         VcUrl = $retryFile.VcUrl
-                        LocalPath = $localFilePath
-                        RelativePath = if ($retryFile.RelativePath) { $retryFile.RelativePath } else { "Counts/Count7511/Aggregates/" }
-                        CreationTime = if ($retryFile.CreationTime) { $retryFile.CreationTime } else { "Unknown" }
+                        FileName = $retryFile.FileName
+                        LocalPath = Join-Path $localSubDir $retryFile.FileName
+                        RelativePath = $retryFile.RelativePath
+                        CreationTime = $retryFile.CreationTime
+                        OriginalSize = $retryFile.Size
+                        OriginalError = $retryFile.OriginalError
                         Status = $null
                         Size = $null
                         Time = $null
                         Details = $null
-                        OriginalError = if ($retryFile.OriginalError) { $retryFile.OriginalError } else { $retryFile.Details }
                     }
-                    
-                    Write-Log -Message "  Queued for retry: $($retryFile.FileName)" -Level "DEBUG" -Color DarkGray
                 }
-                
-                Write-Log -Message "RETRY MODE: Loaded $($allDownloads.Count) files for retry download" -Level "SUCCESS" -Color Green
-                
-            } catch {
-                Write-Log -Message "Error loading retry file: $($_.Exception.Message)" -Level "ERROR" -Color Red
-                return @{ Downloaded = 0; Failed = 1; Skipped = 0; Error = "Error loading retry file" }
             }
+            
+            Write-Log -Message "RETRY MODE: Loaded $($allDownloads.Count) files for retry" -Level "SUCCESS" -Color Green
             
         } else {
-            # ✅ NORMAL MODE: Use input file or scan Cosmos
-            Write-Log -Message "NORMAL MODE: Processing file list..." -Level "INFO" -Color Green
+            $fileLists = @()
             
-            # Apply DaysBack filtering
-            if ($DaysBack -and $DaysBack -gt 0) {
-                Write-Log -Message "DaysBack filtering: ENABLED - only files from last $DaysBack days" -Level "INFO" -Color Yellow
+            if (-not [string]::IsNullOrEmpty($InputFile)) {
+                $inputPath = if (Test-Path $InputFile) { $InputFile } else { Join-Path $listDir $InputFile }
+                if (Test-Path $inputPath) { $fileLists += $inputPath }
             } else {
-                Write-Log -Message "DaysBack filtering: DISABLED - downloading all files" -Level "INFO" -Color Green
-            }
-            
-            # Parse FileType
-            $fileTypeFilters = Parse-FileTypes -FileTypeString $FileType
-            Write-Log -Message "FileType specified: $($fileTypeFilters -join ',')" -Level "INFO" -Color Cyan
-            
-            # Load file list
-            $inputData = @()
-            if (-not [string]::IsNullOrEmpty($InputFile) -and (Test-Path $InputFile)) {
-                Write-Log -Message "Loading file list from: $InputFile" -Level "INFO" -Color Cyan
-                $inputData = Import-Csv -Path $InputFile
-                Write-Log -Message "Loaded $($inputData.Count) entries from input file" -Level "SUCCESS" -Color Green
-            } else {
-                Write-Log -Message "No input file specified. Use Phase 1 to generate file list first." -Level "ERROR" -Color Red
-                return @{ Downloaded = 0; Failed = 1; Skipped = 0; Error = "No input file specified" }
-            }
-            
-            # Filter and process input data
-            foreach ($item in $inputData) {
-                if (-not $item.FileName -or -not $item.VcUrl) { continue }
-                
-                # Apply FileType filtering
-                $matchesFileType = $false
-                foreach ($filterType in $fileTypeFilters) {
-                    if ($item.FileName -match $filterType -or $item.VcUrl -match $filterType) {
-                        $matchesFileType = $true
-                        break
-                    }
+                # Ensure directoryConfigs exists
+                if (-not $directoryConfigs) {
+                    $directoryConfigs = @(
+                        @{ Type = "V1Daily"; Path = "V1/Daily/" },
+                        @{ Type = "V2Daily"; Path = "V2/Daily/" },
+                        @{ Type = "V1Monitor"; Path = "V1/Daily/Monitor/" },
+                        @{ Type = "V2Monitor"; Path = "V2/Daily/Monitor/" },
+                        @{ Type = "Count7511"; Path = "Counts/Count7511/Aggregates/" },
+                        @{ Type = "Count7513"; Path = "Counts/Count7513/Aggregates/" },
+                        @{ Type = "Count7515"; Path = "Counts/Count7515/Aggregates/" }
+                    )
                 }
                 
-                if (-not $matchesFileType) {
-                    Write-Log -Message "  Skipping $($item.FileName) - doesn't match FileType filter" -Level "DEBUG" -Color DarkGray
-                    continue
+                foreach ($config in $directoryConfigs) {
+                    if ($fileTypeFilters -notcontains $config.Type) { continue }
+                    $listFile = "$listDir\$($config.Type)_vc_listall.txt"
+                    if (Test-Path $listFile) { $fileLists += $listFile }
                 }
+            }
+            
+            Write-Log -Message "Processing files from $($fileLists.Count) list files..." -Level "INFO" -Color Cyan
+            
+            foreach ($listFile in $fileLists) {
+                if ($global:CleanupInProgress) { break }
                 
-                # Apply DaysBack filtering
-                if ($DaysBack -and $DaysBack -gt 0) {
-                    if ($item.FileName -match '^(\d{4})(\d{2})(\d{2})_(\d{4})_') {
-                        try {
-                            $year = [int]$matches[1]
-                            $month = [int]$matches[2]
-                            $day = [int]$matches[3]
-                            $hour = [int]$matches[4].Substring(0,2)
-                            $minute = [int]$matches[4].Substring(2,2)
+                Write-Log -Message "Processing: $(Split-Path $listFile -Leaf)" -Level "INFO" -Color DarkCyan
+                $entries = Get-Content $listFile | Where-Object { $_.Trim() -ne "" }
+                
+                Write-Log -Message "  Found $($entries.Count) entries in list file" -Level "INFO" -Color DarkGreen
+                
+                foreach ($entry in $entries) {
+                    $parts = $entry -split "\|"
+                    if ($parts.Length -ge 4) {
+                        $vcUrl = $parts[0].Trim()
+                        $fileName = $parts[1].Trim()
+                        $relativePath = $parts[2].Trim()
+                        $extension = $parts[3].Trim()
+                        $creationTimeStr = if ($parts.Length -ge 5) { $parts[4].Trim() } else { "Unknown" }
+                        
+                        # Simple filename-based date filtering
+                        if ($dateFilterActive) {
+                            $shouldFilter = $false
                             
-                            $fileDate = Get-Date -Year $year -Month $month -Day $day -Hour $hour -Minute $minute
-                            $cutoffDate = (Get-Date).AddDays(-$DaysBack)
+                            # Try to extract date from filename patterns like YYYYMMDD
+                            if ($fileName -match "(\d{8})") {
+                                $dateMatch = $matches[1]
+                                try {
+                                    $fileDate = [DateTime]::ParseExact($dateMatch, "yyyyMMdd", $null)
+                                    if ($fileDate -lt $cutoffDate) {
+                                        $shouldFilter = $true
+                                        $filtered++
+                                        Write-Log -Message "  SKIPPED: $fileName - File older than $DaysBack days cutoff ($($fileDate.ToString('yyyy-MM-dd')))" -Level "WARN" -Color Yellow
+                                    }
+                                } catch {
+                                    Write-Log -Message "    Warning: Could not parse date from filename: $fileName" -Level "WARN" -Color Yellow
+                                }
+                            }
                             
-                            if ($fileDate -lt $cutoffDate) {
-                                $skipped++
-                                Write-Log -Message "  SKIPPED: $($item.FileName) - older than $DaysBack days" -Level "WARN" -Color Yellow
+                            if ($shouldFilter) {
                                 continue
                             }
-                        } catch {
-                            Write-Log -Message "  Warning: Could not parse date from $($item.FileName)" -Level "WARN" -Color Yellow
                         }
+                        
+                        $localSubDir = Join-Path $localStagingDir $relativePath.TrimEnd('/')
+                        if (!(Test-Path $localSubDir)) {
+                            New-Item -ItemType Directory -Path $localSubDir -Force | Out-Null
+                        }
+                        
+                        $allDownloads += [PSCustomObject]@{
+                            VcUrl = $vcUrl
+                            FileName = $fileName
+                            LocalPath = Join-Path $localSubDir $fileName
+                            RelativePath = $relativePath
+                            CreationTime = $creationTimeStr
+                            OriginalSize = if ($parts.Length -ge 6) { $parts[5] } else { "Unknown" }
+                            OriginalError = $null
+                            Status = $null
+                            Size = $null
+                            Time = $null
+                            Details = $null
+                        }
+                        
+                        Write-Log -Message "  Queued: $fileName" -Level "DEBUG" -Color DarkGray
+                    } else {
+                        Write-Log -Message "    Warning: Skipping malformed entry: $entry" -Level "WARN" -Color Yellow
                     }
                 }
                 
-                # Determine local path
-                $relativePath = if ($item.RelativePath) { $item.RelativePath.Trim('/') } else { "Counts/Count7511/Aggregates" }
-                $localFilePath = Join-Path $localStagingDir $relativePath
-                $localFilePath = Join-Path $localFilePath $item.FileName
-                
-                # Ensure directory exists
-                $localDir = Split-Path $localFilePath -Parent
-                if (-not (Test-Path $localDir)) {
-                    New-Item -ItemType Directory -Path $localDir -Force | Out-Null
-                }
-                
-                $allDownloads += [PSCustomObject]@{
-                    FileName = $item.FileName
-                    VcUrl = $item.VcUrl
-                    LocalPath = $localFilePath
-                    RelativePath = $item.RelativePath
-                    CreationTime = $item.CreationTime
-                    Status = $null
-                    Size = $null
-                    Time = $null
-                    Details = $null
-                }
+                Write-Log -Message "  After filtering: $($allDownloads.Count) files queued for download, $filtered filtered" -Level "INFO" -Color Green
             }
         }
         
-        # Check if we have files to download
-        if ($allDownloads.Count -eq 0) {
-            $modeText = if ($RetryMode) { "retry" } else { "download" }
-            Write-Log -Message "No files found for $modeText after filtering" -Level "WARN" -Color Yellow
-            return @{ Downloaded = 0; Failed = 0; Skipped = $skipped; Error = $null }
+        $totalFiles = $allDownloads.Count
+        $filterText = if ($RetryMode) { "(Retry files)" } else { "(Filtered by filename date: $filtered)" }
+        Write-Log -Message "Total files to download: $totalFiles $filterText" -Level "INFO" -Color Green
+        
+        if ($totalFiles -eq 0) {
+            Write-Log -Message "No files found for download after filtering" -Level "WARN" -Color Yellow
+            return @{ Downloaded = 0; Failed = 0; Filtered = $filtered; Error = $null }
         }
         
-        $modeText = if ($RetryMode) { "retry download" } else { "download" }
-        Write-Log -Message "Total files to $modeText`: $($allDownloads.Count)" -Level "INFO" -Color Green
+        # ✅ PARALLEL MULTITHREADED DOWNLOAD
+        Write-Log -Message "Starting parallel download with $MaxThreads threads..." -Level "INFO" -Color Magenta
         
-        # ✅ PARALLEL DOWNLOAD EXECUTION
-        Write-Log -Message "Starting parallel download with $MaxThreads threads..." -Level "INFO" -Color Green
+        # Thread-safe collections for results
+        $syncHashtable = [System.Collections.Hashtable]::Synchronized(@{})
+        $lockObject = [System.Object]::new()
         
-        # Create thread-safe synchronization objects
-        $syncHash = [hashtable]::Synchronized(@{})
-        $lockObj = New-Object System.Object
-        
-        # Initialize runspace pool
+        # Create runspace pool
         $runspacePool = [runspacefactory]::CreateRunspacePool(1, $MaxThreads)
         $runspacePool.Open()
         
-        # Download script block
+        # ✅ Download script block
         $downloadScriptBlock = {
             param($download, $syncHash, $lockObj, $user, $useMSAL, $tokenFile, $isRetryMode)
             
@@ -1871,24 +1202,16 @@ function Phase2-DownloadToLocal {
                     $download.Status = "Failed"
                     $download.Size = "0 MB"
                     
-                    # ✅ CAPTURE COMPLETE ERROR MESSAGE - NO TRUNCATION
-                    if ($output) {
-                        if ($output -is [array]) {
-                            # Join all output lines with proper separation
-                            $fullError = ($output | Where-Object { $_ -and $_.ToString().Trim() } | ForEach-Object { $_.ToString().Trim() }) -join " | "
-                        } else {
-                            $fullError = $output.ToString().Trim()
-                        }
-                        
-                        # If still too generic, add more context
-                        if ($fullError -eq "1" -or $fullError.Length -lt 10) {
-                            $fullError = "Scope copy command failed with exit code $LASTEXITCODE. Command: $command"
-                        }
-                        
-                        $download.Details = $fullError
+                    # Fix error message display
+                    if ($output -is [array]) {
+                        $errorMsg = ($output | Where-Object { $_ -and $_.ToString().Trim() } | ForEach-Object { $_.ToString().Trim() }) -join "; "
+                    } elseif ($output) {
+                        $errorMsg = $output.ToString().Trim()
                     } else {
-                        $download.Details = "Download failed with exit code $LASTEXITCODE. No output captured. Command: $command"
+                        $errorMsg = "Download failed with exit code $LASTEXITCODE"
                     }
+                    
+                    $download.Details = $errorMsg
                 }
                 
                 # Thread-safe result storage
@@ -1916,7 +1239,7 @@ function Phase2-DownloadToLocal {
                 $download.Status = "Failed"
                 $download.Size = "0 MB"
                 $download.Time = "0s"
-                $download.Details = "Exception during download: $($_.Exception.Message). Stack trace: $($_.ScriptStackTrace)"
+                $download.Details = "Exception: $($_.Exception.Message)"
                 
                 # Thread-safe error storage
                 [System.Threading.Monitor]::Enter($lockObj)
@@ -1936,35 +1259,39 @@ function Phase2-DownloadToLocal {
             }
         }
         
-        # Start download jobs
+        # Initialize sync hashtable
+        $syncHashtable.Results = [System.Collections.Generic.List[PSObject]]::new()
+        $syncHashtable.Downloaded = 0
+        $syncHashtable.Failed = 0
+        
+        # Create and start download jobs
         $downloadJobs = @()
         foreach ($download in $allDownloads) {
+            # ✅ CHECK FOR CLEANUP SIGNAL
+            if ($global:CleanupInProgress) {
+                Write-Log -Message "Cleanup signal received, stopping job creation..." -Level "WARN" -Color Yellow
+                break
+            }
+            
             $powerShell = [powershell]::Create()
             $powerShell.RunspacePool = $runspacePool
+            $powerShell.AddScript($downloadScriptBlock).AddParameter("download", $download).AddParameter("syncHash", $syncHashtable).AddParameter("lockObj", $lockObject).AddParameter("user", $user).AddParameter("useMSAL", $UseMSAL).AddParameter("tokenFile", $global:TokenFilePath).AddParameter("isRetryMode", $RetryMode) | Out-Null
             
-            [void]$powerShell.AddScript($downloadScriptBlock)
-            [void]$powerShell.AddArgument($download)
-            [void]$powerShell.AddArgument($syncHash)
-            [void]$powerShell.AddArgument($lockObj)
-            [void]$powerShell.AddArgument($user)
-            [void]$powerShell.AddArgument($UseMSAL)
-            [void]$powerShell.AddArgument("")  # tokenFile
-            [void]$powerShell.AddArgument($RetryMode)
-            
-            $downloadJobs += @{
+            $downloadJobs += [PSCustomObject]@{
                 PowerShell = $powerShell
                 Handle = $powerShell.BeginInvoke()
+                Download = $download
                 IsCompleted = $false
             }
         }
         
-        Write-Log -Message "Monitoring $($downloadJobs.Count) parallel download jobs..." -Level "INFO" -Color Cyan
-        
-        # Monitor progress
+        # Monitor progress with cleanup handling
+        $totalJobs = $downloadJobs.Count
         $completedJobs = 0
-        $lastProgressUpdate = Get-Date
         
-        while ($completedJobs -lt $downloadJobs.Count) {
+        Write-Log -Message "Monitoring $totalJobs parallel download jobs..." -Level "INFO" -Color Cyan
+        
+        while ($completedJobs -lt $totalJobs -and -not $global:CleanupInProgress) {
             Start-Sleep -Milliseconds 500
             
             $newlyCompleted = 0
@@ -1976,14 +1303,14 @@ function Phase2-DownloadToLocal {
                         $completedJobs++
                         $newlyCompleted++
                         
-                        # ✅ SHOW COMPLETE ERROR MESSAGES IN CONSOLE
+                        # Log individual completion
                         if ($result -and $result.Status) {
                             if ($result.Status -eq "Success") {
                                 Write-Log -Message "  SUCCESS: $($result.FileName) ($($result.Size) in $($result.Time))" -Level "SUCCESS" -Color Green
                             } else {
                                 Write-Log -Message "  FAILED: $($result.FileName)" -Level "ERROR" -Color Red
                                 if ($result.Details) {
-                                    Write-Log -Message "    Full Error: $($result.Details)" -Level "ERROR" -Color Red
+                                    Write-Log -Message "    Error: $($result.Details)" -Level "ERROR" -Color Red
                                 }
                             }
                         }
@@ -1997,81 +1324,152 @@ function Phase2-DownloadToLocal {
                 }
             }
             
-            # Show progress every 10 seconds or when jobs complete
-            $now = Get-Date
-            if ($newlyCompleted -gt 0 -or ($now - $lastProgressUpdate).TotalSeconds -ge 10) {
-                $progressPercent = [math]::Round(($completedJobs / $downloadJobs.Count) * 100, 1)
-                Write-Log -Message "Download Progress: $completedJobs/$($downloadJobs.Count) completed ($progressPercent%)" -Level "INFO" -Color Cyan
-                $lastProgressUpdate = $now
+            if ($newlyCompleted -gt 0) {
+                $progressPercent = [math]::Round(($completedJobs / $totalJobs) * 100, 1)
+                Write-Log -Message "Download Progress: $completedJobs/$totalJobs completed ($progressPercent%)" -Level "INFO" -Color Cyan
             }
+        }
+        
+        # ✅ GRACEFUL CLEANUP WHEN INTERRUPTED
+        if ($global:CleanupInProgress) {
+            Write-Log -Message "Cleanup signal received, stopping remaining download jobs..." -Level "WARN" -Color Yellow
             
-            if ($global:CleanupInProgress) { break }
+            # Cancel remaining jobs
+            foreach ($job in $downloadJobs) {
+                if (-not $job.IsCompleted) {
+                    try {
+                        $job.PowerShell.Stop()
+                        $job.PowerShell.Dispose()
+                        $job.IsCompleted = $true
+                    } catch {
+                        # Ignore disposal errors during cleanup
+                    }
+                }
+            }
         }
         
-        # Cleanup
+        # Get final results
+        $downloaded = $syncHashtable.Downloaded
+        $failed = $syncHashtable.Failed
+        $allDownloads = $syncHashtable.Results.ToArray()
+        
+        Write-Log -Message "Parallel Download Results: $downloaded downloaded, $failed failed, $filtered filtered" -Level "INFO" -Color Cyan
+        
+        # ✅ GENERATE REPORT WITH UPDATED STATUS (maintaining existing flow)
+        Write-Log -Message "Generating download report..." -Level "INFO" -Color Cyan
+        try {
+            if ($allDownloads.Count -gt 0) {
+                # Convert to existing report format to maintain compatibility
+                $global:DownloadResults = [System.Collections.Generic.List[PSObject]]::new()
+                
+                foreach ($download in $allDownloads) {
+                    $global:DownloadResults.Add([PSCustomObject]@{
+                        FileName = $download.FileName
+                        Status = if ($download.Status) { $download.Status } else { "Unknown" }
+                        Size = if ($download.Size) { $download.Size } else { "0 MB" }
+                        Time = if ($download.Time) { $download.Time } else { "0s" }
+                        CreationDate = $download.CreationTime
+                        Path = $download.RelativePath
+                        Details = if ($download.Details) { $download.Details } else { "No details available" }
+                        VcUrl = $download.VcUrl
+                    })
+                }
+                
+                # Save error files (existing functionality)
+                Save-ErrorFiles -OperationType "Download" -Results $global:DownloadResults
+                
+                Write-Log -Message "Download results processed for existing reporting flow" -Level "SUCCESS" -Color Green
+            } else {
+                Write-Log -Message "No download results to report" -Level "WARN" -Color Yellow
+            }
+        } catch {
+            Write-Log -Message "Error generating report: $_" -Level "ERROR" -Color Red
+        }
+        
+        return @{
+            Downloaded = $downloaded
+            Failed = $failed
+            Filtered = $filtered
+            Error = $null
+        }
+        
+    } catch {
+        $errorMsg = "Error in Phase 2: $($_.Exception.Message)"
+        Write-Log -Message $errorMsg -Level "ERROR" -Color Red
+        return @{ Downloaded = 0; Failed = 0; Filtered = $filtered; Error = $errorMsg }
+        
+    } finally {
+        # ✅ GUARANTEED CLEANUP
         Write-Log -Message "Cleaning up download resources..." -Level "INFO" -Color Yellow
-        $runspacePool.Close()
-        $runspacePool.Dispose()
         
-        # Collect results
-        $downloadResults = if ($syncHash.Results) { @($syncHash.Results.ToArray()) } else { @() }
-        $downloaded = if ($syncHash.Downloaded) { $syncHash.Downloaded } else { 0 }
-        $failed = if ($syncHash.Failed) { $syncHash.Failed } else { 0 }
-        
-        Write-Log -Message "Download Results: $downloaded succeeded, $failed failed, $skipped skipped" -Level "SUCCESS" -Color Green
-        
-        # ✅ CONVERT RESULTS TO EXISTING FORMAT FOR COMPATIBILITY
-        $global:DownloadResults.Clear()
-        foreach ($download in $downloadResults) {
-            $global:DownloadResults.Add([PSCustomObject]@{
-                FileName = $download.FileName
-                Status = if ($download.Status) { $download.Status } else { "Unknown" }
-                Size = if ($download.Size) { $download.Size } else { "0 MB" }
-                Time = if ($download.Time) { $download.Time } else { "0s" }
-                CreationDate = $download.CreationTime
-                Path = $download.RelativePath
-                Details = if ($download.Details) { $download.Details } else { "No details available" }
-                VcUrl = $download.VcUrl
-            })
+        # Dispose all remaining PowerShell objects
+        if ($downloadJobs) {
+            foreach ($job in $downloadJobs) {
+                try {
+                    if ($job.PowerShell -and -not $job.IsCompleted) {
+                        $job.PowerShell.Stop()
+                    }
+                    if ($job.PowerShell) {
+                        $job.PowerShell.Dispose()
+                    }
+                } catch {
+                    # Ignore disposal errors during cleanup
+                }
+            }
         }
         
-        # Save error files if there were failures
-        if ($failed -gt 0) {
-            Save-ErrorFiles -OperationType "Download" -Results $global:DownloadResults
+        # Close and dispose runspace pool
+        if ($runspacePool) {
+            try {
+                $runspacePool.Close()
+                $runspacePool.Dispose()
+                Write-Log -Message "Runspace pool cleaned up successfully" -Level "INFO" -Color Green
+            } catch {
+                Write-Log -Message "Error cleaning up runspace pool: $($_.Exception.Message)" -Level "WARN" -Color Yellow
+            }
         }
         
-        return @{ Downloaded = $downloaded; Failed = $failed; Skipped = $skipped; Error = $null }
+        # ✅ DOWNLOAD VERIFICATION - Check if all expected files were downloaded
+        Write-Log -Message "=== DOWNLOAD VERIFICATION ===" -Level "INFO" -Color Cyan
+        $expectedFiles = $allDownloads.Count
+        $successfulDownloads = $allDownloads | Where-Object { $_.Status -eq "Success" }
+        $actualDownloadedFiles = @()
         
-    } catch {
-        Write-Log -Message "Error in Phase2-DownloadToLocal: $($_.Exception.Message)" -Level "ERROR" -Color Red
-        return @{ Downloaded = 0; Failed = 1; Skipped = 0; Error = $_.Exception.Message }
-    } 
-    finally {
-    $phaseEnd = Get-Date
-    $phaseDuration = $phaseEnd - $phaseStart
-    Write-Log -Message "==== END PHASE: Phase3-UploadToDestination | Duration: $($phaseDuration.ToString('hh\:mm\:ss')) ====" -Level "PHASE" -Color Magenta
-    
-    # ✅ FIXED: Add to phase summaries with proper error handling
-    try {
-        # Ensure PhaseSummaries is initialized as a list
-        if (-not $global:PhaseSummaries) {
-            $global:PhaseSummaries = [System.Collections.Generic.List[PSObject]]::new()
+        foreach ($download in $successfulDownloads) {
+            if (Test-Path $download.LocalPath) {
+                $fileInfo = Get-Item $download.LocalPath -ErrorAction SilentlyContinue
+                if ($fileInfo -and $fileInfo.Length -gt 0) {
+                    $actualDownloadedFiles += $download
+                }
+            }
         }
         
-        # Create phase summary object
-        $phaseSummary = [PSCustomObject]@{
-            Phase = "Phase3-DownloadToLocal"  # Change this to appropriate phase name
-            Duration = $phaseDuration
-            Data = @{ Uploaded = $uploaded; Failed = $failed; Skipped = $skipped }
+        $actualCount = $actualDownloadedFiles.Count
+        $missingFiles = $allDownloads | Where-Object { 
+            $_.Status -ne "Success" -or -not (Test-Path $_.LocalPath) -or (Get-Item $_.LocalPath -ErrorAction SilentlyContinue).Length -eq 0 
         }
         
-        # Add to global collection
-        $global:PhaseSummaries.Add($phaseSummary)
+        Write-Log -Message "Expected files to download: $expectedFiles" -Level "INFO" -Color White
+        Write-Log -Message "Successfully downloaded: $actualCount" -Level "INFO" -Color Green
+        Write-Log -Message "Missing/Failed files: $($missingFiles.Count)" -Level "INFO" -Color $(if($missingFiles.Count -eq 0) {"Green"} else {"Yellow"})
         
-    } catch {
-        Write-Log -Message "Warning: Could not add phase summary: $($_.Exception.Message)" -Level "WARN" -Color Yellow
+        if ($missingFiles.Count -gt 0) {
+            Write-Log -Message "Missing files details:" -Level "WARN" -Color Yellow
+            foreach ($missing in ($missingFiles | Select-Object -First 10)) {
+                Write-Log -Message "  - $($missing.FileName): $($missing.Details)" -Level "WARN" -Color Yellow
+            }
+            if ($missingFiles.Count -gt 10) {
+                Write-Log -Message "  ... and $($missingFiles.Count - 10) more files" -Level "WARN" -Color Yellow
+            }
+        }
+        
+        $downloadCompletionRate = if ($expectedFiles -gt 0) { [math]::Round(($actualCount / $expectedFiles) * 100, 1) } else { 0 }
+        Write-Log -Message "Download completion rate: $downloadCompletionRate%" -Level "INFO" -Color $(if($downloadCompletionRate -eq 100) {"Green"} elseif($downloadCompletionRate -ge 80) {"Yellow"} else {"Red"})
+        Write-Log -Message "=== END DOWNLOAD VERIFICATION ===" -Level "INFO" -Color Cyan
+        
+        $duration = (Get-Date) - $startTime
+        Write-Log -Message "==== END PHASE: Phase2-DownloadToLocal | Duration: $($duration.ToString('hh\:mm\:ss')) ====" -Level "PHASE" -Color Magenta
     }
-}
 }
 
 # ================================================================================================
@@ -2081,400 +1479,277 @@ function Phase2-DownloadToLocal {
 # ================================================================================================
 
 function Phase3-UploadToDestination {
-    param([hashtable]$PhaseData = @{})
+    $uploaded = 0
+    $failed = 0
+    $skipped = 0
+    $startTime = Get-Date
     
-    $phaseStart = Get-Date
-    Write-Log -Message "==== START PHASE: Phase3-UploadToDestination ====" -Level "PHASE" -Color Magenta
+    # ✅ ADD GRACEFUL SHUTDOWN VARIABLES
+    $runspacePool = $null
+    $uploadJobs = @()
     
     try {
-        # Set destination and user
-        $destination_https = "vc://cosmos08/bingads.algo.adquality/local/users/varadharajaan/ThemisINTL/"
-        $user = "varadharajaan@microsoft.com"
+        Write-Log -Message "==== START PHASE: Phase3-UploadToDestination ====" -Level "PHASE" -Color Magenta
         
-        Write-Log -Message "Destination set to: $destination_https" -Level "INFO" -Color Cyan
+        # Fix missing destination - USE YOUR CORRECT PATHS
+        if ([string]::IsNullOrEmpty($destination_https)) {
+            if ($Destination -and $Destination.ToLower() -eq "prod") {
+                $destination_https = "vc://cosmos08/bingads.algo.adquality/shares/bingads.algo.rap2/PriamBackup/ThemisINTL/"
+            } else {
+                $destination_https = "vc://cosmos08/bingads.algo.adquality/local/users/vdamotharan/ThemisINTL/"
+            }
+            Write-Log -Message "Destination set to: $destination_https" -Level "INFO" -Color Green
+        }
+        
         Write-Log -Message "Phase 3: Parallel Upload to Cosmos destination" -Level "INFO" -Color Green
         Write-Log -Message "Max Threads: $MaxThreads" -Level "INFO" -Color Cyan
         Write-Log -Message "Source: $localStagingDir" -Level "INFO" -Color Cyan
         Write-Log -Message "Destination: $destination_https" -Level "INFO" -Color Cyan
-        Write-Log -Message "User: $user" -Level "INFO" -Color Cyan
+        Write-Log -Message "User: vdamotharan@microsoft.com" -Level "INFO" -Color Cyan
         
-        # Initialize counters
-        $uploaded = 0
-        $failed = 0
-        $skipped = 0
+        # Show DaysBack filtering info
+        if ($DaysBack -and $DaysBack -gt 0) {
+            $cutoffDate = (Get-Date).AddDays(-$DaysBack)
+            Write-Log -Message "DaysBack filtering: $DaysBack days (files newer than $($cutoffDate.ToString('yyyy-MM-dd')))" -Level "INFO" -Color Yellow
+        } else {
+            Write-Log -Message "DaysBack filtering: DISABLED - uploading all files" -Level "INFO" -Color Green
+        }
         
-        # Directory configurations
-        $directoryConfigs = @(
-            @{ Type = "Count7511"; Path = "Counts/Count7511/Aggregates/" },
-            @{ Type = "Count7513"; Path = "Counts/Count7513/Aggregates/" },
-            @{ Type = "Count7515"; Path = "Counts/Count7515/Aggregates/" },
-            @{ Type = "PipelineRunState"; Path = "PipelineRunState/" },
-            @{ Type = "V1Monitor"; Path = "V1/Monitor/" },
-            @{ Type = "V2Monitor"; Path = "V2/Monitor/" },
-            @{ Type = "V1Daily"; Path = "V1/Daily/" },
-            @{ Type = "V2Daily"; Path = "V2/Daily/" }
-        )
+        # Fix missing fileTypeFilters
+        if (-not $fileTypeFilters -or $fileTypeFilters.Count -eq 0) {
+            if ($FileType) {
+                $fileTypeFilters = @($FileType)
+            } else {
+                $fileTypeFilters = @("V1Daily")
+            }
+        }
+        
+        Write-Log -Message "FileType specified: $($fileTypeFilters -join ',')" -Level "INFO" -Color DarkGreen
+        
+        # Ensure directoryConfigs exists
+        if (-not $directoryConfigs) {
+            $directoryConfigs = @(
+                @{ Type = "V1Daily"; Path = "V1/Daily/" },
+                @{ Type = "V2Daily"; Path = "V2/Daily/" },
+                @{ Type = "V1Monitor"; Path = "V1/Daily/Monitor/" },
+                @{ Type = "V2Monitor"; Path = "V2/Daily/Monitor/" },
+                @{ Type = "Count7511"; Path = "Counts/Count7511/Aggregates/" },
+                @{ Type = "Count7513"; Path = "Counts/Count7513/Aggregates/" },
+                @{ Type = "Count7515"; Path = "Counts/Count7515/Aggregates/" }
+            )
+        }
         
         $allUploads = @()
         
-        # ✅ RETRY MODE LOGIC FOR UPLOADS
-        if ($RetryMode -and -not [string]::IsNullOrEmpty($ErrorFile)) {
-            Write-Log -Message "RETRY MODE: Loading files from error file..." -Level "INFO" -Color Magenta
+        # ✅ Get existing files from destination for DaysBack filtering (SKIP FOR NOW TO SPEED UP)
+        $existingFilesMap = @{}
+        if ($DaysBack -and $DaysBack -gt 0) {
+            Write-Log -Message "Checking existing files in destination for DaysBack filtering..." -Level "INFO" -Color Cyan
             
-            try {
-                if (-not (Test-Path $ErrorFile)) {
-                    Write-Log -Message "Error file not found: $ErrorFile" -Level "ERROR" -Color Red
-                    return @{ Uploaded = 0; Failed = 1; Skipped = 0; Error = "Error file not found" }
-                }
+            foreach ($config in $directoryConfigs) {
+                if ($fileTypeFilters -notcontains $config.Type) { continue }
                 
-                $retryFiles = Import-Csv -Path $ErrorFile
-                Write-Log -Message "Loaded $($retryFiles.Count) entries from error file" -Level "INFO" -Color Green
+                $remotePath = $destination_https + $config.Path.TrimEnd('/')
+                $remotePath = $remotePath -replace "(?<!:)//+", "/"
                 
-                foreach ($retryFile in $retryFiles) {
-                    # For upload retries, files should be in local staging directory
-                    $localFilePath = ""
+                try {
+                    Write-Log -Message "  Listing files in: $remotePath" -Level "DEBUG" -Color DarkGray
+                    $listCommand = "scope.exe dir `"$remotePath`" -on UseCachedCredentials -u vdamotharan@microsoft.com 2>&1"
+                    $listOutput = Invoke-Expression $listCommand
                     
-                    # Try to find the file in local staging directory
-                    if ($retryFile.LocalPath -and (Test-Path $retryFile.LocalPath)) {
-                        $localFilePath = $retryFile.LocalPath
-                    } elseif ($retryFile.FileName) {
-                        # Search for file in staging directory structure
-                        $searchPaths = @(
-                            (Join-Path $localStagingDir "Counts\Count7511\Aggregates\$($retryFile.FileName)"),
-                            (Join-Path $localStagingDir "Counts\Count7513\Aggregates\$($retryFile.FileName)"),
-                            (Join-Path $localStagingDir "Counts\Count7515\Aggregates\$($retryFile.FileName)"),
-                            (Join-Path $localStagingDir "V1\Daily\$($retryFile.FileName)"),
-                            (Join-Path $localStagingDir "V2\Daily\$($retryFile.FileName)"),
-                            (Join-Path $localStagingDir "V1\Monitor\$($retryFile.FileName)"),
-                            (Join-Path $localStagingDir "V2\Monitor\$($retryFile.FileName)"),
-                            (Join-Path $localStagingDir "PipelineRunState\$($retryFile.FileName)")
-                        )
+                    if ($LASTEXITCODE -eq 0 -and $listOutput) {
+                        # Parse the output to extract filenames and dates
+                        $lines = $listOutput -split "`n" | Where-Object { $_ -and $_ -notmatch "Directory of" -and $_ -notmatch "^\s*$" }
                         
-                        foreach ($searchPath in $searchPaths) {
-                            if (Test-Path $searchPath) {
-                                $localFilePath = $searchPath
-                                break
+                        foreach ($line in $lines) {
+                            # Parse scope dir output format: typically shows filename and modification date
+                            if ($line -match '(\d{8}_\d{4}_\w+.*\.ss)') {
+                                $fileName = $matches[1]
+                                
+                                # Extract date from filename (format: YYYYMMDD_HHMM_...)
+                                if ($fileName -match '^(\d{4})(\d{2})(\d{2})_(\d{4})_') {
+                                    try {
+                                        $year = [int]$matches[1]
+                                        $month = [int]$matches[2] 
+                                        $day = [int]$matches[3]
+                                        $hour = [int]$matches[4].Substring(0,2)
+                                        $minute = [int]$matches[4].Substring(2,2)
+                                        
+                                        $fileDate = Get-Date -Year $year -Month $month -Day $day -Hour $hour -Minute $minute
+                                        $existingFilesMap[$fileName] = $fileDate
+                                        
+                                        Write-Log -Message "    Found: $fileName (Date: $($fileDate.ToString('yyyy-MM-dd HH:mm')))" -Level "DEBUG" -Color DarkGray
+                                    } catch {
+                                        Write-Log -Message "    Warning: Could not parse date from $fileName" -Level "WARN" -Color Yellow
+                                    }
+                                }
                             }
                         }
-                    }
-                    
-                    if ($localFilePath -and (Test-Path $localFilePath)) {
-                        # Determine destination URL
-                        $destinationUrl = ""
-                        if ($retryFile.VcUrl -and $retryFile.VcUrl -ne "LOCAL_FILE" -and $retryFile.VcUrl -ne "N/A") {
-                            $destinationUrl = $retryFile.VcUrl
-                        } else {
-                            # Reconstruct destination URL
-                            $relativePath = if ($retryFile.RelativePath) { $retryFile.RelativePath } else { "Counts/Count7511/Aggregates/" }
-                            if (-not $relativePath.EndsWith('/')) { $relativePath += '/' }
-                            $destinationUrl = $destination_https + $relativePath + $retryFile.FileName
-                            $destinationUrl = $destinationUrl -replace "(?<!:)//+", "/"
-                        }
-                        
-                        $allUploads += [PSCustomObject]@{
-                            LocalPath = $localFilePath
-                            FileName = $retryFile.FileName
-                            DestinationUrl = $destinationUrl
-                            RelativePath = if ($retryFile.RelativePath) { $retryFile.RelativePath } else { "Counts/Count7511/Aggregates/" }
-                            Status = $null
-                            Size = $null
-                            Time = $null
-                            Details = $null
-                            OriginalError = if ($retryFile.OriginalError) { $retryFile.OriginalError } else { $retryFile.Details }
-                        }
-                        
-                        Write-Log -Message "  Queued for retry: $($retryFile.FileName)" -Level "DEBUG" -Color DarkGray
                     } else {
-                        Write-Log -Message "  File not found locally: $($retryFile.FileName)" -Level "WARN" -Color Yellow
+                        Write-Log -Message "    No files found or error listing: $remotePath" -Level "DEBUG" -Color DarkGray
+                    }
+                } catch {
+                    Write-Log -Message "    Error listing remote directory: $($_.Exception.Message)" -Level "WARN" -Color Yellow
+                }
+            }
+            
+            Write-Log -Message "Found $($existingFilesMap.Count) existing files for comparison" -Level "INFO" -Color Green
+        }
+        
+        # Scan local staging directory for files to upload
+        foreach ($config in $directoryConfigs) {
+            if ($global:CleanupInProgress) { break }
+            
+            if (-not $config -or -not $config.Type -or -not $config.Path) { continue }
+            if ($fileTypeFilters -notcontains $config.Type) { continue }
+            
+            $configPath = $config.Path.TrimEnd('/')
+            $localSubDir = Join-Path $localStagingDir $configPath
+            
+            if (Test-Path $localSubDir) {
+                Write-Log -Message "Scanning for $($config.Type) files in: $localSubDir" -Level "INFO" -Color DarkCyan
+                
+                # Get direct files only (no subdirectories)
+                $localFiles = Get-ChildItem -Path $localSubDir -File | Where-Object {
+                    $_.Name -notmatch "^\..*" -and $_.Length -gt 0
+                }
+                
+                Write-Log -Message "  Found $($localFiles.Count) total files in $($config.Type)" -Level "INFO" -Color DarkGreen
+                
+                # ✅ Apply DaysBack filtering
+                $filteredFiles = @()
+                foreach ($file in $localFiles) {
+                    if (-not $file -or -not $file.Name) { continue }
+                    
+                    $shouldUpload = $true
+                    $skipReason = ""
+                    
+                    # Apply DaysBack filtering if specified
+                    if ($DaysBack -and $DaysBack -gt 0) {
+                        # Extract date from local filename
+                        if ($file.Name -match '^(\d{4})(\d{2})(\d{2})_(\d{4})_') {
+                            try {
+                                $year = [int]$matches[1]
+                                $month = [int]$matches[2]
+                                $day = [int]$matches[3]
+                                $hour = [int]$matches[4].Substring(0,2)
+                                $minute = [int]$matches[4].Substring(2,2)
+                                
+                                $localFileDate = Get-Date -Year $year -Month $month -Day $day -Hour $hour -Minute $minute
+                                $cutoffDate = (Get-Date).AddDays(-$DaysBack)
+                                
+                                if ($localFileDate -lt $cutoffDate) {
+                                    $shouldUpload = $false
+                                    $skipReason = "File older than $DaysBack days cutoff ($($localFileDate.ToString('yyyy-MM-dd')))"
+                                } else {
+                                    # Check if newer version exists in destination
+                                    if ($existingFilesMap.ContainsKey($file.Name)) {
+                                        $existingFileDate = $existingFilesMap[$file.Name]
+                                        if ($existingFileDate -ge $localFileDate) {
+                                            $shouldUpload = $false
+                                            $skipReason = "Newer/same version exists in destination ($($existingFileDate.ToString('yyyy-MM-dd')))"
+                                        }
+                                    }
+                                }
+                            } catch {
+                                Write-Log -Message "    Warning: Could not parse date from local file $($file.Name)" -Level "WARN" -Color Yellow
+                            }
+                        }
+                    }
+                    
+                    if ($shouldUpload) {
+                        $filteredFiles += $file
+                    } else {
+                        $skipped++
+                        Write-Log -Message "  SKIPPED: $($file.Name) - $skipReason" -Level "WARN" -Color Yellow
                     }
                 }
                 
-                Write-Log -Message "RETRY MODE: Loaded $($allUploads.Count) files for retry upload" -Level "SUCCESS" -Color Green
+                Write-Log -Message "  After filtering: $($filteredFiles.Count) files to upload, $skipped skipped" -Level "INFO" -Color Green
                 
-            } catch {
-                Write-Log -Message "Error loading retry file: $($_.Exception.Message)" -Level "ERROR" -Color Red
-                return @{ Uploaded = 0; Failed = 1; Skipped = 0; Error = "Error loading retry file" }
-            }
-            
-        } else {
-            # ✅ NORMAL MODE: Scan local staging directory for files to upload
-            Write-Log -Message "NORMAL MODE: Scanning local staging directory..." -Level "INFO" -Color Green
-            
-            # Apply DaysBack filtering
-            if ($DaysBack -and $DaysBack -gt 0) {
-                Write-Log -Message "DaysBack filtering: ENABLED - only files from last $DaysBack days" -Level "INFO" -Color Yellow
+                # Process filtered files for upload
+                foreach ($file in $filteredFiles) {
+                    # Proper URL construction
+                    $relativePath = $config.Path
+                    if (-not $relativePath.EndsWith('/')) { $relativePath += '/' }
+                    
+                    $destinationUrl = $destination_https + $relativePath + $file.Name
+                    # Clean up any double slashes except after vc://
+                    $destinationUrl = $destinationUrl -replace "(?<!:)//+", "/"
+                    
+                    $allUploads += [PSCustomObject]@{
+                        LocalPath = $file.FullName
+                        FileName = $file.Name
+                        DestinationUrl = $destinationUrl
+                        RelativePath = $relativePath
+                        Status = $null
+                        Size = $null
+                        Time = $null
+                        Details = $null
+                    }
+                    
+                    Write-Log -Message "  Queued: $($file.Name)" -Level "DEBUG" -Color DarkGray
+                }
             } else {
-                Write-Log -Message "DaysBack filtering: DISABLED - uploading all files" -Level "INFO" -Color Green
-            }
-            
-            # Parse FileType
-            $fileTypeFilters = Parse-FileTypes -FileTypeString $FileType
-            Write-Log -Message "FileType specified: $($fileTypeFilters -join ',')" -Level "INFO" -Color Cyan
-            
-            # Check which file types are available
-            Write-Log -Message "Checking which file types are available..." -Level "INFO" -Color Cyan
-            $availableTypes = @()
-            foreach ($config in $directoryConfigs) {
-                $availableTypes += $config.Type
-            }
-            
-            # Validate FileType filters
-            $validFilters = @()
-            foreach ($filter in $fileTypeFilters) {
-                $matchFound = $false
-                foreach ($availableType in $availableTypes) {
-                    if ($filter.ToLower() -eq $availableType.ToLower()) {
-                        $validFilters += $filter
-                        $matchFound = $true
-                        break
-                    }
-                }
-                if (-not $matchFound) {
-                    Write-Log -Message "  ✗ No config found for: $filter" -Level "WARN" -Color Yellow
-                    Write-Log -Message "    Available types: $($availableTypes -join ', ')" -Level "INFO" -Color Yellow
-                }
-            }
-            
-            if ($validFilters.Count -eq 0) {
-                Write-Log -Message "No valid file types found. Available types: $($availableTypes -join ', ')" -Level "ERROR" -Color Red
-                return @{ Uploaded = 0; Failed = 1; Skipped = 0; Error = "No valid file types" }
-            }
-            
-            # ✅ Get existing files from destination for DaysBack filtering (only in normal mode)
-            $existingFilesMap = @{}
-            if ($DaysBack -and $DaysBack -gt 0) {
-                Write-Log -Message "Checking existing files in destination for DaysBack filtering..." -Level "INFO" -Color Cyan
-                
-                foreach ($config in $directoryConfigs) {
-                    $typeMatches = $validFilters | Where-Object { $_.ToLower() -eq $config.Type.ToLower() }
-                    if (-not $typeMatches) { continue }
-                    
-                    $remotePath = $destination_https + $config.Path.TrimEnd('/')
-                    $remotePath = $remotePath -replace "(?<!:)//+", "/"
-                    
-                    try {
-                        Write-Log -Message "  Listing files in: $remotePath" -Level "DEBUG" -Color DarkGray
-                        $listCommand = "scope.exe dir `"$remotePath`" -on UseCachedCredentials -u vdamotharan@microsoft.com 2>&1    "
-                        $listOutput = Invoke-Expression $listCommand
-                        
-                        if ($LASTEXITCODE -eq 0 -and $listOutput) {
-                            $lines = $listOutput -split "`n" | Where-Object { $_ -and $_ -notmatch "Directory of" -and $_ -notmatch "^\s*$" }
-                            
-                            foreach ($line in $lines) {
-                                if ($line -match '(\d{8}_\d{4}_\w+.*\.(ss|tsv|csv))') {
-                                    $fileName = $matches[1]
-                                    
-                                    if ($fileName -match '^(\d{4})(\d{2})(\d{2})_(\d{4})_') {
-                                        try {
-                                            $year = [int]$matches[1]
-                                            $month = [int]$matches[2] 
-                                            $day = [int]$matches[3]
-                                            $hour = [int]$matches[4].Substring(0,2)
-                                            $minute = [int]$matches[4].Substring(2,2)
-                                            
-                                            $fileDate = Get-Date -Year $year -Month $month -Day $day -Hour $hour -Minute $minute
-                                            $existingFilesMap[$fileName] = $fileDate
-                                            
-                                            Write-Log -Message "    Found: $fileName (Date: $($fileDate.ToString('yyyy-MM-dd HH:mm')))" -Level "DEBUG" -Color DarkGray
-                                        } catch {
-                                            Write-Log -Message "    Warning: Could not parse date from $fileName" -Level "WARN" -Color Yellow
-                                        }
-                                    }
-                                }
-                            }
-                        } else {
-                            Write-Log -Message "    No files found or error listing: $remotePath" -Level "DEBUG" -Color DarkGray
-                        }
-                    } catch {
-                        Write-Log -Message "    Error listing remote directory: $($_.Exception.Message)" -Level "WARN" -Color Yellow
-                    }
-                }
-                
-                Write-Log -Message "Found $($existingFilesMap.Count) existing files for comparison" -Level "INFO" -Color Green
-            }
-            
-            # Scan local staging directory for files to upload
-            foreach ($config in $directoryConfigs) {
-                if ($global:CleanupInProgress) { break }
-                
-                if (-not $config -or -not $config.Type -or -not $config.Path) { continue }
-                
-                $typeMatches = $validFilters | Where-Object { $_.ToLower() -eq $config.Type.ToLower() }
-                if (-not $typeMatches) { 
-                    Write-Log -Message "  Skipping $($config.Type) - not in filter list" -Level "DEBUG" -Color DarkGray
-                    continue 
-                }
-                
-                $configPath = $config.Path.TrimEnd('/')
-                $localSubDir = Join-Path $localStagingDir $configPath
-                
-                if (Test-Path $localSubDir) {
-                    Write-Log -Message "Scanning for $($config.Type) files in: $localSubDir" -Level "INFO" -Color DarkCyan
-                    
-                    $localFiles = Get-ChildItem -Path $localSubDir -File | Where-Object {
-                        $_.Name -notmatch "^\..*" -and $_.Length -gt 0
-                    }
-                    
-                    Write-Log -Message "  Found $($localFiles.Count) total files in $($config.Type)" -Level "INFO" -Color DarkGreen
-                    
-                    # Apply DaysBack filtering and build upload list
-                    $filteredFiles = @()
-                    foreach ($file in $localFiles) {
-                        if (-not $file -or -not $file.Name) { continue }
-                        
-                        $shouldUpload = $true
-                        $skipReason = ""
-                        
-                        # Apply DaysBack filtering if specified
-                        if ($DaysBack -and $DaysBack -gt 0) {
-                            if ($file.Name -match '^(\d{4})(\d{2})(\d{2})_(\d{4})_') {
-                                try {
-                                    $year = [int]$matches[1]
-                                    $month = [int]$matches[2]
-                                    $day = [int]$matches[3]
-                                    $hour = [int]$matches[4].Substring(0,2)
-                                    $minute = [int]$matches[4].Substring(2,2)
-                                    
-                                    $localFileDate = Get-Date -Year $year -Month $month -Day $day -Hour $hour -Minute $minute
-                                    $cutoffDate = (Get-Date).AddDays(-$DaysBack)
-                                    
-                                    if ($localFileDate -lt $cutoffDate) {
-                                        $shouldUpload = $false
-                                        $skipReason = "File older than $DaysBack days cutoff ($($localFileDate.ToString('yyyy-MM-dd')))"
-                                    } else {
-                                        if ($existingFilesMap.ContainsKey($file.Name)) {
-                                            $existingFileDate = $existingFilesMap[$file.Name]
-                                            if ($existingFileDate -ge $localFileDate) {
-                                                $shouldUpload = $false
-                                                $skipReason = "Newer/same version exists in destination ($($existingFileDate.ToString('yyyy-MM-dd')))"
-                                            }
-                                        }
-                                    }
-                                } catch {
-                                    Write-Log -Message "    Warning: Could not parse date from local file $($file.Name)" -Level "WARN" -Color Yellow
-                                }
-                            }
-                        }
-                        
-                        if ($shouldUpload) {
-                            $filteredFiles += $file
-                        } else {
-                            $skipped++
-                            Write-Log -Message "  SKIPPED: $($file.Name) - $skipReason" -Level "WARN" -Color Yellow
-                        }
-                    }
-                    
-                    Write-Log -Message "  After filtering: $($filteredFiles.Count) files to upload, $skipped skipped" -Level "INFO" -Color Green
-                    
-                    # Process filtered files for upload
-                    foreach ($file in $filteredFiles) {
-                        $relativePath = $config.Path
-                        if (-not $relativePath.EndsWith('/')) { $relativePath += '/' }
-                        
-                        $destinationUrl = $destination_https + $relativePath + $file.Name
-                        $destinationUrl = $destinationUrl -replace "(?<!:)//+", "/"
-                        
-                        $allUploads += [PSCustomObject]@{
-                            LocalPath = $file.FullName
-                            FileName = $file.Name
-                            DestinationUrl = $destinationUrl
-                            RelativePath = $relativePath
-                            Status = $null
-                            Size = $null
-                            Time = $null
-                            Details = $null
-                        }
-                        
-                        Write-Log -Message "  Queued: $($file.Name)" -Level "DEBUG" -Color DarkGray
-                    }
-                } else {
-                    Write-Log -Message "  Directory not found: $localSubDir" -Level "WARN" -Color Yellow
-                }
+                Write-Log -Message "  Directory not found: $localSubDir" -Level "WARN" -Color Yellow
             }
         }
         
-        # Check if we have files to upload
         if ($allUploads.Count -eq 0) {
-            $modeText = if ($RetryMode) { "retry" } else { "upload" }
-            Write-Log -Message "No files found for $modeText after filtering" -Level "WARN" -Color Yellow
+            Write-Log -Message "No files found for upload after filtering" -Level "WARN" -Color Yellow
             return @{ Uploaded = 0; Failed = 0; Skipped = $skipped; Error = $null }
         }
         
-        $modeText = if ($RetryMode) { "retry upload" } else { "upload" }
-        Write-Log -Message "Total files to $modeText`: $($allUploads.Count)" -Level "INFO" -Color Green
+        Write-Log -Message "Total files to upload: $($allUploads.Count)" -Level "INFO" -Color Green
         
-        # ✅ PARALLEL UPLOAD EXECUTION
-        Write-Log -Message "Starting parallel upload with $MaxThreads threads..." -Level "INFO" -Color Green
+        # ✅ FIXED PARALLEL MULTITHREADED UPLOAD WITH GRACEFUL SHUTDOWN
+        Write-Log -Message "Starting parallel upload with $MaxThreads threads..." -Level "INFO" -Color Magenta
         
-        # Create thread-safe synchronization objects
-        $syncHash = [hashtable]::Synchronized(@{})
-        $lockObj = New-Object System.Object
+        # Thread-safe collections for results
+        $syncHashtable = [System.Collections.Hashtable]::Synchronized(@{})
+        $lockObject = [System.Object]::new()
         
-        # Initialize runspace pool
+        # Create runspace pool
         $runspacePool = [runspacefactory]::CreateRunspacePool(1, $MaxThreads)
         $runspacePool.Open()
         
-        # Upload script block
+        # ✅ FIXED Upload script block with correct expiration syntax
         $uploadScriptBlock = {
             param($upload, $syncHash, $lockObj, $expiry_days)
             
             try {
-                $uploadStartTime = Get-Date
+                $startTime = Get-Date
                 
-                # Determine file type flag based on extension
-                $fileFlag = if ($upload.FileName.EndsWith('.ss')) { '-binary' } else { '-text' }
+                # BUILD SCOPE UPLOAD COMMAND
+                $localPath = $upload.LocalPath
+                $destinationUrl = $upload.DestinationUrl
                 
-                # Create destination directory first
-                $destinationDir = $upload.DestinationUrl.Substring(0, $upload.DestinationUrl.LastIndexOf('/'))
-                
-                $createDirCommand = "scope.exe mkdir `"$destinationDir`" -on UseCachedCredentials -u varadharajaan@microsoft.com 2>&1"
-                $createDirOutput = Invoke-Expression $createDirCommand
-                # Don't check exit code for mkdir - it fails if directory exists
-                
-                # ✅ CORRECT: Use proper scope command with correct parameters
-                if ($expiry_days -and $expiry_days -gt 0) {
-                    $command = "scope.exe copy `"$($upload.LocalPath)`" `"$($upload.DestinationUrl)`" -on UseCachedCredentials -u varadharajaan@microsoft.com $fileFlag -expirationtime $expiry_days"
-                } else {
-                    $command = "scope.exe copy `"$($upload.LocalPath)`" `"$($upload.DestinationUrl)`" -on UseCachedCredentials -u varadharajaan@microsoft.com $fileFlag"
+                if (-not (Test-Path $localPath)) {
+                    throw "Local file not found: $localPath"
                 }
                 
-                $output = Invoke-Expression $command
-                $uploadEndTime = Get-Date
-                $duration = ($uploadEndTime - $uploadStartTime).TotalSeconds
+                $command = "scope.exe copy `"$localPath`" `"$destinationUrl`" -e $expiry_days -on UseAadAuthentication -u vdamotharan@microsoft.com"
                 
-                # Get file size
-                $sizeBytes = (Get-Item $upload.LocalPath).Length
-                $sizeMB = [math]::Round($sizeBytes / 1MB, 2)
+                # EXECUTE UPLOAD
+                $result = Invoke-Expression $command 2>&1
+                $exitCode = $LASTEXITCODE
                 
-                # Update upload object with results
-                $upload.Size = "$sizeMB MB"
-                $upload.Time = "$([math]::Round($duration, 1))s"
+                $endTime = Get-Date
+                $duration = ($endTime - $startTime).TotalSeconds
                 
-                if ($LASTEXITCODE -eq 0) {
-                    # Success
+                if ($exitCode -eq 0) {
+                    $fileSize = (Get-Item $localPath).Length
+                    $sizeInMB = [math]::Round($fileSize / 1MB, 2)
+                    
                     $upload.Status = "Success"
-                    $upload.Details = "Upload completed successfully"
+                    $upload.Size = "$sizeInMB MB"
+                    $upload.Time = "$([math]::Round($duration, 2))s"
+                    $upload.Details = "Uploaded successfully"
                 } else {
                     $upload.Status = "Failed"
-                    
-                    # ✅ CAPTURE COMPLETE ERROR MESSAGE - NO TRUNCATION
-                    if ($output) {
-                        if ($output -is [array]) {
-                            # Join all output lines with proper separation
-                            $fullError = ($output | Where-Object { $_ -and $_.ToString().Trim() } | ForEach-Object { $_.ToString().Trim() }) -join " | "
-                        } else {
-                            $fullError = $output.ToString().Trim()
-                        }
-                        
-                        # If still too generic, add more context
-                        if ($fullError -eq "1" -or $fullError.Length -lt 10) {
-                            $fullError = "Scope copy command failed with exit code $LASTEXITCODE. Command: $command"
-                        }
-                        
-                        $upload.Details = $fullError
-                    } else {
-                        $upload.Details = "Upload failed with exit code $LASTEXITCODE. No output captured. Command: $command"
-                    }
+                    $upload.Size = "0 MB"
+                    $upload.Time = "$([math]::Round($duration, 2))s"
+                    $upload.Details = "Upload failed: $result"
                 }
                 
                 # Thread-safe result storage
@@ -2502,7 +1777,7 @@ function Phase3-UploadToDestination {
                 $upload.Status = "Failed"
                 $upload.Size = "0 MB"
                 $upload.Time = "0s"
-                $upload.Details = "Exception during upload: $($_.Exception.Message). Stack trace: $($_.ScriptStackTrace)"
+                $upload.Details = "Exception: $($_.Exception.Message)"
                 
                 # Thread-safe error storage
                 [System.Threading.Monitor]::Enter($lockObj)
@@ -2521,33 +1796,39 @@ function Phase3-UploadToDestination {
                 return $upload
             }
         }
+        # Initialize sync hashtable
+        $syncHashtable.Results = [System.Collections.Generic.List[PSObject]]::new()
+        $syncHashtable.Uploaded = 0
+        $syncHashtable.Failed = 0
         
-        # Start upload jobs
+        # Create and start upload jobs
         $uploadJobs = @()
         foreach ($upload in $allUploads) {
+            # ✅ CHECK FOR CLEANUP SIGNAL
+            if ($global:CleanupInProgress) {
+                Write-Log -Message "Cleanup signal received, stopping job creation..." -Level "WARN" -Color Yellow
+                break
+            }
+            
             $powerShell = [powershell]::Create()
             $powerShell.RunspacePool = $runspacePool
+            $powerShell.AddScript($uploadScriptBlock).AddParameter("upload", $upload).AddParameter("syncHash", $syncHashtable).AddParameter("lockObj", $lockObject).AddParameter("expiry_days", $expiry_days) | Out-Null
             
-            [void]$powerShell.AddScript($uploadScriptBlock)
-            [void]$powerShell.AddArgument($upload)
-            [void]$powerShell.AddArgument($syncHash)
-            [void]$powerShell.AddArgument($lockObj)
-            [void]$powerShell.AddArgument($expiry_days)
-            
-            $uploadJobs += @{
+            $uploadJobs += [PSCustomObject]@{
                 PowerShell = $powerShell
                 Handle = $powerShell.BeginInvoke()
+                Upload = $upload
                 IsCompleted = $false
             }
         }
         
-        Write-Log -Message "Monitoring $($uploadJobs.Count) parallel upload jobs..." -Level "INFO" -Color Cyan
-        
-        # Monitor progress
+        # Monitor progress with cleanup handling
+        $totalJobs = $uploadJobs.Count
         $completedJobs = 0
-        $lastProgressUpdate = Get-Date
         
-        while ($completedJobs -lt $uploadJobs.Count) {
+        Write-Log -Message "Monitoring $totalJobs parallel upload jobs..." -Level "INFO" -Color Cyan
+        
+        while ($completedJobs -lt $totalJobs -and -not $global:CleanupInProgress) {
             Start-Sleep -Milliseconds 500
             
             $newlyCompleted = 0
@@ -2559,14 +1840,14 @@ function Phase3-UploadToDestination {
                         $completedJobs++
                         $newlyCompleted++
                         
-                        # ✅ SHOW COMPLETE ERROR MESSAGES IN CONSOLE
+                        # Log individual completion
                         if ($result -and $result.Status) {
                             if ($result.Status -eq "Success") {
                                 Write-Log -Message "  SUCCESS: $($result.FileName) ($($result.Size) in $($result.Time))" -Level "SUCCESS" -Color Green
                             } else {
                                 Write-Log -Message "  FAILED: $($result.FileName)" -Level "ERROR" -Color Red
                                 if ($result.Details) {
-                                    Write-Log -Message "    Full Error: $($result.Details)" -Level "ERROR" -Color Red
+                                    Write-Log -Message "    Error: $($result.Details)" -Level "ERROR" -Color Red
                                 }
                             }
                         }
@@ -2580,89 +1861,679 @@ function Phase3-UploadToDestination {
                 }
             }
             
-            # Show progress every 10 seconds or when jobs complete
-            $now = Get-Date
-            if ($newlyCompleted -gt 0 -or ($now - $lastProgressUpdate).TotalSeconds -ge 10) {
-                $progressPercent = [math]::Round(($completedJobs / $uploadJobs.Count) * 100, 1)
-                Write-Log -Message "Upload Progress: $completedJobs/$($uploadJobs.Count) completed ($progressPercent%)" -Level "INFO" -Color Cyan
-                $lastProgressUpdate = $now
+            if ($newlyCompleted -gt 0) {
+                $progressPercent = [math]::Round(($completedJobs / $totalJobs) * 100, 1)
+                Write-Log -Message "Upload Progress: $completedJobs/$totalJobs completed ($progressPercent%)" -Level "INFO" -Color Cyan
             }
+        }
+        
+        # ✅ GRACEFUL CLEANUP WHEN INTERRUPTED
+        if ($global:CleanupInProgress) {
+            Write-Log -Message "Cleanup signal received, stopping remaining upload jobs..." -Level "WARN" -Color Yellow
             
-            if ($global:CleanupInProgress) { break }
+            # Cancel remaining jobs
+            foreach ($job in $uploadJobs) {
+                if (-not $job.IsCompleted) {
+                    try {
+                        $job.PowerShell.Stop()
+                        $job.PowerShell.Dispose()
+                        $job.IsCompleted = $true
+                    } catch {
+                        # Ignore disposal errors during cleanup
+                    }
+                }
+            }
         }
         
-        # Cleanup
-        Write-Log -Message "Cleaning up upload resources..." -Level "INFO" -Color Yellow
-        $runspacePool.Close()
-        $runspacePool.Dispose()
+        # Get final results
+        $uploaded = $syncHashtable.Uploaded
+        $failed = $syncHashtable.Failed
+        $allUploads = $syncHashtable.Results.ToArray()
         
-        # Collect results
-        $uploadResults = if ($syncHash.Results) { @($syncHash.Results.ToArray()) } else { @() }
-        $uploaded = if ($syncHash.Uploaded) { $syncHash.Uploaded } else { 0 }
-        $failed = if ($syncHash.Failed) { $syncHash.Failed } else { 0 }
+        Write-Log -Message "Parallel Upload Results: $uploaded uploaded, $failed failed, $skipped skipped" -Level "INFO" -Color Cyan
         
-        Write-Log -Message "Upload Results: $uploaded succeeded, $failed failed, $skipped skipped" -Level "SUCCESS" -Color Green
-        
-        # ✅ CONVERT RESULTS TO EXISTING FORMAT FOR COMPATIBILITY
-        $global:UploadResults.Clear()
-        foreach ($upload in $uploadResults) {
-            $global:UploadResults.Add([PSCustomObject]@{
-                FileName = $upload.FileName
-                Status = if ($upload.Status) { $upload.Status } else { "Unknown" }
-                Size = if ($upload.Size) { $upload.Size } else { "0 MB" }
-                Time = if ($upload.Time) { $upload.Time } else { "0s" }
-                LocalPath = $upload.LocalPath
-                DestinationUrl = $upload.DestinationUrl
-                RelativePath = $upload.RelativePath
-                Details = if ($upload.Details) { $upload.Details } else { "No details available" }
-                VcUrl = $upload.DestinationUrl
-            })
+        # GENERATE REPORT WITH UPDATED STATUS
+        Write-Log -Message "Generating upload report..." -Level "INFO" -Color Cyan
+        try {
+            if ($allUploads.Count -gt 0) {
+                # Convert to report format with all tracked data
+                $reportResults = $allUploads | ForEach-Object {
+                    [PSCustomObject]@{
+                        FileName = $_.FileName
+                        Status = if ($_.Status) { $_.Status } else { "Unknown" }
+                        Size = if ($_.Size) { $_.Size } else { "0 MB" }
+                        Time = if ($_.Time) { $_.Time } else { "0s" }
+                        VcUrl = $_.DestinationUrl
+                        Details = if ($_.Details) { $_.Details } else { "No details available" }
+                    }
+                }
+                
+                $reportFile = Generate-HTMLReport -ReportType "Upload" -Results $reportResults
+                if ($reportFile) {
+                    Write-Log -Message "Upload report generated: $reportFile" -Level "SUCCESS" -Color Green
+                } else {
+                    Write-Log -Message "Failed to generate upload report" -Level "WARN" -Color Yellow
+                }
+            } else {
+                Write-Log -Message "No upload results to report" -Level "WARN" -Color Yellow
+            }
+        } catch {
+            Write-Log -Message "Error generating report: $_" -Level "ERROR" -Color Red
         }
         
-        # Save error files if there were failures
-        if ($failed -gt 0) {
-            Save-ErrorFiles -OperationType "Upload" -Results $global:UploadResults
+        return @{
+            Uploaded = $uploaded
+            Failed = $failed
+            Skipped = $skipped
+            Error = $null
         }
-        
-        return @{ Uploaded = $uploaded; Failed = $failed; Skipped = $skipped; Error = $null }
         
     } catch {
-        Write-Log -Message "Error in Phase3-UploadToDestination: $($_.Exception.Message)" -Level "ERROR" -Color Red
-        return @{ Uploaded = 0; Failed = 1; Skipped = 0; Error = $_.Exception.Message }
+        $errorMsg = "Error in Phase 3: $($_.Exception.Message)"
+        Write-Log -Message $errorMsg -Level "ERROR" -Color Red
+        return @{ Uploaded = 0; Failed = 0; Skipped = 0; Error = $errorMsg }
+        
     } finally {
-    $phaseEnd = Get-Date
-    $phaseDuration = $phaseEnd - $phaseStart
-    Write-Log -Message "==== END PHASE: Phase3-UploadToDestination | Duration: $($phaseDuration.ToString('hh\:mm\:ss')) ====" -Level "PHASE" -Color Magenta
-    
-    # ✅ FIXED: Add to phase summaries with proper error handling
-    try {
-        # Ensure PhaseSummaries is initialized as a list
-        if (-not $global:PhaseSummaries) {
-            $global:PhaseSummaries = [System.Collections.Generic.List[PSObject]]::new()
+        # ✅ GUARANTEED CLEANUP
+        Write-Log -Message "Cleaning up upload resources..." -Level "INFO" -Color Yellow
+        
+        # Dispose all remaining PowerShell objects
+        if ($uploadJobs) {
+            foreach ($job in $uploadJobs) {
+                try {
+                    if ($job.PowerShell -and -not $job.IsCompleted) {
+                        $job.PowerShell.Stop()
+                    }
+                    if ($job.PowerShell) {
+                        $job.PowerShell.Dispose()
+                    }
+                } catch {
+                    # Ignore disposal errors during cleanup
+                }
+            }
         }
         
-        # Create phase summary object
-        $phaseSummary = [PSCustomObject]@{
-            Phase = "Phase3-UploadToDestination"  # Change this to appropriate phase name
-            Duration = $phaseDuration
-            Data = @{ Uploaded = $uploaded; Failed = $failed; Skipped = $skipped }
+        # Close and dispose runspace pool
+        if ($runspacePool) {
+            try {
+                $runspacePool.Close()
+                $runspacePool.Dispose()
+                Write-Log -Message "Runspace pool cleaned up successfully" -Level "INFO" -Color Green
+            } catch {
+                Write-Log -Message "Error cleaning up runspace pool: $($_.Exception.Message)" -Level "WARN" -Color Yellow
+            }
         }
         
-        # Add to global collection
-        $global:PhaseSummaries.Add($phaseSummary)
+        # ✅ UPLOAD VERIFICATION - Check if all expected files were uploaded
+        Write-Log -Message "=== UPLOAD VERIFICATION ===" -Level "INFO" -Color Cyan
+        $expectedUploads = $allUploads.Count
+        $successfulUploads = $allUploads | Where-Object { $_.Status -eq "Success" }
+        $actualUploadedFiles = @()
         
-    } catch {
-        Write-Log -Message "Warning: Could not add phase summary: $($_.Exception.Message)" -Level "WARN" -Color Yellow
+        # Verify uploads by checking if the source files still exist and were marked as successful
+        foreach ($upload in $successfulUploads) {
+            if (Test-Path $upload.LocalPath) {
+                $fileInfo = Get-Item $upload.LocalPath -ErrorAction SilentlyContinue
+                if ($fileInfo -and $fileInfo.Length -gt 0) {
+                    $actualUploadedFiles += $upload
+                }
+            }
+        }
+        
+        $actualUploadCount = $actualUploadedFiles.Count
+        $failedUploads = $allUploads | Where-Object { 
+            $_.Status -ne "Success" -or -not (Test-Path $_.LocalPath) 
+        }
+        
+        # Double-check local files are still present (they should be after upload)
+        $localFilesPresent = @()
+        foreach ($upload in $allUploads) {
+            if (Test-Path $upload.LocalPath) {
+                $localFilesPresent += $upload
+            }
+        }
+        
+        Write-Log -Message "Expected files to upload: $expectedUploads" -Level "INFO" -Color White
+        Write-Log -Message "Successfully uploaded: $actualUploadCount" -Level "INFO" -Color Green
+        Write-Log -Message "Failed uploads: $($failedUploads.Count)" -Level "INFO" -Color $(if($failedUploads.Count -eq 0) {"Green"} else {"Yellow"})
+        Write-Log -Message "Local source files still present: $($localFilesPresent.Count)" -Level "INFO" -Color Green
+        
+        if ($failedUploads.Count -gt 0) {
+            Write-Log -Message "Failed upload details:" -Level "WARN" -Color Yellow
+            foreach ($failed in ($failedUploads | Select-Object -First 10)) {
+                Write-Log -Message "  - $($failed.FileName): $($failed.Details)" -Level "WARN" -Color Yellow
+            }
+            if ($failedUploads.Count -gt 10) {
+                Write-Log -Message "  ... and $($failedUploads.Count - 10) more files" -Level "WARN" -Color Yellow
+            }
+        }
+        
+        # Check if any local files are missing (shouldn't happen after upload)
+        $missingLocalFiles = $allUploads | Where-Object { -not (Test-Path $_.LocalPath) }
+        if ($missingLocalFiles.Count -gt 0) {
+            Write-Log -Message "WARNING: $($missingLocalFiles.Count) local source files are missing after upload!" -Level "ERROR" -Color Red
+        }
+        
+        $uploadCompletionRate = if ($expectedUploads -gt 0) { [math]::Round(($actualUploadCount / $expectedUploads) * 100, 1) } else { 0 }
+        Write-Log -Message "Upload completion rate: $uploadCompletionRate%" -Level "INFO" -Color $(if($uploadCompletionRate -eq 100) {"Green"} elseif($uploadCompletionRate -ge 80) {"Yellow"} else {"Red"})
+        Write-Log -Message "=== END UPLOAD VERIFICATION ===" -Level "INFO" -Color Cyan
+        
+        $duration = (Get-Date) - $startTime
+        Write-Log -Message "==== END PHASE: Phase3-UploadToDestination | Duration: $($duration.ToString('hh\:mm\:ss')) ====" -Level "PHASE" -Color Magenta
     }
 }
+
+
+# ================================================================================================
+# UPLOAD FAILURE REPORTING FUNCTIONS
+# ================================================================================================
+
+function Show-ManualUploadFailureReport {
+    param([string]$OperationType = "UPLOAD")
+    
+    $allResults = @($global:UploadResults.ToArray())
+    $recentFailures = $allResults | Where-Object { 
+        $_.Status -eq "Failed" -and 
+        $_.FileName -and 
+        $_.Details
+    } | Select-Object -Last 10  # Show last 10 failures
+    
+    if ($recentFailures.Count -gt 0) {
+        Write-Host "`n" -ForegroundColor Yellow
+        Write-Host "========================================" -ForegroundColor Red
+        Write-Host "$OperationType FAILURE REPORT - $(Get-Date -Format 'HH:mm:ss')" -ForegroundColor Red
+        Write-Host "========================================" -ForegroundColor Red
+        Write-Host "Recent upload failures ($($recentFailures.Count) shown):" -ForegroundColor Yellow
+        
+        foreach ($failure in $recentFailures) {
+            $shortError = if ($failure.Details.Length -gt 80) { 
+                $failure.Details.Substring(0, 77) + "..." 
+            } else { 
+                $failure.Details 
+            }
+            Write-Host "  ✗ $($failure.FileName) - $shortError" -ForegroundColor Red
+        }
+        
+        Write-Host "========================================" -ForegroundColor Red
+        Write-Host ""
+    }
 }
+
+function Show-FinalUploadFailureReport {
+    param([string]$OperationType = "UPLOAD")
+    
+    $allResults = @($global:UploadResults.ToArray())
+    $allFailures = $allResults | Where-Object { $_.Status -eq "Failed" }
+    
+    if ($allFailures.Count -gt 0) {
+        Write-Host ""
+        Write-Host "========================================" -ForegroundColor Red
+        Write-Host "FINAL $OperationType FAILURE SUMMARY" -ForegroundColor Red  
+        Write-Host "========================================" -ForegroundColor Red
+        Write-Host "Total failures: $($allFailures.Count)" -ForegroundColor Yellow
+        
+        # Group failures by error type
+        $errorGroups = $allFailures | Group-Object { 
+            if ($_.Details -match "Access is denied") { "Access Denied" }
+            elseif ($_.Details -match "authentication") { "Authentication Error" }
+            elseif ($_.Details -match "not found") { "File Not Found" }
+            elseif ($_.Details -match "timeout") { "Timeout" }
+            else { "Other Error" }
+        }
+        
+        foreach ($group in $errorGroups) {
+            Write-Host "  $($group.Name): $($group.Count) files" -ForegroundColor Yellow
+        }
+        
+        Write-Host "========================================" -ForegroundColor Red
+        Write-Host ""
+    }
+}
+
+function Save-UploadErrorFiles {
+    param(
+        [string]$OperationType,
+        [object]$Results
+    )
+    
+    try {
+        $allResults = @($Results.ToArray())
+        $failures = $allResults | Where-Object { $_.Status -eq "Failed" }
+        
+        if ($failures.Count -gt 0) {
+            $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+            $errorFile = Join-Path $errorDir "$OperationType-errors_$timestamp.csv"
+            
+            $failures | ForEach-Object {
+                [PSCustomObject]@{
+                    FileName = $_.FileName
+                    LocalPath = $_.LocalPath
+                    DestinationUrl = $_.DestinationUrl
+                    RelativePath = $_.RelativePath
+                    Size = $_.Size
+                    Status = $_.Status
+                    Details = $_.Details
+                    Time = $_.Time
+                }
+            } | Export-Csv -Path $errorFile -NoTypeInformation -Encoding UTF8
+            
+            Write-Log -Message "Upload error file saved: $errorFile" -Level "INFO" -Color Yellow
+            
+            # Also save retry file
+            $retryFile = Join-Path $errorDir "$OperationType-retry_$timestamp.csv"
+            $failures | ForEach-Object {
+                [PSCustomObject]@{
+                    FileName = $_.FileName
+                    VcUrl = "LOCAL_FILE"  # Mark as local file for upload retry
+                    RelativePath = $_.RelativePath
+                    CreationTime = "Unknown"
+                    Size = $_.Size
+                    OriginalError = $_.Details
+                }
+            } | Export-Csv -Path $retryFile -NoTypeInformation -Encoding UTF8
+            
+            Write-Log -Message "Upload retry file saved: $retryFile" -Level "INFO" -Color Yellow
+        }
+    } catch {
+        Write-Log -Message "Error saving upload error files: $_" -Level "ERROR" -Color Red
+    }
+}
+
+# ================================================================================================
+# HTML REPORT GENERATION FUNCTIONS
+# Current Date and Time (UTC): 2025-08-12 06:33:43
+# Current User: varadharajaan
+# ================================================================================================
+
+function Generate-HTMLReport {
+    param(
+        [string]$ReportType,
+        [array]$Results,
+        [string]$CustomPath = ""
+    )
+    
+    try {
+        $timestamp = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
+        $utcTime = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss")
+        $currentUser = $env:USERNAME
+        
+        if ($CustomPath) {
+            $reportFile = $CustomPath
+        } else {
+            $reportFile = Join-Path $reportsDir "${ReportType}_Report_${timestamp}.html"
+        }
+        
+        # HTML Header with styling
+        $html = @"
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Themis $ReportType Report - $timestamp</title>
+    <style>
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            margin: 20px; 
+            background-color: #f5f7fa; 
+            color: #333;
+        }
+        .header { 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+            color: white; 
+            padding: 20px; 
+            border-radius: 10px; 
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .header h1 { 
+            margin: 0; 
+            font-size: 28px; 
+            font-weight: 300;
+        }
+        .header .subtitle { 
+            margin: 5px 0 0 0; 
+            opacity: 0.9; 
+            font-size: 14px;
+        }
+        .section { 
+            background: white; 
+            padding: 20px; 
+            margin-bottom: 20px; 
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .section h2 { 
+            color: #4a5568; 
+            border-bottom: 2px solid #e2e8f0; 
+            padding-bottom: 10px;
+            margin-top: 0;
+        }
+        .stats-grid { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); 
+            gap: 15px; 
+            margin: 20px 0;
+        }
+        .stat-card { 
+            background: #f7fafc; 
+            padding: 15px; 
+            border-radius: 8px; 
+            text-align: center;
+            border: 1px solid #e2e8f0;
+        }
+        .stat-number { 
+            font-size: 24px; 
+            font-weight: bold; 
+            color: #2d3748;
+        }
+        .stat-label { 
+            color: #718096; 
+            font-size: 14px; 
+            margin-top: 5px;
+        }
+        .success { color: #38a169; }
+        .error { color: #e53e3e; }
+        .warning { color: #d69e2e; }
+        table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            margin-top: 15px;
+            background: white;
+        }
+        th, td { 
+            padding: 12px; 
+            text-align: left; 
+            border-bottom: 1px solid #e2e8f0;
+        }
+        th { 
+            background-color: #f7fafc; 
+            font-weight: 600; 
+            color: #4a5568;
+            position: sticky;
+            top: 0;
+        }
+        tr:hover { 
+            background-color: #f7fafc; 
+        }
+        .status-success { 
+            background-color: #c6f6d5; 
+            color: #22543d; 
+            padding: 4px 8px; 
+            border-radius: 4px; 
+            font-size: 12px; 
+            font-weight: bold;
+        }
+        .status-failed { 
+            background-color: #fed7d7; 
+            color: #742a2a; 
+            padding: 4px 8px; 
+            border-radius: 4px; 
+            font-size: 12px; 
+            font-weight: bold;
+        }
+        .status-skipped { 
+            background-color: #feebc8; 
+            color: #744210; 
+            padding: 4px 8px; 
+            border-radius: 4px; 
+            font-size: 12px; 
+            font-weight: bold;
+        }
+        .details-cell { 
+            max-width: 300px; 
+            overflow: hidden; 
+            text-overflow: ellipsis; 
+            white-space: nowrap;
+        }
+        .url-cell { 
+            max-width: 400px; 
+            overflow: hidden; 
+            text-overflow: ellipsis; 
+            white-space: nowrap;
+            font-family: monospace;
+            font-size: 11px;
+        }
+        .footer { 
+            text-align: center; 
+            color: #718096; 
+            font-size: 12px; 
+            margin-top: 30px;
+            padding: 20px;
+            border-top: 1px solid #e2e8f0;
+        }
+        .filter-controls {
+            margin: 15px 0;
+            padding: 15px;
+            background: #f7fafc;
+            border-radius: 8px;
+        }
+        .filter-controls input, .filter-controls select {
+            margin: 5px;
+            padding: 8px;
+            border: 1px solid #e2e8f0;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🚀 Themis $ReportType Report</h1>
+        <div class="subtitle">
+            Generated: $utcTime UTC | User: $currentUser | Report Type: $ReportType
+        </div>
+    </div>
+"@
+
+        # Calculate statistics
+        $totalFiles = $Results.Count
+        $successCount = ($Results | Where-Object { $_.Status -eq "Success" }).Count
+        $failedCount = ($Results | Where-Object { $_.Status -eq "Failed" }).Count
+        $skippedCount = ($Results | Where-Object { $_.Status -eq "Skipped" }).Count
+        
+        $totalSize = 0
+        $totalTime = 0
+        foreach ($result in $Results) {
+            if ($result.Size -and $result.Size -match "(\d+\.?\d*)\s*MB") {
+                $totalSize += [double]$matches[1]
+            }
+            if ($result.Time -and $result.Time -match "(\d+\.?\d*)s") {
+                $totalTime += [double]$matches[1]
+            }
+        }
+        
+        $successRate = if ($totalFiles -gt 0) { [math]::Round(($successCount / $totalFiles) * 100, 1) } else { 0 }
+        
+        # Statistics section
+        $html += @"
+    <div class="section">
+        <h2>📊 Upload Statistics</h2>
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-number">$totalFiles</div>
+                <div class="stat-label">Total Files</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number success">$successCount</div>
+                <div class="stat-label">Successfully Uploaded</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number error">$failedCount</div>
+                <div class="stat-label">Failed Uploads</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number warning">$skippedCount</div>
+                <div class="stat-label">Skipped Files</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">$([math]::Round($totalSize, 2)) MB</div>
+                <div class="stat-label">Total Data Size</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">$([math]::Round($totalTime, 1))s</div>
+                <div class="stat-label">Total Upload Time</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">$successRate%</div>
+                <div class="stat-label">Success Rate</div>
+            </div>
+        </div>
+    </div>
+"@
+
+        # Upload results table
+        if ($Results.Count -gt 0) {
+            $html += @"
+    <div class="section">
+        <h2>📁 Upload Results</h2>
+        <div class="filter-controls">
+            <input type="text" id="fileFilter" placeholder="Filter by filename..." onkeyup="filterTable()">
+            <select id="statusFilter" onchange="filterTable()">
+                <option value="">All Status</option>
+                <option value="Success">Success Only</option>
+                <option value="Failed">Failed Only</option>
+                <option value="Skipped">Skipped Only</option>
+            </select>
+        </div>
+        <table id="resultsTable">
+            <thead>
+                <tr>
+                    <th>📄 File Name</th>
+                    <th>📊 Status</th>
+                    <th>📏 Size</th>
+                    <th>⏱️ Time</th>
+                    <th>🔗 Destination URL</th>
+                    <th>📝 Details</th>
+                </tr>
+            </thead>
+            <tbody>
+"@
+
+            foreach ($result in $Results) {
+                $statusClass = switch ($result.Status) {
+                    "Success" { "status-success" }
+                    "Failed" { "status-failed" }
+                    "Skipped" { "status-skipped" }
+                    default { "status-failed" }
+                }
+                
+                $fileName = if ($result.FileName) { $result.FileName } else { "Unknown" }
+                $status = if ($result.Status) { $result.Status } else { "Unknown" }
+                $size = if ($result.Size) { $result.Size } else { "0 MB" }
+                $time = if ($result.Time) { $result.Time } else { "0s" }
+                $vcUrl = if ($result.VcUrl) { [System.Web.HttpUtility]::HtmlEncode($result.VcUrl) } else { "N/A" }
+                $details = if ($result.Details) { [System.Web.HttpUtility]::HtmlEncode($result.Details) } else { "No details" }
+                
+                $html += @"
+                <tr>
+                    <td><strong>$fileName</strong></td>
+                    <td><span class="$statusClass">$status</span></td>
+                    <td>$size</td>
+                    <td>$time</td>
+                    <td class="url-cell" title="$vcUrl">$vcUrl</td>
+                    <td class="details-cell" title="$details">$details</td>
+                </tr>
+"@
+            }
+
+            $html += @"
+            </tbody>
+        </table>
+    </div>
+"@
+        }
+
+        # Add JavaScript for filtering
+        $html += @"
+    <script>
+        function filterTable() {
+            const fileFilter = document.getElementById('fileFilter').value.toLowerCase();
+            const statusFilter = document.getElementById('statusFilter').value;
+            const table = document.getElementById('resultsTable');
+            const tbody = table.getElementsByTagName('tbody')[0];
+            const rows = tbody.getElementsByTagName('tr');
+            
+            for (let i = 0; i < rows.length; i++) {
+                const row = rows[i];
+                const fileName = row.cells[0].textContent.toLowerCase();
+                const status = row.cells[1].textContent.trim();
+                
+                const fileMatch = fileName.includes(fileFilter);
+                const statusMatch = statusFilter === '' || status === statusFilter;
+                
+                if (fileMatch && statusMatch) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            }
+        }
+    </script>
+"@
+
+        # Footer
+        $html += @"
+    <div class="footer">
+        <p>Generated by Themis File Management Script | $utcTime UTC</p>
+        <p>Report saved to: $reportFile</p>
+    </div>
+</body>
+</html>
+"@
+
+        # Write HTML to file
+        $html | Out-File -FilePath $reportFile -Encoding UTF8
+        
+        Write-Log -Message "HTML report generated: $reportFile" -Level "SUCCESS" -Color Green
+        return $reportFile
+        
+    } catch {
+        Write-Log -Message "Error generating HTML report: $($_.Exception.Message)" -Level "ERROR" -Color Red
+        return $null
+    }
+}
+
+function Generate-PhaseReports {
+    param([hashtable]$AllPhaseData = @{})
+    
+    try {
+        # Generate download report if download results exist
+        if ($global:DownloadResults -and $global:DownloadResults.Count -gt 0) {
+            $downloadResults = @($global:DownloadResults.ToArray())
+            $downloadReport = Generate-HTMLReport -ReportType "Download" -Results $downloadResults -PhaseData $AllPhaseData
+            Write-Log -Message "Download report generated: $downloadReport" -Level "SUCCESS" -Color Green
+        }
+        
+        # Generate upload report if upload results exist
+        if ($global:UploadResults -and $global:UploadResults.Count -gt 0) {
+            $uploadResults = @($global:UploadResults.ToArray())
+            $uploadReport = Generate-HTMLReport -ReportType "Upload" -Results $uploadResults -PhaseData $AllPhaseData
+            Write-Log -Message "Upload report generated: $uploadReport" -Level "SUCCESS" -Color Green
+        }
+        
+        # Generate overall summary report
+        $allResults = @()
+        if ($global:DownloadResults) { $allResults += @($global:DownloadResults.ToArray()) }
+        if ($global:UploadResults) { $allResults += @($global:UploadResults.ToArray()) }
+        
+        if ($allResults.Count -gt 0) {
+            $summaryReport = Generate-HTMLReport -ReportType "Summary" -Results $allResults -PhaseData $AllPhaseData
+            Write-Log -Message "Summary report generated: $summaryReport" -Level "SUCCESS" -Color Green
+        }
+        
+    } catch {
+        Write-Log -Message "Error generating phase reports: $_" -Level "ERROR" -Color Red
+    }
+}
+
+
 
 # ================================================================================================
 # MAIN EXECUTION
 # ================================================================================================
 Write-Log -Message "THEMIS FILE MANAGEMENT SCRIPT - WITHOUT METADATA EXTRACTION" -Level "START" -Color Cyan
 Write-Log -Message "Current Time: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') UTC" -Level "INFO" -Color Cyan
-Write-Log -Message "Current User: $env:USERNAME" -Level "INFO" -Color Cyan
+Write-Log -Message "Current User: varadharajaan" -Level "INFO" -Color Cyan
 
 try {
     # Parse phases dynamically
@@ -2678,60 +2549,24 @@ try {
     
     if ($invalidPhases.Count -gt 0) {
         Write-Log -Message "Invalid phases: $($invalidPhases -join ', '). Valid phases are: $($validPhases -join ', '), or 'all'" -Level "ERROR" -Color Red
-        exit 1
     } else {
         Write-Log -Message "Executing phases: $($requestedPhases -join ', ')" -Level "INFO" -Color Cyan
         
         foreach ($phaseNum in $requestedPhases) {
             if ($global:CleanupInProgress) { break }
             
-            try {
-                switch ($phaseNum) {
-                    "1" { 
-                        Write-Log -Message "Starting Phase 1: List All Files" -Level "INFO" -Color Green
-                        $result = Phase1-ListAllFiles
-                        $global:PhaseResults["Phase1"] = $result
-                    }
-                    "2" { 
-                        Write-Log -Message "Starting Phase 2: Download To Local" -Level "INFO" -Color Green
-                        $result = Phase2-DownloadToLocal
-                        $global:PhaseResults["Phase2"] = $result
-                        
-                        # ✅ Show download failure report if there were failures
-                        if ($global:DownloadResults) {
-                            Show-FinalFailureReport -OperationType "DOWNLOAD"
-                        }
-                    }
-                    "3" { 
-                        Write-Log -Message "Starting Phase 3: Upload To Destination" -Level "INFO" -Color Green
-                        $result = Phase3-UploadToDestination
-                        $global:PhaseResults["Phase3"] = $result
-                        
-                        # ✅ Show upload failure report if there were failures
-                        if ($global:UploadResults) {
-                            Show-FinalFailureReport -OperationType "UPLOAD"
-                        }
-                    }
-                }
-            } catch {
-                Write-Log -Message "Error in Phase $phaseNum`: $($_.Exception.Message)" -Level "ERROR" -Color Red
-
-                # Continue with other phases instead of stopping completely
+            switch ($phaseNum) {
+                "1" { Phase1-ListAllFiles }
+                "2" { Phase2-DownloadToLocal }
+                "3" { Phase3-UploadToDestination }
             }
         }
     }
 } catch {
     Write-Log -Message "Fatal error: $_" -Level "ERROR" -Color Red
-    # ✅ FIX: Check if cleanup function exists before calling
-    if (Get-Command "Cleanup-Resources" -ErrorAction SilentlyContinue) {
-        Cleanup-Resources
-    }
+    Cleanup-Resources
 } finally {
-    # ✅ FIX: Check if cleanup variables exist and cleanup function exists
-    if ((Get-Command "Cleanup-Resources" -ErrorAction SilentlyContinue) -and 
-        (($global:RunspacePools -and $global:RunspacePools.Count -gt 0) -or 
-         ($global:ActiveJobs -and $global:ActiveJobs.Count -gt 0) -or 
-         $global:TokenMonitorJob)) {
+    if ($global:RunspacePools.Count -gt 0 -or $global:ActiveJobs.Count -gt 0 -or $global:TokenMonitorJob) {
         Write-Log -Message "Performing final cleanup..." -Level "INFO" -Color Yellow
         Cleanup-Resources
     }
@@ -2740,94 +2575,53 @@ try {
 if (-not $global:CleanupInProgress) {
     Write-Host ""
     Write-Log -Message "EXECUTION SUMMARY" -Level "SUMMARY" -Color Cyan
-    
-    # ✅ FIX: Check if PhaseSummaries exists before using
-    if ($global:PhaseSummaries -and $global:PhaseSummaries.Count -gt 0) {
-        foreach ($ps in $global:PhaseSummaries) {
-            $dataStr = if ($ps.Data) { ($ps.Data.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }) -join ', ' } else { "N/A" }
-            Write-Host ("{0,-30} Duration={1,-12} Data={2}" -f $ps.Phase, $ps.Duration.ToString("hh\:mm\:ss"), $dataStr)
-        }
-    } else {
-        Write-Log -Message "No phase summaries available" -Level "INFO" -Color Yellow
+    foreach ($ps in $global:PhaseSummaries) {
+        $dataStr = if ($ps.Data) { ($ps.Data.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }) -join ', ' } else { "N/A" }
+        Write-Host ("{0,-30} Duration={1,-12} Data={2}" -f $ps.Phase, $ps.Duration.ToString("hh\:mm\:ss"), $dataStr)
     }
-    
     Write-Log -Message "SCRIPT COMPLETED SUCCESSFULLY" -Level "END" -Color Green
-    
-    # ✅ FIX: Use correct variable names
-    if ($reportsDir) {
-        Write-Log -Message "Reports available in: $reportsDir" -Level "INFO" -Color Cyan
-    }
+    Write-Log -Message "Reports available in: $reportDir" -Level "INFO" -Color Cyan
     
     if ($UseMSAL) {
         Write-Log -Message "MSAL token file cleaned up" -Level "INFO" -Color Cyan
     }
     
-    if ($errorDir) {
-        Write-Log -Message "Error files (if any) available in: $errorDir" -Level "INFO" -Color Cyan
-    }
+    Write-Log -Message "Error files (if any) available in: $errorDir" -Level "INFO" -Color Cyan
     
     # Show total script execution time
-    if ($global:ScriptStart) {
-        $totalDuration = New-TimeSpan -Start $global:ScriptStart -End (Get-Date)
-        Write-Log -Message "Total Script Duration: $($totalDuration.ToString('hh\:mm\:ss'))" -Level "INFO" -Color Green
-    }
+    $totalDuration = New-TimeSpan -Start $global:ScriptStart -End (Get-Date)
+    Write-Log -Message "Total Script Duration: $($totalDuration.ToString('hh\:mm\:ss'))" -Level "INFO" -Color Green
     
-    # ✅ IMPROVED: Show final statistics based on actual results
-    Write-Host ""
-    Write-Log -Message "FINAL STATISTICS" -Level "SUMMARY" -Color Cyan
-    
-    $totalProcessed = 0
-    $totalSucceeded = 0
-    $totalFailed = 0
-    $totalSkipped = 0
-    
-    # Count download results
-    if ($global:DownloadResults -and $global:DownloadResults.Count -gt 0) {
-        $downloadStats = @($global:DownloadResults.ToArray())
-        $downloadSuccess = ($downloadStats | Where-Object { $_.Status -eq "Success" }).Count
-        $downloadFailed = ($downloadStats | Where-Object { $_.Status -eq "Failed" }).Count
-        $downloadSkipped = ($downloadStats | Where-Object { $_.Status -eq "Skipped" }).Count
-        
-        $totalProcessed += $downloadStats.Count
-        $totalSucceeded += $downloadSuccess
-        $totalFailed += $downloadFailed
-        $totalSkipped += $downloadSkipped
-        
-        Write-Host "📥 DOWNLOADS: $downloadSuccess succeeded, $downloadFailed failed, $downloadSkipped skipped" -ForegroundColor Cyan
-    }
-    
-    # Count upload results
-    if ($global:UploadResults -and $global:UploadResults.Count -gt 0) {
-        $uploadStats = @($global:UploadResults.ToArray())
-        $uploadSuccess = ($uploadStats | Where-Object { $_.Status -eq "Success" }).Count
-        $uploadFailed = ($uploadStats | Where-Object { $_.Status -eq "Failed" }).Count
-        $uploadSkipped = ($uploadStats | Where-Object { $_.Status -eq "Skipped" }).Count
-        
-        $totalProcessed += $uploadStats.Count
-        $totalSucceeded += $uploadSuccess
-        $totalFailed += $uploadFailed
-        $totalSkipped += $uploadSkipped
-        
-        Write-Host "📤 UPLOADS: $uploadSuccess succeeded, $uploadFailed failed, $uploadSkipped skipped" -ForegroundColor Cyan
-    }
-    
-    # Show overall totals
-    if ($totalProcessed -gt 0) {
+    # Show final statistics
+    if ($global:PhaseSummaries.Count -gt 0) {
         Write-Host ""
-        Write-Host "📊 OVERALL TOTALS:" -ForegroundColor White
-        Write-Host "  Total Files Processed: $totalProcessed" -ForegroundColor White
-        Write-Host "  ✓ Successfully Processed: $totalSucceeded" -ForegroundColor Green
-        Write-Host "  ✗ Failed: $totalFailed" -ForegroundColor Red
-        if ($totalSkipped -gt 0) {
-            Write-Host "  ⚡ Skipped: $totalSkipped" -ForegroundColor Yellow
+        Write-Log -Message "FINAL STATISTICS" -Level "SUMMARY" -Color Cyan
+        
+        $totalDownloaded = 0
+        $totalFailed = 0
+        $totalFiltered = 0
+        
+        foreach ($phase in $global:PhaseSummaries) {
+            if ($phase.Data) {
+                if ($phase.Data.Downloaded) { $totalDownloaded += $phase.Data.Downloaded }
+                if ($phase.Data.Failed) { $totalFailed += $phase.Data.Failed }
+                if ($phase.Data.Filtered) { $totalFiltered += $phase.Data.Filtered }
+            }
         }
         
-        if ($totalSucceeded + $totalFailed -gt 0) {
-            $successRate = [math]::Round(($totalSucceeded / ($totalSucceeded + $totalFailed)) * 100, 2)
-            Write-Host "  📈 Success Rate: $successRate%" -ForegroundColor Cyan
+        if ($totalDownloaded + $totalFailed + $totalFiltered -gt 0) {
+            Write-Host "Total Files Processed: $($totalDownloaded + $totalFailed + $totalFiltered)" -ForegroundColor White
+            Write-Host "  ✓ Successfully Downloaded: $totalDownloaded" -ForegroundColor Green
+            Write-Host "  ✗ Failed: $totalFailed" -ForegroundColor Red
+            if ($totalFiltered -gt 0) {
+                Write-Host "  ⚡ Filtered by Date: $totalFiltered" -ForegroundColor Yellow
+            }
+            
+            if ($totalDownloaded + $totalFailed -gt 0) {
+                $successRate = [math]::Round(($totalDownloaded / ($totalDownloaded + $totalFailed)) * 100, 2)
+                Write-Host "  📊 Success Rate: $successRate%" -ForegroundColor Cyan
+            }
         }
-    } else {
-        Write-Host "No files were processed in this execution." -ForegroundColor Yellow
     }
     
     Write-Host ""
@@ -2837,7 +2631,6 @@ if (-not $global:CleanupInProgress) {
     Write-Host "========================================" -ForegroundColor Green
 }
 
-# ✅ GENERATE FINAL REPORTS
 try {
     Write-Host ""
     Write-Log -Message "=== GENERATING FINAL REPORTS ===" -Level "INFO" -Color Magenta
@@ -2860,22 +2653,21 @@ try {
     Write-Log -Message "Error during report generation: $_" -Level "ERROR" -Color Red
 }
 
-# ✅ FINAL SUMMARY WITH PROPER NULL CHECKS
+# Final summary
 Write-Host ""
 Write-Host "===============================================" -ForegroundColor Magenta
 Write-Host "           THEMIS SCRIPT EXECUTION COMPLETE    " -ForegroundColor Magenta  
 Write-Host "===============================================" -ForegroundColor Magenta
 Write-Host ""
 
-# Show final download/upload summaries if they exist
-if ($global:DownloadResults -and $global:DownloadResults.Count -gt 0) {
+if ($global:DownloadResults) {
     $downloadStats = @($global:DownloadResults.ToArray())
     $downloadSuccess = ($downloadStats | Where-Object { $_.Status -eq "Success" }).Count
     $downloadFailed = ($downloadStats | Where-Object { $_.Status -eq "Failed" }).Count
     Write-Host "📥 DOWNLOAD SUMMARY: $downloadSuccess succeeded, $downloadFailed failed" -ForegroundColor Cyan
 }
 
-if ($global:UploadResults -and $global:UploadResults.Count -gt 0) {
+if ($global:UploadResults) {
     $uploadStats = @($global:UploadResults.ToArray())
     $uploadSuccess = ($uploadStats | Where-Object { $_.Status -eq "Success" }).Count
     $uploadFailed = ($uploadStats | Where-Object { $_.Status -eq "Failed" }).Count
@@ -2883,59 +2675,9 @@ if ($global:UploadResults -and $global:UploadResults.Count -gt 0) {
 }
 
 Write-Host ""
-if ($reportsDir) {
-    Write-Host "📊 Check the generated HTML reports in: $reportsDir" -ForegroundColor Yellow
-}
-if ($errorDir) {
-    Write-Host "📋 Check error files (if any) in: $errorDir" -ForegroundColor Yellow
-}
+Write-Host "📊 Check the generated HTML reports in: $reportsDir" -ForegroundColor Yellow
+Write-Host "📋 Check error files (if any) in: $errorDir" -ForegroundColor Yellow
 Write-Host ""
 
-# ✅ Show available files in directories if they exist
-try {
-    if ($reportsDir -and (Test-Path $reportsDir)) {
-        $reportFiles = Get-ChildItem -Path $reportsDir -Filter "*.html" | Sort-Object LastWriteTime -Descending | Select-Object -First 5
-        if ($reportFiles.Count -gt 0) {
-            Write-Host "📄 Recent HTML Reports:" -ForegroundColor Green
-            foreach ($file in $reportFiles) {
-                Write-Host "  • $($file.Name)" -ForegroundColor DarkGreen
-            }
-            Write-Host ""
-        }
-    }
-    
-    if ($errorDir -and (Test-Path $errorDir)) {
-        $errorFiles = Get-ChildItem -Path $errorDir -Filter "*errors*.csv" | Sort-Object LastWriteTime -Descending | Select-Object -First 3
-        if ($errorFiles.Count -gt 0) {
-            Write-Host "⚠️  Recent Error Files:" -ForegroundColor Yellow
-            foreach ($file in $errorFiles) {
-                Write-Host "  • $($file.Name)" -ForegroundColor DarkYellow
-            }
-            Write-Host ""
-        }
-        
-        $retryFiles = Get-ChildItem -Path $errorDir -Filter "*retry*.csv" | Sort-Object LastWriteTime -Descending | Select-Object -First 3
-        if ($retryFiles.Count -gt 0) {
-            Write-Host "🔄 Recent Retry Files:" -ForegroundColor Cyan
-            foreach ($file in $retryFiles) {
-                Write-Host "  • $($file.Name) (use with -RetryMode)" -ForegroundColor DarkCyan
-            }
-            Write-Host ""
-        }
-    }
-} catch {
-    # Ignore errors in file listing
-}
-
-# ================================================================================================
-# STOP TRANSCRIPT LOGGING - ADD THIS AT THE VERY END
-# ================================================================================================
-
-try {
-    Stop-Transcript
-    Write-Host "📝 Console transcript saved to: $transcriptFile" -ForegroundColor Green
-} catch {
-    # Transcript might not be running
-}
-
+# Final exit
 exit 0
