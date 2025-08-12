@@ -1554,7 +1554,7 @@ function Phase3-UploadToDestination {
                 
                 try {
                     Write-Log -Message "  Listing files in: $remotePath" -Level "DEBUG" -Color DarkGray
-                    $listCommand = "scope.exe dir `"$remotePath`" -on UseCachedCredentials -u vdamotharan@microsoft.com 2>&1"
+                    $listCommand = "scope.exe dir `"$remotePath`" -on UseCachedCredentials -u vdamotharan@microsoft.com"
                     $listOutput = Invoke-Expression $listCommand
                     
                     if ($LASTEXITCODE -eq 0 -and $listOutput) {
@@ -1727,8 +1727,10 @@ function Phase3-UploadToDestination {
                 if (-not (Test-Path $localPath)) {
                     throw "Local file not found: $localPath"
                 }
+
+                $fileFlag = if ($upload.FileName.EndsWith('.ss')) { '-binary' } else { '-text' }
                 
-                $command = "scope.exe copy `"$localPath`" `"$destinationUrl`" -e $expiry_days -on UseAadAuthentication -u vdamotharan@microsoft.com"
+                $command = "scope.exe copy `"$localPath`" `"$destinationUrl`" -expirationtime $expiry_days  $fileFlag -on UseAadAuthentication -u vdamotharan@microsoft.com"
                 
                 # EXECUTE UPLOAD
                 $result = Invoke-Expression $command 2>&1
