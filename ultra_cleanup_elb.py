@@ -185,14 +185,344 @@ class UltraCleanupELBManager:
             self.log_operation('ERROR', f"Failed to create AWS clients for {region}: {e}")
             raise
 
+    def get_elb_tags(self, elb_client, elbv2_client, lb_info):
+        """Get tags for a load balancer (Classic or ELBv2)"""
+        try:
+            tags = {}
+            lb_name = lb_info['name']
+            lb_type = lb_info['type']
+            
+            if lb_type == 'classic':
+                # Classic Load Balancer tags
+                try:
+                    response = elb_client.describe_tags(LoadBalancerNames=[lb_name])
+                    tag_descriptions = response.get('TagDescriptions', [])
+                    if tag_descriptions:
+                        for tag in tag_descriptions[0].get('Tags', []):
+                            tags[tag['Key']] = tag['Value']
+                except Exception as e:
+                    self.log_operation('WARNING', f"Could not get tags for Classic ELB {lb_name}: {e}")
+            else:
+                # Application/Network Load Balancer tags
+                try:
+                    lb_arn = lb_info.get('arn')
+                    if lb_arn:
+                        response = elbv2_client.describe_tags(ResourceArns=[lb_arn])
+                        tag_descriptions = response.get('TagDescriptions', [])
+                        if tag_descriptions:
+                            for tag in tag_descriptions[0].get('Tags', []):
+                                tags[tag['Key']] = tag['Value']
+                except Exception as e:
+                    self.log_operation('WARNING', f"Could not get tags for {lb_type.upper()} ELB {lb_name}: {e}")
+            
+            return tags
+        except Exception as e:
+            self.log_operation('WARNING', f"Error getting tags for load balancer {lb_info['name']}: {e}")
+            return {}
+
+    def check_kubernetes_tags(self, tags, lb_name):
+        """Check if load balancer has Kubernetes-specific tags"""
+        k8s_indicators = {
+            'is_kubernetes': False,
+            'cluster_name': None,
+            'service_name': None,
+            'reasons': []
+        }
+        
+        if not tags:
+            return k8s_indicators
+        
+        # Check for Kubernetes-specific tag patterns
+        for tag_key, tag_value in tags.items():
+            tag_key_lower = tag_key.lower()
+            tag_value_lower = str(tag_value).lower()
+            
+            # kubernetes.io/cluster/<cluster-name> tag
+            if tag_key.startswith('kubernetes.io/cluster/'):
+                k8s_indicators['is_kubernetes'] = True
+                cluster_name = tag_key.split('/')[-1]
+                k8s_indicators['cluster_name'] = cluster_name
+                k8s_indicators['reasons'].append(f"Found kubernetes.io/cluster/{cluster_name} tag")
+            
+            # kubernetes.io/service-name tag
+            elif tag_key == 'kubernetes.io/service-name':
+                k8s_indicators['is_kubernetes'] = True
+                k8s_indicators['service_name'] = tag_value
+                k8s_indicators['reasons'].append(f"Found kubernetes.io/service-name tag: {tag_value}")
+            
+            # KubernetesCluster tag
+            elif tag_key_lower == 'kubernetescluster':
+                k8s_indicators['is_kubernetes'] = True
+                k8s_indicators['cluster_name'] = tag_value
+                k8s_indicators['reasons'].append(f"Found KubernetesCluster tag: {tag_value}")
+            
+            # Other common Kubernetes tags
+            elif tag_key_lower in ['cluster', 'eks-cluster', 'clustername']:
+                k8s_indicators['is_kubernetes'] = True
+                k8s_indicators['cluster_name'] = tag_value
+                k8s_indicators['reasons'].append(f"Found {tag_key} tag: {tag_value}")
+            
+            # Check for EKS or Kubernetes in tag values
+            elif any(keyword in tag_value_lower for keyword in ['kubernetes', 'k8s', 'eks']):
+                k8s_indicators['is_kubernetes'] = True
+                k8s_indicators['reasons'].append(f"Found Kubernetes-related value in {tag_key}: {tag_value}")
+        
+        return k8s_indicators
+
+    def check_kubernetes_naming_patterns(self, lb_name, lb_dns=None):
+        """Check if load balancer follows Kubernetes naming patterns"""
+        k8s_patterns = {
+            'is_kubernetes_pattern': False,
+            'pattern_type': None,
+            'reasons': []
+        }
+        
+        # AWS-generated names for Kubernetes ELBs typically start with 'a' followed by random characters
+        # Example: a1b2c3d4e5f6g7h8-123456789.us-east-1.elb.amazonaws.com
+        if lb_name and len(lb_name) >= 8:
+            # Check for AWS-generated pattern: starts with 'a', followed by alphanumeric
+            if (lb_name.startswith('a') and 
+                len(lb_name) > 8 and 
+                all(c.isalnum() or c == '-' for c in lb_name)):
+                
+                # Additional validation: should have specific character patterns
+                if '-' in lb_name and len(lb_name.replace('-', '')) >= 8:
+                    k8s_patterns['is_kubernetes_pattern'] = True
+                    k8s_patterns['pattern_type'] = 'aws_generated'
+                    k8s_patterns['reasons'].append(f"AWS-generated ELB name pattern: {lb_name}")
+        
+        # Check for common Kubernetes service naming patterns
+        k8s_keywords = ['k8s', 'kubernetes', 'kube', 'eks', 'cluster']
+        lb_name_lower = lb_name.lower() if lb_name else ''
+        
+        for keyword in k8s_keywords:
+            if keyword in lb_name_lower:
+                k8s_patterns['is_kubernetes_pattern'] = True
+                k8s_patterns['pattern_type'] = 'named_pattern'
+                k8s_patterns['reasons'].append(f"Kubernetes keyword '{keyword}' in name: {lb_name}")
+                break
+        
+        # Check DNS name patterns if available
+        if lb_dns:
+            lb_dns_lower = lb_dns.lower()
+            for keyword in k8s_keywords:
+                if keyword in lb_dns_lower:
+                    k8s_patterns['is_kubernetes_pattern'] = True
+                    k8s_patterns['pattern_type'] = 'dns_pattern'
+                    k8s_patterns['reasons'].append(f"Kubernetes keyword '{keyword}' in DNS: {lb_dns}")
+                    break
+        
+        return k8s_patterns
+
+    def is_orphaned_kubernetes_elb(self, elb_client, elbv2_client, ec2_client, lb_info, k8s_info):
+        """Check if a Kubernetes ELB appears to be orphaned (no corresponding K8s service)"""
+        orphan_indicators = {
+            'is_orphaned': False,
+            'confidence': 'low',  # low, medium, high
+            'reasons': []
+        }
+        
+        if not k8s_info.get('is_kubernetes'):
+            return orphan_indicators
+        
+        try:
+            lb_name = lb_info['name']
+            vpc_id = lb_info.get('vpc_id')
+            
+            # Check if there are any active instances behind the load balancer
+            if lb_info['type'] == 'classic':
+                try:
+                    response = elb_client.describe_instance_health(LoadBalancerName=lb_name)
+                    instance_states = response.get('InstanceStates', [])
+                    
+                    if not instance_states:
+                        orphan_indicators['reasons'].append("No instances registered with Classic ELB")
+                        orphan_indicators['confidence'] = 'medium'
+                    else:
+                        healthy_instances = [inst for inst in instance_states if inst.get('State') == 'InService']
+                        if not healthy_instances:
+                            orphan_indicators['reasons'].append("No healthy instances in Classic ELB")
+                            orphan_indicators['confidence'] = 'medium'
+                except Exception as e:
+                    self.log_operation('WARNING', f"Could not check instance health for {lb_name}: {e}")
+            
+            else:
+                # For ALB/NLB, check target groups
+                try:
+                    target_groups = self.get_all_target_groups_in_region(elbv2_client, lb_info['region'], lb_info['account_info'])
+                    
+                    # Find target groups associated with this load balancer
+                    associated_tgs = []
+                    for tg in target_groups:
+                        try:
+                            # Check if target group is associated with our load balancer
+                            listeners_response = elbv2_client.describe_listeners(LoadBalancerArn=lb_info['arn'])
+                            for listener in listeners_response.get('Listeners', []):
+                                for action in listener.get('DefaultActions', []):
+                                    if (action.get('Type') == 'forward' and 
+                                        action.get('TargetGroupArn') == tg['arn']):
+                                        associated_tgs.append(tg)
+                                        break
+                        except Exception:
+                            continue
+                    
+                    if not associated_tgs:
+                        orphan_indicators['reasons'].append("No target groups associated with ALB/NLB")
+                        orphan_indicators['confidence'] = 'medium'
+                    else:
+                        # Check if target groups have healthy targets
+                        healthy_targets_found = False
+                        for tg in associated_tgs:
+                            try:
+                                health_response = elbv2_client.describe_target_health(TargetGroupArn=tg['arn'])
+                                healthy_targets = [t for t in health_response.get('TargetHealthDescriptions', []) 
+                                                 if t.get('TargetHealth', {}).get('State') == 'healthy']
+                                if healthy_targets:
+                                    healthy_targets_found = True
+                                    break
+                            except Exception:
+                                continue
+                        
+                        if not healthy_targets_found:
+                            orphan_indicators['reasons'].append("No healthy targets in associated target groups")
+                            orphan_indicators['confidence'] = 'medium'
+                
+                except Exception as e:
+                    self.log_operation('WARNING', f"Could not check target groups for {lb_name}: {e}")
+            
+            # Check if VPC has active EKS clusters
+            if vpc_id and vpc_id != 'EC2-Classic':
+                try:
+                    eks_client = boto3.client('eks', region_name=lb_info['region'])
+                    clusters_response = eks_client.list_clusters()
+                    
+                    vpc_has_active_clusters = False
+                    for cluster_name in clusters_response.get('clusters', []):
+                        try:
+                            cluster_info = eks_client.describe_cluster(name=cluster_name)
+                            cluster_vpc_id = cluster_info.get('cluster', {}).get('resourcesVpcConfig', {}).get('vpcId')
+                            cluster_status = cluster_info.get('cluster', {}).get('status')
+                            
+                            if cluster_vpc_id == vpc_id and cluster_status == 'ACTIVE':
+                                vpc_has_active_clusters = True
+                                break
+                        except Exception:
+                            continue
+                    
+                    if not vpc_has_active_clusters:
+                        orphan_indicators['reasons'].append("No active EKS clusters found in VPC")
+                        orphan_indicators['confidence'] = 'high'
+                    
+                except Exception as e:
+                    self.log_operation('WARNING', f"Could not check EKS clusters in VPC {vpc_id}: {e}")
+            
+            # Check creation time - very old ELBs might be orphaned
+            created_time = lb_info.get('created_time')
+            if created_time:
+                from datetime import datetime, timedelta
+                import pytz
+                
+                now = datetime.now(pytz.UTC)
+                if hasattr(created_time, 'replace'):
+                    if created_time.tzinfo is None:
+                        created_time = created_time.replace(tzinfo=pytz.UTC)
+                    
+                    age_days = (now - created_time).days
+                    if age_days > 30:  # ELB older than 30 days
+                        orphan_indicators['reasons'].append(f"ELB is {age_days} days old")
+                        if orphan_indicators['confidence'] == 'low':
+                            orphan_indicators['confidence'] = 'medium'
+            
+            # Determine if orphaned based on evidence
+            if len(orphan_indicators['reasons']) >= 2:
+                orphan_indicators['is_orphaned'] = True
+            elif orphan_indicators['confidence'] == 'high':
+                orphan_indicators['is_orphaned'] = True
+            
+        except Exception as e:
+            self.log_operation('WARNING', f"Error checking if ELB {lb_info['name']} is orphaned: {e}")
+        
+        return orphan_indicators
+
+    def is_kubernetes_load_balancer(self, elb_client, elbv2_client, ec2_client, lb_info):
+        """Main method to determine if a load balancer is Kubernetes-managed"""
+        k8s_detection = {
+            'is_kubernetes': False,
+            'confidence': 'low',  # low, medium, high
+            'cluster_name': None,
+            'service_name': None,
+            'is_orphaned': False,
+            'detection_methods': [],
+            'reasons': []
+        }
+        
+        try:
+            lb_name = lb_info['name']
+            lb_dns = lb_info.get('dns_name')
+            
+            # Method 1: Check tags
+            tags = self.get_elb_tags(elb_client, elbv2_client, lb_info)
+            tag_results = self.check_kubernetes_tags(tags, lb_name)
+            
+            if tag_results['is_kubernetes']:
+                k8s_detection['is_kubernetes'] = True
+                k8s_detection['confidence'] = 'high'
+                k8s_detection['cluster_name'] = tag_results.get('cluster_name')
+                k8s_detection['service_name'] = tag_results.get('service_name')
+                k8s_detection['detection_methods'].append('tags')
+                k8s_detection['reasons'].extend(tag_results['reasons'])
+            
+            # Method 2: Check naming patterns
+            pattern_results = self.check_kubernetes_naming_patterns(lb_name, lb_dns)
+            
+            if pattern_results['is_kubernetes_pattern']:
+                k8s_detection['is_kubernetes'] = True
+                if k8s_detection['confidence'] == 'low':
+                    k8s_detection['confidence'] = 'medium'
+                k8s_detection['detection_methods'].append('naming_pattern')
+                k8s_detection['reasons'].extend(pattern_results['reasons'])
+            
+            # Method 3: Check if orphaned (only if detected as Kubernetes)
+            if k8s_detection['is_kubernetes']:
+                orphan_results = self.is_orphaned_kubernetes_elb(elb_client, elbv2_client, ec2_client, lb_info, k8s_detection)
+                k8s_detection['is_orphaned'] = orphan_results['is_orphaned']
+                if orphan_results['reasons']:
+                    k8s_detection['reasons'].extend([f"Orphan check: {reason}" for reason in orphan_results['reasons']])
+            
+            # Log detailed detection results
+            if k8s_detection['is_kubernetes']:
+                self.log_operation('INFO', 
+                    f"🔍 Kubernetes ELB detected: {lb_name} "
+                    f"(confidence: {k8s_detection['confidence']}, "
+                    f"methods: {', '.join(k8s_detection['detection_methods'])}, "
+                    f"orphaned: {k8s_detection['is_orphaned']})")
+                
+                for reason in k8s_detection['reasons']:
+                    self.log_operation('INFO', f"    - {reason}")
+            
+        except Exception as e:
+            self.log_operation('ERROR', f"Error detecting Kubernetes ELB for {lb_info['name']}: {e}")
+        
+        return k8s_detection
+
     def get_all_load_balancers_in_region(self, elb_client, elbv2_client, region, account_info):
-        """Get all load balancers (Classic, Application, Network) in a specific region"""
+        """Get all load balancers (Classic, Application, Network) in a specific region with enhanced Kubernetes detection"""
         try:
             load_balancers = []
+            kubernetes_elbs = []
+            non_kubernetes_elbs = []
+            orphaned_elbs = []
             account_name = account_info.get('account_key', 'Unknown')
 
             self.log_operation('INFO', f"🔍 Scanning for load balancers in {region} ({account_name})")
             print(f"   🔍 Scanning for load balancers in {region} ({account_name})...")
+
+            # Get EC2 client for additional checks
+            ec2_client = self.create_aws_clients(
+                account_info['access_key'], 
+                account_info['secret_key'], 
+                region
+            )[0]
 
             # Get Classic Load Balancers
             try:
@@ -220,6 +550,20 @@ class UltraCleanupELBManager:
                             'availability_zones': [az['ZoneName'] for az in lb.get('AvailabilityZones', [])],
                             'created_time': lb.get('CreatedTime')
                         }
+
+                        # Enhanced Kubernetes detection
+                        k8s_detection = self.is_kubernetes_load_balancer(elb_client, elbv2_client, ec2_client, lb_info)
+                        
+                        # Add Kubernetes metadata to load balancer info
+                        lb_info['kubernetes'] = k8s_detection
+                        
+                        # Categorize the ELB
+                        if k8s_detection['is_kubernetes']:
+                            kubernetes_elbs.append(lb_info)
+                            if k8s_detection['is_orphaned']:
+                                orphaned_elbs.append(lb_info)
+                        else:
+                            non_kubernetes_elbs.append(lb_info)
 
                         load_balancers.append(lb_info)
 
@@ -256,13 +600,56 @@ class UltraCleanupELBManager:
                             'created_time': lb.get('CreatedTime')
                         }
 
+                        # Enhanced Kubernetes detection
+                        k8s_detection = self.is_kubernetes_load_balancer(elb_client, elbv2_client, ec2_client, lb_info)
+                        
+                        # Add Kubernetes metadata to load balancer info
+                        lb_info['kubernetes'] = k8s_detection
+                        
+                        # Categorize the ELB
+                        if k8s_detection['is_kubernetes']:
+                            kubernetes_elbs.append(lb_info)
+                            if k8s_detection['is_orphaned']:
+                                orphaned_elbs.append(lb_info)
+                        else:
+                            non_kubernetes_elbs.append(lb_info)
+
                         load_balancers.append(lb_info)
 
             except Exception as e:
                 self.log_operation('WARNING', f"Error getting ALB/NLB Load Balancers: {e}")
 
-            self.log_operation('INFO', f"⚖️  Found {len(load_balancers)} load balancers in {region} ({account_name})")
-            print(f"   ⚖️  Found {len(load_balancers)} load balancers in {region} ({account_name})")
+            # Enhanced logging with Kubernetes breakdown
+            total_elbs = len(load_balancers)
+            k8s_elbs = len(kubernetes_elbs)
+            non_k8s_elbs = len(non_kubernetes_elbs)
+            orphaned_k8s_elbs = len(orphaned_elbs)
+
+            self.log_operation('INFO', f"⚖️  Found {total_elbs} load balancers in {region} ({account_name})")
+            self.log_operation('INFO', f"    🚢 Kubernetes ELBs: {k8s_elbs}")
+            self.log_operation('INFO', f"    🏢 Non-Kubernetes ELBs: {non_k8s_elbs}")
+            self.log_operation('INFO', f"    🧹 Orphaned Kubernetes ELBs: {orphaned_k8s_elbs}")
+            
+            print(f"   ⚖️  Found {total_elbs} load balancers in {region} ({account_name})")
+            print(f"      🚢 Kubernetes ELBs: {k8s_elbs}")
+            print(f"      🏢 Non-Kubernetes ELBs: {non_k8s_elbs}")
+            if orphaned_k8s_elbs > 0:
+                print(f"      🧹 Orphaned Kubernetes ELBs: {orphaned_k8s_elbs}")
+
+            # Show Kubernetes ELB details
+            if kubernetes_elbs:
+                self.log_operation('INFO', f"🚢 Kubernetes ELB Details:")
+                for k8s_elb in kubernetes_elbs:
+                    k8s_info = k8s_elb['kubernetes']
+                    cluster_info = f" (cluster: {k8s_info['cluster_name']})" if k8s_info['cluster_name'] else ""
+                    service_info = f" (service: {k8s_info['service_name']})" if k8s_info['service_name'] else ""
+                    orphan_info = " [ORPHANED]" if k8s_info['is_orphaned'] else ""
+                    
+                    self.log_operation('INFO', 
+                        f"    • {k8s_elb['name']} ({k8s_elb['type']}) - "
+                        f"confidence: {k8s_info['confidence']}, "
+                        f"methods: {', '.join(k8s_info['detection_methods'])}"
+                        f"{cluster_info}{service_info}{orphan_info}")
 
             return load_balancers
 
@@ -423,27 +810,73 @@ class UltraCleanupELBManager:
             return []
 
     def delete_load_balancer(self, elb_client, elbv2_client, lb_info):
-        """Delete a load balancer (Classic, Application, or Network)"""
+        """Delete a load balancer (Classic, Application, or Network) with enhanced error handling"""
         try:
             lb_name = lb_info['name']
             lb_type = lb_info['type']
             region = lb_info['region']
             account_name = lb_info['account_info'].get('account_key', 'Unknown')
+            
+            # Get Kubernetes info if available
+            k8s_info = lb_info.get('kubernetes', {})
+            is_k8s = k8s_info.get('is_kubernetes', False)
+            is_orphaned = k8s_info.get('is_orphaned', False)
+            
+            # Enhanced logging with Kubernetes context
+            k8s_context = ""
+            if is_k8s:
+                k8s_context = " [KUBERNETES"
+                if k8s_info.get('cluster_name'):
+                    k8s_context += f" - {k8s_info['cluster_name']}"
+                if is_orphaned:
+                    k8s_context += " - ORPHANED"
+                k8s_context += "]"
 
-            self.log_operation('INFO', f"🗑️  Deleting {lb_type} load balancer {lb_name} in {region} ({account_name})")
-            print(f"   🗑️  Deleting {lb_type} load balancer {lb_name}...")
+            self.log_operation('INFO', f"🗑️  Deleting {lb_type} load balancer {lb_name} in {region} ({account_name}){k8s_context}")
+            print(f"   🗑️  Deleting {lb_type} load balancer {lb_name}{k8s_context}...")
 
+            # Check for transitional states before deletion
             if lb_type == 'classic':
+                try:
+                    # Check Classic ELB state
+                    response = elb_client.describe_load_balancers(LoadBalancerNames=[lb_name])
+                    if response['LoadBalancerDescriptions']:
+                        lb_state = response['LoadBalancerDescriptions'][0].get('State', {})
+                        self.log_operation('INFO', f"Classic ELB {lb_name} current state info: {lb_state}")
+                except Exception as state_check_error:
+                    self.log_operation('WARNING', f"Could not check state for Classic ELB {lb_name}: {state_check_error}")
+
                 # Delete Classic Load Balancer
                 elb_client.delete_load_balancer(LoadBalancerName=lb_name)
+                
             else:
+                try:
+                    # Check ALB/NLB state
+                    response = elbv2_client.describe_load_balancers(LoadBalancerArns=[lb_info['arn']])
+                    if response['LoadBalancers']:
+                        lb_state = response['LoadBalancers'][0].get('State', {})
+                        self.log_operation('INFO', f"{lb_type.upper()} {lb_name} current state: {lb_state}")
+                        
+                        # Check if load balancer is in a transitional state
+                        if lb_state.get('Code') in ['provisioning', 'deleting']:
+                            self.log_operation('WARNING', f"{lb_type.upper()} {lb_name} is in transitional state: {lb_state.get('Code')}")
+                            print(f"   ⚠️  Load balancer {lb_name} is in transitional state: {lb_state.get('Code')}")
+                            
+                            # Wait a bit for transitional state to complete
+                            import time
+                            time.sleep(10)
+                            
+                except Exception as state_check_error:
+                    self.log_operation('WARNING', f"Could not check state for {lb_type.upper()} {lb_name}: {state_check_error}")
+
                 # Delete Application/Network Load Balancer
                 elbv2_client.delete_load_balancer(LoadBalancerArn=lb_info['arn'])
 
-            self.log_operation('INFO', f"✅ Successfully deleted {lb_type} load balancer {lb_name}")
+            self.log_operation('INFO', f"✅ Successfully deleted {lb_type} load balancer {lb_name}{k8s_context}")
             print(f"   ✅ Successfully deleted {lb_type} load balancer {lb_name}")
 
-            self.cleanup_results['deleted_load_balancers'].append({
+            # Enhanced cleanup result tracking with Kubernetes metadata
+            deletion_record = {
                 'name': lb_name,
                 'type': lb_type,
                 'dns_name': lb_info['dns_name'],
@@ -452,10 +885,55 @@ class UltraCleanupELBManager:
                 'scheme': lb_info['scheme'],
                 'region': region,
                 'account_info': lb_info['account_info'],
-                'deleted_at': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            })
+                'deleted_at': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                'kubernetes': k8s_info if is_k8s else None
+            }
+            
+            self.cleanup_results['deleted_load_balancers'].append(deletion_record)
 
             return True
+
+        except ClientError as e:
+            error_code = e.response['Error']['Code']
+            error_message = e.response['Error']['Message']
+            account_name = lb_info['account_info'].get('account_key', 'Unknown')
+            
+            # Enhanced error handling for specific AWS error cases
+            if error_code == 'LoadBalancerNotFound':
+                self.log_operation('INFO', f"Load balancer {lb_name} not found (already deleted)")
+                print(f"   ℹ️  Load balancer {lb_name} not found (already deleted)")
+                return True
+                
+            elif error_code == 'DependencyViolation':
+                self.log_operation('WARNING', f"Cannot delete {lb_name}: has dependencies - {error_message}")
+                print(f"   ⚠️  Cannot delete {lb_name}: has dependencies")
+                
+                # For Kubernetes ELBs, provide specific guidance
+                if k8s_info.get('is_kubernetes'):
+                    self.log_operation('INFO', f"Kubernetes ELB {lb_name} has dependencies - may need manual K8s service cleanup")
+                    print(f"   💡 Kubernetes ELB may need manual service cleanup first")
+                
+            elif error_code == 'OperationNotPermitted':
+                self.log_operation('ERROR', f"Operation not permitted for {lb_name}: {error_message}")
+                print(f"   ❌ Operation not permitted for {lb_name}")
+                
+            elif error_code == 'LoadBalancerPending':
+                self.log_operation('WARNING', f"Load balancer {lb_name} is in pending state: {error_message}")
+                print(f"   ⏳ Load balancer {lb_name} is in pending state")
+                
+            else:
+                self.log_operation('ERROR', f"AWS Error deleting {lb_name} ({error_code}): {error_message}")
+                print(f"   ❌ AWS Error deleting {lb_name}: {error_code}")
+
+            self.cleanup_results['failed_deletions'].append({
+                'resource_type': 'load_balancer',
+                'resource_id': lb_name,
+                'region': region,
+                'account_info': lb_info['account_info'],
+                'error': f"{error_code}: {error_message}",
+                'kubernetes': k8s_info if k8s_info.get('is_kubernetes') else None
+            })
+            return False
 
         except Exception as e:
             account_name = lb_info['account_info'].get('account_key', 'Unknown')
@@ -467,7 +945,8 @@ class UltraCleanupELBManager:
                 'resource_id': lb_name,
                 'region': region,
                 'account_info': lb_info['account_info'],
-                'error': str(e)
+                'error': str(e),
+                'kubernetes': k8s_info if k8s_info.get('is_kubernetes') else None
             })
             return False
 
@@ -1422,12 +1901,12 @@ class UltraCleanupELBManager:
             self.cleanup_results['errors'].append({
                 'account_info': account_info,
                 'region': region,
-                'error': str(alle)
+                'error': str(e)
             })
             return False
 
     def save_cleanup_report(self):
-        """Save comprehensive cleanup results to JSON report"""
+        """Save comprehensive cleanup results to JSON report with enhanced Kubernetes tracking"""
         try:
             os.makedirs(self.reports_dir, exist_ok=True)
             report_filename = f"{self.reports_dir}/ultra_elb_cleanup_report_{self.execution_timestamp}.json"
@@ -1443,36 +1922,85 @@ class UltraCleanupELBManager:
             total_failed = len(self.cleanup_results['failed_deletions'])
             total_skipped = len(self.cleanup_results['skipped_resources'])
 
+            # Enhanced Kubernetes statistics
+            k8s_lbs_deleted = len([lb for lb in self.cleanup_results['deleted_load_balancers'] 
+                                  if lb.get('kubernetes', {}).get('is_kubernetes', False)])
+            non_k8s_lbs_deleted = total_lbs_deleted - k8s_lbs_deleted
+            orphaned_k8s_lbs_deleted = len([lb for lb in self.cleanup_results['deleted_load_balancers'] 
+                                           if lb.get('kubernetes', {}).get('is_orphaned', False)])
+            
+            k8s_failed_deletions = len([fail for fail in self.cleanup_results['failed_deletions'] 
+                                       if fail.get('kubernetes', {}).get('is_kubernetes', False)])
+
             # Group deletions by account and region
             deletions_by_account = {}
             deletions_by_region = {}
+            k8s_deletions_by_cluster = {}
 
             for lb in self.cleanup_results['deleted_load_balancers']:
                 account = lb['account_info'].get('account_key', 'Unknown')
                 region = lb['region']
-
+                
+                # Standard accounting
                 if account not in deletions_by_account:
                     deletions_by_account[account] = {
-                        'load_balancers': 0, 'target_groups': 0, 'security_groups': 0, 'vpcs': 0
+                        'load_balancers': 0, 'target_groups': 0, 'security_groups': 0, 'vpcs': 0,
+                        'kubernetes_elbs': 0, 'non_kubernetes_elbs': 0, 'orphaned_k8s_elbs': 0
                     }
                 deletions_by_account[account]['load_balancers'] += 1
-
+                
                 if region not in deletions_by_region:
                     deletions_by_region[region] = {
-                        'load_balancers': 0, 'target_groups': 0, 'security_groups': 0, 'vpcs': 0
+                        'load_balancers': 0, 'target_groups': 0, 'security_groups': 0, 'vpcs': 0,
+                        'kubernetes_elbs': 0, 'non_kubernetes_elbs': 0, 'orphaned_k8s_elbs': 0
                     }
                 deletions_by_region[region]['load_balancers'] += 1
+                
+                # Kubernetes-specific accounting
+                k8s_info = lb.get('kubernetes', {})
+                if k8s_info.get('is_kubernetes', False):
+                    deletions_by_account[account]['kubernetes_elbs'] += 1
+                    deletions_by_region[region]['kubernetes_elbs'] += 1
+                    
+                    if k8s_info.get('is_orphaned', False):
+                        deletions_by_account[account]['orphaned_k8s_elbs'] += 1
+                        deletions_by_region[region]['orphaned_k8s_elbs'] += 1
+                    
+                    # Track by cluster
+                    cluster_name = k8s_info.get('cluster_name', 'unknown-cluster')
+                    if cluster_name not in k8s_deletions_by_cluster:
+                        k8s_deletions_by_cluster[cluster_name] = {
+                            'elbs_deleted': 0,
+                            'orphaned_elbs': 0,
+                            'regions': set(),
+                            'accounts': set()
+                        }
+                    k8s_deletions_by_cluster[cluster_name]['elbs_deleted'] += 1
+                    k8s_deletions_by_cluster[cluster_name]['regions'].add(region)
+                    k8s_deletions_by_cluster[cluster_name]['accounts'].add(account)
+                    
+                    if k8s_info.get('is_orphaned', False):
+                        k8s_deletions_by_cluster[cluster_name]['orphaned_elbs'] += 1
+                else:
+                    deletions_by_account[account]['non_kubernetes_elbs'] += 1
+                    deletions_by_region[region]['non_kubernetes_elbs'] += 1
+
+            # Convert sets to lists for JSON serialization
+            for cluster_info in k8s_deletions_by_cluster.values():
+                cluster_info['regions'] = list(cluster_info['regions'])
+                cluster_info['accounts'] = list(cluster_info['accounts'])
 
             report_data = {
                 "metadata": {
-                    "cleanup_type": "ULTRA_ELB_CLEANUP",
+                    "cleanup_type": "ULTRA_ELB_CLEANUP_ENHANCED",
                     "cleanup_date": self.current_time.split()[0],
                     "cleanup_time": self.current_time.split()[1],
                     "cleaned_by": self.current_user,
                     "execution_timestamp": self.execution_timestamp,
                     "config_dir": self.config_dir,
                     "log_file": self.log_filename,
-                    "regions_processed": self.user_regions
+                    "regions_processed": self.user_regions,
+                    "kubernetes_detection_enabled": True
                 },
                 "summary": {
                     "total_accounts_processed": len(
@@ -1480,6 +2008,9 @@ class UltraCleanupELBManager:
                     "total_regions_processed": len(
                         set(rp['region'] for rp in self.cleanup_results['regions_processed'])),
                     "total_load_balancers_deleted": total_lbs_deleted,
+                    "kubernetes_elbs_deleted": k8s_lbs_deleted,
+                    "non_kubernetes_elbs_deleted": non_k8s_lbs_deleted,
+                    "orphaned_kubernetes_elbs_deleted": orphaned_k8s_lbs_deleted,
                     "total_target_groups_deleted": total_tgs_deleted,
                     "total_security_groups_deleted": total_sgs_deleted,
                     "total_vpcs_deleted": total_vpcs_deleted,
@@ -1487,9 +2018,11 @@ class UltraCleanupELBManager:
                     "total_internet_gateways_deleted": total_igws_deleted,
                     "total_route_tables_deleted": total_route_tables_deleted,
                     "total_failed_deletions": total_failed,
+                    "kubernetes_failed_deletions": k8s_failed_deletions,
                     "total_skipped_resources": total_skipped,
                     "deletions_by_account": deletions_by_account,
-                    "deletions_by_region": deletions_by_region
+                    "deletions_by_region": deletions_by_region,
+                    "kubernetes_deletions_by_cluster": k8s_deletions_by_cluster
                 },
                 "detailed_results": {
                     "regions_processed": self.cleanup_results['regions_processed'],
@@ -1499,7 +2032,7 @@ class UltraCleanupELBManager:
                     "deleted_vpcs": self.cleanup_results['deleted_vpcs'],
                     "deleted_subnets": self.cleanup_results['deleted_subnets'],
                     "deleted_internet_gateways": self.cleanup_results['deleted_internet_gateways'],
-                                        "deleted_route_tables": self.cleanup_results['deleted_route_tables'],
+                    "deleted_route_tables": self.cleanup_results['deleted_route_tables'],
                     "failed_deletions": self.cleanup_results['failed_deletions'],
                     "skipped_resources": self.cleanup_results['skipped_resources'],
                     "errors": self.cleanup_results['errors']
@@ -1510,6 +2043,22 @@ class UltraCleanupELBManager:
                 json.dump(report_data, f, indent=2, default=str)
 
             self.log_operation('INFO', f"✅ Ultra ELB cleanup report saved to: {report_filename}")
+            
+            # Log Kubernetes-specific summary
+            if k8s_lbs_deleted > 0:
+                self.log_operation('INFO', f"📊 Kubernetes ELB Summary:")
+                self.log_operation('INFO', f"    🚢 Total Kubernetes ELBs deleted: {k8s_lbs_deleted}")
+                self.log_operation('INFO', f"    🧹 Orphaned Kubernetes ELBs deleted: {orphaned_k8s_lbs_deleted}")
+                self.log_operation('INFO', f"    🏢 Non-Kubernetes ELBs deleted: {non_k8s_lbs_deleted}")
+                
+                if k8s_deletions_by_cluster:
+                    self.log_operation('INFO', f"    📋 By Kubernetes Cluster:")
+                    for cluster, info in k8s_deletions_by_cluster.items():
+                        self.log_operation('INFO', 
+                            f"        • {cluster}: {info['elbs_deleted']} ELBs "
+                            f"({info['orphaned_elbs']} orphaned) "
+                            f"in {len(info['regions'])} regions")
+            
             return report_filename
 
         except Exception as e:
