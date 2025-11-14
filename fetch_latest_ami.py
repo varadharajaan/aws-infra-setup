@@ -1,6 +1,8 @@
-import boto3
 import json
 import os
+
+import boto3
+
 
 def load_accounts_config(config_file="aws_accounts_config.json"):
     if not os.path.exists(config_file):
@@ -8,6 +10,7 @@ def load_accounts_config(config_file="aws_accounts_config.json"):
         return None
     with open(config_file, "r") as f:
         return json.load(f)
+
 
 def select_account(accounts):
     print("📦 Available Accounts:")
@@ -23,6 +26,7 @@ def select_account(accounts):
         return None
     return selected
 
+
 def get_boto3_session(account_key):
     for suffix in ["", "-bk"]:
         profile = f"{account_key}{suffix}"
@@ -36,6 +40,7 @@ def get_boto3_session(account_key):
     print("❌ No working profile found.")
     return None
 
+
 def get_latest_amazon_linux_3_ami(region, session):
     ec2 = session.client("ec2", region_name=region)
     try:
@@ -46,15 +51,16 @@ def get_latest_amazon_linux_3_ami(region, session):
                 {"Name": "state", "Values": ["available"]},
                 {"Name": "architecture", "Values": ["x86_64"]},
                 {"Name": "virtualization-type", "Values": ["hvm"]},
-                {"Name": "root-device-type", "Values": ["ebs"]}
-            ]
+                {"Name": "root-device-type", "Values": ["ebs"]},
+            ],
         )
         images = response["Images"]
         # Prefer AMIs with ec2-instance-connect in name or description
         preferred = [
-            img for img in images
-            if "ec2-instance-connect" in img.get("Name", "").lower() or
-               "ec2-instance-connect" in img.get("Description", "").lower()
+            img
+            for img in images
+            if "ec2-instance-connect" in img.get("Name", "").lower()
+            or "ec2-instance-connect" in img.get("Description", "").lower()
         ]
         images = preferred if preferred else images
         images = sorted(images, key=lambda x: x["CreationDate"], reverse=True)
@@ -62,6 +68,7 @@ def get_latest_amazon_linux_3_ami(region, session):
     except Exception as e:
         print(f"[{region}] ❌ Failed to fetch AL2023 AMI: {e}")
         return None
+
 
 def get_latest_amazon_linux_2_ami(region, session):
     ec2 = session.client("ec2", region_name=region)
@@ -73,8 +80,8 @@ def get_latest_amazon_linux_2_ami(region, session):
                 {"Name": "state", "Values": ["available"]},
                 {"Name": "architecture", "Values": ["x86_64"]},
                 {"Name": "virtualization-type", "Values": ["hvm"]},
-                {"Name": "root-device-type", "Values": ["ebs"]}
-            ]
+                {"Name": "root-device-type", "Values": ["ebs"]},
+            ],
         )
         images = response["Images"]
         images = sorted(images, key=lambda x: x["CreationDate"], reverse=True)
@@ -82,6 +89,7 @@ def get_latest_amazon_linux_2_ami(region, session):
     except Exception as e:
         print(f"[{region}] ❌ Failed to fetch AL2 AMI: {e}")
         return None
+
 
 def main():
     config = load_accounts_config()
@@ -120,6 +128,7 @@ def main():
     print("\n✅ Latest Amazon Linux 2 AMI Mapping:")
     for region, ami in al2_ami_mapping.items():
         print(f'    "{region}": "{ami}",')
+
 
 if __name__ == "__main__":
     main()

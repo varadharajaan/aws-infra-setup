@@ -1,9 +1,11 @@
 import json
 import subprocess
 
+
 def load_config(path="aws_accounts_config.json"):
     with open(path, "r") as f:
         return json.load(f)
+
 
 def prompt_account_selection(accounts):
     print("\n📦 Available Accounts:")
@@ -12,7 +14,11 @@ def prompt_account_selection(accounts):
         print(f"  {i}. {acc}")
         indexed_map[str(i)] = acc
 
-    selection = input("\n👉 Enter account(s) to configure [comma, range, or 'all']: ").strip().lower()
+    selection = (
+        input("\n👉 Enter account(s) to configure [comma, range, or 'all']: ")
+        .strip()
+        .lower()
+    )
 
     if selection == "all":
         return list(accounts.keys())
@@ -37,12 +43,38 @@ def prompt_account_selection(accounts):
 
     return list(selected)
 
-def set_aws_profile(profile, access_key, secret_key, region="us-east-1", output_format="json"):
-    subprocess.run(["aws", "configure", "--profile", profile, "set", "aws_access_key_id", access_key])
-    subprocess.run(["aws", "configure", "--profile", profile, "set", "aws_secret_access_key", secret_key])
+
+def set_aws_profile(
+    profile, access_key, secret_key, region="us-east-1", output_format="json"
+):
+    subprocess.run(
+        [
+            "aws",
+            "configure",
+            "--profile",
+            profile,
+            "set",
+            "aws_access_key_id",
+            access_key,
+        ]
+    )
+    subprocess.run(
+        [
+            "aws",
+            "configure",
+            "--profile",
+            profile,
+            "set",
+            "aws_secret_access_key",
+            secret_key,
+        ]
+    )
     subprocess.run(["aws", "configure", "--profile", profile, "set", "region", region])
-    subprocess.run(["aws", "configure", "--profile", profile, "set", "output", output_format])
+    subprocess.run(
+        ["aws", "configure", "--profile", profile, "set", "output", output_format]
+    )
     print(f"✅ Profile configured: {profile}")
+
 
 def configure_selected_accounts(accounts_data, selected_accounts, region="us-east-1"):
     print("\n🔧 Setting AWS CLI Profiles...\n")
@@ -57,17 +89,18 @@ def configure_selected_accounts(accounts_data, selected_accounts, region="us-eas
             profile=main_profile,
             access_key=data["access_key"],
             secret_key=data["secret_key"],
-            region=region
+            region=region,
         )
 
         set_aws_profile(
             profile=backup_profile,
             access_key=data["backup_access_key"],
             secret_key=data["backup_secret_key"],
-            region=region
+            region=region,
         )
 
     print("\n🎉 All selected profiles are now configured.")
+
 
 if __name__ == "__main__":
     config = load_config()

@@ -8,14 +8,14 @@ Generated on: {{CURRENT_DATETIME}}
 Created by: {{CURRENT_USER}}
 """
 
-import boto3
 import json
 import logging
 import os
 import time
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Any, Optional
-from botocore.exceptions import ClientError, BotoCoreError
+
+import boto3
+from botocore.exceptions import ClientError
 
 # Configure enhanced logging
 logger = logging.getLogger()
@@ -25,7 +25,7 @@ logger.setLevel(logging.INFO)
 # Create custom formatter for better log structure
 class CustomFormatter(logging.Formatter):
     def format(self, record):
-        timestamp = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')
+        timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
         level = record.levelname
         message = record.getMessage()
         return f"[{timestamp}] [{level}] {message}"
@@ -41,12 +41,12 @@ class EKSNodeGroupScaler:
         self.logger = logger
         self.start_time = None
         self.execution_stats = {
-            'nodegroups_processed': 0,
-            'successful_operations': 0,
-            'skipped_operations': 0,
-            'failed_operations': 0,
-            'warnings_issued': 0,
-            'total_scaling_changes': 0
+            "nodegroups_processed": 0,
+            "successful_operations": 0,
+            "skipped_operations": 0,
+            "failed_operations": 0,
+            "warnings_issued": 0,
+            "total_scaling_changes": 0,
         }
 
     def log_execution_start(self, cluster_name, region, action, ist_time):
@@ -71,69 +71,91 @@ class EKSNodeGroupScaler:
         self.logger.info("🏁 EKS NODEGROUP SCALING LAMBDA - EXECUTION END")
         self.logger.info("=" * 80)
         self.logger.info(f"⏱️  Total Execution Time: {execution_time:.2f} seconds")
-        self.logger.info(f"📊 Nodegroups Processed: {self.execution_stats['nodegroups_processed']}")
-        self.logger.info(f"✅ Successful Operations: {self.execution_stats['successful_operations']}")
-        self.logger.info(f"⏭️  Skipped Operations: {self.execution_stats['skipped_operations']}")
-        self.logger.info(f"❌ Failed Operations: {self.execution_stats['failed_operations']}")
-        self.logger.info(f"📈 Total Scaling Changes: {self.execution_stats['total_scaling_changes']}")
-        self.logger.info(f"⚠️  Warnings Issued: {self.execution_stats['warnings_issued']}")
         self.logger.info(
-            f"🎯 Success Rate: {(self.execution_stats['successful_operations'] + self.execution_stats['skipped_operations']) / max(1, self.execution_stats['nodegroups_processed']) * 100:.1f}%")
+            f"📊 Nodegroups Processed: {self.execution_stats['nodegroups_processed']}"
+        )
+        self.logger.info(
+            f"✅ Successful Operations: {self.execution_stats['successful_operations']}"
+        )
+        self.logger.info(
+            f"⏭️  Skipped Operations: {self.execution_stats['skipped_operations']}"
+        )
+        self.logger.info(
+            f"❌ Failed Operations: {self.execution_stats['failed_operations']}"
+        )
+        self.logger.info(
+            f"📈 Total Scaling Changes: {self.execution_stats['total_scaling_changes']}"
+        )
+        self.logger.info(
+            f"⚠️  Warnings Issued: {self.execution_stats['warnings_issued']}"
+        )
+        self.logger.info(
+            f"🎯 Success Rate: {(self.execution_stats['successful_operations'] + self.execution_stats['skipped_operations']) / max(1, self.execution_stats['nodegroups_processed']) * 100:.1f}%"
+        )
         self.logger.info(f"✅ Execution Status: {'SUCCESS' if success else 'FAILED'}")
         self.logger.info("=" * 80)
 
     def calculate_ist_time(self):
         """Calculate current IST time with logging"""
-        self.logger.info("🕐 IST time not provided in event, calculating current IST time...")
+        self.logger.info(
+            "🕐 IST time not provided in event, calculating current IST time..."
+        )
 
         try:
             # Calculate current IST time (UTC + 5:30)
             ist_timezone = timezone(timedelta(hours=5, minutes=30))
             current_ist = datetime.now(ist_timezone)
-            ist_time = current_ist.strftime('%I:%M %p IST')
+            ist_time = current_ist.strftime("%I:%M %p IST")
 
             self.logger.info(f"✅ Current IST time calculated: {ist_time}")
             return ist_time
 
         except Exception as e:
-            self.logger.warning(f"⚠️  Error calculating IST time: {str(e)} - using UTC time")
-            self.execution_stats['warnings_issued'] += 1
-            utc_time = datetime.utcnow().strftime('%I:%M %p UTC')
+            self.logger.warning(
+                f"⚠️  Error calculating IST time: {str(e)} - using UTC time"
+            )
+            self.execution_stats["warnings_issued"] += 1
+            utc_time = datetime.utcnow().strftime("%I:%M %p UTC")
             return utc_time
 
     def validate_nodegroup_config(self, ng_config, index):
         """Validate nodegroup configuration with detailed logging"""
-        nodegroup_name = ng_config.get('name')
+        nodegroup_name = ng_config.get("name")
 
         if not nodegroup_name:
-            self.logger.warning(f"⚠️  [{index}] Skipping nodegroup with missing name: {ng_config}")
-            self.execution_stats['warnings_issued'] += 1
+            self.logger.warning(
+                f"⚠️  [{index}] Skipping nodegroup with missing name: {ng_config}"
+            )
+            self.execution_stats["warnings_issued"] += 1
             return None
 
         # Get scaling parameters with defaults
-        desired_size = ng_config.get('desired_size', 1)
-        min_size = ng_config.get('min_size', 0)
-        max_size = ng_config.get('max_size', 3)
+        desired_size = ng_config.get("desired_size", 1)
+        min_size = ng_config.get("min_size", 0)
+        max_size = ng_config.get("max_size", 3)
 
         # Validate scaling configuration logic
         if min_size > max_size:
             self.logger.warning(
-                f"⚠️  [{index}] Invalid config for {nodegroup_name}: min_size ({min_size}) > max_size ({max_size})")
-            self.execution_stats['warnings_issued'] += 1
+                f"⚠️  [{index}] Invalid config for {nodegroup_name}: min_size ({min_size}) > max_size ({max_size})"
+            )
+            self.execution_stats["warnings_issued"] += 1
 
         if desired_size < min_size or desired_size > max_size:
             self.logger.warning(
-                f"⚠️  [{index}] Invalid config for {nodegroup_name}: desired_size ({desired_size}) not between min_size ({min_size}) and max_size ({max_size})")
-            self.execution_stats['warnings_issued'] += 1
+                f"⚠️  [{index}] Invalid config for {nodegroup_name}: desired_size ({desired_size}) not between min_size ({min_size}) and max_size ({max_size})"
+            )
+            self.execution_stats["warnings_issued"] += 1
 
         self.logger.info(
-            f"✅ [{index}] Validated config for {nodegroup_name}: min={min_size}, desired={desired_size}, max={max_size}")
+            f"✅ [{index}] Validated config for {nodegroup_name}: min={min_size}, desired={desired_size}, max={max_size}"
+        )
 
         return {
-            'name': nodegroup_name,
-            'desired_size': desired_size,
-            'min_size': min_size,
-            'max_size': max_size
+            "name": nodegroup_name,
+            "desired_size": desired_size,
+            "min_size": min_size,
+            "max_size": max_size,
         }
 
     def get_current_nodegroup_config(self, eks_client, cluster_name, nodegroup_name):
@@ -142,50 +164,60 @@ class EKSNodeGroupScaler:
 
         try:
             current_ng = eks_client.describe_nodegroup(
-                clusterName=cluster_name,
-                nodegroupName=nodegroup_name
+                clusterName=cluster_name, nodegroupName=nodegroup_name
             )
 
-            nodegroup_info = current_ng['nodegroup']
-            current_scaling = nodegroup_info.get('scalingConfig', {})
+            nodegroup_info = current_ng["nodegroup"]
+            current_scaling = nodegroup_info.get("scalingConfig", {})
 
             current_config = {
-                'desired': current_scaling.get('desiredSize', 0),
-                'min': current_scaling.get('minSize', 0),
-                'max': current_scaling.get('maxSize', 0)
+                "desired": current_scaling.get("desiredSize", 0),
+                "min": current_scaling.get("minSize", 0),
+                "max": current_scaling.get("maxSize", 0),
             }
 
             # Log additional nodegroup details
-            status = nodegroup_info.get('status', 'unknown')
-            capacity_type = nodegroup_info.get('capacityType', 'unknown')
-            instance_types = nodegroup_info.get('instanceTypes', ['unknown'])
+            status = nodegroup_info.get("status", "unknown")
+            capacity_type = nodegroup_info.get("capacityType", "unknown")
+            instance_types = nodegroup_info.get("instanceTypes", ["unknown"])
 
             self.logger.info(
-                f"   ├── 📊 Current scaling: min={current_config['min']}, desired={current_config['desired']}, max={current_config['max']}")
+                f"   ├── 📊 Current scaling: min={current_config['min']}, desired={current_config['desired']}, max={current_config['max']}"
+            )
             self.logger.info(f"   ├── 📈 Status: {status}")
             self.logger.info(f"   ├── 💾 Capacity Type: {capacity_type}")
             self.logger.info(f"   ├── 🖥️  Instance Types: {instance_types}")
 
-            if status != 'ACTIVE':
+            if status != "ACTIVE":
                 self.logger.warning(f"   ⚠️  Nodegroup status is {status}, not ACTIVE")
-                self.execution_stats['warnings_issued'] += 1
+                self.execution_stats["warnings_issued"] += 1
 
             return current_config
 
         except ClientError as e:
-            error_code = e.response['Error']['Code']
-            if error_code == 'ResourceNotFoundException':
-                self.logger.error(f"   ❌ Nodegroup {nodegroup_name} not found in cluster {cluster_name}")
-            elif error_code == 'AccessDeniedException':
-                self.logger.error(f"   ❌ Access denied to nodegroup {nodegroup_name} - check IAM permissions")
+            error_code = e.response["Error"]["Code"]
+            if error_code == "ResourceNotFoundException":
+                self.logger.error(
+                    f"   ❌ Nodegroup {nodegroup_name} not found in cluster {cluster_name}"
+                )
+            elif error_code == "AccessDeniedException":
+                self.logger.error(
+                    f"   ❌ Access denied to nodegroup {nodegroup_name} - check IAM permissions"
+                )
             else:
-                self.logger.error(f"   ❌ AWS API error: {error_code} - {e.response['Error']['Message']}")
+                self.logger.error(
+                    f"   ❌ AWS API error: {error_code} - {e.response['Error']['Message']}"
+                )
             raise
         except Exception as e:
-            self.logger.error(f"   ❌ Unexpected error retrieving nodegroup config: {str(e)}")
+            self.logger.error(
+                f"   ❌ Unexpected error retrieving nodegroup config: {str(e)}"
+            )
             raise
 
-    def update_nodegroup_scaling(self, eks_client, cluster_name, nodegroup_name, target_config):
+    def update_nodegroup_scaling(
+        self, eks_client, cluster_name, nodegroup_name, target_config
+    ):
         """Update nodegroup scaling configuration with detailed logging"""
         self.logger.info(f"   ├── 🔄 Initiating scaling configuration update...")
 
@@ -194,40 +226,42 @@ class EKSNodeGroupScaler:
                 clusterName=cluster_name,
                 nodegroupName=nodegroup_name,
                 scalingConfig={
-                    'minSize': target_config['min_size'],
-                    'maxSize': target_config['max_size'],
-                    'desiredSize': target_config['desired_size']
-                }
+                    "minSize": target_config["min_size"],
+                    "maxSize": target_config["max_size"],
+                    "desiredSize": target_config["desired_size"],
+                },
             )
 
-            update_id = response['update']['id']
-            update_status = response['update']['status']
+            update_id = response["update"]["id"]
+            update_status = response["update"]["status"]
 
             self.logger.info(f"   ├── ✅ Scaling update initiated successfully")
             self.logger.info(f"   ├── 🆔 Update ID: {update_id}")
             self.logger.info(f"   ├── 📊 Update Status: {update_status}")
             self.logger.info(
-                f"   └── 🎯 New configuration will be: min={target_config['min_size']}, desired={target_config['desired_size']}, max={target_config['max_size']}")
+                f"   └── 🎯 New configuration will be: min={target_config['min_size']}, desired={target_config['desired_size']}, max={target_config['max_size']}"
+            )
 
-            self.execution_stats['total_scaling_changes'] += 1
+            self.execution_stats["total_scaling_changes"] += 1
 
-            return {
-                'update_id': update_id,
-                'status': update_status
-            }
+            return {"update_id": update_id, "status": update_status}
 
         except ClientError as e:
-            error_code = e.response['Error']['Code']
-            error_message = e.response['Error']['Message']
+            error_code = e.response["Error"]["Code"]
+            error_message = e.response["Error"]["Message"]
 
-            if error_code == 'InvalidParameterException':
+            if error_code == "InvalidParameterException":
                 self.logger.error(f"   ❌ Invalid scaling parameters: {error_message}")
-            elif error_code == 'ResourceInUseException':
-                self.logger.error(f"   ❌ Nodegroup is currently being updated: {error_message}")
-            elif error_code == 'InvalidRequestException':
+            elif error_code == "ResourceInUseException":
+                self.logger.error(
+                    f"   ❌ Nodegroup is currently being updated: {error_message}"
+                )
+            elif error_code == "InvalidRequestException":
                 self.logger.error(f"   ❌ Invalid request: {error_message}")
             else:
-                self.logger.error(f"   ❌ AWS API error: {error_code} - {error_message}")
+                self.logger.error(
+                    f"   ❌ AWS API error: {error_code} - {error_message}"
+                )
             raise
         except Exception as e:
             self.logger.error(f"   ❌ Unexpected error updating nodegroup: {str(e)}")
@@ -235,116 +269,135 @@ class EKSNodeGroupScaler:
 
     def process_nodegroup(self, eks_client, cluster_name, ng_config, index, total):
         """Process individual nodegroup scaling with comprehensive logging"""
-        nodegroup_name = ng_config['name']
+        nodegroup_name = ng_config["name"]
         target_config = {
-            'desired_size': ng_config['desired_size'],
-            'min_size': ng_config['min_size'],
-            'max_size': ng_config['max_size']
+            "desired_size": ng_config["desired_size"],
+            "min_size": ng_config["min_size"],
+            "max_size": ng_config["max_size"],
         }
 
         self.logger.info(f"📦 [{index}/{total}] Processing nodegroup: {nodegroup_name}")
         self.logger.info(
-            f"   ├── 🎯 Target: min={target_config['min_size']}, desired={target_config['desired_size']}, max={target_config['max_size']}")
+            f"   ├── 🎯 Target: min={target_config['min_size']}, desired={target_config['desired_size']}, max={target_config['max_size']}"
+        )
 
         try:
             # Get current configuration
-            current_config = self.get_current_nodegroup_config(eks_client, cluster_name, nodegroup_name)
+            current_config = self.get_current_nodegroup_config(
+                eks_client, cluster_name, nodegroup_name
+            )
 
             # Check if update is needed
-            if (current_config['min'] == target_config['min_size'] and
-                    current_config['desired'] == target_config['desired_size'] and
-                    current_config['max'] == target_config['max_size']):
-                self.logger.info(f"   ├── ⏭️  No changes needed - scaling configuration already matches target")
+            if (
+                current_config["min"] == target_config["min_size"]
+                and current_config["desired"] == target_config["desired_size"]
+                and current_config["max"] == target_config["max_size"]
+            ):
+                self.logger.info(
+                    f"   ├── ⏭️  No changes needed - scaling configuration already matches target"
+                )
                 self.logger.info(f"   └── ✅ Skipping update for {nodegroup_name}")
 
-                self.execution_stats['skipped_operations'] += 1
+                self.execution_stats["skipped_operations"] += 1
                 return {
-                    'nodegroup': nodegroup_name,
-                    'status': 'skipped',
-                    'message': 'Configuration unchanged',
-                    'current': {
-                        'min': current_config['min'],
-                        'desired': current_config['desired'],
-                        'max': current_config['max']
-                    }
+                    "nodegroup": nodegroup_name,
+                    "status": "skipped",
+                    "message": "Configuration unchanged",
+                    "current": {
+                        "min": current_config["min"],
+                        "desired": current_config["desired"],
+                        "max": current_config["max"],
+                    },
                 }
 
             # Perform the update
-            update_result = self.update_nodegroup_scaling(eks_client, cluster_name, nodegroup_name, target_config)
+            update_result = self.update_nodegroup_scaling(
+                eks_client, cluster_name, nodegroup_name, target_config
+            )
 
-            self.execution_stats['successful_operations'] += 1
-            self.execution_stats['nodegroups_processed'] += 1
+            self.execution_stats["successful_operations"] += 1
+            self.execution_stats["nodegroups_processed"] += 1
 
             return {
-                'nodegroup': nodegroup_name,
-                'status': 'success',
-                'update_id': update_result['update_id'],
-                'update_status': update_result['status'],
-                'previous': {
-                    'min': current_config['min'],
-                    'desired': current_config['desired'],
-                    'max': current_config['max']
+                "nodegroup": nodegroup_name,
+                "status": "success",
+                "update_id": update_result["update_id"],
+                "update_status": update_result["status"],
+                "previous": {
+                    "min": current_config["min"],
+                    "desired": current_config["desired"],
+                    "max": current_config["max"],
                 },
-                'new': {
-                    'min': target_config['min_size'],
-                    'desired': target_config['desired_size'],
-                    'max': target_config['max_size']
-                }
+                "new": {
+                    "min": target_config["min_size"],
+                    "desired": target_config["desired_size"],
+                    "max": target_config["max_size"],
+                },
             }
 
         except Exception as e:
             error_msg = str(e)
-            self.logger.error(f"   ❌ Failed to process nodegroup {nodegroup_name}: {error_msg}")
+            self.logger.error(
+                f"   ❌ Failed to process nodegroup {nodegroup_name}: {error_msg}"
+            )
 
-            self.execution_stats['failed_operations'] += 1
-            self.execution_stats['nodegroups_processed'] += 1
+            self.execution_stats["failed_operations"] += 1
+            self.execution_stats["nodegroups_processed"] += 1
 
             return {
-                'nodegroup': nodegroup_name,
-                'status': 'error',
-                'error': error_msg,
-                'target': {
-                    'min': target_config['min_size'],
-                    'desired': target_config['desired_size'],
-                    'max': target_config['max_size']
-                }
+                "nodegroup": nodegroup_name,
+                "status": "error",
+                "error": error_msg,
+                "target": {
+                    "min": target_config["min_size"],
+                    "desired": target_config["desired_size"],
+                    "max": target_config["max_size"],
+                },
             }
 
-    def scale_nodegroups(self, cluster_name, region, action, ist_time, nodegroups_config):
+    def scale_nodegroups(
+        self, cluster_name, region, action, ist_time, nodegroups_config
+    ):
         """Main scaling logic with enhanced logging and error handling"""
         self.log_execution_start(cluster_name, region, action, ist_time)
 
         try:
             # Create EKS client with connection testing
             self.logger.info("🔧 Initializing AWS EKS client...")
-            eks_client = boto3.client('eks', region_name=region)
+            eks_client = boto3.client("eks", region_name=region)
 
             # Test connectivity
             try:
-                sts_client = boto3.client('sts', region_name=region)
+                sts_client = boto3.client("sts", region_name=region)
                 identity = sts_client.get_caller_identity()
-                self.logger.info(f"✅ AWS connectivity verified - Account: {identity.get('Account')}")
+                self.logger.info(
+                    f"✅ AWS connectivity verified - Account: {identity.get('Account')}"
+                )
                 self.logger.info(f"   User/Role ARN: {identity.get('Arn')}")
             except Exception as e:
                 self.logger.warning(f"⚠️  Could not verify AWS identity: {str(e)}")
-                self.execution_stats['warnings_issued'] += 1
+                self.execution_stats["warnings_issued"] += 1
 
             # Validate input
             if not nodegroups_config:
                 error_msg = "No nodegroups specified in the event"
                 self.logger.error(f"❌ Validation failed: {error_msg}")
                 return {
-                    'statusCode': 400,
-                    'body': json.dumps({
-                        'success': False,
-                        'error': error_msg,
-                        'cluster': cluster_name,
-                        'region': region,
-                        'timestamp': datetime.utcnow().isoformat() + 'Z'
-                    })
+                    "statusCode": 400,
+                    "body": json.dumps(
+                        {
+                            "success": False,
+                            "error": error_msg,
+                            "cluster": cluster_name,
+                            "region": region,
+                            "timestamp": datetime.utcnow().isoformat() + "Z",
+                        }
+                    ),
                 }
 
-            self.logger.info(f"📋 PHASE 1: VALIDATING {len(nodegroups_config)} NODEGROUP CONFIGURATIONS")
+            self.logger.info(
+                f"📋 PHASE 1: VALIDATING {len(nodegroups_config)} NODEGROUP CONFIGURATIONS"
+            )
             self.logger.info("─" * 60)
 
             # Validate all nodegroup configurations
@@ -359,18 +412,21 @@ class EKSNodeGroupScaler:
                 self.logger.error(f"❌ {error_msg}")
                 self.log_execution_end(success=False)
                 return {
-                    'statusCode': 400,
-                    'body': json.dumps({
-                        'success': False,
-                        'error': error_msg,
-                        'cluster': cluster_name,
-                        'region': region,
-                        'timestamp': datetime.utcnow().isoformat() + 'Z'
-                    })
+                    "statusCode": 400,
+                    "body": json.dumps(
+                        {
+                            "success": False,
+                            "error": error_msg,
+                            "cluster": cluster_name,
+                            "region": region,
+                            "timestamp": datetime.utcnow().isoformat() + "Z",
+                        }
+                    ),
                 }
 
             self.logger.info(
-                f"✅ Validation complete: {len(valid_configs)}/{len(nodegroups_config)} configurations valid")
+                f"✅ Validation complete: {len(valid_configs)}/{len(nodegroups_config)} configurations valid"
+            )
 
             # Process scaling operations
             self.logger.info(f"🚀 PHASE 2: EXECUTING SCALING OPERATIONS")
@@ -378,65 +434,86 @@ class EKSNodeGroupScaler:
 
             results = []
             for i, ng_config in enumerate(valid_configs, 1):
-                result = self.process_nodegroup(eks_client, cluster_name, ng_config, i, len(valid_configs))
+                result = self.process_nodegroup(
+                    eks_client, cluster_name, ng_config, i, len(valid_configs)
+                )
                 results.append(result)
 
             # Calculate final statistics
             total_processed = len(valid_configs)
-            success_rate = ((self.execution_stats['successful_operations'] + self.execution_stats[
-                'skipped_operations']) / max(1, total_processed)) * 100
+            success_rate = (
+                (
+                    self.execution_stats["successful_operations"]
+                    + self.execution_stats["skipped_operations"]
+                )
+                / max(1, total_processed)
+            ) * 100
 
             self.logger.info("📊 SCALING OPERATION SUMMARY:")
             self.logger.info(f"   ├── Total nodegroups: {total_processed}")
-            self.logger.info(f"   ├── Successful operations: {self.execution_stats['successful_operations']}")
-            self.logger.info(f"   ├── Skipped operations: {self.execution_stats['skipped_operations']}")
-            self.logger.info(f"   ├── Failed operations: {self.execution_stats['failed_operations']}")
+            self.logger.info(
+                f"   ├── Successful operations: {self.execution_stats['successful_operations']}"
+            )
+            self.logger.info(
+                f"   ├── Skipped operations: {self.execution_stats['skipped_operations']}"
+            )
+            self.logger.info(
+                f"   ├── Failed operations: {self.execution_stats['failed_operations']}"
+            )
             self.logger.info(f"   ├── Success rate: {success_rate:.1f}%")
-            self.logger.info(f"   └── Total scaling changes: {self.execution_stats['total_scaling_changes']}")
+            self.logger.info(
+                f"   └── Total scaling changes: {self.execution_stats['total_scaling_changes']}"
+            )
 
             self.log_execution_end(success=True)
 
             # Prepare response
             summary = {
-                'success': True,
-                'timestamp': datetime.utcnow().isoformat() + 'Z',
-                'cluster': cluster_name,
-                'region': region,
-                'action': action,
-                'ist_time': ist_time,
-                'total_nodegroups': total_processed,
-                'successful_operations': self.execution_stats['successful_operations'],
-                'skipped_operations': self.execution_stats['skipped_operations'],
-                'failed_operations': self.execution_stats['failed_operations'],
-                'success_rate_percent': round(success_rate, 1),
-                'total_scaling_changes': self.execution_stats['total_scaling_changes'],
-                'execution_stats': self.execution_stats,
-                'results': results,
-                'processed_by': 'eks-nodegroup-scaling-lambda',
-                'processed_by_user': '{{CURRENT_USER}}',
-                'generated_on': '{{CURRENT_DATETIME}}'
+                "success": True,
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "cluster": cluster_name,
+                "region": region,
+                "action": action,
+                "ist_time": ist_time,
+                "total_nodegroups": total_processed,
+                "successful_operations": self.execution_stats["successful_operations"],
+                "skipped_operations": self.execution_stats["skipped_operations"],
+                "failed_operations": self.execution_stats["failed_operations"],
+                "success_rate_percent": round(success_rate, 1),
+                "total_scaling_changes": self.execution_stats["total_scaling_changes"],
+                "execution_stats": self.execution_stats,
+                "results": results,
+                "processed_by": "eks-nodegroup-scaling-lambda",
+                "processed_by_user": "{{CURRENT_USER}}",
+                "generated_on": "{{CURRENT_DATETIME}}",
             }
 
             return {
-                'statusCode': 200 if self.execution_stats['failed_operations'] == 0 else 207,  # 207 = Multi-Status
-                'body': json.dumps(summary, default=str)
+                "statusCode": (
+                    200 if self.execution_stats["failed_operations"] == 0 else 207
+                ),  # 207 = Multi-Status
+                "body": json.dumps(summary, default=str),
             }
 
         except Exception as e:
             error_msg = str(e)
-            self.logger.error(f"💥 Scaling operation failed with unexpected error: {error_msg}")
+            self.logger.error(
+                f"💥 Scaling operation failed with unexpected error: {error_msg}"
+            )
             self.log_execution_end(success=False)
 
             return {
-                'statusCode': 500,
-                'body': json.dumps({
-                    'success': False,
-                    'error': error_msg,
-                    'cluster': cluster_name,
-                    'region': region,
-                    'execution_stats': self.execution_stats,
-                    'timestamp': datetime.utcnow().isoformat() + 'Z'
-                })
+                "statusCode": 500,
+                "body": json.dumps(
+                    {
+                        "success": False,
+                        "error": error_msg,
+                        "cluster": cluster_name,
+                        "region": region,
+                        "execution_stats": self.execution_stats,
+                        "timestamp": datetime.utcnow().isoformat() + "Z",
+                    }
+                ),
             }
 
 
@@ -459,51 +536,65 @@ def lambda_handler(event, context):
         logger.info(f"📍 Function ARN: {context.invoked_function_arn}")
         logger.info(f"📅 Template generated: {{CURRENT_DATETIME}}")
         logger.info(f"👤 Generated by user: {{CURRENT_USER}}")
-        logger.info(f"⏱️  Remaining execution time: {context.get_remaining_time_in_millis()}ms")
+        logger.info(
+            f"⏱️  Remaining execution time: {context.get_remaining_time_in_millis()}ms"
+        )
         logger.info(f"💾 Memory limit: {context.memory_limit_in_mb}MB")
 
         # Log event (safely)
         logger.info(f"📥 Event received: {json.dumps(event, indent=2)}")
 
         # Get configuration from template injection or event
-        cluster_name = cluster_name = "{{ cluster_name }}" if "{{ cluster_name }}" != "" else event.get("cluster_name") or os.environ.get("CLUSTER_NAME")
-        region = '{{region}}' if '{{region}}' != "" else event.get('region') or os.environ.get('REGION')
+        cluster_name = cluster_name = (
+            "{{ cluster_name }}"
+            if "{{ cluster_name }}" != ""
+            else event.get("cluster_name") or os.environ.get("CLUSTER_NAME")
+        )
+        region = (
+            "{{region}}"
+            if "{{region}}" != ""
+            else event.get("region") or os.environ.get("REGION")
+        )
 
         # Validate required parameters
         if not cluster_name:
-            error_msg = 'cluster_name is required in template injection, event payload, or CLUSTER_NAME environment variable'
+            error_msg = "cluster_name is required in template injection, event payload, or CLUSTER_NAME environment variable"
             logger.error(f"❌ Validation failed: {error_msg}")
             return {
-                'statusCode': 400,
-                'body': json.dumps({
-                    'success': False,
-                    'error': error_msg,
-                    'timestamp': datetime.utcnow().isoformat() + 'Z'
-                })
+                "statusCode": 400,
+                "body": json.dumps(
+                    {
+                        "success": False,
+                        "error": error_msg,
+                        "timestamp": datetime.utcnow().isoformat() + "Z",
+                    }
+                ),
             }
 
         if not region:
-            error_msg = 'region is required in template injection, event, or AWS_REGION environment variable'
+            error_msg = "region is required in template injection, event, or AWS_REGION environment variable"
             logger.error(f"❌ Validation failed: {error_msg}")
             return {
-                'statusCode': 400,
-                'body': json.dumps({
-                    'success': False,
-                    'error': error_msg,
-                    'cluster_name': cluster_name,
-                    'timestamp': datetime.utcnow().isoformat() + 'Z'
-                })
+                "statusCode": 400,
+                "body": json.dumps(
+                    {
+                        "success": False,
+                        "error": error_msg,
+                        "cluster_name": cluster_name,
+                        "timestamp": datetime.utcnow().isoformat() + "Z",
+                    }
+                ),
             }
 
         # Process the event
-        action = event.get('action', 'unknown')
+        action = event.get("action", "unknown")
 
         # Get IST time - if not provided, calculate current IST time
-        ist_time = event.get('ist_time')
-        if not ist_time or ist_time == 'unknown time':
+        ist_time = event.get("ist_time")
+        if not ist_time or ist_time == "unknown time":
             ist_time = scaler.calculate_ist_time()
 
-        nodegroups_config = event.get('nodegroups', [])
+        nodegroups_config = event.get("nodegroups", [])
 
         logger.info(f"🔧 Configuration resolved:")
         logger.info(f"   ├── Cluster: {cluster_name}")
@@ -513,20 +604,26 @@ def lambda_handler(event, context):
         logger.info(f"   └── Nodegroups: {len(nodegroups_config)} configured")
 
         # Run the scaling logic
-        result = scaler.scale_nodegroups(cluster_name, region, action, ist_time, nodegroups_config)
+        result = scaler.scale_nodegroups(
+            cluster_name, region, action, ist_time, nodegroups_config
+        )
 
-        logger.info(f"🎉 Lambda execution completed with status: {result['statusCode']}")
+        logger.info(
+            f"🎉 Lambda execution completed with status: {result['statusCode']}"
+        )
         return result
 
     except Exception as e:
         logger.error(f"💥 Lambda handler failed with unexpected error: {str(e)}")
         return {
-            'statusCode': 500,
-            'body': json.dumps({
-                'success': False,
-                'error': f'Lambda execution failed: {str(e)}',
-                'timestamp': datetime.utcnow().isoformat() + 'Z'
-            })
+            "statusCode": 500,
+            "body": json.dumps(
+                {
+                    "success": False,
+                    "error": f"Lambda execution failed: {str(e)}",
+                    "timestamp": datetime.utcnow().isoformat() + "Z",
+                }
+            ),
         }
 
 
@@ -839,15 +936,15 @@ def main():
                 "name": "test-nodegroup-1",
                 "desired_size": 2,
                 "min_size": 1,
-                "max_size": 3
+                "max_size": 3,
             },
             {
                 "name": "test-nodegroup-2",
                 "desired_size": 1,
                 "min_size": 1,
-                "max_size": 3
-            }
-        ]
+                "max_size": 3,
+            },
+        ],
     }
 
     scale_down_event = {
@@ -858,27 +955,29 @@ def main():
                 "name": "test-nodegroup-1",
                 "desired_size": 0,
                 "min_size": 0,
-                "max_size": 3
+                "max_size": 3,
             },
             {
                 "name": "test-nodegroup-2",
                 "desired_size": 0,
                 "min_size": 0,
-                "max_size": 3
-            }
-        ]
+                "max_size": 3,
+            },
+        ],
     }
 
     # Mock Lambda context
     class MockContext:
         def __init__(self):
-            self.function_name = 'eks-nodegroup-scaling-function'
-            self.function_version = '$LATEST'
-            self.invoked_function_arn = 'arn:aws:lambda:{{region}}:123456789012:function:eks-scaling-function'
-            self.memory_limit_in_mb = '256'
+            self.function_name = "eks-nodegroup-scaling-function"
+            self.function_version = "$LATEST"
+            self.invoked_function_arn = (
+                "arn:aws:lambda:{{region}}:123456789012:function:eks-scaling-function"
+            )
+            self.memory_limit_in_mb = "256"
             self.remaining_time_in_millis = 60000
-            self.log_group_name = '/aws/lambda/eks-scaling-function'
-            self.log_stream_name = '{{current_date}}/[$LATEST]test'
+            self.log_group_name = "/aws/lambda/eks-scaling-function"
+            self.log_stream_name = "{{current_date}}/[$LATEST]test"
 
         def get_remaining_time_in_millis(self):
             return self.remaining_time_in_millis
@@ -889,15 +988,15 @@ def main():
         print("\n🚀 Testing SCALE UP operation...")
         result = lambda_handler(scale_up_event, context)
         print(f"Status Code: {result['statusCode']}")
-        if result.get('body'):
-            body = json.loads(result['body'])
+        if result.get("body"):
+            body = json.loads(result["body"])
             print(json.dumps(body, indent=2))
 
         print("\n🚀 Testing SCALE DOWN operation...")
         result = lambda_handler(scale_down_event, context)
         print(f"Status Code: {result['statusCode']}")
-        if result.get('body'):
-            body = json.loads(result['body'])
+        if result.get("body"):
+            body = json.loads(result["body"])
             print(json.dumps(body, indent=2))
 
         print("\n✅ Local testing completed!")

@@ -1,10 +1,12 @@
-import os
 import glob
 import json
-import boto3
-from datetime import datetime, timedelta
+import os
 import re
-from typing import Dict, List, Optional, Any
+from datetime import datetime
+from typing import Any, Dict, List, Optional
+
+import boto3
+
 from root_iam_credential_manager import AWSCredentialManager, Colors
 
 
@@ -25,8 +27,12 @@ class EKSLambdaScaler:
         self.eks_dir = os.path.join(self.config_dir, "aws", "eks")
 
         # Lambda event templates
-        self.lambda_scale_up_file = os.path.join(self.config_dir, "lambda_scale_up_event.json")
-        self.lambda_scale_down_file = os.path.join(self.config_dir, "lambda_scale_down_event.json")
+        self.lambda_scale_up_file = os.path.join(
+            self.config_dir, "lambda_scale_up_event.json"
+        )
+        self.lambda_scale_down_file = os.path.join(
+            self.config_dir, "lambda_scale_down_event.json"
+        )
 
         self._check_required_files()
 
@@ -43,91 +49,122 @@ class EKSLambdaScaler:
             return None
 
         if len(iam_files) == 1:
-            self.print_colored(Colors.GREEN, f"✅ Using single IAM credentials file: {iam_files[0]['filename']}")
-            return iam_files[0]['file_path']
+            self.print_colored(
+                Colors.GREEN,
+                f"✅ Using single IAM credentials file: {iam_files[0]['filename']}",
+            )
+            return iam_files[0]["file_path"]
 
         # Sort by timestamp (newest first)
         # Handle both string and datetime timestamp formats
         def get_sort_key(file_info):
-            timestamp = file_info['timestamp']
+            timestamp = file_info["timestamp"]
             if isinstance(timestamp, str):
                 try:
                     # Try to parse string timestamp
-                    return datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S')
+                    return datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
                 except ValueError:
                     try:
-                        return datetime.strptime(timestamp, '%Y%m%d_%H%M%S')
+                        return datetime.strptime(timestamp, "%Y%m%d_%H%M%S")
                     except ValueError:
                         # If parsing fails, use file modification time
-                        return datetime.fromtimestamp(os.path.getmtime(file_info['file_path']))
+                        return datetime.fromtimestamp(
+                            os.path.getmtime(file_info["file_path"])
+                        )
             return timestamp
 
         sorted_files = sorted(iam_files, key=get_sort_key, reverse=True)
 
-        self.print_colored(Colors.YELLOW, f"\n📁 Found {len(sorted_files)} IAM credential files:")
+        self.print_colored(
+            Colors.YELLOW, f"\n📁 Found {len(sorted_files)} IAM credential files:"
+        )
         self.print_colored(Colors.YELLOW, "=" * 80)
 
         for i, file_info in enumerate(sorted_files, 1):
-            timestamp = file_info['timestamp']
+            timestamp = file_info["timestamp"]
 
             # Format timestamp for display
             if isinstance(timestamp, str):
                 timestamp_str = timestamp  # Use as-is if it's already a string
             else:
-                timestamp_str = timestamp.strftime('%Y-%m-%d %H:%M:%S')
+                timestamp_str = timestamp.strftime("%Y-%m-%d %H:%M:%S")
 
-            filename = file_info['filename']
+            filename = file_info["filename"]
 
             # Mark the latest (first) file as default
             if i == 1:
-                self.print_colored(Colors.GREEN, f"   {i}. [{timestamp_str}] {filename} (DEFAULT)")
+                self.print_colored(
+                    Colors.GREEN, f"   {i}. [{timestamp_str}] {filename} (DEFAULT)"
+                )
             else:
                 self.print_colored(Colors.CYAN, f"   {i}. [{timestamp_str}] {filename}")
 
         self.print_colored(Colors.YELLOW, "=" * 80)
-        self.print_colored(Colors.YELLOW, "💡 Press Enter to use default (latest file) or select by number")
+        self.print_colored(
+            Colors.YELLOW,
+            "💡 Press Enter to use default (latest file) or select by number",
+        )
         self.print_colored(Colors.YELLOW, "=" * 80)
 
         while True:
             try:
                 choice = input(
-                    f"Select IAM credentials file (1-{len(sorted_files)}, Enter for default) or 'q' to quit: ").strip()
+                    f"Select IAM credentials file (1-{len(sorted_files)}, Enter for default) or 'q' to quit: "
+                ).strip()
 
-                if choice.lower() == 'q':
+                if choice.lower() == "q":
                     return None
 
                 # Use default (latest file)
-                if choice == '':
+                if choice == "":
                     selected_file = sorted_files[0]
-                    self.print_colored(Colors.GREEN, f"✅ Using default: {selected_file['filename']}")
-                    return selected_file['file_path']
+                    self.print_colored(
+                        Colors.GREEN, f"✅ Using default: {selected_file['filename']}"
+                    )
+                    return selected_file["file_path"]
 
                 # Parse selection
                 selection = int(choice)
                 if 1 <= selection <= len(sorted_files):
                     selected_file = sorted_files[selection - 1]
-                    self.print_colored(Colors.GREEN, f"✅ Selected: {selected_file['filename']}")
-                    return selected_file['file_path']
+                    self.print_colored(
+                        Colors.GREEN, f"✅ Selected: {selected_file['filename']}"
+                    )
+                    return selected_file["file_path"]
                 else:
-                    self.print_colored(Colors.RED, f"❌ Invalid selection. Please enter 1-{len(sorted_files)}")
+                    self.print_colored(
+                        Colors.RED,
+                        f"❌ Invalid selection. Please enter 1-{len(sorted_files)}",
+                    )
 
             except ValueError:
-                self.print_colored(Colors.RED, "❌ Invalid input. Please enter a number")
+                self.print_colored(
+                    Colors.RED, "❌ Invalid input. Please enter a number"
+                )
             except Exception as e:
-                self.print_colored(Colors.RED, f"❌ Error processing selection: {str(e)}")
+                self.print_colored(
+                    Colors.RED, f"❌ Error processing selection: {str(e)}"
+                )
 
     def _check_required_files(self):
         """Check if required files exist."""
         if not os.path.exists(self.eks_dir):
-            self.print_colored(Colors.YELLOW, f"⚠️  Warning: AWS EKS directory not found: {self.eks_dir}")
+            self.print_colored(
+                Colors.YELLOW,
+                f"⚠️  Warning: AWS EKS directory not found: {self.eks_dir}",
+            )
 
         if not os.path.exists(self.lambda_scale_up_file):
-            self.print_colored(Colors.YELLOW,
-                               f"⚠️  Warning: Lambda scale up event file not found: {self.lambda_scale_up_file}")
+            self.print_colored(
+                Colors.YELLOW,
+                f"⚠️  Warning: Lambda scale up event file not found: {self.lambda_scale_up_file}",
+            )
 
         if not os.path.exists(self.lambda_scale_down_file):
-            self.print_colored(Colors.YELLOW,
-                               f"⚠️  Warning: Lambda scale down event file not found: {self.lambda_scale_down_file}")
+            self.print_colored(
+                Colors.YELLOW,
+                f"⚠️  Warning: Lambda scale down event file not found: {self.lambda_scale_down_file}",
+            )
 
     def scan_eks_files(self) -> Dict[str, List[Dict[str, Any]]]:
         """
@@ -152,24 +189,28 @@ class EKSLambdaScaler:
             try:
                 # Extract timestamp from filename
                 filename = os.path.basename(file_path)
-                match = re.search(r'(\d{4}-\d{2}-\d{2})(?:_\d{2}-\d{2}-\d{2})?\.json$', filename)
+                match = re.search(
+                    r"(\d{4}-\d{2}-\d{2})(?:_\d{2}-\d{2}-\d{2})?\.json$", filename
+                )
 
                 if match:
                     date_key = match.group(1)  # YYYY-MM-DD
                 else:
                     # Use file modification date if pattern not found
                     mod_time = datetime.fromtimestamp(os.path.getmtime(file_path))
-                    date_key = mod_time.strftime('%Y-%m-%d')
+                    date_key = mod_time.strftime("%Y-%m-%d")
 
                 # Extract account and cluster info from filename
-                account_match = re.search(r'eks_cluster_(.*?)(?:_clouduser|\.json|-us)', filename)
+                account_match = re.search(
+                    r"eks_cluster_(.*?)(?:_clouduser|\.json|-us)", filename
+                )
                 account_info = account_match.group(1) if account_match else "unknown"
 
                 file_info = {
-                    'file_path': file_path,
-                    'filename': filename,
-                    'account_info': account_info,
-                    'date': date_key
+                    "file_path": file_path,
+                    "filename": filename,
+                    "account_info": account_info,
+                    "date": date_key,
                 }
 
                 if date_key not in files_by_date:
@@ -178,21 +219,29 @@ class EKSLambdaScaler:
                 files_by_date[date_key].append(file_info)
 
             except Exception as e:
-                self.print_colored(Colors.YELLOW, f"⚠️  Error processing {file_path}: {str(e)}")
+                self.print_colored(
+                    Colors.YELLOW, f"⚠️  Error processing {file_path}: {str(e)}"
+                )
 
         # Sort dates in reverse order (newest first)
         sorted_files_by_date = {
             date: files
-            for date, files in sorted(files_by_date.items(), key=lambda x: x[0], reverse=True)
+            for date, files in sorted(
+                files_by_date.items(), key=lambda x: x[0], reverse=True
+            )
         }
 
         total_files = sum(len(files) for files in sorted_files_by_date.values())
-        self.print_colored(Colors.GREEN,
-                           f"✅ Found {total_files} EKS cluster files across {len(sorted_files_by_date)} dates")
+        self.print_colored(
+            Colors.GREEN,
+            f"✅ Found {total_files} EKS cluster files across {len(sorted_files_by_date)} dates",
+        )
 
         return sorted_files_by_date
 
-    def select_dates_interactive(self, files_by_date: Dict[str, List[Dict[str, Any]]]) -> Optional[List[str]]:
+    def select_dates_interactive(
+        self, files_by_date: Dict[str, List[Dict[str, Any]]]
+    ) -> Optional[List[str]]:
         """Interactive date selection for EKS files."""
         if not files_by_date:
             self.print_colored(Colors.RED, "❌ No EKS dates available")
@@ -219,28 +268,39 @@ class EKSLambdaScaler:
         while True:
             try:
                 choice = input(
-                    f"Select dates (1-{len(dates)}, comma-separated, range, or 'all') or 'q' to quit: ").strip()
+                    f"Select dates (1-{len(dates)}, comma-separated, range, or 'all') or 'q' to quit: "
+                ).strip()
 
-                if choice.lower() == 'q':
+                if choice.lower() == "q":
                     return None
 
                 if choice.lower() == "all":
-                    self.print_colored(Colors.GREEN, f"✅ Selected all {len(dates)} dates")
+                    self.print_colored(
+                        Colors.GREEN, f"✅ Selected all {len(dates)} dates"
+                    )
                     return dates
 
-                selected_indices = self.cred_manager._parse_selection(choice, len(dates))
+                selected_indices = self.cred_manager._parse_selection(
+                    choice, len(dates)
+                )
                 if not selected_indices:
                     self.print_colored(Colors.RED, "❌ Invalid selection format")
                     continue
 
                 selected_dates = [dates[i - 1] for i in selected_indices]
-                self.print_colored(Colors.GREEN, f"✅ Selected {len(selected_dates)} dates")
+                self.print_colored(
+                    Colors.GREEN, f"✅ Selected {len(selected_dates)} dates"
+                )
                 return selected_dates
 
             except Exception as e:
-                self.print_colored(Colors.RED, f"❌ Error processing selection: {str(e)}")
+                self.print_colored(
+                    Colors.RED, f"❌ Error processing selection: {str(e)}"
+                )
 
-    def load_clusters_from_files(self, files: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def load_clusters_from_files(
+        self, files: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
         """
         Load EKS cluster information from files.
 
@@ -253,62 +313,73 @@ class EKSLambdaScaler:
         clusters = []
 
         for file_info in files:
-            file_path = file_info['file_path']
+            file_path = file_info["file_path"]
 
             try:
-                with open(file_path, 'r') as f:
+                with open(file_path, "r") as f:
                     data = json.load(f)
 
                 # Extract account details from the path
                 account_dir = os.path.basename(os.path.dirname(file_path))
 
                 # Check if this is the new JSON structure (with cluster_info)
-                if 'cluster_info' in data:
+                if "cluster_info" in data:
                     # Get account info
-                    account_info = data.get('account_info', {})
-                    account_id = account_info.get('account_id', account_dir)
+                    account_info = data.get("account_info", {})
+                    account_id = account_info.get("account_id", account_dir)
 
                     # Get cluster details
-                    cluster_info = data.get('cluster_info', {})
+                    cluster_info = data.get("cluster_info", {})
 
                     # Create a cluster entry
-                    clusters.append({
-                        'account_id': account_id,
-                        'account_key': account_info.get('account_name', account_dir),
-                        'region': account_info.get('region', 'unknown'),
-                        'name': cluster_info.get('cluster_name', 'unknown'),
-                        'status': 'ACTIVE',  # Default status since it's not in the JSON
-                        'created_at': data.get('timestamp', 'unknown'),
-                        'file_path': file_path,
-                        'cluster': cluster_info,
-                        'source_file': file_info,
-                        # Additional useful information from the JSON file
-                        'eks_version': cluster_info.get('eks_version', 'unknown'),
-                        'nodegroups': cluster_info.get('nodegroups_created', []),
-                        'features': data.get('features_status', {})
-                    })
+                    clusters.append(
+                        {
+                            "account_id": account_id,
+                            "account_key": account_info.get(
+                                "account_name", account_dir
+                            ),
+                            "region": account_info.get("region", "unknown"),
+                            "name": cluster_info.get("cluster_name", "unknown"),
+                            "status": "ACTIVE",  # Default status since it's not in the JSON
+                            "created_at": data.get("timestamp", "unknown"),
+                            "file_path": file_path,
+                            "cluster": cluster_info,
+                            "source_file": file_info,
+                            # Additional useful information from the JSON file
+                            "eks_version": cluster_info.get("eks_version", "unknown"),
+                            "nodegroups": cluster_info.get("nodegroups_created", []),
+                            "features": data.get("features_status", {}),
+                        }
+                    )
                 # Try the old format with clusters array
-                elif 'clusters' in data:
-                    for cluster in data['clusters']:
+                elif "clusters" in data:
+                    for cluster in data["clusters"]:
                         # Store both file info and cluster info (old format)
-                        clusters.append({
-                            'account_id': data.get('account_id', account_dir),
-                            'account_key': data.get('account_key', account_dir),
-                            'region': cluster.get('region', 'unknown'),
-                            'name': cluster.get('name', 'unknown'),
-                            'status': cluster.get('status', 'unknown'),
-                            'created_at': cluster.get('created_at', 'unknown'),
-                            'file_path': file_path,
-                            'cluster': cluster,
-                            'source_file': file_info
-                        })
+                        clusters.append(
+                            {
+                                "account_id": data.get("account_id", account_dir),
+                                "account_key": data.get("account_key", account_dir),
+                                "region": cluster.get("region", "unknown"),
+                                "name": cluster.get("name", "unknown"),
+                                "status": cluster.get("status", "unknown"),
+                                "created_at": cluster.get("created_at", "unknown"),
+                                "file_path": file_path,
+                                "cluster": cluster,
+                                "source_file": file_info,
+                            }
+                        )
 
             except Exception as e:
-                self.print_colored(Colors.YELLOW, f"⚠️  Error loading clusters from {file_path}: {str(e)}")
+                self.print_colored(
+                    Colors.YELLOW,
+                    f"⚠️  Error loading clusters from {file_path}: {str(e)}",
+                )
 
         return clusters
 
-    def select_clusters_interactive(self, clusters: List[Dict[str, Any]]) -> Optional[List[Dict[str, Any]]]:
+    def select_clusters_interactive(
+        self, clusters: List[Dict[str, Any]]
+    ) -> Optional[List[Dict[str, Any]]]:
         """Interactive cluster selection."""
         if not clusters:
             self.print_colored(Colors.RED, "❌ No clusters found")
@@ -332,8 +403,14 @@ class EKSLambdaScaler:
             for cluster in account_clusters:
                 # Find the correct index in the original clusters list
                 cluster_index = clusters.index(cluster) + 1
-                self.print_colored(Colors.CYAN, f"   {cluster_index}. {cluster['name']} ({cluster['region']})")
-                self.print_colored(Colors.WHITE, f"      Status: {cluster['status']}, Created: {cluster['created_at']}")
+                self.print_colored(
+                    Colors.CYAN,
+                    f"   {cluster_index}. {cluster['name']} ({cluster['region']})",
+                )
+                self.print_colored(
+                    Colors.WHITE,
+                    f"      Status: {cluster['status']}, Created: {cluster['created_at']}",
+                )
 
         total_clusters = len(clusters)
         self.print_colored(Colors.YELLOW, "=" * 100)
@@ -347,16 +424,21 @@ class EKSLambdaScaler:
         while True:
             try:
                 choice = input(
-                    f"Select clusters (1-{total_clusters}, comma-separated, range, or 'all') or 'q' to quit: ").strip()
+                    f"Select clusters (1-{total_clusters}, comma-separated, range, or 'all') or 'q' to quit: "
+                ).strip()
 
-                if choice.lower() == 'q':
+                if choice.lower() == "q":
                     return None
 
                 if choice.lower() == "all":
-                    self.print_colored(Colors.GREEN, f"✅ Selected all {total_clusters} clusters")
+                    self.print_colored(
+                        Colors.GREEN, f"✅ Selected all {total_clusters} clusters"
+                    )
                     return clusters
 
-                selected_indices = self.cred_manager._parse_selection(choice, total_clusters)
+                selected_indices = self.cred_manager._parse_selection(
+                    choice, total_clusters
+                )
                 if not selected_indices:
                     self.print_colored(Colors.RED, "❌ Invalid selection format")
                     continue
@@ -364,42 +446,58 @@ class EKSLambdaScaler:
                 selected_clusters = [clusters[i - 1] for i in selected_indices]
 
                 # Show what was actually selected for confirmation
-                self.print_colored(Colors.GREEN, f"✅ Selected {len(selected_clusters)} clusters:")
+                self.print_colored(
+                    Colors.GREEN, f"✅ Selected {len(selected_clusters)} clusters:"
+                )
                 for cluster in selected_clusters:
-                    self.print_colored(Colors.WHITE, f"   • {cluster['name']} ({cluster['account_key']})")
+                    self.print_colored(
+                        Colors.WHITE,
+                        f"   • {cluster['name']} ({cluster['account_key']})",
+                    )
 
                 return selected_clusters
 
             except Exception as e:
-                self.print_colored(Colors.RED, f"❌ Error processing selection: {str(e)}")
+                self.print_colored(
+                    Colors.RED, f"❌ Error processing selection: {str(e)}"
+                )
 
     def get_lambda_event_template(self, action: str) -> Optional[Dict[str, Any]]:
         """Get the Lambda event template for the specified action."""
-        template_file = self.lambda_scale_up_file if action == "up" else self.lambda_scale_down_file
+        template_file = (
+            self.lambda_scale_up_file if action == "up" else self.lambda_scale_down_file
+        )
 
         try:
             if not os.path.exists(template_file):
-                self.print_colored(Colors.RED, f"❌ Lambda {action} event template not found: {template_file}")
+                self.print_colored(
+                    Colors.RED,
+                    f"❌ Lambda {action} event template not found: {template_file}",
+                )
                 return None
 
-            with open(template_file, 'r') as f:
+            with open(template_file, "r") as f:
                 data = json.load(f)
 
             return data
 
         except Exception as e:
-            self.print_colored(Colors.RED, f"❌ Error loading Lambda event template: {str(e)}")
+            self.print_colored(
+                Colors.RED, f"❌ Error loading Lambda event template: {str(e)}"
+            )
             return None
 
     def get_lambda_function_name(self, cluster_name: str) -> str:
         """Derive Lambda function name from cluster name."""
         # Extract the 4-character suffix if it exists
-        match = re.search(r'([a-zA-Z0-9]{4})$', cluster_name)
+        match = re.search(r"([a-zA-Z0-9]{4})$", cluster_name)
         suffix = match.group(1) if match else "main"
 
         return f"eks-scale-{suffix}"
 
-    def invoke_lambda(self, cluster_info: Dict[str, Any], action: str, aws_creds: Dict[str, Any]) -> Dict[str, Any]:
+    def invoke_lambda(
+        self, cluster_info: Dict[str, Any], action: str, aws_creds: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """
         Invoke Lambda function to scale the cluster.
 
@@ -415,81 +513,89 @@ class EKSLambdaScaler:
             # Get Lambda event template
             event_template = self.get_lambda_event_template(action)
             if not event_template:
-                return {'success': False, 'error': 'Event template not found'}
+                return {"success": False, "error": "Event template not found"}
 
             # Customize event for this cluster
             event = event_template.copy()
             # Add any necessary customization here based on the cluster
 
             # Get Lambda function name
-            function_name = self.get_lambda_function_name(cluster_info['name'])
+            function_name = self.get_lambda_function_name(cluster_info["name"])
 
             # Create Lambda client
             lambda_client = boto3.client(
-                'lambda',
-                region_name=cluster_info['region'],
-                aws_access_key_id=aws_creds['access_key'],
-                aws_secret_access_key=aws_creds['secret_key']
+                "lambda",
+                region_name=cluster_info["region"],
+                aws_access_key_id=aws_creds["access_key"],
+                aws_secret_access_key=aws_creds["secret_key"],
             )
 
             # Invoke Lambda
             response = lambda_client.invoke(
                 FunctionName=function_name,
-                InvocationType='RequestResponse',
-                Payload=json.dumps(event)
+                InvocationType="RequestResponse",
+                Payload=json.dumps(event),
             )
 
             # Read and parse response
-            payload = json.loads(response['Payload'].read().decode('utf-8'))
+            payload = json.loads(response["Payload"].read().decode("utf-8"))
 
             return {
-                'success': response['StatusCode'] == 200,
-                'function_name': function_name,
-                'response': payload,
-                'status_code': response['StatusCode']
+                "success": response["StatusCode"] == 200,
+                "function_name": function_name,
+                "response": payload,
+                "status_code": response["StatusCode"],
             }
 
         except Exception as e:
             return {
-                'success': False,
-                'function_name': self.get_lambda_function_name(cluster_info['name']),
-                'error': str(e)
+                "success": False,
+                "function_name": self.get_lambda_function_name(cluster_info["name"]),
+                "error": str(e),
             }
 
-    def get_credentials_for_cluster(self, cluster_info: Dict[str, Any], selected_iam_file: str = None) -> Optional[
-        Dict[str, Any]]:
+    def get_credentials_for_cluster(
+        self, cluster_info: Dict[str, Any], selected_iam_file: str = None
+    ) -> Optional[Dict[str, Any]]:
         """Get AWS credentials for the cluster's account."""
-        account_id = cluster_info['account_id']
-        account_key = cluster_info['account_key']
-        cluster_name = cluster_info['name']
+        account_id = cluster_info["account_id"]
+        account_key = cluster_info["account_key"]
+        cluster_name = cluster_info["name"]
 
         # Determine if this is a root or IAM user cluster
-        is_root_cluster = cluster_name.startswith('root-')
+        is_root_cluster = cluster_name.startswith("root-")
 
         if is_root_cluster:
-            return self.cred_manager.get_root_account_by_id(account_id) or self.cred_manager.get_root_account_by_key(
-                account_key)
+            return self.cred_manager.get_root_account_by_id(
+                account_id
+            ) or self.cred_manager.get_root_account_by_key(account_key)
         else:
             # Extract username from cluster name (if format is account_clouduser)
-            user_match = re.search(r'_clouduser(\d+)', cluster_name)
+            user_match = re.search(r"_clouduser(\d+)", cluster_name)
 
             # Use selected IAM file if provided
             if selected_iam_file:
-                all_users = self.cred_manager.get_all_iam_users_from_file(selected_iam_file)
+                all_users = self.cred_manager.get_all_iam_users_from_file(
+                    selected_iam_file
+                )
                 for user in all_users:
-                    if user['account_id'] == account_id:
+                    if user["account_id"] == account_id:
                         # If we have a specific username match, prioritize that user
-                        if user_match and f"clouduser{user_match.group(1)}" == user['username']:
+                        if (
+                            user_match
+                            and f"clouduser{user_match.group(1)}" == user["username"]
+                        ):
                             return user
 
                 # If we didn't find a specific match but have users for this account, return the first one
                 for user in all_users:
-                    if user['account_id'] == account_id:
+                    if user["account_id"] == account_id:
                         return user
 
             # Fall back to root credentials
-            return self.cred_manager.get_root_account_by_id(account_id) or self.cred_manager.get_root_account_by_key(
-                account_key)
+            return self.cred_manager.get_root_account_by_id(
+                account_id
+            ) or self.cred_manager.get_root_account_by_key(account_key)
 
     def run(self):
         """Main execution flow for the EKS Lambda scaler."""
@@ -500,7 +606,9 @@ class EKSLambdaScaler:
         # Scan and select dates
         selected_iam_file = self.select_iam_credentials_file()
         if not selected_iam_file:
-            self.print_colored(Colors.RED, "❌ No IAM credentials file selected, exiting...")
+            self.print_colored(
+                Colors.RED, "❌ No IAM credentials file selected, exiting..."
+            )
             return
 
         files_by_date = self.scan_eks_files()
@@ -538,82 +646,103 @@ class EKSLambdaScaler:
 
         action = None
         while action is None:
-            choice = input("Select action (1 for Scale Up, 2 for Scale Down) or 'q' to quit: ").strip()
+            choice = input(
+                "Select action (1 for Scale Up, 2 for Scale Down) or 'q' to quit: "
+            ).strip()
 
-            if choice.lower() == 'q':
+            if choice.lower() == "q":
                 return
 
-            if choice == '1':
-                action = 'up'
-            elif choice == '2':
-                action = 'down'
+            if choice == "1":
+                action = "up"
+            elif choice == "2":
+                action = "down"
             else:
                 self.print_colored(Colors.RED, "❌ Invalid choice. Please enter 1 or 2")
 
         action_display = "Scale Up" if action == "up" else "Scale Down"
 
         # Confirm before proceeding
-        self.print_colored(Colors.YELLOW, f"\n⚠️  You are about to {action_display} {len(selected_clusters)} clusters:")
+        self.print_colored(
+            Colors.YELLOW,
+            f"\n⚠️  You are about to {action_display} {len(selected_clusters)} clusters:",
+        )
         for cluster in selected_clusters[:5]:
-            self.print_colored(Colors.WHITE, f"   • {cluster['name']} ({cluster['account_key']})")
+            self.print_colored(
+                Colors.WHITE, f"   • {cluster['name']} ({cluster['account_key']})"
+            )
 
         if len(selected_clusters) > 5:
-            self.print_colored(Colors.WHITE, f"   • ... and {len(selected_clusters) - 5} more")
+            self.print_colored(
+                Colors.WHITE, f"   • ... and {len(selected_clusters) - 5} more"
+            )
 
-        confirmation = input(f"\nConfirm {action_display} for all selected clusters? (y/n): ").strip().lower()
-        if confirmation != 'y':
+        confirmation = (
+            input(f"\nConfirm {action_display} for all selected clusters? (y/n): ")
+            .strip()
+            .lower()
+        )
+        if confirmation != "y":
             self.print_colored(Colors.RED, "❌ Operation canceled")
             return
 
         # Process clusters
-        self.print_colored(Colors.YELLOW, f"\n🚀 Executing {action_display} on {len(selected_clusters)} clusters...")
+        self.print_colored(
+            Colors.YELLOW,
+            f"\n🚀 Executing {action_display} on {len(selected_clusters)} clusters...",
+        )
 
-        results = {
-            'success': [],
-            'failed': []
-        }
+        results = {"success": [], "failed": []}
 
         for i, cluster in enumerate(selected_clusters, 1):
-            self.print_colored(Colors.CYAN,
-                               f"[{i}/{len(selected_clusters)}] Processing: {cluster['name']} ({cluster['account_key']})")
+            self.print_colored(
+                Colors.CYAN,
+                f"[{i}/{len(selected_clusters)}] Processing: {cluster['name']} ({cluster['account_key']})",
+            )
 
             # Get credentials for this cluster
             creds = self.get_credentials_for_cluster(cluster)
             if not creds:
-                self.print_colored(Colors.RED, f"   ❌ Failed to get credentials for account {cluster['account_id']}")
-                results['failed'].append({
-                    'cluster': cluster,
-                    'error': 'No credentials found'
-                })
+                self.print_colored(
+                    Colors.RED,
+                    f"   ❌ Failed to get credentials for account {cluster['account_id']}",
+                )
+                results["failed"].append(
+                    {"cluster": cluster, "error": "No credentials found"}
+                )
                 continue
 
             # Invoke Lambda
             result = self.invoke_lambda(cluster, action, creds)
 
-            if result['success']:
-                function_name = result.get('function_name', 'unknown')
-                self.print_colored(Colors.GREEN, f"   ✅ Successfully invoked Lambda: {function_name}")
-                results['success'].append({
-                    'cluster': cluster,
-                    'result': result
-                })
+            if result["success"]:
+                function_name = result.get("function_name", "unknown")
+                self.print_colored(
+                    Colors.GREEN, f"   ✅ Successfully invoked Lambda: {function_name}"
+                )
+                results["success"].append({"cluster": cluster, "result": result})
             else:
-                error = result.get('error', 'unknown error')
-                function_name = result.get('function_name', 'unknown')
-                self.print_colored(Colors.RED, f"   ❌ Failed to invoke Lambda {function_name}: {error}")
-                results['failed'].append({
-                    'cluster': cluster,
-                    'error': error
-                })
+                error = result.get("error", "unknown error")
+                function_name = result.get("function_name", "unknown")
+                self.print_colored(
+                    Colors.RED,
+                    f"   ❌ Failed to invoke Lambda {function_name}: {error}",
+                )
+                results["failed"].append({"cluster": cluster, "error": error})
 
         # Summary
         self.print_colored(Colors.YELLOW, "\n📊 Summary:")
-        self.print_colored(Colors.GREEN,
-                           f"   ✅ Successfully executed {action_display} on {len(results['success'])} clusters")
+        self.print_colored(
+            Colors.GREEN,
+            f"   ✅ Successfully executed {action_display} on {len(results['success'])} clusters",
+        )
 
-        if results['failed']:
-            self.print_colored(Colors.RED,
-                               f"   ❌ Failed to execute {action_display} on {len(results['failed'])} clusters")
+        if results["failed"]:
+            self.print_colored(
+                Colors.RED,
+                f"   ❌ Failed to execute {action_display} on {len(results['failed'])} clusters",
+            )
+
 
 if __name__ == "__main__":
     scaler = EKSLambdaScaler()

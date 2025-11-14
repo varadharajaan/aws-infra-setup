@@ -1,13 +1,17 @@
-import boto3
+import glob
+import json
+import os
 import subprocess
 import tempfile
-import os
-import json
-import glob
+
+import boto3
 from kubernetes import config
 
+
 class K8sPolicyInstaller:
-    def __init__(self, access_key, secret_key, account_id, region, manifests_dir='k8s_manifests'):
+    def __init__(
+        self, access_key, secret_key, account_id, region, manifests_dir="k8s_manifests"
+    ):
         self.access_key = access_key
         self.secret_key = secret_key
         self.account_id = account_id
@@ -18,12 +22,12 @@ class K8sPolicyInstaller:
         session = boto3.Session(
             aws_access_key_id=self.access_key,
             aws_secret_access_key=self.secret_key,
-            region_name=self.region
+            region_name=self.region,
         )
-        eks = session.client('eks')
-        cluster_info = eks.describe_cluster(name=cluster_name)['cluster']
-        endpoint = cluster_info['endpoint']
-        cert_data = cluster_info['certificateAuthority']['data']
+        eks = session.client("eks")
+        cluster_info = eks.describe_cluster(name=cluster_name)["cluster"]
+        endpoint = cluster_info["endpoint"]
+        cert_data = cluster_info["certificateAuthority"]["data"]
 
         kubeconfig_path = tempfile.NamedTemporaryFile(delete=False).name
         kubeconfig_yaml = f"""
@@ -60,24 +64,34 @@ users:
         - name: AWS_SECRET_ACCESS_KEY
           value: "{self.secret_key}"
 """
-        with open(kubeconfig_path, 'w') as f:
+        with open(kubeconfig_path, "w") as f:
             f.write(kubeconfig_yaml)
 
-        os.environ['KUBECONFIG'] = kubeconfig_path
+        os.environ["KUBECONFIG"] = kubeconfig_path
         config.load_kube_config(config_file=kubeconfig_path)
         return kubeconfig_path
 
     def install_kyverno(self):
-        subprocess.run([
-            "kubectl", "create", "-f",
-            "https://raw.githubusercontent.com/kyverno/kyverno/main/config/release/install.yaml"
-        ], check=True)
+        subprocess.run(
+            [
+                "kubectl",
+                "create",
+                "-f",
+                "https://raw.githubusercontent.com/kyverno/kyverno/main/config/release/install.yaml",
+            ],
+            check=True,
+        )
 
     def install_gatekeeper(self):
-        subprocess.run([
-            "kubectl", "apply", "-f",
-            "https://raw.githubusercontent.com/open-policy-agent/gatekeeper/master/deploy/gatekeeper.yaml"
-        ], check=True)
+        subprocess.run(
+            [
+                "kubectl",
+                "apply",
+                "-f",
+                "https://raw.githubusercontent.com/open-policy-agent/gatekeeper/master/deploy/gatekeeper.yaml",
+            ],
+            check=True,
+        )
 
     def apply_yaml(self, file_name):
         file_path = os.path.join(self.manifests_dir, file_name)
@@ -93,6 +107,7 @@ users:
         # self.apply_yaml("gatekeeper-template.yaml")
         # self.apply_yaml("gatekeeper-constraint.yaml")
 
+
 def select_accounts(accounts):
     keys = list(accounts.keys())
     print("Available accounts:")
@@ -106,12 +121,13 @@ def select_accounts(accounts):
         part = part.strip()
         if "-" in part:
             start, end = map(int, part.split("-"))
-            result.update(keys[start-1:end])
+            result.update(keys[start - 1 : end])
         elif part.isdigit():
-            result.add(keys[int(part)-1])
+            result.add(keys[int(part) - 1])
         elif part in keys:
             result.add(part)
     return list(result)
+
 
 def main():
     with open("aws_accounts_config.json") as f:
@@ -125,13 +141,18 @@ def main():
         account_id = acc_info["account_id"]
         eks_dir = f"aws/eks/{account}*"
         for eks_path in glob.glob(eks_dir):
-            for file in glob.glob(os.path.join(eks_path, "eks_cluster_eks-cluster-*.json")):
+            for file in glob.glob(
+                os.path.join(eks_path, "eks_cluster_eks-cluster-*.json")
+            ):
                 with open(file) as f:
                     cluster_data = json.load(f)
                 cluster_name = cluster_data["cluster_info"]["cluster_name"]
                 region = cluster_data["account_info"]["region"]
-                installer = K8sPolicyInstaller(access_key, secret_key, account_id, region)
+                installer = K8sPolicyInstaller(
+                    access_key, secret_key, account_id, region
+                )
                 installer.install_policies(cluster_name)
+
 
 if __name__ == "__main__":
     main()

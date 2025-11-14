@@ -8,15 +8,12 @@ Created by: {{CURRENT_USER}}
 """
 
 import json
-import os
-import sys
-import boto3
-from datetime import datetime
 import logging
+import os
 import time
-import base64
-import tempfile
-from botocore.exceptions import ClientError, BotoCoreError
+from datetime import datetime
+
+import boto3
 
 # Configure enhanced logging
 logger = logging.getLogger()
@@ -25,7 +22,7 @@ logger.setLevel(logging.INFO)
 
 class CustomFormatter(logging.Formatter):
     def format(self, record):
-        timestamp = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')
+        timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
         level = record.levelname
         message = record.getMessage()
         return f"[{timestamp}] [{level}] {message}"
@@ -41,12 +38,12 @@ class LambdaNodeProtectionMonitor:
         self.logger = logger
         self.start_time = None
         self.execution_stats = {
-            'instances_scanned': 0,
-            'protection_applied': 0,
-            'protection_removed': 0,
-            'protection_maintained': 0,  # Added this line
-            'errors_encountered': 0,
-            'warnings_issued': 0
+            "instances_scanned": 0,
+            "protection_applied": 0,
+            "protection_removed": 0,
+            "protection_maintained": 0,  # Added this line
+            "errors_encountered": 0,
+            "warnings_issued": 0,
         }
 
     def log_execution_start(self, cluster_name, region):
@@ -70,16 +67,26 @@ class LambdaNodeProtectionMonitor:
         self.logger.info("🏁 EXECUTION COMPLETE")
         self.logger.info("=" * 80)
         self.logger.info(f"⏱️  Total Execution Time: {execution_time:.2f} seconds")
-        self.logger.info(f"📊 Instances Scanned: {self.execution_stats['instances_scanned']}")
-        self.logger.info(f"🛡️  Protection Applied: {self.execution_stats['protection_applied']}")
-        self.logger.info(f"🔓 Protection Removed: {self.execution_stats['protection_removed']}")
-        self.logger.info(f"🔒 Protection Maintained: {self.execution_stats['protection_maintained']}")
+        self.logger.info(
+            f"📊 Instances Scanned: {self.execution_stats['instances_scanned']}"
+        )
+        self.logger.info(
+            f"🛡️  Protection Applied: {self.execution_stats['protection_applied']}"
+        )
+        self.logger.info(
+            f"🔓 Protection Removed: {self.execution_stats['protection_removed']}"
+        )
+        self.logger.info(
+            f"🔒 Protection Maintained: {self.execution_stats['protection_maintained']}"
+        )
         self.logger.info(f"❌ Errors: {self.execution_stats['errors_encountered']}")
         self.logger.info(f"⚠️  Warnings: {self.execution_stats['warnings_issued']}")
         self.logger.info(f"✅ Status: {'SUCCESS' if success else 'FAILED'}")
         self.logger.info("=" * 80)
 
-    def generate_kubeconfig_with_boto3(self, cluster_name, region, access_key=None, secret_key=None):
+    def generate_kubeconfig_with_boto3(
+        self, cluster_name, region, access_key=None, secret_key=None
+    ):
         """
         Generate kubeconfig using Boto3 instead of AWS CLI
         This eliminates the 70MB AWS CLI dependency
@@ -90,87 +97,93 @@ class LambdaNodeProtectionMonitor:
             # Create EKS client
             if access_key and secret_key:
                 eks_client = boto3.client(
-                    'eks',
+                    "eks",
                     region_name=region,
                     aws_access_key_id=access_key,
-                    aws_secret_access_key=secret_key
+                    aws_secret_access_key=secret_key,
                 )
                 sts_client = boto3.client(
-                    'sts',
+                    "sts",
                     region_name=region,
                     aws_access_key_id=access_key,
-                    aws_secret_access_key=secret_key
+                    aws_secret_access_key=secret_key,
                 )
             else:
-                eks_client = boto3.client('eks', region_name=region)
-                sts_client = boto3.client('sts', region_name=region)
+                eks_client = boto3.client("eks", region_name=region)
+                sts_client = boto3.client("sts", region_name=region)
 
             # Get cluster information
             self.logger.info(f"🔍 Retrieving cluster information for {cluster_name}...")
             cluster_info = eks_client.describe_cluster(name=cluster_name)
-            cluster = cluster_info['cluster']
+            cluster = cluster_info["cluster"]
 
-            endpoint = cluster['endpoint']
-            ca_data = cluster['certificateAuthority']['data']
+            endpoint = cluster["endpoint"]
+            ca_data = cluster["certificateAuthority"]["data"]
 
             self.logger.info(f"✅ Cluster endpoint: {endpoint}")
             self.logger.info(f"✅ CA data retrieved: {len(ca_data)} characters")
 
             # Get AWS account information
             identity = sts_client.get_caller_identity()
-            account_id = identity['Account']
+            account_id = identity["Account"]
 
             self.logger.info(f"✅ Account ID: {account_id}")
 
             # Create kubeconfig structure
             kubeconfig = {
-                'apiVersion': 'v1',
-                'clusters': [{
-                    'cluster': {
-                        'certificate-authority-data': ca_data,
-                        'server': endpoint
-                    },
-                    'name': f'arn:aws:eks:{region}:{account_id}:cluster/{cluster_name}'
-                }],
-                'contexts': [{
-                    'context': {
-                        'cluster': f'arn:aws:eks:{region}:{account_id}:cluster/{cluster_name}',
-                        'user': f'arn:aws:eks:{region}:{account_id}:cluster/{cluster_name}'
-                    },
-                    'name': f'arn:aws:eks:{region}:{account_id}:cluster/{cluster_name}'
-                }],
-                'current-context': f'arn:aws:eks:{region}:{account_id}:cluster/{cluster_name}',
-                'kind': 'Config',
-                'users': [{
-                    'name': f'arn:aws:eks:{region}:{account_id}:cluster/{cluster_name}',
-                    'user': {
-                        'exec': {
-                            'apiVersion': 'client.authentication.k8s.io/v1beta1',
-                            'command': '/bin/sh',
-                            'args': [
-                                '-c',
-                                f'python3 -c "import boto3, base64; '
-                                f'sts=boto3.client(\'sts\', region_name=\'{region}\'); '
-                                f'token=base64.urlsafe_b64encode(f\'k8s-aws-v1.{{base64.urlsafe_b64encode(f\\"https://sts.{region}.amazonaws.com/?Action=GetCallerIdentity&Version=2011-06-15\\".encode()).decode().rstrip(\\"=\\").replace(\\"+\\", \\"-\\").replace(\\"/\\", \\"_\\")}}\'.encode()).decode().rstrip(\'=\'); '
-                                f'print(token)"'
-                            ],
-                            'env': []
-                        }
+                "apiVersion": "v1",
+                "clusters": [
+                    {
+                        "cluster": {
+                            "certificate-authority-data": ca_data,
+                            "server": endpoint,
+                        },
+                        "name": f"arn:aws:eks:{region}:{account_id}:cluster/{cluster_name}",
                     }
-                }]
+                ],
+                "contexts": [
+                    {
+                        "context": {
+                            "cluster": f"arn:aws:eks:{region}:{account_id}:cluster/{cluster_name}",
+                            "user": f"arn:aws:eks:{region}:{account_id}:cluster/{cluster_name}",
+                        },
+                        "name": f"arn:aws:eks:{region}:{account_id}:cluster/{cluster_name}",
+                    }
+                ],
+                "current-context": f"arn:aws:eks:{region}:{account_id}:cluster/{cluster_name}",
+                "kind": "Config",
+                "users": [
+                    {
+                        "name": f"arn:aws:eks:{region}:{account_id}:cluster/{cluster_name}",
+                        "user": {
+                            "exec": {
+                                "apiVersion": "client.authentication.k8s.io/v1beta1",
+                                "command": "/bin/sh",
+                                "args": [
+                                    "-c",
+                                    f'python3 -c "import boto3, base64; '
+                                    f"sts=boto3.client('sts', region_name='{region}'); "
+                                    f'token=base64.urlsafe_b64encode(f\'k8s-aws-v1.{{base64.urlsafe_b64encode(f\\"https://sts.{region}.amazonaws.com/?Action=GetCallerIdentity&Version=2011-06-15\\".encode()).decode().rstrip(\\"=\\").replace(\\"+\\", \\"-\\").replace(\\"/\\", \\"_\\")}}\'.encode()).decode().rstrip(\'=\'); '
+                                    f'print(token)"',
+                                ],
+                                "env": [],
+                            }
+                        },
+                    }
+                ],
             }
 
             # Add credentials if provided
             if access_key and secret_key:
-                kubeconfig['users'][0]['user']['exec']['env'] = [
-                    {'name': 'AWS_ACCESS_KEY_ID', 'value': access_key},
-                    {'name': 'AWS_SECRET_ACCESS_KEY', 'value': secret_key},
-                    {'name': 'AWS_REGION', 'value': region}
+                kubeconfig["users"][0]["user"]["exec"]["env"] = [
+                    {"name": "AWS_ACCESS_KEY_ID", "value": access_key},
+                    {"name": "AWS_SECRET_ACCESS_KEY", "value": secret_key},
+                    {"name": "AWS_REGION", "value": region},
                 ]
 
             # Write kubeconfig to temporary file using JSON format
-            kubeconfig_path = '/tmp/kubeconfig'
-            with open(kubeconfig_path, 'w') as f:
+            kubeconfig_path = "/tmp/kubeconfig"
+            with open(kubeconfig_path, "w") as f:
                 json.dump(kubeconfig, f, indent=2)
 
             self.logger.info(f"✅ Kubeconfig generated at: {kubeconfig_path}")
@@ -189,14 +202,14 @@ class LambdaNodeProtectionMonitor:
 
         # Prioritized paths for kubectl
         kubectl_paths = [
-            '/opt/bin/kubectl',
-            '/opt/kubectl/kubectl',
-            '/usr/local/bin/kubectl',
-            '/usr/bin/kubectl'
+            "/opt/bin/kubectl",
+            "/opt/kubectl/kubectl",
+            "/usr/local/bin/kubectl",
+            "/usr/bin/kubectl",
         ]
 
         # Try using which with updated PATH
-        kubectl_path = shutil.which('kubectl')
+        kubectl_path = shutil.which("kubectl")
         if kubectl_path:
             self.logger.info(f"🔍 Found kubectl via PATH: {kubectl_path}")
             return kubectl_path
@@ -221,37 +234,56 @@ class LambdaNodeProtectionMonitor:
             self.logger.error("❌ kubectl not found. Cannot annotate nodes.")
             return False
 
-        self.logger.info(f"🔒 Annotating node {node_name} with scale-down protection...")
+        self.logger.info(
+            f"🔒 Annotating node {node_name} with scale-down protection..."
+        )
 
         try:
             # Check if annotation already exists
             check_cmd = [
-                kubectl_path, '--kubeconfig', kubeconfig_path,
-                'get', 'node', node_name,
-                '-o', 'jsonpath={.metadata.annotations.cluster-autoscaler\\.kubernetes\\.io/scale-down-disabled}'
+                kubectl_path,
+                "--kubeconfig",
+                kubeconfig_path,
+                "get",
+                "node",
+                node_name,
+                "-o",
+                "jsonpath={.metadata.annotations.cluster-autoscaler\\.kubernetes\\.io/scale-down-disabled}",
             ]
 
-            check_result = subprocess.run(check_cmd, capture_output=True, text=True, timeout=30)
+            check_result = subprocess.run(
+                check_cmd, capture_output=True, text=True, timeout=30
+            )
 
             if check_result.returncode == 0 and check_result.stdout.strip() == "true":
-                self.logger.info(f"✅ Node {node_name} already has scale-down protection")
+                self.logger.info(
+                    f"✅ Node {node_name} already has scale-down protection"
+                )
                 return True
 
             # Add the annotation
             annotate_cmd = [
-                kubectl_path, '--kubeconfig', kubeconfig_path,
-                'annotate', 'node', node_name,
-                'cluster-autoscaler.kubernetes.io/scale-down-disabled=true',
-                '--overwrite'
+                kubectl_path,
+                "--kubeconfig",
+                kubeconfig_path,
+                "annotate",
+                "node",
+                node_name,
+                "cluster-autoscaler.kubernetes.io/scale-down-disabled=true",
+                "--overwrite",
             ]
 
-            annotate_result = subprocess.run(annotate_cmd, capture_output=True, text=True, timeout=30)
+            annotate_result = subprocess.run(
+                annotate_cmd, capture_output=True, text=True, timeout=30
+            )
 
             if annotate_result.returncode == 0:
                 self.logger.info(f"✅ Successfully annotated node {node_name}")
                 return True
             else:
-                self.logger.error(f"❌ Failed to annotate node {node_name}: {annotate_result.stderr}")
+                self.logger.error(
+                    f"❌ Failed to annotate node {node_name}: {annotate_result.stderr}"
+                )
                 return False
 
         except subprocess.TimeoutExpired:
@@ -278,11 +310,19 @@ class LambdaNodeProtectionMonitor:
         try:
             # Get all nodes with instance IDs
             nodes_cmd = [
-                kubectl_path, '--kubeconfig', kubeconfig_path,
-                'get', 'nodes', '-o', 'wide', '--no-headers'
+                kubectl_path,
+                "--kubeconfig",
+                kubeconfig_path,
+                "get",
+                "nodes",
+                "-o",
+                "wide",
+                "--no-headers",
             ]
 
-            nodes_result = subprocess.run(nodes_cmd, capture_output=True, text=True, timeout=60)
+            nodes_result = subprocess.run(
+                nodes_cmd, capture_output=True, text=True, timeout=60
+            )
 
             if nodes_result.returncode != 0:
                 self.logger.error(f"❌ Failed to get nodes: {nodes_result.stderr}")
@@ -290,7 +330,7 @@ class LambdaNodeProtectionMonitor:
 
             # Parse node information and match with instance IDs
             node_map = {}
-            for line in nodes_result.stdout.strip().split('\n'):
+            for line in nodes_result.stdout.strip().split("\n"):
                 if not line.strip():
                     continue
 
@@ -301,33 +341,44 @@ class LambdaNodeProtectionMonitor:
                     instance_id = None
 
                     # Check EXTERNAL-IP column first
-                    if cols[6].startswith('i-'):
+                    if cols[6].startswith("i-"):
                         instance_id = cols[6]
                     else:
                         # Try to get from node provider ID
                         try:
                             provider_cmd = [
-                                kubectl_path, '--kubeconfig', kubeconfig_path,
-                                'get', 'node', node_name,
-                                '-o', 'jsonpath={.spec.providerID}'
+                                kubectl_path,
+                                "--kubeconfig",
+                                kubeconfig_path,
+                                "get",
+                                "node",
+                                node_name,
+                                "-o",
+                                "jsonpath={.spec.providerID}",
                             ]
 
-                            provider_result = subprocess.run(provider_cmd, capture_output=True, text=True, timeout=10)
+                            provider_result = subprocess.run(
+                                provider_cmd, capture_output=True, text=True, timeout=10
+                            )
                             if provider_result.returncode == 0:
                                 provider_id = provider_result.stdout.strip()
                                 # Provider ID format: aws:///us-east-1a/i-1234567890abcdef0
-                                if '/' in provider_id:
-                                    potential_id = provider_id.split('/')[-1]
-                                    if potential_id.startswith('i-'):
+                                if "/" in provider_id:
+                                    potential_id = provider_id.split("/")[-1]
+                                    if potential_id.startswith("i-"):
                                         instance_id = potential_id
                         except:
                             pass
 
-                    if instance_id and instance_id.startswith('i-'):
+                    if instance_id and instance_id.startswith("i-"):
                         node_map[instance_id] = node_name
-                        self.logger.info(f"✅ Mapped instance {instance_id} to node {node_name}")
+                        self.logger.info(
+                            f"✅ Mapped instance {instance_id} to node {node_name}"
+                        )
 
-            self.logger.info(f"📊 Successfully mapped {len(node_map)} instances to nodes")
+            self.logger.info(
+                f"📊 Successfully mapped {len(node_map)} instances to nodes"
+            )
             return node_map
 
         except subprocess.TimeoutExpired:
@@ -344,27 +395,32 @@ class LambdaNodeProtectionMonitor:
         try:
             if access_key and secret_key:
                 self.logger.info("🔐 Using provided AWS credentials")
-                masked_key = access_key[:4] + "*" * (len(access_key) - 8) + access_key[-4:] if len(
-                    access_key) > 8 else "****"
+                masked_key = (
+                    access_key[:4] + "*" * (len(access_key) - 8) + access_key[-4:]
+                    if len(access_key) > 8
+                    else "****"
+                )
                 self.logger.info(f"   Access Key: {masked_key}")
 
                 session = boto3.Session(
                     aws_access_key_id=access_key,
                     aws_secret_access_key=secret_key,
-                    region_name=region
+                    region_name=region,
                 )
             else:
                 self.logger.info("🔐 Using Lambda execution role")
                 session = boto3.Session(region_name=region)
 
-            eks_client = session.client('eks')
-            ec2_client = session.client('ec2')
-            autoscaling_client = session.client('autoscaling')
+            eks_client = session.client("eks")
+            ec2_client = session.client("ec2")
+            autoscaling_client = session.client("autoscaling")
 
             # Test connectivity
-            sts_client = session.client('sts')
+            sts_client = session.client("sts")
             identity = sts_client.get_caller_identity()
-            self.logger.info(f"✅ AWS connectivity verified - Account: {identity.get('Account')}")
+            self.logger.info(
+                f"✅ AWS connectivity verified - Account: {identity.get('Account')}"
+            )
 
             return eks_client, ec2_client, autoscaling_client
 
@@ -372,7 +428,13 @@ class LambdaNodeProtectionMonitor:
             self.logger.error(f"❌ Failed to create AWS clients: {str(e)}")
             raise
 
-    def run_protection_monitor_logic(self, cluster_name: str, region: str, access_key: str = None, secret_key: str = None):
+    def run_protection_monitor_logic(
+        self,
+        cluster_name: str,
+        region: str,
+        access_key: str = None,
+        secret_key: str = None,
+    ):
         """
         Main protection monitoring logic with optimized approach
         """
@@ -380,17 +442,21 @@ class LambdaNodeProtectionMonitor:
 
         try:
             # Create AWS clients
-            eks_client, ec2_client, autoscaling_client = self.create_aws_clients(region, access_key, secret_key)
+            eks_client, ec2_client, autoscaling_client = self.create_aws_clients(
+                region, access_key, secret_key
+            )
 
             # Generate kubeconfig using Boto3 (eliminates AWS CLI dependency)
-            kubeconfig_path = self.generate_kubeconfig_with_boto3(cluster_name, region, access_key, secret_key)
+            kubeconfig_path = self.generate_kubeconfig_with_boto3(
+                cluster_name, region, access_key, secret_key
+            )
 
             # Get Kubernetes nodes with instance IDs
             node_map = self.get_k8s_nodes_with_instance_ids(kubeconfig_path)
 
             if not node_map:
                 self.logger.warning("⚠️  No Kubernetes nodes found with instance IDs")
-                self.execution_stats['warnings_issued'] += 1
+                self.execution_stats["warnings_issued"] += 1
 
             results = {}
             all_protected_instances = []
@@ -399,21 +465,25 @@ class LambdaNodeProtectionMonitor:
             # Get nodegroups
             self.logger.info(f"📦 Retrieving nodegroups for cluster: {cluster_name}")
             nodegroups_response = eks_client.list_nodegroups(clusterName=cluster_name)
-            nodegroups = nodegroups_response.get('nodegroups', [])
+            nodegroups = nodegroups_response.get("nodegroups", [])
 
             if not nodegroups:
-                self.logger.warning(f"⚠️  No nodegroups found for cluster {cluster_name}")
-                self.execution_stats['warnings_issued'] += 1
+                self.logger.warning(
+                    f"⚠️  No nodegroups found for cluster {cluster_name}"
+                )
+                self.execution_stats["warnings_issued"] += 1
                 self.log_execution_end(success=False)
                 return {
-                    'statusCode': 404,
-                    'body': json.dumps({
-                        'success': False,
-                        'error': 'No nodegroups found for cluster',
-                        'cluster_name': cluster_name,
-                        'region': region,
-                        'timestamp': datetime.utcnow().isoformat() + 'Z'
-                    })
+                    "statusCode": 404,
+                    "body": json.dumps(
+                        {
+                            "success": False,
+                            "error": "No nodegroups found for cluster",
+                            "cluster_name": cluster_name,
+                            "region": region,
+                            "timestamp": datetime.utcnow().isoformat() + "Z",
+                        }
+                    ),
                 }
 
             self.logger.info(f"✅ Found {len(nodegroups)} nodegroups: {nodegroups}")
@@ -423,38 +493,46 @@ class LambdaNodeProtectionMonitor:
             self.logger.info("─" * 60)
 
             for i, ng_name in enumerate(nodegroups, 1):
-                self.logger.info(f"📦 [{i}/{len(nodegroups)}] Processing nodegroup: {ng_name}")
+                self.logger.info(
+                    f"📦 [{i}/{len(nodegroups)}] Processing nodegroup: {ng_name}"
+                )
 
                 try:
                     # Get nodegroup details
                     ng_response = eks_client.describe_nodegroup(
-                        clusterName=cluster_name,
-                        nodegroupName=ng_name
+                        clusterName=cluster_name, nodegroupName=ng_name
                     )
 
-                    nodegroup = ng_response['nodegroup']
-                    status = nodegroup['status']
-                    capacity_type = nodegroup.get('capacityType', 'ON_DEMAND')
-                    instance_types = nodegroup.get('instanceTypes', ['Unknown'])
+                    nodegroup = ng_response["nodegroup"]
+                    status = nodegroup["status"]
+                    capacity_type = nodegroup.get("capacityType", "ON_DEMAND")
+                    instance_types = nodegroup.get("instanceTypes", ["Unknown"])
 
                     self.logger.info(f"   ├── Status: {status}")
                     self.logger.info(f"   ├── Capacity Type: {capacity_type}")
                     self.logger.info(f"   ├── Instance Types: {instance_types}")
 
-                    if status != 'ACTIVE':
-                        self.logger.warning(f"   ⚠️  Nodegroup {ng_name} is not ACTIVE (status: {status})")
-                        self.execution_stats['warnings_issued'] += 1
+                    if status != "ACTIVE":
+                        self.logger.warning(
+                            f"   ⚠️  Nodegroup {ng_name} is not ACTIVE (status: {status})"
+                        )
+                        self.execution_stats["warnings_issued"] += 1
 
                     # Get Auto Scaling Group
                     asg_name = None
-                    if 'resources' in nodegroup and 'autoScalingGroups' in nodegroup['resources']:
-                        asg_list = nodegroup['resources']['autoScalingGroups']
+                    if (
+                        "resources" in nodegroup
+                        and "autoScalingGroups" in nodegroup["resources"]
+                    ):
+                        asg_list = nodegroup["resources"]["autoScalingGroups"]
                         if asg_list:
-                            asg_name = asg_list[0]['name']
+                            asg_name = asg_list[0]["name"]
                             self.logger.info(f"   ├── ASG: {asg_name}")
 
                     if not asg_name:
-                        self.logger.warning(f"   ⚠️  No ASG found for nodegroup {ng_name}")
+                        self.logger.warning(
+                            f"   ⚠️  No ASG found for nodegroup {ng_name}"
+                        )
                         continue
 
                     # Get instances in ASG
@@ -462,17 +540,23 @@ class LambdaNodeProtectionMonitor:
                         AutoScalingGroupNames=[asg_name]
                     )
 
-                    if not asg_response['AutoScalingGroups']:
+                    if not asg_response["AutoScalingGroups"]:
                         self.logger.warning(f"   ⚠️  ASG {asg_name} not found")
                         continue
 
-                    asg = asg_response['AutoScalingGroups'][0]
-                    instances = [i for i in asg.get('Instances', []) if i['LifecycleState'] == 'InService']
+                    asg = asg_response["AutoScalingGroups"][0]
+                    instances = [
+                        i
+                        for i in asg.get("Instances", [])
+                        if i["LifecycleState"] == "InService"
+                    ]
 
                     self.logger.info(f"   ├── Instances in service: {len(instances)}")
 
                     if not instances:
-                        self.logger.warning(f"   ⚠️  No instances in service for nodegroup {ng_name}")
+                        self.logger.warning(
+                            f"   ⚠️  No instances in service for nodegroup {ng_name}"
+                        )
                         continue
 
                     # Check protection status
@@ -480,29 +564,34 @@ class LambdaNodeProtectionMonitor:
                     ng_unprotected_instances = []
 
                     for instance in instances:
-                        instance_id = instance['InstanceId']
+                        instance_id = instance["InstanceId"]
 
                         try:
                             # Get instance details
-                            instance_response = ec2_client.describe_instances(InstanceIds=[instance_id])
-                            if not instance_response['Reservations']:
+                            instance_response = ec2_client.describe_instances(
+                                InstanceIds=[instance_id]
+                            )
+                            if not instance_response["Reservations"]:
                                 continue
 
-                            instance_data = instance_response['Reservations'][0]['Instances'][0]
-                            tags = instance_data.get('Tags', [])
+                            instance_data = instance_response["Reservations"][0][
+                                "Instances"
+                            ][0]
+                            tags = instance_data.get("Tags", [])
 
                             # Check for NO_DELETE protection
                             has_protection = any(
-                                tag['Key'] == 'kubernetes.io/cluster-autoscaler/node-template/label/protection'
-                                and tag['Value'] == 'NO_DELETE'
+                                tag["Key"]
+                                == "kubernetes.io/cluster-autoscaler/node-template/label/protection"
+                                and tag["Value"] == "NO_DELETE"
                                 for tag in tags
                             )
 
                             instance_info = {
-                                'instance_id': instance_id,
-                                'nodegroup': ng_name,
-                                'asg': asg_name,
-                                'node_name': node_map.get(instance_id, 'unknown')
+                                "instance_id": instance_id,
+                                "nodegroup": ng_name,
+                                "asg": asg_name,
+                                "node_name": node_map.get(instance_id, "unknown"),
                             }
 
                             if has_protection:
@@ -512,179 +601,215 @@ class LambdaNodeProtectionMonitor:
                             else:
                                 ng_unprotected_instances.append(instance_id)
                                 all_unprotected_instances.append(instance_info)
-                                self.logger.info(f"   │   🔓 {instance_id}: Not protected")
+                                self.logger.info(
+                                    f"   │   🔓 {instance_id}: Not protected"
+                                )
 
-                            self.execution_stats['instances_scanned'] += 1
+                            self.execution_stats["instances_scanned"] += 1
 
                         except Exception as e:
-                            self.logger.error(f"   │   ❌ Error checking {instance_id}: {str(e)}")
-                            self.execution_stats['errors_encountered'] += 1
+                            self.logger.error(
+                                f"   │   ❌ Error checking {instance_id}: {str(e)}"
+                            )
+                            self.execution_stats["errors_encountered"] += 1
 
                     results[ng_name] = {
-                        'status': 'scanned',
-                        'protected_instances': ng_protected_instances,
-                        'unprotected_instances': ng_unprotected_instances,
-                        'asg_name': asg_name
+                        "status": "scanned",
+                        "protected_instances": ng_protected_instances,
+                        "unprotected_instances": ng_unprotected_instances,
+                        "asg_name": asg_name,
                     }
 
                     self.logger.info(
-                        f"   └── Protected: {len(ng_protected_instances)}, Unprotected: {len(ng_unprotected_instances)}")
+                        f"   └── Protected: {len(ng_protected_instances)}, Unprotected: {len(ng_unprotected_instances)}"
+                    )
 
                 except Exception as e:
-                    self.logger.error(f"   ❌ Error processing nodegroup {ng_name}: {str(e)}")
-                    self.execution_stats['errors_encountered'] += 1
+                    self.logger.error(
+                        f"   ❌ Error processing nodegroup {ng_name}: {str(e)}"
+                    )
+                    self.execution_stats["errors_encountered"] += 1
 
             # PHASE 2: Apply protection logic
             self.logger.info("🛡️  PHASE 2: APPLYING PROTECTION LOGIC")
             self.logger.info("─" * 60)
             self.logger.info(
-                f"📊 Cluster-wide: {len(all_protected_instances)} protected, {len(all_unprotected_instances)} unprotected")
+                f"📊 Cluster-wide: {len(all_protected_instances)} protected, {len(all_unprotected_instances)} unprotected"
+            )
 
             target_instance_info = None
 
             if len(all_protected_instances) == 0 and len(all_unprotected_instances) > 0:
                 # No protection exists, apply to first available instance
                 target_instance_info = all_unprotected_instances[0]
-                instance_id = target_instance_info['instance_id']
+                instance_id = target_instance_info["instance_id"]
 
                 self.logger.info(f"🎯 Applying protection to: {instance_id}")
 
                 try:
                     ec2_client.create_tags(
                         Resources=[instance_id],
-                        Tags=[{
-                            'Key': 'kubernetes.io/cluster-autoscaler/node-template/label/protection',
-                            'Value': 'NO_DELETE'
-                        }]
+                        Tags=[
+                            {
+                                "Key": "kubernetes.io/cluster-autoscaler/node-template/label/protection",
+                                "Value": "NO_DELETE",
+                            }
+                        ],
                     )
                     self.logger.info(f"✅ Protection applied to {instance_id}")
-                    self.execution_stats['protection_applied'] += 1
+                    self.execution_stats["protection_applied"] += 1
 
                     # Update results
-                    target_ng = target_instance_info['nodegroup']
-                    results[target_ng]['status'] = 'success'
-                    results[target_ng]['message'] = f'Applied protection to {instance_id}'
-                    results[target_ng]['action_taken'] = 'protection_applied'
-                    results[target_ng]['protected_instance'] = instance_id
+                    target_ng = target_instance_info["nodegroup"]
+                    results[target_ng]["status"] = "success"
+                    results[target_ng][
+                        "message"
+                    ] = f"Applied protection to {instance_id}"
+                    results[target_ng]["action_taken"] = "protection_applied"
+                    results[target_ng]["protected_instance"] = instance_id
 
                 except Exception as e:
                     self.logger.error(f"❌ Failed to apply protection: {str(e)}")
-                    self.execution_stats['errors_encountered'] += 1
+                    self.execution_stats["errors_encountered"] += 1
 
             elif len(all_protected_instances) == 1:
                 # Perfect state - one instance already protected
                 target_instance_info = all_protected_instances[0]
-                self.logger.info(f"🎯 Perfect state: {target_instance_info['instance_id']} already protected")
+                self.logger.info(
+                    f"🎯 Perfect state: {target_instance_info['instance_id']} already protected"
+                )
 
-                target_ng = target_instance_info['nodegroup']
-                results[target_ng]['status'] = 'success'
-                results[target_ng]['message'] = f'Perfect state - one instance protected'
-                results[target_ng]['action_taken'] = 'no_action_needed'
+                target_ng = target_instance_info["nodegroup"]
+                results[target_ng]["status"] = "success"
+                results[target_ng][
+                    "message"
+                ] = f"Perfect state - one instance protected"
+                results[target_ng]["action_taken"] = "no_action_needed"
 
                 # Count maintained protection
-                self.execution_stats['protection_maintained'] += 1
+                self.execution_stats["protection_maintained"] += 1
 
             elif len(all_protected_instances) > 1:
                 # Too many protected, remove excess
                 target_instance_info = all_protected_instances[0]
                 remove_instances = all_protected_instances[1:]
 
-                self.logger.info(f"🎯 Removing excess protection from {len(remove_instances)} instances")
+                self.logger.info(
+                    f"🎯 Removing excess protection from {len(remove_instances)} instances"
+                )
 
                 for instance_info in remove_instances:
-                    instance_id = instance_info['instance_id']
+                    instance_id = instance_info["instance_id"]
                     try:
                         ec2_client.delete_tags(
                             Resources=[instance_id],
-                            Tags=[{
-                                'Key': 'kubernetes.io/cluster-autoscaler/node-template/label/protection',
-                                'Value': 'NO_DELETE'
-                            }]
+                            Tags=[
+                                {
+                                    "Key": "kubernetes.io/cluster-autoscaler/node-template/label/protection",
+                                    "Value": "NO_DELETE",
+                                }
+                            ],
                         )
                         self.logger.info(f"✅ Removed protection from {instance_id}")
-                        self.execution_stats['protection_removed'] += 1
+                        self.execution_stats["protection_removed"] += 1
 
                         # Update results
-                        ng_name = instance_info['nodegroup']
-                        results[ng_name]['status'] = 'success'
-                        results[ng_name]['message'] = f'Removed excess protection from {instance_id}'
-                        results[ng_name]['action_taken'] = 'protection_removed'
+                        ng_name = instance_info["nodegroup"]
+                        results[ng_name]["status"] = "success"
+                        results[ng_name][
+                            "message"
+                        ] = f"Removed excess protection from {instance_id}"
+                        results[ng_name]["action_taken"] = "protection_removed"
 
                     except Exception as e:
-                        self.logger.error(f"❌ Failed to remove protection from {instance_id}: {str(e)}")
-                        self.execution_stats['errors_encountered'] += 1
+                        self.logger.error(
+                            f"❌ Failed to remove protection from {instance_id}: {str(e)}"
+                        )
+                        self.execution_stats["errors_encountered"] += 1
 
                 # Update the kept instance's nodegroup and count maintained protection
-                keep_ng = target_instance_info['nodegroup']
-                if results[keep_ng]['status'] != 'error':
-                    results[keep_ng]['status'] = 'success'
-                    results[keep_ng]['message'] = f'Kept protection on {target_instance_info["instance_id"]}'
-                    results[keep_ng]['action_taken'] = 'protection_kept'
-                    self.execution_stats['protection_maintained'] += 1
+                keep_ng = target_instance_info["nodegroup"]
+                if results[keep_ng]["status"] != "error":
+                    results[keep_ng]["status"] = "success"
+                    results[keep_ng][
+                        "message"
+                    ] = f'Kept protection on {target_instance_info["instance_id"]}'
+                    results[keep_ng]["action_taken"] = "protection_kept"
+                    self.execution_stats["protection_maintained"] += 1
 
             # PHASE 3: Annotate Kubernetes node
             if target_instance_info:
-                instance_id = target_instance_info['instance_id']
-                node_name = target_instance_info['node_name']
+                instance_id = target_instance_info["instance_id"]
+                node_name = target_instance_info["node_name"]
 
-                if node_name and node_name != 'unknown':
+                if node_name and node_name != "unknown":
                     self.logger.info("🔒 PHASE 3: ANNOTATING KUBERNETES NODE")
                     self.logger.info("─" * 60)
-                    self.logger.info(f"🎯 Target node: {node_name} (instance: {instance_id})")
+                    self.logger.info(
+                        f"🎯 Target node: {node_name} (instance: {instance_id})"
+                    )
 
-                    annotation_success = self.annotate_k8s_node_scale_down_disabled(kubeconfig_path, node_name)
+                    annotation_success = self.annotate_k8s_node_scale_down_disabled(
+                        kubeconfig_path, node_name
+                    )
 
                     if annotation_success:
                         self.logger.info(f"✅ Successfully annotated node {node_name}")
                     else:
                         self.logger.warning(f"⚠️  Failed to annotate node {node_name}")
-                        self.execution_stats['warnings_issued'] += 1
+                        self.execution_stats["warnings_issued"] += 1
                 else:
-                    self.logger.warning(f"⚠️  Could not find Kubernetes node for instance {instance_id}")
-                    self.execution_stats['warnings_issued'] += 1
+                    self.logger.warning(
+                        f"⚠️  Could not find Kubernetes node for instance {instance_id}"
+                    )
+                    self.execution_stats["warnings_issued"] += 1
 
             # Update final status for nodegroups that were only scanned
             for ng_name, result in results.items():
-                if result.get('status') == 'scanned':
-                    result['status'] = 'success'
-                    result['action_taken'] = 'no_action_needed'
-                    result['message'] = 'No action needed for this nodegroup'
+                if result.get("status") == "scanned":
+                    result["status"] = "success"
+                    result["action_taken"] = "no_action_needed"
+                    result["message"] = "No action needed for this nodegroup"
 
             self.log_execution_end(success=True)
 
             return {
-                'statusCode': 200,
-                'body': json.dumps({
-                    'success': True,
-                    'message': f'Protection monitor completed for {cluster_name}',
-                    'cluster_name': cluster_name,
-                    'region': region,
-                    'protection_actions': {
-                        'applied': self.execution_stats['protection_applied'],
-                        'removed': self.execution_stats['protection_removed'],
-                        'maintained': self.execution_stats['protection_maintained']
-                    },
-                    'execution_stats': self.execution_stats,
-                    'timestamp': datetime.utcnow().isoformat() + 'Z',
-                    'generated_by': '{{CURRENT_USER}}',
-                    'generated_on': '{{CURRENT_DATETIME}}',
-                })
+                "statusCode": 200,
+                "body": json.dumps(
+                    {
+                        "success": True,
+                        "message": f"Protection monitor completed for {cluster_name}",
+                        "cluster_name": cluster_name,
+                        "region": region,
+                        "protection_actions": {
+                            "applied": self.execution_stats["protection_applied"],
+                            "removed": self.execution_stats["protection_removed"],
+                            "maintained": self.execution_stats["protection_maintained"],
+                        },
+                        "execution_stats": self.execution_stats,
+                        "timestamp": datetime.utcnow().isoformat() + "Z",
+                        "generated_by": "{{CURRENT_USER}}",
+                        "generated_on": "{{CURRENT_DATETIME}}",
+                    }
+                ),
             }
 
         except Exception as e:
             self.logger.error(f"❌ Protection monitor failed: {str(e)}")
-            self.execution_stats['errors_encountered'] += 1
+            self.execution_stats["errors_encountered"] += 1
             self.log_execution_end(success=False)
 
             return {
-                'statusCode': 500,
-                'body': json.dumps({
-                    'success': False,
-                    'error': str(e),
-                    'cluster_name': cluster_name,
-                    'region': region,
-                    'timestamp': datetime.utcnow().isoformat() + 'Z'
-                })
+                "statusCode": 500,
+                "body": json.dumps(
+                    {
+                        "success": False,
+                        "error": str(e),
+                        "cluster_name": cluster_name,
+                        "region": region,
+                        "timestamp": datetime.utcnow().isoformat() + "Z",
+                    }
+                ),
             }
 
 
@@ -708,40 +833,59 @@ def lambda_handler(event, context):
         logger.info(f"🔍 Event data: {json.dumps(event, indent=2)}")
 
         # Get parameters from template injection or event
-        cluster_name = '{{CLUSTER_NAME}}' if '{{CLUSTER_NAME}}' != '{{CLUSTER_NAME}}' else event.get(
-            'cluster_name') or os.environ.get('CLUSTER_NAME')
-        region = '{{REGION}}' if '{{REGION}}' != '{{REGION}}' else event.get('region') or os.environ.get('REGION')
-        access_key = '{{ACCESS_KEY}}' if '{{ACCESS_KEY}}' != '{{ACCESS_KEY}}' else event.get(
-            'access_key') or os.environ.get('NEW_AWS_ACCESS_KEY_ID')
-        secret_key = '{{SECRET_KEY}}' if '{{SECRET_KEY}}' != '{{SECRET_KEY}}' else event.get(
-            'secret_key') or os.environ.get('NEW_AWS_SECRET_ACCESS_KEY')
+        cluster_name = (
+            "{{CLUSTER_NAME}}"
+            if "{{CLUSTER_NAME}}" != "{{CLUSTER_NAME}}"
+            else event.get("cluster_name") or os.environ.get("CLUSTER_NAME")
+        )
+        region = (
+            "{{REGION}}"
+            if "{{REGION}}" != "{{REGION}}"
+            else event.get("region") or os.environ.get("REGION")
+        )
+        access_key = (
+            "{{ACCESS_KEY}}"
+            if "{{ACCESS_KEY}}" != "{{ACCESS_KEY}}"
+            else event.get("access_key") or os.environ.get("NEW_AWS_ACCESS_KEY_ID")
+        )
+        secret_key = (
+            "{{SECRET_KEY}}"
+            if "{{SECRET_KEY}}" != "{{SECRET_KEY}}"
+            else event.get("secret_key") or os.environ.get("NEW_AWS_SECRET_ACCESS_KEY")
+        )
 
         # Validate required parameters
         if not cluster_name:
             return {
-                'statusCode': 400,
-                'body': json.dumps({
-                    'success': False,
-                    'error': 'cluster_name is required',
-                    'timestamp': datetime.utcnow().isoformat() + 'Z'
-                })
+                "statusCode": 400,
+                "body": json.dumps(
+                    {
+                        "success": False,
+                        "error": "cluster_name is required",
+                        "timestamp": datetime.utcnow().isoformat() + "Z",
+                    }
+                ),
             }
 
         if not region:
             return {
-                'statusCode': 400,
-                'body': json.dumps({
-                    'success': False,
-                    'error': 'region is required',
-                    'timestamp': datetime.utcnow().isoformat() + 'Z'
-                })
+                "statusCode": 400,
+                "body": json.dumps(
+                    {
+                        "success": False,
+                        "error": "region is required",
+                        "timestamp": datetime.utcnow().isoformat() + "Z",
+                    }
+                ),
             }
 
         logger.info(f"🎯 Final target: {cluster_name} in {region}")
         logger.info(f"🔐 Credentials: {'Provided' if access_key else 'Lambda Role'}")
 
         # Run protection monitoring
-        result = monitor.run_protection_monitor_logic(cluster_name, region, access_key, secret_key)
+        result = monitor.run_protection_monitor_logic(
+            cluster_name, region, access_key, secret_key
+        )
 
         logger.info(f"✅ Lambda execution completed: {result['statusCode']}")
         return result
@@ -749,29 +893,29 @@ def lambda_handler(event, context):
     except Exception as e:
         logger.error(f"💥 Lambda handler failed: {str(e)}")
         return {
-            'statusCode': 500,
-            'body': json.dumps({
-                'success': False,
-                'error': f'Lambda execution failed: {str(e)}',
-                'timestamp': datetime.utcnow().isoformat() + 'Z'
-            })
+            "statusCode": 500,
+            "body": json.dumps(
+                {
+                    "success": False,
+                    "error": f"Lambda execution failed: {str(e)}",
+                    "timestamp": datetime.utcnow().isoformat() + "Z",
+                }
+            ),
         }
 
 
 if __name__ == "__main__":
     # Local testing
     test_event = {
-        'cluster_name': '{{CLUSTER_NAME}}',
-        'region': '{{REGION}}',
-        'test_mode': True
+        "cluster_name": "{{CLUSTER_NAME}}",
+        "region": "{{REGION}}",
+        "test_mode": True,
     }
-
 
     class MockContext:
         def __init__(self):
-            self.function_name = 'node-protection-monitor-eks'
+            self.function_name = "node-protection-monitor-eks"
             self.remaining_time_in_millis = 30000
 
-
     result = lambda_handler(test_event, MockContext())
-    print(json.dumps(json.loads(result['body']), indent=2))
+    print(json.dumps(json.loads(result["body"]), indent=2))
