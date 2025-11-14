@@ -57,102 +57,6 @@ class EC2InstanceManager:
             print(f"❌ Error loading AMI configuration: {e}")
             raise
 
-    def prepare_userdata_with_aws_config_enchanced(self, base_userdata, access_key, secret_key, region, account_name=None):
-        """Add AWS credentials to userdata script for both default and custom profiles"""
-
-        # Create custom profile name based on user type
-        if account_name:
-            if self.current_user == "root":
-                custom_profile = f"root-{account_name.lower()}"
-            else:
-                custom_profile = self.current_user
-        else:
-            custom_profile = self.current_user
-
-        # Replace placeholder variables if they exist
-        enhanced_userdata = base_userdata.replace('${AWS_ACCESS_KEY_ID}', access_key)
-        enhanced_userdata = enhanced_userdata.replace('${AWS_SECRET_ACCESS_KEY}', secret_key)
-        enhanced_userdata = enhanced_userdata.replace('${AWS_DEFAULT_REGION}', region)
-
-        # Create AWS config block for both default and custom profiles
-        aws_config_commands = f"""
-    # Configure AWS CLI with both default and custom profiles
-    echo "Configuring AWS CLI for ec2-user..."
-    sudo -u ec2-user bash <<EOF
-    # Configure default profile
-    aws configure set aws_access_key_id "{access_key}"
-    aws configure set aws_secret_access_key "{secret_key}"
-    aws configure set default.region "{region}"
-    aws configure set default.output "json"
-
-    # Configure custom profile ({custom_profile})
-    aws configure set aws_access_key_id "{access_key}" --profile {custom_profile}
-    aws configure set aws_secret_access_key "{secret_key}" --profile {custom_profile}
-    aws configure set region "{region}" --profile {custom_profile}
-    aws configure set output "json" --profile {custom_profile}
-    EOF
-
-    echo "✅ AWS CLI configured with profiles: default and {custom_profile}"
-
-    # Test the credentials
-    sudo -u ec2-user bash <<EOF
-    echo "Testing AWS credentials for default profile:"
-    aws sts get-caller-identity || echo "⚠️ Default profile credentials may be invalid"
-
-    echo "Testing AWS credentials for {custom_profile} profile:"
-    aws sts get-caller-identity --profile {custom_profile} || echo "⚠️ {custom_profile} profile credentials may be invalid"
-    EOF
-    """
-
-        # Check if we can find the AWS CLI configuration section in userdata
-        if "Configure AWS CLI" in enhanced_userdata and "aws configure set" in enhanced_userdata:
-            # Look for the section after "Configuring AWS CLI for ec2-user..."
-            parts = enhanced_userdata.split('echo "Configuring AWS CLI for ec2-user..."', 1)
-            if len(parts) == 2:
-                # Split at the end of existing config section
-                before_config = parts[0] + 'echo "Configuring AWS CLI for ec2-user..."'
-                after_config = parts[1]
-
-                # Find where the configuration section ends
-                if "echo \"✅ AWS CLI configured" in after_config:
-                    end_marker = "echo \"✅ AWS CLI configured"
-                    config_parts = after_config.split(end_marker, 1)
-                    if len(config_parts) == 2:
-                        # Replace the entire configuration section
-                        enhanced_userdata = before_config + aws_config_commands
-                        return enhanced_userdata
-
-        # If we couldn't find the right section to replace, let's check if the file
-        # has aws configure commands and replace that entire section
-        if "aws configure set aws_access_key_id" in enhanced_userdata:
-            # Find the sudo -u ec2-user bash part
-            start_marker = "sudo -u ec2-user bash <<EOF"
-            end_marker = "EOF"
-
-            # Split at start marker
-            parts = enhanced_userdata.split(start_marker, 1)
-            if len(parts) == 2:
-                before_block = parts[0]
-                after_start = parts[1]
-
-                # Split at end marker
-                config_parts = after_start.split(end_marker, 1)
-                if len(config_parts) == 2:
-                    # Replace the entire block
-                    enhanced_userdata = before_block + aws_config_commands + config_parts[1]
-                    return enhanced_userdata
-
-        # If we couldn't find a good place to replace, just add it after AWS CLI installation
-        if "awscli" in enhanced_userdata:
-            enhanced_userdata = enhanced_userdata.replace(
-                "sudo dnf install -y git vim htop awscli python3-pip",
-                "sudo dnf install -y git vim htop awscli python3-pip\n" + aws_config_commands
-            )
-        else:
-            # Just append at the end if we can't find a good insertion point
-            enhanced_userdata += "\n\n" + aws_config_commands
-
-        return enhanced_userdata
 
     def prepare_userdata_with_aws_config(self, base_userdata, access_key, secret_key, region):
         """Add AWS credentials to userdata script"""
@@ -221,20 +125,6 @@ class EC2InstanceManager:
             print(f"Error loading user data script: {e}")
             sys.exit(1)
 
-    def load_userdata_script_bk(self):
-        """Load userdata script from file"""
-        try:
-            userdata_file = 'userdata_allsupport.sh'
-            if os.path.exists(userdata_file):
-                with open(userdata_file, 'r') as f:
-                    self.userdata_script = f.read()
-                print(f"✅ Userdata script loaded from: {userdata_file}")
-            else:
-                print(f"⚠️ Userdata script not found: {userdata_file}")
-                self.userdata_script = "#!/bin/bash\necho 'Default userdata script'"
-        except Exception as e:
-            print(f"❌ Error loading userdata script: {e}")
-            self.userdata_script = "#!/bin/bash\necho 'Default userdata script'"
     
     def get_allowed_instance_types(self, region: str = None) -> List[str]:
         """Get allowed instance types for region"""
@@ -771,56 +661,6 @@ class EC2InstanceManager:
         except Exception as e:
             self.log_operation('WARNING', f"Failed to load unsupported AZs from mapping file: {str(e)}")
     
-    def select_existing_launch_template(self, cred_info: CredentialInfo) -> Optional[str]:
-        """
-        List available launch templates and prompt user to select one.
-        Returns the selected Launch Template ID or None.
-        """
-        import boto3
-        from datetime import datetime
-
-        region = cred_info.regions[0]
-        ec2_client = boto3.client(
-            'ec2',
-            aws_access_key_id=cred_info.access_key,
-            aws_secret_access_key=cred_info.secret_key,
-            region_name=region
-        )
-
-        try:
-            response = ec2_client.describe_launch_templates()
-            templates = response.get('LaunchTemplates', [])
-            if not templates:
-                print("No launch templates found in this region.")
-                return None
-
-            print("\nAvailable Launch Templates:")
-            print("=" * 60)
-                        # Sort templates by CreateTime descending (most recent first)
-            templates = sorted(
-                templates,
-                key=lambda tpl: tpl.get('CreateTime', datetime.min),
-                reverse=True
-            )
-
-            for idx, tpl in enumerate(templates, 1):
-                created = tpl.get('CreateTime')
-                if isinstance(created, datetime):
-                    created_str = created.strftime('%Y-%m-%d %H:%M:%S')
-                else:
-                    created_str = str(created)
-                print(f"{idx:2}. {tpl['LaunchTemplateName']} | ID: {tpl['LaunchTemplateId']} | Created: {created_str}")
-
-            while True:
-                choice = input(f"Select a launch template (1-{len(templates)}) (or press Enter to create new): ").strip()
-                if not choice:
-                    return None
-                if choice.isdigit() and 1 <= int(choice) <= len(templates):
-                    return templates[int(choice) - 1]['LaunchTemplateId']
-                print("❌ Invalid choice. Please enter a valid number or press Enter to cancel.")
-        except Exception as e:
-            print(f"❌ Error listing launch templates: {e}")
-            return None
 
     def log_operation(self, level: str, message: str):
             """Basic logger for EC2InstanceManager"""
