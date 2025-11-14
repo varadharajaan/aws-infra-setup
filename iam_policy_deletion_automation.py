@@ -1,8 +1,9 @@
-from datetime import datetime
-from typing import Dict, List, Any
 import os
-from root_iam_credential_manager import AWSCredentialManager, Colors
+from datetime import datetime
+from typing import Dict, List
+
 from iam_policy_manager import IAMPolicyManager
+from root_iam_credential_manager import AWSCredentialManager, Colors
 
 
 class IAMCleanupAutomation:
@@ -59,10 +60,14 @@ class IAMCleanupAutomation:
     def _display_header(self):
         """Display the application header."""
         self.print_colored(Colors.YELLOW, "\n" + "=" * 80)
-        self.print_colored(Colors.BOLD + Colors.CYAN, "🌟 AWS IAM Policy & Role Cleanup Manager")
+        self.print_colored(
+            Colors.BOLD + Colors.CYAN, "🌟 AWS IAM Policy & Role Cleanup Manager"
+        )
         self.print_colored(Colors.YELLOW, "=" * 80)
-        self.print_colored(Colors.WHITE,
-                           f"📅 Current Date and Time (UTC - YYYY-MM-DD HH:MM:SS formatted): {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}")
+        self.print_colored(
+            Colors.WHITE,
+            f"📅 Current Date and Time (UTC - YYYY-MM-DD HH:MM:SS formatted): {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}",
+        )
         self.print_colored(Colors.WHITE, f"👤 Current User's Login: varadharajaan")
         self.print_colored(Colors.YELLOW, "=" * 80)
 
@@ -70,10 +75,20 @@ class IAMCleanupAutomation:
         """Display menu options."""
         self.print_colored(Colors.CYAN, "🛠️  Available Operations:")
         self.print_colored(Colors.WHITE, "-" * 50)
-        self.print_colored(Colors.WHITE, "1. 🎯 Delete custom policies from specific role (single account)")
-        self.print_colored(Colors.WHITE, "2. 🎯 Delete custom policies from specific role (multiple accounts)")
-        self.print_colored(Colors.WHITE, "3. 🌍 Delete ALL custom policies (single account)")
-        self.print_colored(Colors.WHITE, "4. 🌍 Delete ALL custom policies (multiple accounts)")
+        self.print_colored(
+            Colors.WHITE,
+            "1. 🎯 Delete custom policies from specific role (single account)",
+        )
+        self.print_colored(
+            Colors.WHITE,
+            "2. 🎯 Delete custom policies from specific role (multiple accounts)",
+        )
+        self.print_colored(
+            Colors.WHITE, "3. 🌍 Delete ALL custom policies (single account)"
+        )
+        self.print_colored(
+            Colors.WHITE, "4. 🌍 Delete ALL custom policies (multiple accounts)"
+        )
         self.print_colored(Colors.WHITE, "5. 🎭 Delete custom IAM roles")
         self.print_colored(Colors.WHITE, "6. ❓ Help")
         self.print_colored(Colors.WHITE, "0. 🚪 Exit")
@@ -82,7 +97,9 @@ class IAMCleanupAutomation:
         """Handle cleanup of policies from a specific role in a single account."""
         self.print_colored(Colors.CYAN, "\n🎯 Single Account - Role Policy Cleanup")
         self.print_colored(Colors.YELLOW, "=" * 60)
-        self.print_colored(Colors.WHITE, "ℹ️  This operation requires ROOT user credentials")
+        self.print_colored(
+            Colors.WHITE, "ℹ️  This operation requires ROOT user credentials"
+        )
         self.print_colored(Colors.WHITE, "ℹ️  IAM policies are account-level resources")
 
         # Get role name
@@ -92,67 +109,98 @@ class IAMCleanupAutomation:
             return
 
         # Get credentials (ROOT required for IAM operations)
-        root_accounts = self.credential_manager.select_root_accounts_interactive(allow_multiple=False)
+        root_accounts = self.credential_manager.select_root_accounts_interactive(
+            allow_multiple=False
+        )
         if not root_accounts:
             return
 
         root_account = root_accounts[0]
 
         # Ask for dry run
-        dry_run = input("🔍 Perform dry run first? (Y/n): ").strip().lower() != 'n'
+        dry_run = input("🔍 Perform dry run first? (Y/n): ").strip().lower() != "n"
 
         # Initialize and execute
         if not self.policy_manager.initialize_with_credentials(root_account):
             self.print_colored(Colors.RED, "❌ Failed to initialize with credentials")
             return
 
-        results = self.policy_manager.delete_custom_policies_from_role(role_name, dry_run)
+        results = self.policy_manager.delete_custom_policies_from_role(
+            role_name, dry_run
+        )
         self._display_role_results(results)
 
         # If dry run and found policies, ask to proceed
-        if dry_run and results['custom_policies_found'] and not results['errors']:
-            proceed = input(
-                f"\n⚠️  Found {len(results['custom_policies_found'])} custom policies. Proceed with deletion? (y/N): ").strip().lower()
-            if proceed == 'y':
-                self.print_colored(Colors.RED, f"🗑️  EXECUTING: Deleting custom policies from role: {role_name}")
-                real_results = self.policy_manager.delete_custom_policies_from_role(role_name, False)
+        if dry_run and results["custom_policies_found"] and not results["errors"]:
+            proceed = (
+                input(
+                    f"\n⚠️  Found {len(results['custom_policies_found'])} custom policies. Proceed with deletion? (y/N): "
+                )
+                .strip()
+                .lower()
+            )
+            if proceed == "y":
+                self.print_colored(
+                    Colors.RED,
+                    f"🗑️  EXECUTING: Deleting custom policies from role: {role_name}",
+                )
+                real_results = self.policy_manager.delete_custom_policies_from_role(
+                    role_name, False
+                )
                 self._display_role_results(real_results)
 
     def _handle_multi_account_role_cleanup(self):
         """Handle cleanup of policies from a specific role across multiple accounts."""
         self.print_colored(Colors.CYAN, "\n🎯 Multi-Account - Role Policy Cleanup")
         self.print_colored(Colors.YELLOW, "=" * 60)
-        self.print_colored(Colors.WHITE, "ℹ️  This operation requires ROOT user credentials")
-        self.print_colored(Colors.WHITE, "ℹ️  Same role will be processed across all selected accounts")
+        self.print_colored(
+            Colors.WHITE, "ℹ️  This operation requires ROOT user credentials"
+        )
+        self.print_colored(
+            Colors.WHITE, "ℹ️  Same role will be processed across all selected accounts"
+        )
 
         # Get multiple root accounts
-        root_accounts = self.credential_manager.select_root_accounts_interactive(allow_multiple=True)
+        root_accounts = self.credential_manager.select_root_accounts_interactive(
+            allow_multiple=True
+        )
         if not root_accounts:
             return
 
         # Get role name once
-        role_name = input(f"\n📝 Enter role name for ALL {len(root_accounts)} accounts: ").strip()
+        role_name = input(
+            f"\n📝 Enter role name for ALL {len(root_accounts)} accounts: "
+        ).strip()
         if not role_name:
             self.print_colored(Colors.RED, "❌ Role name cannot be empty!")
             return
 
         # Ask for dry run
-        dry_run = input("🔍 Perform dry run first? (Y/n): ").strip().lower() != 'n'
+        dry_run = input("🔍 Perform dry run first? (Y/n): ").strip().lower() != "n"
 
         # Process each account
         all_results = []
         for i, root_account in enumerate(root_accounts, 1):
-            self.print_colored(Colors.PURPLE,
-                               f"\n📋 Processing Account {i}/{len(root_accounts)}: {root_account['account_key']}")
-            self.print_colored(Colors.WHITE, f"   Account ID: {root_account['account_id']}")
+            self.print_colored(
+                Colors.PURPLE,
+                f"\n📋 Processing Account {i}/{len(root_accounts)}: {root_account['account_key']}",
+            )
+            self.print_colored(
+                Colors.WHITE, f"   Account ID: {root_account['account_id']}"
+            )
 
             if not self.policy_manager.initialize_with_credentials(root_account):
-                self.print_colored(Colors.RED, f"❌ Failed to initialize account {root_account['account_key']}")
+                self.print_colored(
+                    Colors.RED,
+                    f"❌ Failed to initialize account {root_account['account_key']}",
+                )
                 continue
 
-            results = self.policy_manager.delete_custom_policies_from_role(role_name, dry_run)
-            results['account_key'] = root_account['account_key']
-            results['account_id'] = root_account['account_id']
+            results = self.policy_manager.delete_custom_policies_from_role(
+                role_name, dry_run
+            )
+            results["account_key"] = root_account["account_key"]
+            results["account_id"] = root_account["account_id"]
             all_results.append(results)
 
             self._display_role_results(results)
@@ -164,84 +212,131 @@ class IAMCleanupAutomation:
         """Handle cleanup of all custom policies in a single account."""
         self.print_colored(Colors.CYAN, "\n🌍 Single Account - All Policies Cleanup")
         self.print_colored(Colors.YELLOW, "=" * 60)
-        self.print_colored(Colors.RED, "⚠️  WARNING: This will delete ALL custom policies in the account!")
+        self.print_colored(
+            Colors.RED,
+            "⚠️  WARNING: This will delete ALL custom policies in the account!",
+        )
         self.print_colored(Colors.GREEN, "✅ AWS managed policies will NOT be affected")
-        self.print_colored(Colors.WHITE, "ℹ️  This operation requires ROOT user credentials")
+        self.print_colored(
+            Colors.WHITE, "ℹ️  This operation requires ROOT user credentials"
+        )
 
-        proceed = input("\n🤔 Are you sure you want to continue? (y/N): ").strip().lower()
-        if proceed != 'y':
+        proceed = (
+            input("\n🤔 Are you sure you want to continue? (y/N): ").strip().lower()
+        )
+        if proceed != "y":
             return
 
         # Get credentials
-        root_accounts = self.credential_manager.select_root_accounts_interactive(allow_multiple=False)
+        root_accounts = self.credential_manager.select_root_accounts_interactive(
+            allow_multiple=False
+        )
         if not root_accounts:
             return
 
         root_account = root_accounts[0]
 
         # Get exclusion list
-        exclude_input = input("\n📝 Enter policy names to exclude (comma-separated, or press Enter for none): ").strip()
-        exclude_policies = [p.strip() for p in exclude_input.split(',')] if exclude_input else []
+        exclude_input = input(
+            "\n📝 Enter policy names to exclude (comma-separated, or press Enter for none): "
+        ).strip()
+        exclude_policies = (
+            [p.strip() for p in exclude_input.split(",")] if exclude_input else []
+        )
 
         # Ask for dry run
-        dry_run = input("🔍 Perform dry run first? (Y/n): ").strip().lower() != 'n'
+        dry_run = input("🔍 Perform dry run first? (Y/n): ").strip().lower() != "n"
 
         # Initialize and execute
         if not self.policy_manager.initialize_with_credentials(root_account):
             self.print_colored(Colors.RED, "❌ Failed to initialize with credentials")
             return
 
-        results = self.policy_manager.delete_all_custom_policies_in_account(dry_run, exclude_policies)
+        results = self.policy_manager.delete_all_custom_policies_in_account(
+            dry_run, exclude_policies
+        )
         self._display_account_results(results)
 
         # If dry run and found policies, ask to proceed
-        if dry_run and results['policies_to_process'] and not results['errors']:
-            proceed = input(
-                f"\n⚠️  Found {len(results['policies_to_process'])} policies to delete. Proceed? (y/N): ").strip().lower()
-            if proceed == 'y':
-                self.print_colored(Colors.RED, "🗑️  EXECUTING: Deleting ALL custom policies")
-                real_results = self.policy_manager.delete_all_custom_policies_in_account(False, exclude_policies)
+        if dry_run and results["policies_to_process"] and not results["errors"]:
+            proceed = (
+                input(
+                    f"\n⚠️  Found {len(results['policies_to_process'])} policies to delete. Proceed? (y/N): "
+                )
+                .strip()
+                .lower()
+            )
+            if proceed == "y":
+                self.print_colored(
+                    Colors.RED, "🗑️  EXECUTING: Deleting ALL custom policies"
+                )
+                real_results = (
+                    self.policy_manager.delete_all_custom_policies_in_account(
+                        False, exclude_policies
+                    )
+                )
                 self._display_account_results(real_results)
 
     def _handle_multi_account_policy_cleanup(self):
         """Handle cleanup of all custom policies across multiple accounts."""
         self.print_colored(Colors.CYAN, "\n🌍 Multi-Account - All Policies Cleanup")
         self.print_colored(Colors.YELLOW, "=" * 60)
-        self.print_colored(Colors.RED, "⚠️  WARNING: This will delete ALL custom policies in ALL selected accounts!")
+        self.print_colored(
+            Colors.RED,
+            "⚠️  WARNING: This will delete ALL custom policies in ALL selected accounts!",
+        )
         self.print_colored(Colors.GREEN, "✅ AWS managed policies will NOT be affected")
-        self.print_colored(Colors.WHITE, "ℹ️  This operation requires ROOT user credentials")
+        self.print_colored(
+            Colors.WHITE, "ℹ️  This operation requires ROOT user credentials"
+        )
 
-        proceed = input("\n🤔 Are you sure you want to continue? (y/N): ").strip().lower()
-        if proceed != 'y':
+        proceed = (
+            input("\n🤔 Are you sure you want to continue? (y/N): ").strip().lower()
+        )
+        if proceed != "y":
             return
 
         # Get multiple root accounts
-        root_accounts = self.credential_manager.select_root_accounts_interactive(allow_multiple=True)
+        root_accounts = self.credential_manager.select_root_accounts_interactive(
+            allow_multiple=True
+        )
         if not root_accounts:
             return
 
         # Get exclusion list once for all accounts
         exclude_input = input(
-            f"\n📝 Enter policy names to exclude from ALL {len(root_accounts)} accounts (comma-separated, or press Enter for none): ").strip()
-        exclude_policies = [p.strip() for p in exclude_input.split(',')] if exclude_input else []
+            f"\n📝 Enter policy names to exclude from ALL {len(root_accounts)} accounts (comma-separated, or press Enter for none): "
+        ).strip()
+        exclude_policies = (
+            [p.strip() for p in exclude_input.split(",")] if exclude_input else []
+        )
 
         # Ask for dry run
-        dry_run = input("🔍 Perform dry run first? (Y/n): ").strip().lower() != 'n'
+        dry_run = input("🔍 Perform dry run first? (Y/n): ").strip().lower() != "n"
 
         # Process each account
         all_results = []
         for i, root_account in enumerate(root_accounts, 1):
-            self.print_colored(Colors.PURPLE,
-                               f"\n📋 Processing Account {i}/{len(root_accounts)}: {root_account['account_key']}")
-            self.print_colored(Colors.WHITE, f"   Account ID: {root_account['account_id']}")
+            self.print_colored(
+                Colors.PURPLE,
+                f"\n📋 Processing Account {i}/{len(root_accounts)}: {root_account['account_key']}",
+            )
+            self.print_colored(
+                Colors.WHITE, f"   Account ID: {root_account['account_id']}"
+            )
 
             if not self.policy_manager.initialize_with_credentials(root_account):
-                self.print_colored(Colors.RED, f"❌ Failed to initialize account {root_account['account_key']}")
+                self.print_colored(
+                    Colors.RED,
+                    f"❌ Failed to initialize account {root_account['account_key']}",
+                )
                 continue
 
-            results = self.policy_manager.delete_all_custom_policies_in_account(dry_run, exclude_policies)
-            results['account_key'] = root_account['account_key']
-            results['account_id'] = root_account['account_id']
+            results = self.policy_manager.delete_all_custom_policies_in_account(
+                dry_run, exclude_policies
+            )
+            results["account_key"] = root_account["account_key"]
+            results["account_id"] = root_account["account_id"]
             all_results.append(results)
 
             self._display_account_results(results)
@@ -254,11 +349,15 @@ class IAMCleanupAutomation:
         self.print_colored(Colors.CYAN, "\n🎭 Custom IAM Role Deletion")
         self.print_colored(Colors.YELLOW, "=" * 60)
         self.print_colored(Colors.RED, "⚠️  WARNING: Role deletion is irreversible!")
-        self.print_colored(Colors.GREEN, "✅ AWS service roles will be identified and protected")
-        self.print_colored(Colors.WHITE, "ℹ️  This operation requires ROOT user credentials")
+        self.print_colored(
+            Colors.GREEN, "✅ AWS service roles will be identified and protected"
+        )
+        self.print_colored(
+            Colors.WHITE, "ℹ️  This operation requires ROOT user credentials"
+        )
 
         proceed = input("\n🤔 Continue with role deletion? (y/N): ").strip().lower()
-        if proceed != 'y':
+        if proceed != "y":
             return
 
         # Ask for single or multi-account
@@ -278,7 +377,9 @@ class IAMCleanupAutomation:
     def _handle_single_account_role_deletion(self):
         """Handle role deletion in a single account."""
         # Get credentials
-        root_accounts = self.credential_manager.select_root_accounts_interactive(allow_multiple=False)
+        root_accounts = self.credential_manager.select_root_accounts_interactive(
+            allow_multiple=False
+        )
         if not root_accounts:
             return
 
@@ -286,7 +387,9 @@ class IAMCleanupAutomation:
 
         # Ask for specific roles or show all
         self.print_colored(Colors.YELLOW, "\n📋 Role Selection Options:")
-        self.print_colored(Colors.WHITE, "1. Select from list of all custom roles (recommended)")
+        self.print_colored(
+            Colors.WHITE, "1. Select from list of all custom roles (recommended)"
+        )
         self.print_colored(Colors.WHITE, "2. Specify role names manually")
 
         selection_choice = input("Choose option (1-2): ").strip()
@@ -295,13 +398,13 @@ class IAMCleanupAutomation:
         if selection_choice == "2":
             role_input = input("\n📝 Enter role names (comma-separated): ").strip()
             if role_input:
-                role_names = [name.strip() for name in role_input.split(',')]
+                role_names = [name.strip() for name in role_input.split(",")]
             else:
                 self.print_colored(Colors.RED, "❌ No role names provided!")
                 return
 
         # Ask for dry run
-        dry_run = input("🔍 Perform dry run first? (Y/n): ").strip().lower() != 'n'
+        dry_run = input("🔍 Perform dry run first? (Y/n): ").strip().lower() != "n"
 
         # Initialize and execute
         if not self.policy_manager.initialize_with_credentials(root_account):
@@ -312,41 +415,58 @@ class IAMCleanupAutomation:
         self._display_role_deletion_results(results)
 
         # If dry run and found roles, ask to proceed
-        if dry_run and results['roles_to_delete'] and not results['errors']:
-            proceed = input(
-                f"\n⚠️  Found {len(results['roles_to_delete'])} roles to delete. Proceed? (y/N): ").strip().lower()
-            if proceed == 'y':
-                self.print_colored(Colors.RED, "🗑️  EXECUTING: Deleting selected custom roles")
+        if dry_run and results["roles_to_delete"] and not results["errors"]:
+            proceed = (
+                input(
+                    f"\n⚠️  Found {len(results['roles_to_delete'])} roles to delete. Proceed? (y/N): "
+                )
+                .strip()
+                .lower()
+            )
+            if proceed == "y":
+                self.print_colored(
+                    Colors.RED, "🗑️  EXECUTING: Deleting selected custom roles"
+                )
                 real_results = self.policy_manager.delete_custom_roles(
-                    [role['role_name'] for role in results['roles_to_delete']],
-                    False
+                    [role["role_name"] for role in results["roles_to_delete"]], False
                 )
                 self._display_role_deletion_results(real_results)
 
     def _handle_multi_account_role_deletion(self):
         """Handle role deletion across multiple accounts."""
         # Get multiple root accounts
-        root_accounts = self.credential_manager.select_root_accounts_interactive(allow_multiple=True)
+        root_accounts = self.credential_manager.select_root_accounts_interactive(
+            allow_multiple=True
+        )
         if not root_accounts:
             return
 
         # Ask for dry run
-        dry_run = input("🔍 Perform dry run first? (Y/n): ").strip().lower() != 'n'
+        dry_run = input("🔍 Perform dry run first? (Y/n): ").strip().lower() != "n"
 
         # Process each account
         all_results = []
         for i, root_account in enumerate(root_accounts, 1):
-            self.print_colored(Colors.PURPLE,
-                               f"\n📋 Processing Account {i}/{len(root_accounts)}: {root_account['account_key']}")
-            self.print_colored(Colors.WHITE, f"   Account ID: {root_account['account_id']}")
+            self.print_colored(
+                Colors.PURPLE,
+                f"\n📋 Processing Account {i}/{len(root_accounts)}: {root_account['account_key']}",
+            )
+            self.print_colored(
+                Colors.WHITE, f"   Account ID: {root_account['account_id']}"
+            )
 
             if not self.policy_manager.initialize_with_credentials(root_account):
-                self.print_colored(Colors.RED, f"❌ Failed to initialize account {root_account['account_key']}")
+                self.print_colored(
+                    Colors.RED,
+                    f"❌ Failed to initialize account {root_account['account_key']}",
+                )
                 continue
 
-            results = self.policy_manager.delete_custom_roles(None, dry_run)  # None = show all for selection
-            results['account_key'] = root_account['account_key']
-            results['account_id'] = root_account['account_id']
+            results = self.policy_manager.delete_custom_roles(
+                None, dry_run
+            )  # None = show all for selection
+            results["account_key"] = root_account["account_key"]
+            results["account_id"] = root_account["account_id"]
             all_results.append(results)
 
             self._display_role_deletion_results(results)
@@ -358,47 +478,89 @@ class IAMCleanupAutomation:
         """Display help information."""
         self.print_colored(Colors.CYAN, "\n❓ Help & Information")
         self.print_colored(Colors.YELLOW, "=" * 80)
-        self.print_colored(Colors.WHITE, "📋 This tool helps you clean up AWS IAM custom policies and roles.")
+        self.print_colored(
+            Colors.WHITE,
+            "📋 This tool helps you clean up AWS IAM custom policies and roles.",
+        )
 
         self.print_colored(Colors.CYAN, "\n🎯 Role-Specific Policy Cleanup:")
-        self.print_colored(Colors.WHITE, "   • Deletes custom policies attached to a specific role")
-        self.print_colored(Colors.WHITE, "   • Can be done for single or multiple accounts")
-        self.print_colored(Colors.WHITE, "   • Same role name applied across all selected accounts")
-        self.print_colored(Colors.WHITE, "   • Requires ROOT credentials (IAM is account-level)")
+        self.print_colored(
+            Colors.WHITE, "   • Deletes custom policies attached to a specific role"
+        )
+        self.print_colored(
+            Colors.WHITE, "   • Can be done for single or multiple accounts"
+        )
+        self.print_colored(
+            Colors.WHITE, "   • Same role name applied across all selected accounts"
+        )
+        self.print_colored(
+            Colors.WHITE, "   • Requires ROOT credentials (IAM is account-level)"
+        )
 
         self.print_colored(Colors.CYAN, "\n🌍 Account-Wide Policy Cleanup:")
-        self.print_colored(Colors.WHITE, "   • Deletes ALL custom policies in an account")
+        self.print_colored(
+            Colors.WHITE, "   • Deletes ALL custom policies in an account"
+        )
         self.print_colored(Colors.WHITE, "   • Can exclude specific policies")
-        self.print_colored(Colors.WHITE, "   • Most destructive operation - use carefully!")
+        self.print_colored(
+            Colors.WHITE, "   • Most destructive operation - use carefully!"
+        )
         self.print_colored(Colors.WHITE, "   • Requires ROOT credentials")
 
         self.print_colored(Colors.CYAN, "\n🎭 Custom Role Deletion:")
         self.print_colored(Colors.WHITE, "   • Identifies and deletes custom IAM roles")
-        self.print_colored(Colors.WHITE, "   • Protects AWS service roles automatically")
-        self.print_colored(Colors.WHITE, "   • Safely detaches policies and removes instance profiles")
+        self.print_colored(
+            Colors.WHITE, "   • Protects AWS service roles automatically"
+        )
+        self.print_colored(
+            Colors.WHITE, "   • Safely detaches policies and removes instance profiles"
+        )
         self.print_colored(Colors.WHITE, "   • Requires ROOT credentials")
 
         self.print_colored(Colors.CYAN, "\n🔒 Safety Features:")
-        self.print_colored(Colors.WHITE, "   • Dry run mode (default) - shows what would be deleted")
-        self.print_colored(Colors.WHITE, "   • Confirmation prompts before actual deletion")
-        self.print_colored(Colors.WHITE, "   • AWS managed policies/roles are never touched")
+        self.print_colored(
+            Colors.WHITE, "   • Dry run mode (default) - shows what would be deleted"
+        )
+        self.print_colored(
+            Colors.WHITE, "   • Confirmation prompts before actual deletion"
+        )
+        self.print_colored(
+            Colors.WHITE, "   • AWS managed policies/roles are never touched"
+        )
         self.print_colored(Colors.WHITE, "   • Detailed logging and error reporting")
         self.print_colored(Colors.WHITE, "   • Multi-account operation summaries")
 
         self.print_colored(Colors.CYAN, "\n🔑 Credential Requirements:")
-        self.print_colored(Colors.WHITE, "   • IAM operations require ROOT user credentials")
-        self.print_colored(Colors.WHITE, "   • IAM policies and roles are account-level resources")
-        self.print_colored(Colors.WHITE, "   • IAM user credentials cannot manage account-level IAM")
+        self.print_colored(
+            Colors.WHITE, "   • IAM operations require ROOT user credentials"
+        )
+        self.print_colored(
+            Colors.WHITE, "   • IAM policies and roles are account-level resources"
+        )
+        self.print_colored(
+            Colors.WHITE, "   • IAM user credentials cannot manage account-level IAM"
+        )
 
         self.print_colored(Colors.CYAN, "\n📁 Required Files:")
-        self.print_colored(Colors.WHITE, "   • aws_accounts_config.json - Root account credentials")
-        self.print_colored(Colors.WHITE,
-                           "   • aws/iam/iam_users_credentials_*.json - IAM user credentials (for reference)")
+        self.print_colored(
+            Colors.WHITE, "   • aws_accounts_config.json - Root account credentials"
+        )
+        self.print_colored(
+            Colors.WHITE,
+            "   • aws/iam/iam_users_credentials_*.json - IAM user credentials (for reference)",
+        )
 
         self.print_colored(Colors.CYAN, "\n🏗️  AWS Service Role Protection:")
-        self.print_colored(Colors.WHITE, "   • Roles with /aws-service-role/ or /service-role/ paths")
-        self.print_colored(Colors.WHITE, "   • Names containing: AWSServiceRole, OrganizationAccountAccessRole")
-        self.print_colored(Colors.WHITE, "   • CloudFormation, CodeBuild, CodeDeploy service roles")
+        self.print_colored(
+            Colors.WHITE, "   • Roles with /aws-service-role/ or /service-role/ paths"
+        )
+        self.print_colored(
+            Colors.WHITE,
+            "   • Names containing: AWSServiceRole, OrganizationAccountAccessRole",
+        )
+        self.print_colored(
+            Colors.WHITE, "   • CloudFormation, CodeBuild, CodeDeploy service roles"
+        )
         self.print_colored(Colors.WHITE, "   • Lambda, RDS, EKS, EMR execution roles")
 
         input(f"\n{Colors.YELLOW}Press Enter to continue...{Colors.END}")
@@ -407,33 +569,49 @@ class IAMCleanupAutomation:
 
     def _display_role_results(self, results: Dict):
         """Display results from role policy operations."""
-        self.print_colored(Colors.CYAN, f"\n📊 Results for role: {results.get('role_name', 'Unknown')}")
+        self.print_colored(
+            Colors.CYAN, f"\n📊 Results for role: {results.get('role_name', 'Unknown')}"
+        )
         self.print_colored(Colors.WHITE, "-" * 50)
 
-        if results.get('errors'):
+        if results.get("errors"):
             self.print_colored(Colors.RED, f"❌ Errors: {len(results['errors'])}")
-            for error in results['errors']:
+            for error in results["errors"]:
                 self.print_colored(Colors.WHITE, f"   • {error}")
             return
 
-        self.print_colored(Colors.WHITE, f"🔍 Custom policies found: {len(results.get('custom_policies_found', []))}")
-        for policy in results.get('custom_policies_found', []):
+        self.print_colored(
+            Colors.WHITE,
+            f"🔍 Custom policies found: {len(results.get('custom_policies_found', []))}",
+        )
+        for policy in results.get("custom_policies_found", []):
             self.print_colored(Colors.WHITE, f"   • {policy['name']}")
 
-        self.print_colored(Colors.WHITE,
-                           f"🏢 AWS managed policies found: {len(results.get('aws_managed_policies_found', []))}")
-        for policy in results.get('aws_managed_policies_found', []):
+        self.print_colored(
+            Colors.WHITE,
+            f"🏢 AWS managed policies found: {len(results.get('aws_managed_policies_found', []))}",
+        )
+        for policy in results.get("aws_managed_policies_found", []):
             self.print_colored(Colors.WHITE, f"   • {policy['name']}")
 
-        if not results.get('dry_run', True):
-            self.print_colored(Colors.GREEN, f"✅ Successfully deleted: {len(results.get('deleted_policies', []))}")
-            for policy in results.get('deleted_policies', []):
+        if not results.get("dry_run", True):
+            self.print_colored(
+                Colors.GREEN,
+                f"✅ Successfully deleted: {len(results.get('deleted_policies', []))}",
+            )
+            for policy in results.get("deleted_policies", []):
                 self.print_colored(Colors.WHITE, f"   • {policy}")
 
-            if results.get('failed_deletions'):
-                self.print_colored(Colors.RED, f"❌ Failed deletions: {len(results['failed_deletions'])}")
-                for failure in results['failed_deletions']:
-                    self.print_colored(Colors.WHITE, f"   • {failure['policy_name']}: {failure['reason']}")
+            if results.get("failed_deletions"):
+                self.print_colored(
+                    Colors.RED,
+                    f"❌ Failed deletions: {len(results['failed_deletions'])}",
+                )
+                for failure in results["failed_deletions"]:
+                    self.print_colored(
+                        Colors.WHITE,
+                        f"   • {failure['policy_name']}: {failure['reason']}",
+                    )
 
     def _display_account_results(self, results: Dict):
         """Display results from account-wide policy operations."""
@@ -442,31 +620,48 @@ class IAMCleanupAutomation:
         self.print_colored(Colors.WHITE, account_info)
         self.print_colored(Colors.WHITE, "-" * len(account_info))
 
-        if results.get('errors'):
+        if results.get("errors"):
             self.print_colored(Colors.RED, f"❌ Errors: {len(results['errors'])}")
-            for error in results['errors']:
+            for error in results["errors"]:
                 self.print_colored(Colors.WHITE, f"   • {error}")
             return
 
-        self.print_colored(Colors.WHITE,
-                           f"🔍 Total custom policies found: {results.get('total_custom_policies_found', 0)}")
-        self.print_colored(Colors.WHITE, f"📝 Policies to process: {len(results.get('policies_to_process', []))}")
-        self.print_colored(Colors.WHITE, f"🚫 Excluded policies: {len(results.get('excluded_policies', []))}")
+        self.print_colored(
+            Colors.WHITE,
+            f"🔍 Total custom policies found: {results.get('total_custom_policies_found', 0)}",
+        )
+        self.print_colored(
+            Colors.WHITE,
+            f"📝 Policies to process: {len(results.get('policies_to_process', []))}",
+        )
+        self.print_colored(
+            Colors.WHITE,
+            f"🚫 Excluded policies: {len(results.get('excluded_policies', []))}",
+        )
 
-        if results.get('excluded_policies'):
+        if results.get("excluded_policies"):
             self.print_colored(Colors.WHITE, "   Excluded:")
-            for policy in results['excluded_policies']:
+            for policy in results["excluded_policies"]:
                 self.print_colored(Colors.WHITE, f"     • {policy}")
 
-        if not results.get('dry_run', True):
-            self.print_colored(Colors.GREEN, f"✅ Successfully deleted: {len(results.get('deleted_policies', []))}")
-            for policy in results.get('deleted_policies', []):
+        if not results.get("dry_run", True):
+            self.print_colored(
+                Colors.GREEN,
+                f"✅ Successfully deleted: {len(results.get('deleted_policies', []))}",
+            )
+            for policy in results.get("deleted_policies", []):
                 self.print_colored(Colors.WHITE, f"   • {policy}")
 
-            if results.get('failed_deletions'):
-                self.print_colored(Colors.RED, f"❌ Failed deletions: {len(results['failed_deletions'])}")
-                for failure in results['failed_deletions']:
-                    self.print_colored(Colors.WHITE, f"   • {failure['policy_name']}: {failure['reason']}")
+            if results.get("failed_deletions"):
+                self.print_colored(
+                    Colors.RED,
+                    f"❌ Failed deletions: {len(results['failed_deletions'])}",
+                )
+                for failure in results["failed_deletions"]:
+                    self.print_colored(
+                        Colors.WHITE,
+                        f"   • {failure['policy_name']}: {failure['reason']}",
+                    )
 
     def _display_role_deletion_results(self, results: Dict):
         """Display results from role deletion operations."""
@@ -475,110 +670,180 @@ class IAMCleanupAutomation:
         self.print_colored(Colors.WHITE, account_info)
         self.print_colored(Colors.WHITE, "-" * len(account_info))
 
-        if results.get('errors'):
+        if results.get("errors"):
             self.print_colored(Colors.RED, f"❌ Errors: {len(results['errors'])}")
-            for error in results['errors']:
+            for error in results["errors"]:
                 self.print_colored(Colors.WHITE, f"   • {error}")
-            if not results.get('roles_found'):
+            if not results.get("roles_found"):
                 return
 
-        self.print_colored(Colors.WHITE, f"🔍 Custom roles found: {len(results.get('roles_found', []))}")
-        self.print_colored(Colors.WHITE, f"🎯 Roles selected for deletion: {len(results.get('roles_to_delete', []))}")
-        self.print_colored(Colors.WHITE,
-                           f"🏢 AWS service roles found (protected): {len(results.get('aws_service_roles_found', []))}")
+        self.print_colored(
+            Colors.WHITE,
+            f"🔍 Custom roles found: {len(results.get('roles_found', []))}",
+        )
+        self.print_colored(
+            Colors.WHITE,
+            f"🎯 Roles selected for deletion: {len(results.get('roles_to_delete', []))}",
+        )
+        self.print_colored(
+            Colors.WHITE,
+            f"🏢 AWS service roles found (protected): {len(results.get('aws_service_roles_found', []))}",
+        )
 
-        if results.get('aws_service_roles_found'):
+        if results.get("aws_service_roles_found"):
             self.print_colored(Colors.WHITE, "   AWS Service Roles (protected):")
-            for role in results['aws_service_roles_found']:
+            for role in results["aws_service_roles_found"]:
                 self.print_colored(Colors.WHITE, f"     • {role['role_name']}")
 
-        if results.get('roles_to_delete'):
+        if results.get("roles_to_delete"):
             self.print_colored(Colors.WHITE, "   Roles selected for deletion:")
-            for role in results['roles_to_delete']:
-                create_date = role['create_date'].strftime('%Y-%m-%d') if hasattr(role['create_date'],
-                                                                                  'strftime') else str(
-                    role['create_date'])[:10]
-                self.print_colored(Colors.WHITE, f"     • {role['role_name']} (created: {create_date})")
+            for role in results["roles_to_delete"]:
+                create_date = (
+                    role["create_date"].strftime("%Y-%m-%d")
+                    if hasattr(role["create_date"], "strftime")
+                    else str(role["create_date"])[:10]
+                )
+                self.print_colored(
+                    Colors.WHITE, f"     • {role['role_name']} (created: {create_date})"
+                )
 
-        if not results.get('dry_run', True):
-            self.print_colored(Colors.GREEN, f"✅ Successfully deleted: {len(results.get('deleted_roles', []))}")
-            for role in results.get('deleted_roles', []):
+        if not results.get("dry_run", True):
+            self.print_colored(
+                Colors.GREEN,
+                f"✅ Successfully deleted: {len(results.get('deleted_roles', []))}",
+            )
+            for role in results.get("deleted_roles", []):
                 self.print_colored(Colors.WHITE, f"   • {role}")
 
-            if results.get('failed_deletions'):
-                self.print_colored(Colors.RED, f"❌ Failed deletions: {len(results['failed_deletions'])}")
-                for failure in results['failed_deletions']:
-                    self.print_colored(Colors.WHITE, f"   • {failure['role_name']}: {failure['reason']}")
+            if results.get("failed_deletions"):
+                self.print_colored(
+                    Colors.RED,
+                    f"❌ Failed deletions: {len(results['failed_deletions'])}",
+                )
+                for failure in results["failed_deletions"]:
+                    self.print_colored(
+                        Colors.WHITE,
+                        f"   • {failure['role_name']}: {failure['reason']}",
+                    )
 
-    def _display_multi_account_summary(self, all_results: List[Dict], operation_type: str):
+    def _display_multi_account_summary(
+        self, all_results: List[Dict], operation_type: str
+    ):
         """Display summary of multi-account operations."""
         self.print_colored(Colors.YELLOW, "\n📊 Multi-Account Operation Summary")
         self.print_colored(Colors.YELLOW, "=" * 80)
 
         total_accounts = len(all_results)
-        successful_accounts = len([r for r in all_results if not r.get('errors')])
+        successful_accounts = len([r for r in all_results if not r.get("errors")])
         failed_accounts = total_accounts - successful_accounts
 
-        self.print_colored(Colors.WHITE, f"📈 Total Accounts Processed: {total_accounts}")
-        self.print_colored(Colors.GREEN, f"✅ Successful Operations: {successful_accounts}")
+        self.print_colored(
+            Colors.WHITE, f"📈 Total Accounts Processed: {total_accounts}"
+        )
+        self.print_colored(
+            Colors.GREEN, f"✅ Successful Operations: {successful_accounts}"
+        )
         self.print_colored(Colors.RED, f"❌ Failed Operations: {failed_accounts}")
 
         # Operation-specific summary
         if operation_type == "role_policy_cleanup":
             total_custom_policies = sum(
-                len(r.get('custom_policies_found', [])) for r in all_results if not r.get('errors'))
-            total_deleted = sum(len(r.get('deleted_policies', [])) for r in all_results if not r.get('errors'))
+                len(r.get("custom_policies_found", []))
+                for r in all_results
+                if not r.get("errors")
+            )
+            total_deleted = sum(
+                len(r.get("deleted_policies", []))
+                for r in all_results
+                if not r.get("errors")
+            )
 
-            self.print_colored(Colors.WHITE, f"🔍 Total custom policies found: {total_custom_policies}")
-            if not all_results[0].get('dry_run', True):
-                self.print_colored(Colors.GREEN, f"🗑️  Total policies deleted: {total_deleted}")
+            self.print_colored(
+                Colors.WHITE, f"🔍 Total custom policies found: {total_custom_policies}"
+            )
+            if not all_results[0].get("dry_run", True):
+                self.print_colored(
+                    Colors.GREEN, f"🗑️  Total policies deleted: {total_deleted}"
+                )
 
         elif operation_type == "account_policy_cleanup":
-            total_policies = sum(r.get('total_custom_policies_found', 0) for r in all_results if not r.get('errors'))
-            total_deleted = sum(len(r.get('deleted_policies', [])) for r in all_results if not r.get('errors'))
+            total_policies = sum(
+                r.get("total_custom_policies_found", 0)
+                for r in all_results
+                if not r.get("errors")
+            )
+            total_deleted = sum(
+                len(r.get("deleted_policies", []))
+                for r in all_results
+                if not r.get("errors")
+            )
 
-            self.print_colored(Colors.WHITE, f"🔍 Total custom policies found: {total_policies}")
-            if not all_results[0].get('dry_run', True):
-                self.print_colored(Colors.GREEN, f"🗑️  Total policies deleted: {total_deleted}")
+            self.print_colored(
+                Colors.WHITE, f"🔍 Total custom policies found: {total_policies}"
+            )
+            if not all_results[0].get("dry_run", True):
+                self.print_colored(
+                    Colors.GREEN, f"🗑️  Total policies deleted: {total_deleted}"
+                )
 
         elif operation_type == "role_deletion":
-            total_roles = sum(len(r.get('roles_found', [])) for r in all_results if not r.get('errors'))
-            total_deleted = sum(len(r.get('deleted_roles', [])) for r in all_results if not r.get('errors'))
+            total_roles = sum(
+                len(r.get("roles_found", []))
+                for r in all_results
+                if not r.get("errors")
+            )
+            total_deleted = sum(
+                len(r.get("deleted_roles", []))
+                for r in all_results
+                if not r.get("errors")
+            )
 
-            self.print_colored(Colors.WHITE, f"🔍 Total custom roles found: {total_roles}")
-            if not all_results[0].get('dry_run', True):
-                self.print_colored(Colors.GREEN, f"🗑️  Total roles deleted: {total_deleted}")
+            self.print_colored(
+                Colors.WHITE, f"🔍 Total custom roles found: {total_roles}"
+            )
+            if not all_results[0].get("dry_run", True):
+                self.print_colored(
+                    Colors.GREEN, f"🗑️  Total roles deleted: {total_deleted}"
+                )
 
         # Per-account breakdown
         self.print_colored(Colors.YELLOW, "\n📋 Per-Account Results:")
         for result in all_results:
-            account_key = result.get('account_key', 'Unknown')
-            account_id = result.get('account_id', 'Unknown')
+            account_key = result.get("account_key", "Unknown")
+            account_id = result.get("account_id", "Unknown")
 
             self.print_colored(Colors.CYAN, f"\n   📋 {account_key} (ID: {account_id})")
 
-            if result.get('errors'):
-                self.print_colored(Colors.RED, f"      ❌ Errors: {', '.join(result['errors'])}")
+            if result.get("errors"):
+                self.print_colored(
+                    Colors.RED, f"      ❌ Errors: {', '.join(result['errors'])}"
+                )
             else:
                 if operation_type == "role_policy_cleanup":
-                    custom_policies = len(result.get('custom_policies_found', []))
-                    self.print_colored(Colors.WHITE, f"      🔍 Custom policies: {custom_policies}")
-                    if not result.get('dry_run', True):
-                        deleted = len(result.get('deleted_policies', []))
+                    custom_policies = len(result.get("custom_policies_found", []))
+                    self.print_colored(
+                        Colors.WHITE, f"      🔍 Custom policies: {custom_policies}"
+                    )
+                    if not result.get("dry_run", True):
+                        deleted = len(result.get("deleted_policies", []))
                         self.print_colored(Colors.GREEN, f"      ✅ Deleted: {deleted}")
 
                 elif operation_type == "account_policy_cleanup":
-                    total_found = result.get('total_custom_policies_found', 0)
-                    self.print_colored(Colors.WHITE, f"      🔍 Total policies: {total_found}")
-                    if not result.get('dry_run', True):
-                        deleted = len(result.get('deleted_policies', []))
+                    total_found = result.get("total_custom_policies_found", 0)
+                    self.print_colored(
+                        Colors.WHITE, f"      🔍 Total policies: {total_found}"
+                    )
+                    if not result.get("dry_run", True):
+                        deleted = len(result.get("deleted_policies", []))
                         self.print_colored(Colors.GREEN, f"      ✅ Deleted: {deleted}")
 
                 elif operation_type == "role_deletion":
-                    roles_found = len(result.get('roles_found', []))
-                    self.print_colored(Colors.WHITE, f"      🔍 Custom roles: {roles_found}")
-                    if not result.get('dry_run', True):
-                        deleted = len(result.get('deleted_roles', []))
+                    roles_found = len(result.get("roles_found", []))
+                    self.print_colored(
+                        Colors.WHITE, f"      🔍 Custom roles: {roles_found}"
+                    )
+                    if not result.get("dry_run", True):
+                        deleted = len(result.get("deleted_roles", []))
                         self.print_colored(Colors.GREEN, f"      ✅ Deleted: {deleted}")
 
 
@@ -586,8 +851,12 @@ def main():
     """
     Main function to run the IAM Cleanup Automation.
     """
-    print(f"{Colors.CYAN}🚀 Starting AWS IAM Policy & Role Cleanup Manager...{Colors.END}")
-    print(f"{Colors.WHITE}📅 Current Date and Time (UTC): {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}{Colors.END}")
+    print(
+        f"{Colors.CYAN}🚀 Starting AWS IAM Policy & Role Cleanup Manager...{Colors.END}"
+    )
+    print(
+        f"{Colors.WHITE}📅 Current Date and Time (UTC): {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}{Colors.END}"
+    )
     print(f"{Colors.WHITE}👤 Current User's Login: varadharajaan{Colors.END}")
 
     try:
@@ -604,10 +873,14 @@ def main():
                 # Fall back to current working directory
                 config_dir = os.getcwd()
 
-            print(f"{Colors.CYAN}📁 Attempting to use config directory: {config_dir}{Colors.END}")
+            print(
+                f"{Colors.CYAN}📁 Attempting to use config directory: {config_dir}{Colors.END}"
+            )
 
         except Exception as e:
-            print(f"{Colors.YELLOW}⚠️  Warning: Could not determine config directory: {e}{Colors.END}")
+            print(
+                f"{Colors.YELLOW}⚠️  Warning: Could not determine config directory: {e}{Colors.END}"
+            )
             config_dir = None
 
         # Initialize the cleanup automation
@@ -619,13 +892,19 @@ def main():
     except PermissionError as e:
         print(f"\n{Colors.RED}❌ Permission Error: {e}{Colors.END}")
         print(f"{Colors.WHITE}💡 Solutions:{Colors.END}")
-        print(f"{Colors.WHITE}   • Run from a directory you have read permissions on{Colors.END}")
-        print(f"{Colors.WHITE}   • Move the config files to your home directory{Colors.END}")
+        print(
+            f"{Colors.WHITE}   • Run from a directory you have read permissions on{Colors.END}"
+        )
+        print(
+            f"{Colors.WHITE}   • Move the config files to your home directory{Colors.END}"
+        )
         print(f"{Colors.WHITE}   • Run with appropriate permissions{Colors.END}")
 
     except FileNotFoundError as e:
         print(f"\n{Colors.RED}❌ File Not Found: {e}{Colors.END}")
-        print(f"{Colors.WHITE}💡 Make sure these files exist in the config directory:{Colors.END}")
+        print(
+            f"{Colors.WHITE}💡 Make sure these files exist in the config directory:{Colors.END}"
+        )
         print(f"{Colors.WHITE}   • aws_accounts_config.json{Colors.END}")
         print(f"{Colors.WHITE}   • aws/iam/iam_users_credentials_*.json{Colors.END}")
 
@@ -634,7 +913,9 @@ def main():
 
     except Exception as e:
         print(f"\n{Colors.RED}❌ Unexpected error: {e}{Colors.END}")
-        print(f"{Colors.WHITE}💡 Please check your configuration files and try again{Colors.END}")
+        print(
+            f"{Colors.WHITE}💡 Please check your configuration files and try again{Colors.END}"
+        )
         print(f"{Colors.WHITE}   Error type: {type(e).__name__}{Colors.END}")
 
 

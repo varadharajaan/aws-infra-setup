@@ -22,7 +22,7 @@ fields_to_mask = [
     "backup_access_key",
     "backup_secret_key",
     "password",
-    "canonical_user_id"
+    "canonical_user_id",
 ]
 
 # Fields inside billing address to mask (if needed)
@@ -42,17 +42,19 @@ for acc in config.get("accounts", {}).values():
 
 # Add metadata
 current_time = datetime.now()
-created_by = 'varadharajaan'
+created_by = "varadharajaan"
 timestamp = current_time.strftime("%Y-%m-%d %H:%M:%S")
 config["metadata"] = {
     "created_at": timestamp,
     "sanitized": True,
     "created_by": created_by,
-    "source_file": "aws_accounts_config.json"
+    "source_file": "aws_accounts_config.json",
 }
 
 # Save sanitized configuration
 with open("sanitized_aws_accounts_config.json", "w") as f:
     json.dump(config, f, indent=2)
 
-print(f"✅ Sanitized config saved to 'sanitized_aws_accounts_config.json' at {timestamp}")
+print(
+    f"✅ Sanitized config saved to 'sanitized_aws_accounts_config.json' at {timestamp}"
+)

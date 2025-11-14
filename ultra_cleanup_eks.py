@@ -1,13 +1,15 @@
 ﻿#!/usr/bin/env python3
 
-import os
 import json
-import boto3
+import os
 import time
 from datetime import datetime
-from typing import Dict, List, Optional, Any
-from botocore.exceptions import ClientError
+from typing import List, Optional
+
+import boto3
 import botocore
+from botocore.exceptions import ClientError
+
 from root_iam_credential_manager import AWSCredentialManager, Colors
 
 
@@ -52,13 +54,13 @@ class UltraCleanupEKSManager:
 
         # Storage for cleanup results
         self.cleanup_results = {
-            'accounts_processed': [],
-            'regions_processed': [],
-            'deleted_clusters': [],
-            'deleted_nodegroups': [],
-            'failed_deletions': [],
-            'skipped_resources': [],
-            'errors': []
+            "accounts_processed": [],
+            "regions_processed": [],
+            "deleted_clusters": [],
+            "deleted_nodegroups": [],
+            "failed_deletions": [],
+            "skipped_resources": [],
+            "errors": [],
         }
 
     def print_colored(self, color: str, message: str):
@@ -70,13 +72,16 @@ class UltraCleanupEKSManager:
         try:
             config = self.cred_manager.load_root_accounts_config()
             if config:
-                return config.get('user_settings', {}).get('user_regions', [
-                    'us-east-1', 'us-east-2', 'us-west-1', 'us-west-2', 'ap-south-1'
-                ])
+                return config.get("user_settings", {}).get(
+                    "user_regions",
+                    ["us-east-1", "us-east-2", "us-west-1", "us-west-2", "ap-south-1"],
+                )
         except Exception as e:
-            self.print_colored(Colors.YELLOW, f"⚠️  Warning: Could not load user regions: {e}")
+            self.print_colored(
+                Colors.YELLOW, f"⚠️  Warning: Could not load user regions: {e}"
+            )
 
-        return ['us-east-1', 'us-east-2', 'us-west-1', 'us-west-2', 'ap-south-1']
+        return ["us-east-1", "us-east-2", "us-west-1", "us-west-2", "ap-south-1"]
 
     def setup_detailed_logging(self):
         """Setup detailed logging to file"""
@@ -84,13 +89,15 @@ class UltraCleanupEKSManager:
             os.makedirs(self.eks_dir, exist_ok=True)
 
             # Save log file in the aws/eks directory
-            self.log_filename = f"{self.eks_dir}/ultra_eks_cleanup_log_{self.execution_timestamp}.log"
+            self.log_filename = (
+                f"{self.eks_dir}/ultra_eks_cleanup_log_{self.execution_timestamp}.log"
+            )
 
             # Create a file handler for detailed logging
             import logging
 
             # Create logger for detailed operations
-            self.operation_logger = logging.getLogger('ultra_eks_cleanup')
+            self.operation_logger = logging.getLogger("ultra_eks_cleanup")
             self.operation_logger.setLevel(logging.INFO)
 
             # Remove existing handlers to avoid duplicates
@@ -98,7 +105,7 @@ class UltraCleanupEKSManager:
                 self.operation_logger.removeHandler(handler)
 
             # File handler
-            file_handler = logging.FileHandler(self.log_filename, encoding='utf-8')
+            file_handler = logging.FileHandler(self.log_filename, encoding="utf-8")
             file_handler.setLevel(logging.INFO)
 
             # Console handler
@@ -107,8 +114,8 @@ class UltraCleanupEKSManager:
 
             # Formatter
             formatter = logging.Formatter(
-                '%(asctime)s | %(levelname)8s | %(message)s',
-                datefmt='%Y-%m-%d %H:%M:%S'
+                "%(asctime)s | %(levelname)8s | %(message)s",
+                datefmt="%Y-%m-%d %H:%M:%S",
             )
 
             file_handler.setFormatter(formatter)
@@ -128,19 +135,21 @@ class UltraCleanupEKSManager:
             self.operation_logger.info("=" * 100)
 
         except Exception as e:
-            self.print_colored(Colors.YELLOW, f"Warning: Could not setup detailed logging: {e}")
+            self.print_colored(
+                Colors.YELLOW, f"Warning: Could not setup detailed logging: {e}"
+            )
             self.operation_logger = None
 
     def log_operation(self, level, message):
         """Simple logging operation"""
         if self.operation_logger:
-            if level.upper() == 'INFO':
+            if level.upper() == "INFO":
                 self.operation_logger.info(message)
-            elif level.upper() == 'WARNING':
+            elif level.upper() == "WARNING":
                 self.operation_logger.warning(message)
-            elif level.upper() == 'ERROR':
+            elif level.upper() == "ERROR":
                 self.operation_logger.error(message)
-            elif level.upper() == 'DEBUG':
+            elif level.upper() == "DEBUG":
                 self.operation_logger.debug(message)
         else:
             print(f"[{level.upper()}] {message}")
@@ -149,40 +158,56 @@ class UltraCleanupEKSManager:
         """Delete Lambda functions related to the EKS cluster, including node protection functions."""
         try:
             lambda_client = boto3.client(
-                'lambda',
+                "lambda",
                 aws_access_key_id=access_key,
                 aws_secret_access_key=secret_key,
-                region_name=region
+                region_name=region,
             )
 
             deleted_functions = []
             skipped_functions = []
 
             # Get all Lambda functions
-            paginator = lambda_client.get_paginator('list_functions')
+            paginator = lambda_client.get_paginator("list_functions")
 
             for page in paginator.paginate():
-                for function in page['Functions']:
-                    function_name = function['FunctionName']
-                    function_arn = function['FunctionArn']
+                for function in page["Functions"]:
+                    function_name = function["FunctionName"]
+                    function_arn = function["FunctionArn"]
 
                     # Skip shared/common functions
-                    if any(pattern in function_name.lower() for pattern in [
-                        'common-', 'shared-', 'global-', 'admin-', 'all-', 'multi-',
-                        'bastion', 'jumpbox', 'cicd', 'pipeline'
-                    ]):
-                        self.log_operation('INFO', f"⚠️ Skipping shared Lambda function: {function_name}")
+                    if any(
+                        pattern in function_name.lower()
+                        for pattern in [
+                            "common-",
+                            "shared-",
+                            "global-",
+                            "admin-",
+                            "all-",
+                            "multi-",
+                            "bastion",
+                            "jumpbox",
+                            "cicd",
+                            "pipeline",
+                        ]
+                    ):
+                        self.log_operation(
+                            "INFO",
+                            f"⚠️ Skipping shared Lambda function: {function_name}",
+                        )
                         skipped_functions.append(function_name)
-                        self.cleanup_results['skipped_resources'].append({
-                            'resource_type': 'Lambda function',
-                            'resource_id': function_name,
-                            'reason': 'Appears to be a shared resource'
-                        })
+                        self.cleanup_results["skipped_resources"].append(
+                            {
+                                "resource_type": "Lambda function",
+                                "resource_id": function_name,
+                                "reason": "Appears to be a shared resource",
+                            }
+                        )
                         continue
 
                     # Check if function is related to this cluster
                     is_cluster_related = False
-                    cluster_suffix = cluster_name.split('-')[-1]
+                    cluster_suffix = cluster_name.split("-")[-1]
 
                     # Check function name patterns for cluster relation
                     cluster_patterns = [
@@ -191,7 +216,7 @@ class UltraCleanupEKSManager:
                         f"-{cluster_name.lower()}-",
                         f"-{cluster_name.lower()}",
                         f"{cluster_suffix}-",
-                        f"-{cluster_suffix}"
+                        f"-{cluster_suffix}",
                     ]
 
                     # **NEW: Check for node protection function patterns**
@@ -218,12 +243,21 @@ class UltraCleanupEKSManager:
                     # Check function description
                     if not is_cluster_related:
                         try:
-                            function_config = lambda_client.get_function(FunctionName=function_name)
-                            description = function_config.get('Configuration', {}).get('Description', '').lower()
+                            function_config = lambda_client.get_function(
+                                FunctionName=function_name
+                            )
+                            description = (
+                                function_config.get("Configuration", {})
+                                .get("Description", "")
+                                .lower()
+                            )
 
-                            if (cluster_name.lower() in description or
-                                    f"cluster {cluster_suffix}" in description or
-                                    "node protection" in description and cluster_name.lower() in description):
+                            if (
+                                cluster_name.lower() in description
+                                or f"cluster {cluster_suffix}" in description
+                                or "node protection" in description
+                                and cluster_name.lower() in description
+                            ):
                                 is_cluster_related = True
                         except Exception:
                             pass
@@ -231,13 +265,21 @@ class UltraCleanupEKSManager:
                     # Check environment variables for cluster reference
                     if not is_cluster_related:
                         try:
-                            function_config = lambda_client.get_function(FunctionName=function_name)
-                            env_vars = function_config.get('Configuration', {}).get('Environment', {}).get('Variables',
-                                                                                                           {})
+                            function_config = lambda_client.get_function(
+                                FunctionName=function_name
+                            )
+                            env_vars = (
+                                function_config.get("Configuration", {})
+                                .get("Environment", {})
+                                .get("Variables", {})
+                            )
 
                             for var_name, var_value in env_vars.items():
-                                if (var_name.upper() in ['CLUSTER_NAME', 'EKS_CLUSTER', 'TARGET_CLUSTER'] and
-                                        var_value.lower() == cluster_name.lower()):
+                                if (
+                                    var_name.upper()
+                                    in ["CLUSTER_NAME", "EKS_CLUSTER", "TARGET_CLUSTER"]
+                                    and var_value.lower() == cluster_name.lower()
+                                ):
                                     is_cluster_related = True
                                     break
                                 elif cluster_name.lower() in str(var_value).lower():
@@ -249,19 +291,33 @@ class UltraCleanupEKSManager:
                     # Check function tags
                     if not is_cluster_related:
                         try:
-                            tags = lambda_client.list_tags(Resource=function_arn).get('Tags', {})
+                            tags = lambda_client.list_tags(Resource=function_arn).get(
+                                "Tags", {}
+                            )
 
                             for tag_key, tag_value in tags.items():
                                 tag_key_lower = tag_key.lower()
                                 tag_value_lower = tag_value.lower()
 
                                 # **NEW: Check for node protection tags**
-                                if ((tag_key_lower in ['cluster', 'eks-cluster',
-                                                       'clustername'] and tag_value_lower == cluster_name.lower()) or
-                                        (
-                                                tag_key_lower == 'purpose' and 'node-protection' in tag_value_lower and cluster_name.lower() in tag_value_lower) or
-                                        (tag_key_lower == 'function-type' and 'nodegroup-monitor' in tag_value_lower) or
-                                        tag_key_lower == f'kubernetes.io/cluster/{cluster_name.lower()}'):
+                                if (
+                                    (
+                                        tag_key_lower
+                                        in ["cluster", "eks-cluster", "clustername"]
+                                        and tag_value_lower == cluster_name.lower()
+                                    )
+                                    or (
+                                        tag_key_lower == "purpose"
+                                        and "node-protection" in tag_value_lower
+                                        and cluster_name.lower() in tag_value_lower
+                                    )
+                                    or (
+                                        tag_key_lower == "function-type"
+                                        and "nodegroup-monitor" in tag_value_lower
+                                    )
+                                    or tag_key_lower
+                                    == f"kubernetes.io/cluster/{cluster_name.lower()}"
+                                ):
                                     is_cluster_related = True
                                     break
                         except Exception:
@@ -270,43 +326,66 @@ class UltraCleanupEKSManager:
                     if is_cluster_related:
                         try:
                             # **NEW: Remove EventBridge triggers before deleting function**
-                            self.remove_lambda_eventbridge_triggers(lambda_client, function_name, cluster_name,
-                                                                    access_key, secret_key, region)
+                            self.remove_lambda_eventbridge_triggers(
+                                lambda_client,
+                                function_name,
+                                cluster_name,
+                                access_key,
+                                secret_key,
+                                region,
+                            )
 
-                            self.log_operation('INFO',
-                                               f"🗑️  Deleting Lambda function {function_name} related to cluster {cluster_name}")
+                            self.log_operation(
+                                "INFO",
+                                f"🗑️  Deleting Lambda function {function_name} related to cluster {cluster_name}",
+                            )
                             lambda_client.delete_function(FunctionName=function_name)
                             deleted_functions.append(function_name)
-                            self.log_operation('INFO', f"✅ Deleted Lambda function {function_name}")
+                            self.log_operation(
+                                "INFO", f"✅ Deleted Lambda function {function_name}"
+                            )
 
                         except Exception as delete_error:
-                            self.log_operation('ERROR',
-                                               f"Failed to delete Lambda function {function_name}: {delete_error}")
+                            self.log_operation(
+                                "ERROR",
+                                f"Failed to delete Lambda function {function_name}: {delete_error}",
+                            )
 
             if deleted_functions or skipped_functions:
-                self.log_operation('INFO',
-                                   f"Deleted {len(deleted_functions)} Lambda functions and skipped {len(skipped_functions)} for cluster {cluster_name}")
+                self.log_operation(
+                    "INFO",
+                    f"Deleted {len(deleted_functions)} Lambda functions and skipped {len(skipped_functions)} for cluster {cluster_name}",
+                )
                 if skipped_functions:
-                    print(f"   ⚠️ Skipped {len(skipped_functions)} Lambda functions that appear to be shared")
+                    print(
+                        f"   ⚠️ Skipped {len(skipped_functions)} Lambda functions that appear to be shared"
+                    )
 
             if not deleted_functions and not skipped_functions:
-                self.log_operation('INFO', f"No Lambda functions found related to cluster {cluster_name}")
+                self.log_operation(
+                    "INFO",
+                    f"No Lambda functions found related to cluster {cluster_name}",
+                )
 
             return True
 
         except Exception as e:
-            self.log_operation('ERROR', f"Failed to delete Lambda functions for cluster {cluster_name}: {e}")
+            self.log_operation(
+                "ERROR",
+                f"Failed to delete Lambda functions for cluster {cluster_name}: {e}",
+            )
             return False
 
-    def remove_lambda_eventbridge_triggers(self, lambda_client, function_name, cluster_name, access_key, secret_key,
-                                           region):
+    def remove_lambda_eventbridge_triggers(
+        self, lambda_client, function_name, cluster_name, access_key, secret_key, region
+    ):
         """Remove EventBridge triggers for a Lambda function before deletion."""
         try:
             events_client = boto3.client(
-                'events',
+                "events",
                 aws_access_key_id=access_key,
                 aws_secret_access_key=secret_key,
-                region_name=region
+                region_name=region,
             )
 
             # Get the function's policy to find EventBridge triggers
@@ -319,10 +398,10 @@ class UltraCleanupEKSManager:
 
             # **NEW: Find and remove EventBridge rules that target this function**
             try:
-                rules = events_client.list_rules().get('Rules', [])
+                rules = events_client.list_rules().get("Rules", [])
 
                 for rule in rules:
-                    rule_name = rule.get('Name')
+                    rule_name = rule.get("Name")
 
                     # Check if rule is related to node protection for this cluster
                     node_protection_rule_patterns = [
@@ -330,7 +409,7 @@ class UltraCleanupEKSManager:
                         f"node-protection-{cluster_name.lower()}",
                         f"{cluster_name.lower()}-nodegroup-monitor",
                         f"nodegroup-monitor-{cluster_name.lower()}",
-                        f"{cluster_name.split('-')[-1]}-node-protection"
+                        f"{cluster_name.split('-')[-1]}-node-protection",
                     ]
 
                     rule_is_related = False
@@ -342,72 +421,103 @@ class UltraCleanupEKSManager:
                     if rule_is_related:
                         # Check if this rule targets our Lambda function
                         try:
-                            targets = events_client.list_targets_by_rule(Rule=rule_name).get('Targets', [])
+                            targets = events_client.list_targets_by_rule(
+                                Rule=rule_name
+                            ).get("Targets", [])
 
                             for target in targets:
-                                target_arn = target.get('Arn', '')
+                                target_arn = target.get("Arn", "")
                                 if function_name in target_arn:
                                     # Remove the target
                                     events_client.remove_targets(
-                                        Rule=rule_name,
-                                        Ids=[target.get('Id')]
+                                        Rule=rule_name, Ids=[target.get("Id")]
                                     )
-                                    self.log_operation('INFO', f"Removed EventBridge target for rule {rule_name}")
+                                    self.log_operation(
+                                        "INFO",
+                                        f"Removed EventBridge target for rule {rule_name}",
+                                    )
 
                                     # Delete the rule if it has no more targets
-                                    remaining_targets = events_client.list_targets_by_rule(Rule=rule_name).get(
-                                        'Targets', [])
+                                    remaining_targets = (
+                                        events_client.list_targets_by_rule(
+                                            Rule=rule_name
+                                        ).get("Targets", [])
+                                    )
                                     if not remaining_targets:
                                         events_client.delete_rule(Name=rule_name)
-                                        self.log_operation('INFO', f"Deleted EventBridge rule {rule_name}")
+                                        self.log_operation(
+                                            "INFO",
+                                            f"Deleted EventBridge rule {rule_name}",
+                                        )
 
                                     break
                         except Exception as target_error:
-                            self.log_operation('WARNING', f"Error processing rule {rule_name}: {target_error}")
+                            self.log_operation(
+                                "WARNING",
+                                f"Error processing rule {rule_name}: {target_error}",
+                            )
 
             except Exception as events_error:
-                self.log_operation('WARNING',
-                                   f"Error cleaning up EventBridge rules for {function_name}: {events_error}")
+                self.log_operation(
+                    "WARNING",
+                    f"Error cleaning up EventBridge rules for {function_name}: {events_error}",
+                )
 
         except Exception as e:
-            self.log_operation('WARNING', f"Error removing EventBridge triggers for {function_name}: {e}")
+            self.log_operation(
+                "WARNING",
+                f"Error removing EventBridge triggers for {function_name}: {e}",
+            )
 
     def delete_related_event_rules(self, access_key, secret_key, region, cluster_name):
         """Delete EventBridge rules related to the EKS cluster, including node protection rules."""
         try:
             events_client = boto3.client(
-                'events',
+                "events",
                 aws_access_key_id=access_key,
                 aws_secret_access_key=secret_key,
-                region_name=region
+                region_name=region,
             )
 
             deleted_rules = []
             skipped_rules = []
 
             # Get all EventBridge rules
-            rules = events_client.list_rules().get('Rules', [])
+            rules = events_client.list_rules().get("Rules", [])
 
             for rule in rules:
-                rule_name = rule.get('Name')
+                rule_name = rule.get("Name")
 
                 # Skip shared/common rules
-                if any(pattern in rule_name.lower() for pattern in [
-                    'common-', 'shared-', 'global-', 'admin-', 'all-', 'multi-',
-                    'aws-', 'default'
-                ]):
-                    self.log_operation('INFO', f"⚠️ Skipping shared EventBridge rule: {rule_name}")
+                if any(
+                    pattern in rule_name.lower()
+                    for pattern in [
+                        "common-",
+                        "shared-",
+                        "global-",
+                        "admin-",
+                        "all-",
+                        "multi-",
+                        "aws-",
+                        "default",
+                    ]
+                ):
+                    self.log_operation(
+                        "INFO", f"⚠️ Skipping shared EventBridge rule: {rule_name}"
+                    )
                     skipped_rules.append(rule_name)
-                    self.cleanup_results['skipped_resources'].append({
-                        'resource_type': 'EventBridge rule',
-                        'resource_id': rule_name,
-                        'reason': 'Appears to be a shared or system resource'
-                    })
+                    self.cleanup_results["skipped_resources"].append(
+                        {
+                            "resource_type": "EventBridge rule",
+                            "resource_id": rule_name,
+                            "reason": "Appears to be a shared or system resource",
+                        }
+                    )
                     continue
 
                 # Check if rule is related to this cluster
                 is_cluster_related = False
-                cluster_suffix = cluster_name.split('-')[-1]
+                cluster_suffix = cluster_name.split("-")[-1]
 
                 # **ENHANCED: Check for node protection rule patterns**
                 cluster_rule_patterns = [
@@ -425,7 +535,7 @@ class UltraCleanupEKSManager:
                     f"{cluster_name.lower()}-no-delete-monitor",
                     f"no-delete-monitor-{cluster_name.lower()}",
                     f"{cluster_suffix}-node-protection",
-                    f"node-protection-{cluster_suffix}"
+                    f"node-protection-{cluster_suffix}",
                 ]
 
                 for pattern in cluster_rule_patterns:
@@ -435,25 +545,38 @@ class UltraCleanupEKSManager:
 
                 # Check rule description
                 if not is_cluster_related:
-                    rule_description = rule.get('Description', '').lower()
-                    if (cluster_name.lower() in rule_description or
-                            f"cluster {cluster_suffix}" in rule_description or
-                            ("node protection" in rule_description and cluster_name.lower() in rule_description)):
+                    rule_description = rule.get("Description", "").lower()
+                    if (
+                        cluster_name.lower() in rule_description
+                        or f"cluster {cluster_suffix}" in rule_description
+                        or (
+                            "node protection" in rule_description
+                            and cluster_name.lower() in rule_description
+                        )
+                    ):
                         is_cluster_related = True
 
                 # **NEW: Check rule targets for cluster-related Lambda functions**
                 if not is_cluster_related:
                     try:
-                        targets = events_client.list_targets_by_rule(Rule=rule_name).get('Targets', [])
+                        targets = events_client.list_targets_by_rule(
+                            Rule=rule_name
+                        ).get("Targets", [])
 
                         for target in targets:
-                            target_arn = target.get('Arn', '')
+                            target_arn = target.get("Arn", "")
 
                             # Check if target is a Lambda function related to our cluster
-                            if 'lambda' in target_arn and cluster_name.lower() in target_arn.lower():
+                            if (
+                                "lambda" in target_arn
+                                and cluster_name.lower() in target_arn.lower()
+                            ):
                                 is_cluster_related = True
                                 break
-                            elif 'lambda' in target_arn and f"{cluster_suffix}" in target_arn.lower():
+                            elif (
+                                "lambda" in target_arn
+                                and f"{cluster_suffix}" in target_arn.lower()
+                            ):
                                 is_cluster_related = True
                                 break
                     except Exception:
@@ -462,45 +585,69 @@ class UltraCleanupEKSManager:
                 if is_cluster_related:
                     try:
                         # Remove all targets first
-                        targets = events_client.list_targets_by_rule(Rule=rule_name).get('Targets', [])
+                        targets = events_client.list_targets_by_rule(
+                            Rule=rule_name
+                        ).get("Targets", [])
                         if targets:
-                            target_ids = [target.get('Id') for target in targets]
+                            target_ids = [target.get("Id") for target in targets]
                             events_client.remove_targets(Rule=rule_name, Ids=target_ids)
-                            self.log_operation('INFO', f"Removed targets from EventBridge rule {rule_name}")
+                            self.log_operation(
+                                "INFO",
+                                f"Removed targets from EventBridge rule {rule_name}",
+                            )
 
                         # Delete the rule
-                        self.log_operation('INFO',
-                                           f"🗑️  Deleting EventBridge rule {rule_name} related to cluster {cluster_name}")
+                        self.log_operation(
+                            "INFO",
+                            f"🗑️  Deleting EventBridge rule {rule_name} related to cluster {cluster_name}",
+                        )
                         events_client.delete_rule(Name=rule_name)
                         deleted_rules.append(rule_name)
-                        self.log_operation('INFO', f"✅ Deleted EventBridge rule {rule_name}")
+                        self.log_operation(
+                            "INFO", f"✅ Deleted EventBridge rule {rule_name}"
+                        )
 
                     except Exception as delete_error:
-                        self.log_operation('ERROR', f"Failed to delete EventBridge rule {rule_name}: {delete_error}")
+                        self.log_operation(
+                            "ERROR",
+                            f"Failed to delete EventBridge rule {rule_name}: {delete_error}",
+                        )
 
             if deleted_rules or skipped_rules:
-                self.log_operation('INFO',
-                                   f"Deleted {len(deleted_rules)} EventBridge rules and skipped {len(skipped_rules)} for cluster {cluster_name}")
+                self.log_operation(
+                    "INFO",
+                    f"Deleted {len(deleted_rules)} EventBridge rules and skipped {len(skipped_rules)} for cluster {cluster_name}",
+                )
                 if skipped_rules:
-                    print(f"   ⚠️ Skipped {len(skipped_rules)} EventBridge rules that appear to be shared")
+                    print(
+                        f"   ⚠️ Skipped {len(skipped_rules)} EventBridge rules that appear to be shared"
+                    )
 
             if not deleted_rules and not skipped_rules:
-                self.log_operation('INFO', f"No EventBridge rules found related to cluster {cluster_name}")
+                self.log_operation(
+                    "INFO",
+                    f"No EventBridge rules found related to cluster {cluster_name}",
+                )
 
             return True
 
         except Exception as e:
-            self.log_operation('ERROR', f"Failed to delete EventBridge rules for cluster {cluster_name}: {e}")
+            self.log_operation(
+                "ERROR",
+                f"Failed to delete EventBridge rules for cluster {cluster_name}: {e}",
+            )
             return False
 
-    def delete_all_iam_roles_policies(self, access_key, secret_key, region, cluster_name):
+    def delete_all_iam_roles_policies(
+        self, access_key, secret_key, region, cluster_name
+    ):
         """Delete IAM roles and policies related to the EKS cluster with improved safety checks."""
         try:
             iam_client = boto3.client(
-                'iam',
+                "iam",
                 aws_access_key_id=access_key,
                 aws_secret_access_key=secret_key,
-                region_name=region
+                region_name=region,
             )
 
             deleted_roles = []
@@ -509,83 +656,103 @@ class UltraCleanupEKSManager:
             skipped_policies = []
 
             # Get all IAM roles
-            paginator = iam_client.get_paginator('list_roles')
+            paginator = iam_client.get_paginator("list_roles")
 
             for page in paginator.paginate():
-                for role in page['Roles']:
-                    role_name = role['RoleName']
+                for role in page["Roles"]:
+                    role_name = role["RoleName"]
 
                     # Skip AWS service-linked roles
-                    if role_name.startswith('AWSServiceRoleFor'):
-                        self.log_operation('INFO', f"Skipping AWS service-linked role {role_name}")
+                    if role_name.startswith("AWSServiceRoleFor"):
+                        self.log_operation(
+                            "INFO", f"Skipping AWS service-linked role {role_name}"
+                        )
                         continue
 
                     # Expanded list of critical roles to skip
                     critical_role_patterns = [
-                        'eks_service_role',
-                        'nodeinstancerole',
-                        'eks-service-role',
-                        'nodeinstance-role',
-                        'node-instance-role',
-                        'cluster-autoscaler',
-                        'ClusterAutoscaler',
-                        'karpenter',
-                        'alb-ingress',
-                        'external-dns',
-                        'ebs-csi-controller',
-                        'loadbalancer-controller',
-                        'eks-admin',
-                        'master-role',
-                        'iam-controller',
-                        'shared-',
-                        'common-',
-                        'global-',
-                        'admin-role',
-                        'bastion-role',
-                        'terraform-role',
-                        'ci-cd-',
-                        'jenkins-',
-                        'ArgoCD',
-                        'ADOT-',
-                        'monitoring-role'
+                        "eks_service_role",
+                        "nodeinstancerole",
+                        "eks-service-role",
+                        "nodeinstance-role",
+                        "node-instance-role",
+                        "cluster-autoscaler",
+                        "ClusterAutoscaler",
+                        "karpenter",
+                        "alb-ingress",
+                        "external-dns",
+                        "ebs-csi-controller",
+                        "loadbalancer-controller",
+                        "eks-admin",
+                        "master-role",
+                        "iam-controller",
+                        "shared-",
+                        "common-",
+                        "global-",
+                        "admin-role",
+                        "bastion-role",
+                        "terraform-role",
+                        "ci-cd-",
+                        "jenkins-",
+                        "ArgoCD",
+                        "ADOT-",
+                        "monitoring-role",
                     ]
 
                     # Skip critical EKS roles
-                    if any(pattern.lower() in role_name.lower() for pattern in critical_role_patterns):
-                        self.log_operation('INFO', f"⚠️ Skipping critical or shared role {role_name}")
+                    if any(
+                        pattern.lower() in role_name.lower()
+                        for pattern in critical_role_patterns
+                    ):
+                        self.log_operation(
+                            "INFO", f"⚠️ Skipping critical or shared role {role_name}"
+                        )
                         skipped_roles.append(role_name)
-                        self.cleanup_results['skipped_resources'].append({
-                            'resource_type': 'IAM role',
-                            'resource_id': role_name,
-                            'reason': 'Critical EKS service role or shared resource - preserved for cluster management'
-                        })
+                        self.cleanup_results["skipped_resources"].append(
+                            {
+                                "resource_type": "IAM role",
+                                "resource_id": role_name,
+                                "reason": "Critical EKS service role or shared resource - preserved for cluster management",
+                            }
+                        )
                         continue
 
                     # Check if role is related to THIS specific EKS cluster
                     is_cluster_related = False
-                    cluster_suffix = cluster_name.split('-')[-1]
+                    cluster_suffix = cluster_name.split("-")[-1]
 
                     # Only delete if name contains EXACT cluster name or specific suffix identifier
-                    if cluster_name.lower() in role_name.lower() or f"-{cluster_suffix}" in role_name.lower():
+                    if (
+                        cluster_name.lower() in role_name.lower()
+                        or f"-{cluster_suffix}" in role_name.lower()
+                    ):
                         is_cluster_related = True
 
                     # Check role tags for direct cluster reference
                     try:
                         tags_response = iam_client.list_role_tags(RoleName=role_name)
-                        tags = tags_response.get('Tags', [])
+                        tags = tags_response.get("Tags", [])
 
                         for tag in tags:
-                            tag_key = tag.get('Key', '').lower()
-                            tag_value = tag.get('Value', '').lower()
+                            tag_key = tag.get("Key", "").lower()
+                            tag_value = tag.get("Value", "").lower()
 
                             # Only match tags that explicitly identify THIS cluster
-                            if ((tag_key in ['cluster', 'eks-cluster',
-                                             'clustername'] and tag_value == cluster_name.lower()) or
-                                    tag_key == f'kubernetes.io/cluster/{cluster_name.lower()}'):
+                            if (
+                                (
+                                    tag_key in ["cluster", "eks-cluster", "clustername"]
+                                    and tag_value == cluster_name.lower()
+                                )
+                                or tag_key
+                                == f"kubernetes.io/cluster/{cluster_name.lower()}"
+                            ):
                                 is_cluster_related = True
                                 break
                     except Exception as tag_error:
-                        self.log_operation('WARNING', f"Could not check tags for IAM role {role_name}: {tag_error}")
+                        self.log_operation(
+                            "WARNING",
+                            f"Could not check tags for IAM role {role_name}: {tag_error}",
+                        )
 
                     if is_cluster_related:
                         try:
@@ -594,118 +761,194 @@ class UltraCleanupEKSManager:
 
                             # Check if role has policies that suggest it's shared
                             try:
-                                attached_policies = iam_client.list_attached_role_policies(RoleName=role_name)
-                                for policy in attached_policies['AttachedPolicies']:
-                                    policy_name = policy['PolicyName']
-                                    if any(shared_term in policy_name.lower() for shared_term in [
-                                        'common', 'shared', 'global', 'all', 'clusters', 'multi'
-                                    ]):
+                                attached_policies = (
+                                    iam_client.list_attached_role_policies(
+                                        RoleName=role_name
+                                    )
+                                )
+                                for policy in attached_policies["AttachedPolicies"]:
+                                    policy_name = policy["PolicyName"]
+                                    if any(
+                                        shared_term in policy_name.lower()
+                                        for shared_term in [
+                                            "common",
+                                            "shared",
+                                            "global",
+                                            "all",
+                                            "clusters",
+                                            "multi",
+                                        ]
+                                    ):
                                         might_be_shared = True
                                         break
                             except Exception:
                                 pass
 
                             if might_be_shared:
-                                self.log_operation('INFO', f"⚠️ Skipping potentially shared role {role_name}")
+                                self.log_operation(
+                                    "INFO",
+                                    f"⚠️ Skipping potentially shared role {role_name}",
+                                )
                                 skipped_roles.append(role_name)
-                                self.cleanup_results['skipped_resources'].append({
-                                    'resource_type': 'IAM role',
-                                    'resource_id': role_name,
-                                    'reason': 'Appears to be shared across clusters based on attached policies'
-                                })
+                                self.cleanup_results["skipped_resources"].append(
+                                    {
+                                        "resource_type": "IAM role",
+                                        "resource_id": role_name,
+                                        "reason": "Appears to be shared across clusters based on attached policies",
+                                    }
+                                )
                                 continue
 
                             # Detach managed policies first
-                            attached_policies = iam_client.list_attached_role_policies(RoleName=role_name)
-                            for policy in attached_policies['AttachedPolicies']:
-                                iam_client.detach_role_policy(RoleName=role_name, PolicyArn=policy['PolicyArn'])
+                            attached_policies = iam_client.list_attached_role_policies(
+                                RoleName=role_name
+                            )
+                            for policy in attached_policies["AttachedPolicies"]:
+                                iam_client.detach_role_policy(
+                                    RoleName=role_name, PolicyArn=policy["PolicyArn"]
+                                )
 
                             # Delete inline policies
-                            inline_policies = iam_client.list_role_policies(RoleName=role_name)
-                            for policy_name in inline_policies['PolicyNames']:
-                                iam_client.delete_role_policy(RoleName=role_name, PolicyName=policy_name)
+                            inline_policies = iam_client.list_role_policies(
+                                RoleName=role_name
+                            )
+                            for policy_name in inline_policies["PolicyNames"]:
+                                iam_client.delete_role_policy(
+                                    RoleName=role_name, PolicyName=policy_name
+                                )
 
                             # Delete the role
-                            self.log_operation('INFO',
-                                               f"🗑️  Deleting IAM role {role_name} related to cluster {cluster_name}")
+                            self.log_operation(
+                                "INFO",
+                                f"🗑️  Deleting IAM role {role_name} related to cluster {cluster_name}",
+                            )
                             iam_client.delete_role(RoleName=role_name)
                             deleted_roles.append(role_name)
-                            self.log_operation('INFO', f"✅ Deleted IAM role {role_name}")
+                            self.log_operation(
+                                "INFO", f"✅ Deleted IAM role {role_name}"
+                            )
 
                         except Exception as delete_error:
-                            self.log_operation('ERROR', f"Failed to delete IAM role {role_name}: {delete_error}")
+                            self.log_operation(
+                                "ERROR",
+                                f"Failed to delete IAM role {role_name}: {delete_error}",
+                            )
 
             # Delete customer-managed policies related to the cluster - use more cautious matching
-            policy_paginator = iam_client.get_paginator('list_policies')
+            policy_paginator = iam_client.get_paginator("list_policies")
 
-            for page in policy_paginator.paginate(Scope='Local'):  # Only customer-managed policies
-                for policy in page['Policies']:
-                    policy_name = policy['PolicyName']
-                    policy_arn = policy['Arn']
+            for page in policy_paginator.paginate(
+                Scope="Local"
+            ):  # Only customer-managed policies
+                for policy in page["Policies"]:
+                    policy_name = policy["PolicyName"]
+                    policy_arn = policy["Arn"]
 
                     # Skip shared/common policies
-                    if any(pattern in policy_name.lower() for pattern in [
-                        'common-', 'shared-', 'global-', 'admin-', 'all-', 'multi-'
-                    ]):
-                        self.log_operation('INFO', f"⚠️ Skipping shared policy: {policy_name}")
+                    if any(
+                        pattern in policy_name.lower()
+                        for pattern in [
+                            "common-",
+                            "shared-",
+                            "global-",
+                            "admin-",
+                            "all-",
+                            "multi-",
+                        ]
+                    ):
+                        self.log_operation(
+                            "INFO", f"⚠️ Skipping shared policy: {policy_name}"
+                        )
                         skipped_policies.append(policy_name)
-                        self.cleanup_results['skipped_resources'].append({
-                            'resource_type': 'IAM policy',
-                            'resource_id': policy_name,
-                            'reason': 'Appears to be a shared resource'
-                        })
+                        self.cleanup_results["skipped_resources"].append(
+                            {
+                                "resource_type": "IAM policy",
+                                "resource_id": policy_name,
+                                "reason": "Appears to be a shared resource",
+                            }
+                        )
                         continue
 
                     # Only delete if policy explicitly references THIS cluster
-                    cluster_suffix = cluster_name.split('-')[-1]
-                    if cluster_name.lower() in policy_name.lower() or f"-{cluster_suffix}" in policy_name.lower():
+                    cluster_suffix = cluster_name.split("-")[-1]
+                    if (
+                        cluster_name.lower() in policy_name.lower()
+                        or f"-{cluster_suffix}" in policy_name.lower()
+                    ):
                         try:
                             # Get all policy versions and delete non-default versions first
-                            versions = iam_client.list_policy_versions(PolicyArn=policy_arn)['Versions']
+                            versions = iam_client.list_policy_versions(
+                                PolicyArn=policy_arn
+                            )["Versions"]
                             for version in versions:
-                                if not version['IsDefaultVersion']:
+                                if not version["IsDefaultVersion"]:
                                     iam_client.delete_policy_version(
                                         PolicyArn=policy_arn,
-                                        VersionId=version['VersionId']
+                                        VersionId=version["VersionId"],
                                     )
 
                             # Delete the policy
-                            self.log_operation('INFO',
-                                               f"🗑️  Deleting IAM policy {policy_name} related to cluster {cluster_name}")
+                            self.log_operation(
+                                "INFO",
+                                f"🗑️  Deleting IAM policy {policy_name} related to cluster {cluster_name}",
+                            )
                             iam_client.delete_policy(PolicyArn=policy_arn)
                             deleted_policies.append(policy_name)
-                            self.log_operation('INFO', f"✅ Deleted IAM policy {policy_name}")
+                            self.log_operation(
+                                "INFO", f"✅ Deleted IAM policy {policy_name}"
+                            )
 
                         except Exception as delete_error:
-                            self.log_operation('ERROR', f"Failed to delete IAM policy {policy_name}: {delete_error}")
+                            self.log_operation(
+                                "ERROR",
+                                f"Failed to delete IAM policy {policy_name}: {delete_error}",
+                            )
 
             if deleted_roles or deleted_policies:
-                self.log_operation('INFO',
-                                   f"Deleted {len(deleted_roles)} IAM roles and {len(deleted_policies)} policies for cluster {cluster_name}")
+                self.log_operation(
+                    "INFO",
+                    f"Deleted {len(deleted_roles)} IAM roles and {len(deleted_policies)} policies for cluster {cluster_name}",
+                )
 
             if skipped_roles or skipped_policies:
-                self.log_operation('INFO',
-                                   f"Skipped {len(skipped_roles)} IAM roles and {len(skipped_policies)} policies")
+                self.log_operation(
+                    "INFO",
+                    f"Skipped {len(skipped_roles)} IAM roles and {len(skipped_policies)} policies",
+                )
                 print(
-                    f"   ⚠️ Skipped {len(skipped_roles)} IAM roles and {len(skipped_policies)} policies that appear to be shared")
+                    f"   ⚠️ Skipped {len(skipped_roles)} IAM roles and {len(skipped_policies)} policies that appear to be shared"
+                )
 
-            if not deleted_roles and not deleted_policies and not skipped_roles and not skipped_policies:
-                self.log_operation('INFO', f"No IAM roles/policies found related to cluster {cluster_name}")
+            if (
+                not deleted_roles
+                and not deleted_policies
+                and not skipped_roles
+                and not skipped_policies
+            ):
+                self.log_operation(
+                    "INFO",
+                    f"No IAM roles/policies found related to cluster {cluster_name}",
+                )
 
             return True
 
         except Exception as e:
-            self.log_operation('ERROR', f"Failed to delete IAM resources for cluster {cluster_name}: {e}")
+            self.log_operation(
+                "ERROR",
+                f"Failed to delete IAM resources for cluster {cluster_name}: {e}",
+            )
             return False
 
-    def delete_all_security_groups(self, access_key, secret_key, region, cluster_name, vpc_id):
+    def delete_all_security_groups(
+        self, access_key, secret_key, region, cluster_name, vpc_id
+    ):
         """Delete security groups related to the EKS cluster with improved safety checks."""
         try:
             ec2_client = boto3.client(
-                'ec2',
+                "ec2",
                 aws_access_key_id=access_key,
                 aws_secret_access_key=secret_key,
-                region_name=region
+                region_name=region,
             )
 
             deleted_sgs = []
@@ -713,67 +956,98 @@ class UltraCleanupEKSManager:
 
             # Get all security groups in the VPC
             response = ec2_client.describe_security_groups(
-                Filters=[
-                    {'Name': 'vpc-id', 'Values': [vpc_id]}
-                ]
+                Filters=[{"Name": "vpc-id", "Values": [vpc_id]}]
             )
 
-            for sg in response['SecurityGroups']:
-                sg_id = sg['GroupId']
-                sg_name = sg['GroupName']
+            for sg in response["SecurityGroups"]:
+                sg_id = sg["GroupId"]
+                sg_name = sg["GroupName"]
 
-                if sg_name == 'eks-cluster-sg':
-                    self.log_operation('INFO',
-                                       f"Skipping and **DONT DELETE** EKS cluster SG which has private access to EC2: {sg_name}")
+                if sg_name == "eks-cluster-sg":
+                    self.log_operation(
+                        "INFO",
+                        f"Skipping and **DONT DELETE** EKS cluster SG which has private access to EC2: {sg_name}",
+                    )
                     continue
 
                 # Skip default security group
-                if sg_name == 'default':
+                if sg_name == "default":
                     continue
 
                 # Skip commonly shared security groups
-                if any(pattern in sg_name.lower() for pattern in [
-                    'common-', 'shared-', 'bastion', 'jumpbox', 'admin',
-                    'master', 'gitlab', 'jenkins', 'cicd', 'global-',
-                    'monitoring', 'prometheus', 'grafana', 'elasticsearch',
-                    'database', 'redis', 'memcached', 'mq-'
-                ]):
-                    self.log_operation('INFO', f"⚠️ Skipping potentially shared security group: {sg_name}")
+                if any(
+                    pattern in sg_name.lower()
+                    for pattern in [
+                        "common-",
+                        "shared-",
+                        "bastion",
+                        "jumpbox",
+                        "admin",
+                        "master",
+                        "gitlab",
+                        "jenkins",
+                        "cicd",
+                        "global-",
+                        "monitoring",
+                        "prometheus",
+                        "grafana",
+                        "elasticsearch",
+                        "database",
+                        "redis",
+                        "memcached",
+                        "mq-",
+                    ]
+                ):
+                    self.log_operation(
+                        "INFO",
+                        f"⚠️ Skipping potentially shared security group: {sg_name}",
+                    )
                     skipped_sgs.append(sg_name)
-                    self.cleanup_results['skipped_resources'].append({
-                        'resource_type': 'Security group',
-                        'resource_id': sg_id,
-                        'reason': 'Appears to be a shared resource'
-                    })
+                    self.cleanup_results["skipped_resources"].append(
+                        {
+                            "resource_type": "Security group",
+                            "resource_id": sg_id,
+                            "reason": "Appears to be a shared resource",
+                        }
+                    )
                     continue
 
                 # Check if security group is directly related to THIS EKS cluster
                 is_cluster_related = False
-                cluster_suffix = cluster_name.split('-')[-1]
+                cluster_suffix = cluster_name.split("-")[-1]
 
                 # Check security group name - require strong match
-                if (cluster_name.lower() in sg_name.lower() or
-                        f"-{cluster_suffix}" in sg_name.lower()):
+                if (
+                    cluster_name.lower() in sg_name.lower()
+                    or f"-{cluster_suffix}" in sg_name.lower()
+                ):
                     is_cluster_related = True
 
                 # Check description - require strong match
                 if not is_cluster_related:
-                    description = sg.get('Description', '').lower()
-                    if (cluster_name.lower() in description or
-                            f"cluster {cluster_suffix}" in description or
-                            f"eks {cluster_suffix}" in description):
+                    description = sg.get("Description", "").lower()
+                    if (
+                        cluster_name.lower() in description
+                        or f"cluster {cluster_suffix}" in description
+                        or f"eks {cluster_suffix}" in description
+                    ):
                         is_cluster_related = True
 
                 # Check security group tags
                 if not is_cluster_related:
-                    for tag in sg.get('Tags', []):
-                        tag_key = tag.get('Key', '').lower()
-                        tag_value = tag.get('Value', '').lower()
+                    for tag in sg.get("Tags", []):
+                        tag_key = tag.get("Key", "").lower()
+                        tag_value = tag.get("Value", "").lower()
 
                         # Only match tags that explicitly identify THIS cluster
-                        if ((tag_key in ['cluster', 'eks-cluster',
-                                         'clustername'] and tag_value == cluster_name.lower()) or
-                                tag_key == f'kubernetes.io/cluster/{cluster_name.lower()}'):
+                        if (
+                            (
+                                tag_key in ["cluster", "eks-cluster", "clustername"]
+                                and tag_value == cluster_name.lower()
+                            )
+                            or tag_key
+                            == f"kubernetes.io/cluster/{cluster_name.lower()}"
+                        ):
                             is_cluster_related = True
                             break
 
@@ -782,51 +1056,79 @@ class UltraCleanupEKSManager:
                     try:
                         # Check if SG is referenced by other resources
                         references = ec2_client.describe_network_interfaces(
-                            Filters=[{'Name': 'group-id', 'Values': [sg_id]}]
+                            Filters=[{"Name": "group-id", "Values": [sg_id]}]
                         )
 
                         # If multiple interfaces use this SG, consider skipping
-                        if len(references[
-                                   'NetworkInterfaces']) > 5:  # Heuristic - if used by many resources, might be shared
-                            self.log_operation('INFO',
-                                               f"⚠️ Skipping security group {sg_name} ({sg_id}) - used by {len(references['NetworkInterfaces'])} resources")
+                        if (
+                            len(references["NetworkInterfaces"]) > 5
+                        ):  # Heuristic - if used by many resources, might be shared
+                            self.log_operation(
+                                "INFO",
+                                f"⚠️ Skipping security group {sg_name} ({sg_id}) - used by {len(references['NetworkInterfaces'])} resources",
+                            )
                             skipped_sgs.append(sg_name)
-                            self.cleanup_results['skipped_resources'].append({
-                                'resource_type': 'Security group',
-                                'resource_id': sg_id,
-                                'reason': f'Used by multiple ({len(references["NetworkInterfaces"])}) resources'
-                            })
+                            self.cleanup_results["skipped_resources"].append(
+                                {
+                                    "resource_type": "Security group",
+                                    "resource_id": sg_id,
+                                    "reason": f'Used by multiple ({len(references["NetworkInterfaces"])}) resources',
+                                }
+                            )
                             continue
                     except Exception:
                         pass
 
                     try:
-                        self.log_operation('INFO',
-                                           f"🗑️  Deleting security group {sg_id} ({sg_name}) related to cluster {cluster_name}")
+                        self.log_operation(
+                            "INFO",
+                            f"🗑️  Deleting security group {sg_id} ({sg_name}) related to cluster {cluster_name}",
+                        )
                         ec2_client.delete_security_group(GroupId=sg_id)
                         deleted_sgs.append(sg_name)
-                        self.log_operation('INFO', f"✅ Deleted security group {sg_id} ({sg_name})")
+                        self.log_operation(
+                            "INFO", f"✅ Deleted security group {sg_id} ({sg_name})"
+                        )
 
                     except Exception as delete_error:
-                        self.log_operation('ERROR', f"Failed to delete security group {sg_id}: {delete_error}")
+                        self.log_operation(
+                            "ERROR",
+                            f"Failed to delete security group {sg_id}: {delete_error}",
+                        )
 
             if deleted_sgs:
-                self.log_operation('INFO', f"Deleted {len(deleted_sgs)} security groups for cluster {cluster_name}")
+                self.log_operation(
+                    "INFO",
+                    f"Deleted {len(deleted_sgs)} security groups for cluster {cluster_name}",
+                )
 
             if skipped_sgs:
-                self.log_operation('INFO', f"Skipped {len(skipped_sgs)} security groups that appear to be shared")
-                print(f"   ⚠️ Skipped {len(skipped_sgs)} security groups that may be shared resources")
+                self.log_operation(
+                    "INFO",
+                    f"Skipped {len(skipped_sgs)} security groups that appear to be shared",
+                )
+                print(
+                    f"   ⚠️ Skipped {len(skipped_sgs)} security groups that may be shared resources"
+                )
 
             if not deleted_sgs and not skipped_sgs:
-                self.log_operation('INFO', f"No security groups found related to cluster {cluster_name}")
+                self.log_operation(
+                    "INFO",
+                    f"No security groups found related to cluster {cluster_name}",
+                )
 
             return True
 
         except Exception as e:
-            self.log_operation('ERROR', f"Failed to delete security groups for cluster {cluster_name}: {e}")
+            self.log_operation(
+                "ERROR",
+                f"Failed to delete security groups for cluster {cluster_name}: {e}",
+            )
             return False
 
-    def delete_all_cloudwatch_alarms(self, access_key: str, secret_key: str, region: str, cluster_name: str) -> bool:
+    def delete_all_cloudwatch_alarms(
+        self, access_key: str, secret_key: str, region: str, cluster_name: str
+    ) -> bool:
         """
         Delete all CloudWatch alarms associated with an EKS cluster
         This includes composite alarms, basic alarms, and cost alarms
@@ -836,18 +1138,20 @@ class UltraCleanupEKSManager:
         Author: varadharajaan
         """
         try:
-            self.log_operation('INFO',
-                               f"🚨 Starting COMPLETE deletion of ALL CloudWatch alarms for cluster {cluster_name}")
+            self.log_operation(
+                "INFO",
+                f"🚨 Starting COMPLETE deletion of ALL CloudWatch alarms for cluster {cluster_name}",
+            )
             print(f"🗑️  Deleting ALL CloudWatch alarms for cluster {cluster_name}...")
 
             # Create CloudWatch client
             session = boto3.Session(
                 aws_access_key_id=access_key,
                 aws_secret_access_key=secret_key,
-                region_name=region
+                region_name=region,
             )
 
-            cloudwatch_client = session.client('cloudwatch')
+            cloudwatch_client = session.client("cloudwatch")
 
             # Track deletion statistics
             total_deleted = 0
@@ -855,20 +1159,29 @@ class UltraCleanupEKSManager:
             max_retries = 3
 
             # STEP 1: Find and delete composite alarms FIRST (they depend on metric alarms)
-            print(f"   🔍 Step 1: Finding and deleting composite alarms for cluster {cluster_name}...")
-            composite_deleted = self.delete_composite_alarms_for_cluster_fixed(cloudwatch_client, cluster_name)
+            print(
+                f"   🔍 Step 1: Finding and deleting composite alarms for cluster {cluster_name}..."
+            )
+            composite_deleted = self.delete_composite_alarms_for_cluster_fixed(
+                cloudwatch_client, cluster_name
+            )
             total_deleted += composite_deleted
 
             # STEP 2: Wait for AWS to process composite alarm deletions
             if composite_deleted > 0:
-                print(f"   ⏳ Waiting 5 seconds for AWS to process composite alarm deletions...")
+                print(
+                    f"   ⏳ Waiting 5 seconds for AWS to process composite alarm deletions..."
+                )
                 time.sleep(5)
 
             # STEP 3: Find and delete basic metric alarms with retry logic
             for retry in range(max_retries):
                 print(
-                    f"   🔍 Step 2: Finding and deleting metric alarms for cluster {cluster_name} (attempt {retry + 1})...")
-                basic_deleted = self.delete_basic_alarms_for_cluster_fixed(cloudwatch_client, cluster_name)
+                    f"   🔍 Step 2: Finding and deleting metric alarms for cluster {cluster_name} (attempt {retry + 1})..."
+                )
+                basic_deleted = self.delete_basic_alarms_for_cluster_fixed(
+                    cloudwatch_client, cluster_name
+                )
                 total_deleted += basic_deleted
 
                 if basic_deleted == 0:
@@ -879,73 +1192,110 @@ class UltraCleanupEKSManager:
                     time.sleep(3)
 
             # STEP 4: Find and delete cost alarms
-            print(f"   🔍 Step 3: Finding and deleting cost monitoring alarms for cluster {cluster_name}...")
-            cost_deleted = self.delete_cost_alarms_for_cluster_fixed(cloudwatch_client, cluster_name)
+            print(
+                f"   🔍 Step 3: Finding and deleting cost monitoring alarms for cluster {cluster_name}..."
+            )
+            cost_deleted = self.delete_cost_alarms_for_cluster_fixed(
+                cloudwatch_client, cluster_name
+            )
             total_deleted += cost_deleted
 
             # STEP 5: Final cleanup - delete any remaining alarms with cluster tags
-            print(f"   🔍 Step 4: Final cleanup - finding tagged alarms for cluster {cluster_name}...")
-            tagged_deleted = self.delete_tagged_alarms_for_cluster_fixed(cloudwatch_client, cluster_name)
+            print(
+                f"   🔍 Step 4: Final cleanup - finding tagged alarms for cluster {cluster_name}..."
+            )
+            tagged_deleted = self.delete_tagged_alarms_for_cluster_fixed(
+                cloudwatch_client, cluster_name
+            )
             total_deleted += tagged_deleted
 
             # STEP 6: Verify no alarms remain
-            remaining_alarms = self.count_remaining_cluster_alarms(cloudwatch_client, cluster_name)
+            remaining_alarms = self.count_remaining_cluster_alarms(
+                cloudwatch_client, cluster_name
+            )
             if remaining_alarms > 0:
-                self.print_colored(Colors.YELLOW,
-                                   f"   ⚠️  {remaining_alarms} alarms still remain - attempting final cleanup...")
-                final_deleted = self.force_delete_remaining_cluster_alarms(cloudwatch_client, cluster_name)
+                self.print_colored(
+                    Colors.YELLOW,
+                    f"   ⚠️  {remaining_alarms} alarms still remain - attempting final cleanup...",
+                )
+                final_deleted = self.force_delete_remaining_cluster_alarms(
+                    cloudwatch_client, cluster_name
+                )
                 total_deleted += final_deleted
 
             # Summary
             if total_deleted > 0:
-                self.print_colored(Colors.GREEN,
-                                   f"   ✅ Successfully deleted {total_deleted} CloudWatch alarms for {cluster_name}")
-                self.log_operation('INFO',
-                                   f"Successfully deleted {total_deleted} CloudWatch alarms for cluster {cluster_name}")
+                self.print_colored(
+                    Colors.GREEN,
+                    f"   ✅ Successfully deleted {total_deleted} CloudWatch alarms for {cluster_name}",
+                )
+                self.log_operation(
+                    "INFO",
+                    f"Successfully deleted {total_deleted} CloudWatch alarms for cluster {cluster_name}",
+                )
             else:
-                self.print_colored(Colors.YELLOW, f"   ⚠️  No CloudWatch alarms found for cluster {cluster_name}")
-                self.log_operation('INFO', f"No CloudWatch alarms found for cluster {cluster_name}")
+                self.print_colored(
+                    Colors.YELLOW,
+                    f"   ⚠️  No CloudWatch alarms found for cluster {cluster_name}",
+                )
+                self.log_operation(
+                    "INFO", f"No CloudWatch alarms found for cluster {cluster_name}"
+                )
 
             if failed_deletions > 0:
-                self.print_colored(Colors.YELLOW, f"   ⚠️  {failed_deletions} alarms failed to delete")
-                self.log_operation('WARNING', f"{failed_deletions} alarms failed to delete for cluster {cluster_name}")
+                self.print_colored(
+                    Colors.YELLOW, f"   ⚠️  {failed_deletions} alarms failed to delete"
+                )
+                self.log_operation(
+                    "WARNING",
+                    f"{failed_deletions} alarms failed to delete for cluster {cluster_name}",
+                )
 
             return failed_deletions == 0
 
         except Exception as e:
             error_msg = str(e)
-            self.log_operation('ERROR', f"Failed to delete CloudWatch alarms for {cluster_name}: {error_msg}")
-            self.print_colored(Colors.RED, f"   ❌ Failed to delete CloudWatch alarms: {error_msg}")
+            self.log_operation(
+                "ERROR",
+                f"Failed to delete CloudWatch alarms for {cluster_name}: {error_msg}",
+            )
+            self.print_colored(
+                Colors.RED, f"   ❌ Failed to delete CloudWatch alarms: {error_msg}"
+            )
             return False
 
-    def delete_composite_alarms_for_cluster_fixed(self, cloudwatch_client, cluster_name: str) -> int:
+    def delete_composite_alarms_for_cluster_fixed(
+        self, cloudwatch_client, cluster_name: str
+    ) -> int:
         """Delete composite alarms associated with the cluster - FIXED version"""
         try:
             deleted_count = 0
 
             # Get ALL composite alarms (CloudWatch doesn't have direct filtering)
-            paginator = cloudwatch_client.get_paginator('describe_alarms')
+            paginator = cloudwatch_client.get_paginator("describe_alarms")
 
-            for page in paginator.paginate(AlarmTypes=['CompositeAlarm']):
-                composite_alarms = page.get('CompositeAlarms', [])
+            for page in paginator.paginate(AlarmTypes=["CompositeAlarm"]):
+                composite_alarms = page.get("CompositeAlarms", [])
 
                 cluster_composite_alarms = []
 
                 for alarm in composite_alarms:
-                    alarm_name = alarm['AlarmName']
+                    alarm_name = alarm["AlarmName"]
 
                     # Enhanced cluster matching patterns
-                    is_cluster_related = self.is_alarm_related_to_cluster(alarm_name, cluster_name)
+                    is_cluster_related = self.is_alarm_related_to_cluster(
+                        alarm_name, cluster_name
+                    )
 
                     if not is_cluster_related:
                         # Check alarm description for cluster reference
-                        alarm_description = alarm.get('AlarmDescription', '')
+                        alarm_description = alarm.get("AlarmDescription", "")
                         if cluster_name.lower() in alarm_description.lower():
                             is_cluster_related = True
 
                     if not is_cluster_related:
                         # Check alarm rule for cluster references
-                        alarm_rule = alarm.get('AlarmRule', '')
+                        alarm_rule = alarm.get("AlarmRule", "")
                         if cluster_name.lower() in alarm_rule.lower():
                             is_cluster_related = True
 
@@ -954,17 +1304,23 @@ class UltraCleanupEKSManager:
 
                 # Delete found composite alarms
                 if cluster_composite_alarms:
-                    print(f"      🗑️  Deleting {len(cluster_composite_alarms)} composite alarms...")
+                    print(
+                        f"      🗑️  Deleting {len(cluster_composite_alarms)} composite alarms..."
+                    )
 
                     for alarm_name in cluster_composite_alarms:
                         try:
-                            self.log_operation('INFO', f"🗑️  Deleting composite alarm: {alarm_name}")
+                            self.log_operation(
+                                "INFO", f"🗑️  Deleting composite alarm: {alarm_name}"
+                            )
                             print(f"         🗑️  Deleting composite alarm: {alarm_name}")
 
                             cloudwatch_client.delete_alarms(AlarmNames=[alarm_name])
                             deleted_count += 1
 
-                            self.log_operation('INFO', f"✅ Deleted composite alarm: {alarm_name}")
+                            self.log_operation(
+                                "INFO", f"✅ Deleted composite alarm: {alarm_name}"
+                            )
                             print(f"         ✅ Deleted composite alarm: {alarm_name}")
 
                             # Small delay to avoid throttling
@@ -972,63 +1328,85 @@ class UltraCleanupEKSManager:
 
                         except Exception as e:
                             error_msg = str(e)
-                            print(f"         ❌ Failed to delete composite alarm {alarm_name}: {error_msg}")
-                            self.log_operation('ERROR', f"Failed to delete composite alarm {alarm_name}: {error_msg}")
+                            print(
+                                f"         ❌ Failed to delete composite alarm {alarm_name}: {error_msg}"
+                            )
+                            self.log_operation(
+                                "ERROR",
+                                f"Failed to delete composite alarm {alarm_name}: {error_msg}",
+                            )
 
             if deleted_count > 0:
-                self.log_operation('INFO', f"Deleted {deleted_count} composite alarms for cluster {cluster_name}")
+                self.log_operation(
+                    "INFO",
+                    f"Deleted {deleted_count} composite alarms for cluster {cluster_name}",
+                )
 
             return deleted_count
 
         except Exception as e:
-            self.log_operation('ERROR', f"Error deleting composite alarms: {str(e)}")
+            self.log_operation("ERROR", f"Error deleting composite alarms: {str(e)}")
             return 0
 
-    def delete_basic_alarms_for_cluster_fixed(self, cloudwatch_client, cluster_name: str) -> int:
+    def delete_basic_alarms_for_cluster_fixed(
+        self, cloudwatch_client, cluster_name: str
+    ) -> int:
         """Delete basic metric alarms associated with the cluster - FIXED version"""
         try:
             deleted_count = 0
 
             # Get ALL metric alarms
-            paginator = cloudwatch_client.get_paginator('describe_alarms')
+            paginator = cloudwatch_client.get_paginator("describe_alarms")
 
-            for page in paginator.paginate(AlarmTypes=['MetricAlarm']):
-                metric_alarms = page.get('MetricAlarms', [])
+            for page in paginator.paginate(AlarmTypes=["MetricAlarm"]):
+                metric_alarms = page.get("MetricAlarms", [])
 
                 cluster_metric_alarms = []
 
                 for alarm in metric_alarms:
-                    alarm_name = alarm['AlarmName']
+                    alarm_name = alarm["AlarmName"]
 
                     # Enhanced cluster matching
-                    is_cluster_related = self.is_alarm_related_to_cluster(alarm_name, cluster_name)
+                    is_cluster_related = self.is_alarm_related_to_cluster(
+                        alarm_name, cluster_name
+                    )
 
                     if not is_cluster_related:
                         # Check alarm description for cluster reference
-                        alarm_description = alarm.get('AlarmDescription', '')
+                        alarm_description = alarm.get("AlarmDescription", "")
                         if cluster_name.lower() in alarm_description.lower():
                             is_cluster_related = True
 
                     if not is_cluster_related:
                         # Check dimensions for cluster name
-                        dimensions = alarm.get('Dimensions', [])
+                        dimensions = alarm.get("Dimensions", [])
                         for dimension in dimensions:
-                            dim_name = dimension.get('Name', '')
-                            dim_value = dimension.get('Value', '')
+                            dim_name = dimension.get("Name", "")
+                            dim_value = dimension.get("Value", "")
 
                             # Check for various dimension patterns
-                            if (dim_name == 'ClusterName' and dim_value == cluster_name) or \
-                                    (dim_name == 'NodegroupName' and cluster_name in dim_value) or \
-                                    (cluster_name in dim_value):
+                            if (
+                                (
+                                    dim_name == "ClusterName"
+                                    and dim_value == cluster_name
+                                )
+                                or (
+                                    dim_name == "NodegroupName"
+                                    and cluster_name in dim_value
+                                )
+                                or (cluster_name in dim_value)
+                            ):
                                 is_cluster_related = True
                                 break
 
                     if not is_cluster_related:
                         # Check metric name and namespace for EKS patterns
-                        namespace = alarm.get('Namespace', '')
-                        metric_name = alarm.get('MetricName', '')
+                        namespace = alarm.get("Namespace", "")
+                        alarm.get("MetricName", "")
 
-                        if 'ContainerInsights' in namespace and cluster_name in str(dimensions):
+                        if "ContainerInsights" in namespace and cluster_name in str(
+                            dimensions
+                        ):
                             is_cluster_related = True
 
                     if is_cluster_related:
@@ -1036,11 +1414,13 @@ class UltraCleanupEKSManager:
 
                 # Delete found metric alarms in batches (CloudWatch allows up to 100 per call)
                 if cluster_metric_alarms:
-                    print(f"      🗑️  Deleting {len(cluster_metric_alarms)} metric alarms...")
+                    print(
+                        f"      🗑️  Deleting {len(cluster_metric_alarms)} metric alarms..."
+                    )
 
                     # Delete in batches of 10 to avoid issues
                     for i in range(0, len(cluster_metric_alarms), 10):
-                        batch = cluster_metric_alarms[i:i + 10]
+                        batch = cluster_metric_alarms[i : i + 10]
 
                         try:
                             # Try batch deletion first
@@ -1048,7 +1428,9 @@ class UltraCleanupEKSManager:
 
                             for alarm_name in batch:
                                 print(f"         ✅ Deleted metric alarm: {alarm_name}")
-                                self.log_operation('INFO', f"Deleted metric alarm: {alarm_name}")
+                                self.log_operation(
+                                    "INFO", f"Deleted metric alarm: {alarm_name}"
+                                )
                                 deleted_count += 1
 
                             # Small delay between batches
@@ -1056,49 +1438,69 @@ class UltraCleanupEKSManager:
 
                         except Exception as batch_error:
                             # If batch fails, try individual deletion
-                            print(f"         ⚠️  Batch deletion failed, trying individual deletion...")
-                            self.log_operation('WARNING', f"Batch deletion failed: {str(batch_error)}")
+                            print(
+                                f"         ⚠️  Batch deletion failed, trying individual deletion..."
+                            )
+                            self.log_operation(
+                                "WARNING", f"Batch deletion failed: {str(batch_error)}"
+                            )
 
                             for alarm_name in batch:
                                 try:
-                                    cloudwatch_client.delete_alarms(AlarmNames=[alarm_name])
-                                    print(f"         ✅ Deleted metric alarm (individual): {alarm_name}")
-                                    self.log_operation('INFO', f"Deleted metric alarm (individual): {alarm_name}")
+                                    cloudwatch_client.delete_alarms(
+                                        AlarmNames=[alarm_name]
+                                    )
+                                    print(
+                                        f"         ✅ Deleted metric alarm (individual): {alarm_name}"
+                                    )
+                                    self.log_operation(
+                                        "INFO",
+                                        f"Deleted metric alarm (individual): {alarm_name}",
+                                    )
                                     deleted_count += 1
                                     time.sleep(0.2)
                                 except Exception as individual_error:
                                     error_msg = str(individual_error)
                                     if "CompositeAlarm" in error_msg:
                                         print(
-                                            f"         ⚠️  Metric alarm {alarm_name} is still referenced by composite alarm - will retry")
-                                        self.log_operation('WARNING',
-                                                           f"Metric alarm {alarm_name} still referenced by composite alarm")
+                                            f"         ⚠️  Metric alarm {alarm_name} is still referenced by composite alarm - will retry"
+                                        )
+                                        self.log_operation(
+                                            "WARNING",
+                                            f"Metric alarm {alarm_name} still referenced by composite alarm",
+                                        )
                                     else:
-                                        print(f"         ❌ Failed to delete metric alarm {alarm_name}: {error_msg}")
-                                        self.log_operation('ERROR',
-                                                           f"Failed to delete metric alarm {alarm_name}: {error_msg}")
+                                        print(
+                                            f"         ❌ Failed to delete metric alarm {alarm_name}: {error_msg}"
+                                        )
+                                        self.log_operation(
+                                            "ERROR",
+                                            f"Failed to delete metric alarm {alarm_name}: {error_msg}",
+                                        )
 
             return deleted_count
 
         except Exception as e:
-            self.log_operation('ERROR', f"Error deleting metric alarms: {str(e)}")
+            self.log_operation("ERROR", f"Error deleting metric alarms: {str(e)}")
             return 0
 
-    def delete_cost_alarms_for_cluster_fixed(self, cloudwatch_client, cluster_name: str) -> int:
+    def delete_cost_alarms_for_cluster_fixed(
+        self, cloudwatch_client, cluster_name: str
+    ) -> int:
         """Delete cost monitoring alarms associated with the cluster - FIXED version"""
         try:
             deleted_count = 0
 
             # Get ALL metric alarms (cost alarms are metric alarms in AWS/Billing namespace)
-            paginator = cloudwatch_client.get_paginator('describe_alarms')
+            paginator = cloudwatch_client.get_paginator("describe_alarms")
 
-            for page in paginator.paginate(AlarmTypes=['MetricAlarm']):
-                metric_alarms = page.get('MetricAlarms', [])
+            for page in paginator.paginate(AlarmTypes=["MetricAlarm"]):
+                metric_alarms = page.get("MetricAlarms", [])
 
                 cost_alarms = []
 
                 for alarm in metric_alarms:
-                    alarm_name = alarm['AlarmName']
+                    alarm_name = alarm["AlarmName"]
 
                     # Check for cost-related alarm names
                     if self.is_cost_alarm_for_cluster(alarm_name, cluster_name):
@@ -1106,43 +1508,57 @@ class UltraCleanupEKSManager:
                         continue
 
                     # Check if it's a billing alarm with cluster reference
-                    namespace = alarm.get('Namespace', '')
-                    metric_name = alarm.get('MetricName', '')
+                    namespace = alarm.get("Namespace", "")
+                    metric_name = alarm.get("MetricName", "")
 
-                    if namespace == 'AWS/Billing' and metric_name == 'EstimatedCharges':
-                        alarm_description = alarm.get('AlarmDescription', '')
+                    if namespace == "AWS/Billing" and metric_name == "EstimatedCharges":
+                        alarm_description = alarm.get("AlarmDescription", "")
                         if cluster_name.lower() in alarm_description.lower():
                             cost_alarms.append(alarm_name)
 
                     # Check for Cost Explorer alarms
-                    if namespace in ['AWS/Billing', 'CostExplorer'] and cluster_name.lower() in alarm_name.lower():
+                    if (
+                        namespace in ["AWS/Billing", "CostExplorer"]
+                        and cluster_name.lower() in alarm_name.lower()
+                    ):
                         cost_alarms.append(alarm_name)
 
                 # Delete found cost alarms
                 if cost_alarms:
-                    print(f"      🗑️  Deleting {len(cost_alarms)} cost monitoring alarms...")
+                    print(
+                        f"      🗑️  Deleting {len(cost_alarms)} cost monitoring alarms..."
+                    )
 
                     for alarm_name in cost_alarms:
                         try:
                             cloudwatch_client.delete_alarms(AlarmNames=[alarm_name])
                             print(f"         ✅ Deleted cost alarm: {alarm_name}")
-                            self.log_operation('INFO', f"Deleted cost alarm: {alarm_name}")
+                            self.log_operation(
+                                "INFO", f"Deleted cost alarm: {alarm_name}"
+                            )
                             deleted_count += 1
 
                             # Small delay to avoid throttling
                             time.sleep(0.2)
 
                         except Exception as e:
-                            print(f"         ❌ Failed to delete cost alarm {alarm_name}: {str(e)}")
-                            self.log_operation('ERROR', f"Failed to delete cost alarm {alarm_name}: {str(e)}")
+                            print(
+                                f"         ❌ Failed to delete cost alarm {alarm_name}: {str(e)}"
+                            )
+                            self.log_operation(
+                                "ERROR",
+                                f"Failed to delete cost alarm {alarm_name}: {str(e)}",
+                            )
 
             return deleted_count
 
         except Exception as e:
-            self.log_operation('ERROR', f"Error deleting cost alarms: {str(e)}")
+            self.log_operation("ERROR", f"Error deleting cost alarms: {str(e)}")
             return 0
 
-    def delete_tagged_alarms_for_cluster_fixed(self, cloudwatch_client, cluster_name: str) -> int:
+    def delete_tagged_alarms_for_cluster_fixed(
+        self, cloudwatch_client, cluster_name: str
+    ) -> int:
         """Delete alarms that are tagged with the cluster name - FIXED version"""
         try:
             deleted_count = 0
@@ -1151,15 +1567,15 @@ class UltraCleanupEKSManager:
             all_alarm_arns = []
 
             # Get metric alarms
-            paginator = cloudwatch_client.get_paginator('describe_alarms')
-            for page in paginator.paginate(AlarmTypes=['MetricAlarm']):
-                metric_alarms = page.get('MetricAlarms', [])
-                all_alarm_arns.extend([alarm['AlarmArn'] for alarm in metric_alarms])
+            paginator = cloudwatch_client.get_paginator("describe_alarms")
+            for page in paginator.paginate(AlarmTypes=["MetricAlarm"]):
+                metric_alarms = page.get("MetricAlarms", [])
+                all_alarm_arns.extend([alarm["AlarmArn"] for alarm in metric_alarms])
 
             # Get composite alarms
-            for page in paginator.paginate(AlarmTypes=['CompositeAlarm']):
-                composite_alarms = page.get('CompositeAlarms', [])
-                all_alarm_arns.extend([alarm['AlarmArn'] for alarm in composite_alarms])
+            for page in paginator.paginate(AlarmTypes=["CompositeAlarm"]):
+                composite_alarms = page.get("CompositeAlarms", [])
+                all_alarm_arns.extend([alarm["AlarmArn"] for alarm in composite_alarms])
 
             if not all_alarm_arns:
                 return 0
@@ -1174,20 +1590,25 @@ class UltraCleanupEKSManager:
                         ResourceARN=resource_arn
                     )
 
-                    tags = response.get('Tags', [])
+                    tags = response.get("Tags", [])
 
                     # Check if any tag references the cluster
                     for tag in tags:
-                        tag_key = tag.get('Key', '')
-                        tag_value = tag.get('Value', '')
+                        tag_key = tag.get("Key", "")
+                        tag_value = tag.get("Value", "")
 
-                        if (tag_key == 'Cluster' and tag_value == cluster_name) or \
-                                (tag_key == 'ClusterName' and tag_value == cluster_name) or \
-                                (tag_key == 'EKSCluster' and tag_value == cluster_name) or \
-                                (cluster_name.lower() in tag_value.lower()) or \
-                                (tag_key.lower() == f'kubernetes.io/cluster/{cluster_name.lower()}'):
+                        if (
+                            (tag_key == "Cluster" and tag_value == cluster_name)
+                            or (tag_key == "ClusterName" and tag_value == cluster_name)
+                            or (tag_key == "EKSCluster" and tag_value == cluster_name)
+                            or (cluster_name.lower() in tag_value.lower())
+                            or (
+                                tag_key.lower()
+                                == f"kubernetes.io/cluster/{cluster_name.lower()}"
+                            )
+                        ):
                             # Extract alarm name from ARN
-                            alarm_name = resource_arn.split(':')[-1]
+                            alarm_name = resource_arn.split(":")[-1]
                             tagged_alarms.append(alarm_name)
                             break
 
@@ -1195,8 +1616,15 @@ class UltraCleanupEKSManager:
                     time.sleep(0.05)
 
                 except Exception as e:
-                    alarm_name = resource_arn.split(':')[-1] if ':' in resource_arn else resource_arn
-                    self.log_operation('WARNING', f"Failed to check tags for alarm {alarm_name}: {str(e)}")
+                    alarm_name = (
+                        resource_arn.split(":")[-1]
+                        if ":" in resource_arn
+                        else resource_arn
+                    )
+                    self.log_operation(
+                        "WARNING",
+                        f"Failed to check tags for alarm {alarm_name}: {str(e)}",
+                    )
 
             # Delete tagged alarms
             if tagged_alarms:
@@ -1206,47 +1634,62 @@ class UltraCleanupEKSManager:
                     try:
                         cloudwatch_client.delete_alarms(AlarmNames=[alarm_name])
                         print(f"         ✅ Deleted tagged alarm: {alarm_name}")
-                        self.log_operation('INFO', f"Deleted tagged alarm: {alarm_name}")
+                        self.log_operation(
+                            "INFO", f"Deleted tagged alarm: {alarm_name}"
+                        )
                         deleted_count += 1
 
                         # Small delay to avoid throttling
                         time.sleep(0.2)
 
                     except Exception as e:
-                        print(f"         ❌ Failed to delete tagged alarm {alarm_name}: {str(e)}")
-                        self.log_operation('ERROR', f"Failed to delete tagged alarm {alarm_name}: {str(e)}")
+                        print(
+                            f"         ❌ Failed to delete tagged alarm {alarm_name}: {str(e)}"
+                        )
+                        self.log_operation(
+                            "ERROR",
+                            f"Failed to delete tagged alarm {alarm_name}: {str(e)}",
+                        )
 
             return deleted_count
 
         except Exception as e:
-            self.log_operation('ERROR', f"Error deleting tagged alarms: {str(e)}")
+            self.log_operation("ERROR", f"Error deleting tagged alarms: {str(e)}")
             return 0
 
-    def count_remaining_cluster_alarms(self, cloudwatch_client, cluster_name: str) -> int:
+    def count_remaining_cluster_alarms(
+        self, cloudwatch_client, cluster_name: str
+    ) -> int:
         """Count how many alarms still remain for the cluster"""
         try:
             remaining_count = 0
 
             # Count metric alarms
-            paginator = cloudwatch_client.get_paginator('describe_alarms')
-            for page in paginator.paginate(AlarmTypes=['MetricAlarm']):
-                for alarm in page.get('MetricAlarms', []):
-                    if self.is_alarm_related_to_cluster(alarm['AlarmName'], cluster_name):
+            paginator = cloudwatch_client.get_paginator("describe_alarms")
+            for page in paginator.paginate(AlarmTypes=["MetricAlarm"]):
+                for alarm in page.get("MetricAlarms", []):
+                    if self.is_alarm_related_to_cluster(
+                        alarm["AlarmName"], cluster_name
+                    ):
                         remaining_count += 1
 
             # Count composite alarms
-            for page in paginator.paginate(AlarmTypes=['CompositeAlarm']):
-                for alarm in page.get('CompositeAlarms', []):
-                    if self.is_alarm_related_to_cluster(alarm['AlarmName'], cluster_name):
+            for page in paginator.paginate(AlarmTypes=["CompositeAlarm"]):
+                for alarm in page.get("CompositeAlarms", []):
+                    if self.is_alarm_related_to_cluster(
+                        alarm["AlarmName"], cluster_name
+                    ):
                         remaining_count += 1
 
             return remaining_count
 
         except Exception as e:
-            self.log_operation('ERROR', f"Error counting remaining alarms: {str(e)}")
+            self.log_operation("ERROR", f"Error counting remaining alarms: {str(e)}")
             return 0
 
-    def force_delete_remaining_cluster_alarms(self, cloudwatch_client, cluster_name: str) -> int:
+    def force_delete_remaining_cluster_alarms(
+        self, cloudwatch_client, cluster_name: str
+    ) -> int:
         """Force delete any remaining cluster alarms"""
         try:
             deleted_count = 0
@@ -1254,19 +1697,23 @@ class UltraCleanupEKSManager:
             # Get ALL remaining alarms
             all_alarms = []
 
-            paginator = cloudwatch_client.get_paginator('describe_alarms')
+            paginator = cloudwatch_client.get_paginator("describe_alarms")
 
             # Get composite alarms first
-            for page in paginator.paginate(AlarmTypes=['CompositeAlarm']):
-                for alarm in page.get('CompositeAlarms', []):
-                    if self.is_alarm_related_to_cluster(alarm['AlarmName'], cluster_name):
-                        all_alarms.append(('composite', alarm['AlarmName']))
+            for page in paginator.paginate(AlarmTypes=["CompositeAlarm"]):
+                for alarm in page.get("CompositeAlarms", []):
+                    if self.is_alarm_related_to_cluster(
+                        alarm["AlarmName"], cluster_name
+                    ):
+                        all_alarms.append(("composite", alarm["AlarmName"]))
 
             # Get metric alarms
-            for page in paginator.paginate(AlarmTypes=['MetricAlarm']):
-                for alarm in page.get('MetricAlarms', []):
-                    if self.is_alarm_related_to_cluster(alarm['AlarmName'], cluster_name):
-                        all_alarms.append(('metric', alarm['AlarmName']))
+            for page in paginator.paginate(AlarmTypes=["MetricAlarm"]):
+                for alarm in page.get("MetricAlarms", []):
+                    if self.is_alarm_related_to_cluster(
+                        alarm["AlarmName"], cluster_name
+                    ):
+                        all_alarms.append(("metric", alarm["AlarmName"]))
 
             # Force delete all remaining alarms
             for alarm_type, alarm_name in all_alarms:
@@ -1274,16 +1721,23 @@ class UltraCleanupEKSManager:
                     print(f"      🔥 FORCE deleting {alarm_type} alarm: {alarm_name}")
                     cloudwatch_client.delete_alarms(AlarmNames=[alarm_name])
                     deleted_count += 1
-                    self.log_operation('INFO', f"FORCE deleted {alarm_type} alarm: {alarm_name}")
+                    self.log_operation(
+                        "INFO", f"FORCE deleted {alarm_type} alarm: {alarm_name}"
+                    )
                     time.sleep(0.3)  # Longer delay for force deletion
                 except Exception as e:
-                    print(f"      ❌ Failed to force delete {alarm_type} alarm {alarm_name}: {str(e)}")
-                    self.log_operation('ERROR', f"Failed to force delete {alarm_type} alarm {alarm_name}: {str(e)}")
+                    print(
+                        f"      ❌ Failed to force delete {alarm_type} alarm {alarm_name}: {str(e)}"
+                    )
+                    self.log_operation(
+                        "ERROR",
+                        f"Failed to force delete {alarm_type} alarm {alarm_name}: {str(e)}",
+                    )
 
             return deleted_count
 
         except Exception as e:
-            self.log_operation('ERROR', f"Error in force deletion: {str(e)}")
+            self.log_operation("ERROR", f"Error in force deletion: {str(e)}")
             return 0
 
     def is_alarm_related_to_cluster(self, alarm_name: str, cluster_name: str) -> bool:
@@ -1302,7 +1756,7 @@ class UltraCleanupEKSManager:
             f"-{cluster_name_lower}",
             cluster_name_lower.replace("-", "_"),
             cluster_name_lower.replace("_", "-"),
-            cluster_name_lower.replace("-", "")
+            cluster_name_lower.replace("-", ""),
         ]
 
         for pattern in alarm_patterns:
@@ -1310,14 +1764,14 @@ class UltraCleanupEKSManager:
                 return True
 
         # Check for cluster suffix patterns (last part of cluster name)
-        cluster_parts = cluster_name_lower.split('-')
+        cluster_parts = cluster_name_lower.split("-")
         if len(cluster_parts) > 1:
             cluster_suffix = cluster_parts[-1]
             if len(cluster_suffix) >= 4:  # Only check suffixes that are meaningful
                 suffix_patterns = [
                     f"-{cluster_suffix}-",
                     f"-{cluster_suffix}",
-                    f"{cluster_suffix}-"
+                    f"{cluster_suffix}-",
                 ]
 
                 for pattern in suffix_patterns:
@@ -1330,7 +1784,7 @@ class UltraCleanupEKSManager:
             f"eks-cluster-{cluster_name_lower}",
             f"{cluster_name_lower}-pod-",
             f"{cluster_name_lower}-node-",
-            f"{cluster_name_lower}-container-"
+            f"{cluster_name_lower}-container-",
         ]
 
         for pattern in eks_patterns:
@@ -1350,7 +1804,7 @@ class UltraCleanupEKSManager:
             f"{cluster_name.lower()}-billing",
             f"cost-{cluster_name.lower()}",
             f"billing-{cluster_name.lower()}",
-            f"budget-{cluster_name.lower()}"
+            f"budget-{cluster_name.lower()}",
         ]
 
         alarm_name_lower = alarm_name.lower()
@@ -1360,7 +1814,7 @@ class UltraCleanupEKSManager:
                 return True
 
         # Check for cluster suffix in cost alarms
-        cluster_parts = cluster_name.split('-')
+        cluster_parts = cluster_name.split("-")
         if len(cluster_parts) > 1:
             cluster_suffix = cluster_parts[-1]
             if len(cluster_suffix) >= 4:
@@ -1368,7 +1822,7 @@ class UltraCleanupEKSManager:
                     f"{cluster_suffix}-daily-cost",
                     f"{cluster_suffix}-cost",
                     f"cost-{cluster_suffix}",
-                    f"billing-{cluster_suffix}"
+                    f"billing-{cluster_suffix}",
                 ]
 
                 for pattern in suffix_cost_patterns:
@@ -1378,23 +1832,28 @@ class UltraCleanupEKSManager:
         return False
 
     ##############
-    def delete_all_cloudwatch_alarms_bk(self, access_key: str, secret_key: str, region: str, cluster_name: str) -> bool:
+    def delete_all_cloudwatch_alarms_bk(
+        self, access_key: str, secret_key: str, region: str, cluster_name: str
+    ) -> bool:
         """
         Delete all CloudWatch alarms associated with an EKS cluster
         This includes basic alarms, composite alarms, and cost alarms
         """
         try:
-            self.log_operation('INFO', f"Starting deletion of all CloudWatch alarms for cluster {cluster_name}")
+            self.log_operation(
+                "INFO",
+                f"Starting deletion of all CloudWatch alarms for cluster {cluster_name}",
+            )
             print(f"🗑️  Deleting all CloudWatch alarms for cluster {cluster_name}...")
 
             # Create CloudWatch client
             session = boto3.Session(
                 aws_access_key_id=access_key,
                 aws_secret_access_key=secret_key,
-                region_name=region
+                region_name=region,
             )
 
-            cloudwatch_client = session.client('cloudwatch')
+            cloudwatch_client = session.client("cloudwatch")
 
             # Track deletion statistics
             total_deleted = 0
@@ -1402,62 +1861,91 @@ class UltraCleanupEKSManager:
 
             # Step 1: Find and delete composite alarms first (they depend on basic alarms)
             print(f"   🔍 Finding composite alarms for cluster {cluster_name}...")
-            composite_deleted = self.delete_composite_alarms_for_cluster(cloudwatch_client, cluster_name)
+            composite_deleted = self.delete_composite_alarms_for_cluster(
+                cloudwatch_client, cluster_name
+            )
             total_deleted += composite_deleted
 
             # Step 2: Find and delete basic metric alarms
             print(f"   🔍 Finding basic metric alarms for cluster {cluster_name}...")
-            basic_deleted = self.delete_basic_alarms_for_cluster(cloudwatch_client, cluster_name)
+            basic_deleted = self.delete_basic_alarms_for_cluster(
+                cloudwatch_client, cluster_name
+            )
             total_deleted += basic_deleted
 
             # Step 3: Find and delete cost alarms
             print(f"   🔍 Finding cost monitoring alarms for cluster {cluster_name}...")
-            cost_deleted = self.delete_cost_alarms_for_cluster(cloudwatch_client, cluster_name)
+            cost_deleted = self.delete_cost_alarms_for_cluster(
+                cloudwatch_client, cluster_name
+            )
             total_deleted += cost_deleted
 
             # Step 4: Find and delete any remaining alarms with cluster tags
             print(f"   🔍 Finding tagged alarms for cluster {cluster_name}...")
-            tagged_deleted = self.delete_tagged_alarms_for_cluster(cloudwatch_client, cluster_name)
+            tagged_deleted = self.delete_tagged_alarms_for_cluster(
+                cloudwatch_client, cluster_name
+            )
             total_deleted += tagged_deleted
 
             # Summary
             if total_deleted > 0:
-                self.print_colored(Colors.GREEN,
-                                   f"   ✅ Successfully deleted {total_deleted} CloudWatch alarms for {cluster_name}")
-                self.log_operation('INFO',
-                                   f"Successfully deleted {total_deleted} CloudWatch alarms for cluster {cluster_name}")
+                self.print_colored(
+                    Colors.GREEN,
+                    f"   ✅ Successfully deleted {total_deleted} CloudWatch alarms for {cluster_name}",
+                )
+                self.log_operation(
+                    "INFO",
+                    f"Successfully deleted {total_deleted} CloudWatch alarms for cluster {cluster_name}",
+                )
             else:
-                self.print_colored(Colors.YELLOW, f"   ⚠️  No CloudWatch alarms found for cluster {cluster_name}")
-                self.log_operation('INFO', f"No CloudWatch alarms found for cluster {cluster_name}")
+                self.print_colored(
+                    Colors.YELLOW,
+                    f"   ⚠️  No CloudWatch alarms found for cluster {cluster_name}",
+                )
+                self.log_operation(
+                    "INFO", f"No CloudWatch alarms found for cluster {cluster_name}"
+                )
 
             if failed_deletions > 0:
-                self.print_colored(Colors.YELLOW, f"   ⚠️  {failed_deletions} alarms failed to delete")
-                self.log_operation('WARNING', f"{failed_deletions} alarms failed to delete for cluster {cluster_name}")
+                self.print_colored(
+                    Colors.YELLOW, f"   ⚠️  {failed_deletions} alarms failed to delete"
+                )
+                self.log_operation(
+                    "WARNING",
+                    f"{failed_deletions} alarms failed to delete for cluster {cluster_name}",
+                )
 
             return failed_deletions == 0
 
         except Exception as e:
             error_msg = str(e)
-            self.log_operation('ERROR', f"Failed to delete CloudWatch alarms for {cluster_name}: {error_msg}")
-            self.print_colored(Colors.RED, f"   ❌ Failed to delete CloudWatch alarms: {error_msg}")
+            self.log_operation(
+                "ERROR",
+                f"Failed to delete CloudWatch alarms for {cluster_name}: {error_msg}",
+            )
+            self.print_colored(
+                Colors.RED, f"   ❌ Failed to delete CloudWatch alarms: {error_msg}"
+            )
             return False
 
-    def delete_composite_alarms_for_cluster(self, cloudwatch_client, cluster_name: str) -> int:
+    def delete_composite_alarms_for_cluster(
+        self, cloudwatch_client, cluster_name: str
+    ) -> int:
         """Delete composite alarms associated with the cluster"""
         try:
             deleted_count = 0
 
             # List all composite alarms (CloudWatch doesn't have direct filtering, so we get all and filter)
-            paginator = cloudwatch_client.get_paginator('describe_alarms')
+            paginator = cloudwatch_client.get_paginator("describe_alarms")
 
             # Get composite alarms
-            for page in paginator.paginate(AlarmTypes=['CompositeAlarm']):
-                composite_alarms = page.get('CompositeAlarms', [])
+            for page in paginator.paginate(AlarmTypes=["CompositeAlarm"]):
+                composite_alarms = page.get("CompositeAlarms", [])
 
                 cluster_composite_alarms = []
 
                 for alarm in composite_alarms:
-                    alarm_name = alarm['AlarmName']
+                    alarm_name = alarm["AlarmName"]
 
                     # Check if alarm name contains cluster name or follows our naming convention
                     if self.is_cluster_related_alarm(alarm_name, cluster_name):
@@ -1465,51 +1953,62 @@ class UltraCleanupEKSManager:
                         continue
 
                     # Check alarm description for cluster reference
-                    alarm_description = alarm.get('AlarmDescription', '')
+                    alarm_description = alarm.get("AlarmDescription", "")
                     if cluster_name in alarm_description:
                         cluster_composite_alarms.append(alarm_name)
                         continue
 
                 # Delete found composite alarms
                 if cluster_composite_alarms:
-                    print(f"      🗑️  Deleting {len(cluster_composite_alarms)} composite alarms...")
+                    print(
+                        f"      🗑️  Deleting {len(cluster_composite_alarms)} composite alarms..."
+                    )
 
                     for alarm_name in cluster_composite_alarms:
                         try:
                             cloudwatch_client.delete_alarms(AlarmNames=[alarm_name])
                             print(f"         ✅ Deleted composite alarm: {alarm_name}")
-                            self.log_operation('INFO', f"Deleted composite alarm: {alarm_name}")
+                            self.log_operation(
+                                "INFO", f"Deleted composite alarm: {alarm_name}"
+                            )
                             deleted_count += 1
 
                             # Small delay to avoid throttling
                             time.sleep(0.1)
 
                         except Exception as e:
-                            print(f"         ❌ Failed to delete composite alarm {alarm_name}: {str(e)}")
-                            self.log_operation('ERROR', f"Failed to delete composite alarm {alarm_name}: {str(e)}")
+                            print(
+                                f"         ❌ Failed to delete composite alarm {alarm_name}: {str(e)}"
+                            )
+                            self.log_operation(
+                                "ERROR",
+                                f"Failed to delete composite alarm {alarm_name}: {str(e)}",
+                            )
 
             return deleted_count
 
         except Exception as e:
-            self.log_operation('ERROR', f"Error deleting composite alarms: {str(e)}")
+            self.log_operation("ERROR", f"Error deleting composite alarms: {str(e)}")
             return 0
 
-    def delete_basic_alarms_for_cluster(self, cloudwatch_client, cluster_name: str) -> int:
+    def delete_basic_alarms_for_cluster(
+        self, cloudwatch_client, cluster_name: str
+    ) -> int:
         """Delete basic metric alarms associated with the cluster"""
         try:
             deleted_count = 0
 
             # List all metric alarms
-            paginator = cloudwatch_client.get_paginator('describe_alarms')
+            paginator = cloudwatch_client.get_paginator("describe_alarms")
 
             # Get metric alarms
-            for page in paginator.paginate(AlarmTypes=['MetricAlarm']):
-                metric_alarms = page.get('MetricAlarms', [])
+            for page in paginator.paginate(AlarmTypes=["MetricAlarm"]):
+                metric_alarms = page.get("MetricAlarms", [])
 
                 cluster_metric_alarms = []
 
                 for alarm in metric_alarms:
-                    alarm_name = alarm['AlarmName']
+                    alarm_name = alarm["AlarmName"]
 
                     # Check if alarm name contains cluster name or follows our naming convention
                     if self.is_cluster_related_alarm(alarm_name, cluster_name):
@@ -1517,79 +2016,107 @@ class UltraCleanupEKSManager:
                         continue
 
                     # Check alarm description for cluster reference
-                    alarm_description = alarm.get('AlarmDescription', '')
+                    alarm_description = alarm.get("AlarmDescription", "")
                     if cluster_name in alarm_description:
                         cluster_metric_alarms.append(alarm_name)
                         continue
 
                     # Check dimensions for cluster name
-                    dimensions = alarm.get('Dimensions', [])
+                    dimensions = alarm.get("Dimensions", [])
                     for dimension in dimensions:
-                        if dimension.get('Name') == 'ClusterName' and dimension.get('Value') == cluster_name:
+                        if (
+                            dimension.get("Name") == "ClusterName"
+                            and dimension.get("Value") == cluster_name
+                        ):
                             cluster_metric_alarms.append(alarm_name)
                             break
-                        elif dimension.get('Name') == 'NodegroupName' and cluster_name in dimension.get('Value', ''):
+                        elif dimension.get(
+                            "Name"
+                        ) == "NodegroupName" and cluster_name in dimension.get(
+                            "Value", ""
+                        ):
                             cluster_metric_alarms.append(alarm_name)
                             break
 
                 # Delete found metric alarms in batches (CloudWatch allows up to 100 per call)
                 if cluster_metric_alarms:
-                    print(f"      🗑️  Deleting {len(cluster_metric_alarms)} metric alarms...")
+                    print(
+                        f"      🗑️  Deleting {len(cluster_metric_alarms)} metric alarms..."
+                    )
 
                     # Delete in batches of 100
                     for i in range(0, len(cluster_metric_alarms), 100):
-                        batch = cluster_metric_alarms[i:i + 100]
+                        batch = cluster_metric_alarms[i : i + 100]
 
                         try:
                             cloudwatch_client.delete_alarms(AlarmNames=batch)
 
                             for alarm_name in batch:
                                 print(f"         ✅ Deleted metric alarm: {alarm_name}")
-                                self.log_operation('INFO', f"Deleted metric alarm: {alarm_name}")
+                                self.log_operation(
+                                    "INFO", f"Deleted metric alarm: {alarm_name}"
+                                )
                                 deleted_count += 1
 
                             # Small delay between batches to avoid throttling
                             time.sleep(0.5)
 
                         except Exception as e:
-                            print(f"         ❌ Failed to delete batch of metric alarms: {str(e)}")
-                            self.log_operation('ERROR', f"Failed to delete batch of metric alarms: {str(e)}")
+                            print(
+                                f"         ❌ Failed to delete batch of metric alarms: {str(e)}"
+                            )
+                            self.log_operation(
+                                "ERROR",
+                                f"Failed to delete batch of metric alarms: {str(e)}",
+                            )
 
                             # Try individual deletion for this batch
                             for alarm_name in batch:
                                 try:
-                                    cloudwatch_client.delete_alarms(AlarmNames=[alarm_name])
-                                    print(f"         ✅ Deleted metric alarm (individual): {alarm_name}")
-                                    self.log_operation('INFO', f"Deleted metric alarm (individual): {alarm_name}")
+                                    cloudwatch_client.delete_alarms(
+                                        AlarmNames=[alarm_name]
+                                    )
+                                    print(
+                                        f"         ✅ Deleted metric alarm (individual): {alarm_name}"
+                                    )
+                                    self.log_operation(
+                                        "INFO",
+                                        f"Deleted metric alarm (individual): {alarm_name}",
+                                    )
                                     deleted_count += 1
                                 except Exception as individual_error:
                                     print(
-                                        f"         ❌ Failed to delete metric alarm {alarm_name}: {str(individual_error)}")
-                                    self.log_operation('ERROR',
-                                                       f"Failed to delete metric alarm {alarm_name}: {str(individual_error)}")
+                                        f"         ❌ Failed to delete metric alarm {alarm_name}: {str(individual_error)}"
+                                    )
+                                    self.log_operation(
+                                        "ERROR",
+                                        f"Failed to delete metric alarm {alarm_name}: {str(individual_error)}",
+                                    )
 
             return deleted_count
 
         except Exception as e:
-            self.log_operation('ERROR', f"Error deleting metric alarms: {str(e)}")
+            self.log_operation("ERROR", f"Error deleting metric alarms: {str(e)}")
             return 0
 
-    def delete_cost_alarms_for_cluster(self, cloudwatch_client, cluster_name: str) -> int:
+    def delete_cost_alarms_for_cluster(
+        self, cloudwatch_client, cluster_name: str
+    ) -> int:
         """Delete cost monitoring alarms associated with the cluster"""
         try:
             deleted_count = 0
 
             # List all metric alarms
-            paginator = cloudwatch_client.get_paginator('describe_alarms')
+            paginator = cloudwatch_client.get_paginator("describe_alarms")
 
             # Get metric alarms
-            for page in paginator.paginate(AlarmTypes=['MetricAlarm']):
-                metric_alarms = page.get('MetricAlarms', [])
+            for page in paginator.paginate(AlarmTypes=["MetricAlarm"]):
+                metric_alarms = page.get("MetricAlarms", [])
 
                 cost_alarms = []
 
                 for alarm in metric_alarms:
-                    alarm_name = alarm['AlarmName']
+                    alarm_name = alarm["AlarmName"]
 
                     # Check for cost-related alarm names
                     if self.is_cost_alarm_for_cluster(alarm_name, cluster_name):
@@ -1597,36 +2124,45 @@ class UltraCleanupEKSManager:
                         continue
 
                     # Check if it's a billing alarm with cluster reference
-                    namespace = alarm.get('Namespace', '')
-                    metric_name = alarm.get('MetricName', '')
+                    namespace = alarm.get("Namespace", "")
+                    metric_name = alarm.get("MetricName", "")
 
-                    if namespace == 'AWS/Billing' and metric_name == 'EstimatedCharges':
-                        alarm_description = alarm.get('AlarmDescription', '')
+                    if namespace == "AWS/Billing" and metric_name == "EstimatedCharges":
+                        alarm_description = alarm.get("AlarmDescription", "")
                         if cluster_name in alarm_description:
                             cost_alarms.append(alarm_name)
 
                 # Delete found cost alarms
                 if cost_alarms:
-                    print(f"      🗑️  Deleting {len(cost_alarms)} cost monitoring alarms...")
+                    print(
+                        f"      🗑️  Deleting {len(cost_alarms)} cost monitoring alarms..."
+                    )
 
                     for alarm_name in cost_alarms:
                         try:
                             cloudwatch_client.delete_alarms(AlarmNames=[alarm_name])
                             print(f"         ✅ Deleted cost alarm: {alarm_name}")
-                            self.log_operation('INFO', f"Deleted cost alarm: {alarm_name}")
+                            self.log_operation(
+                                "INFO", f"Deleted cost alarm: {alarm_name}"
+                            )
                             deleted_count += 1
 
                             # Small delay to avoid throttling
                             time.sleep(0.1)
 
                         except Exception as e:
-                            print(f"         ❌ Failed to delete cost alarm {alarm_name}: {str(e)}")
-                            self.log_operation('ERROR', f"Failed to delete cost alarm {alarm_name}: {str(e)}")
+                            print(
+                                f"         ❌ Failed to delete cost alarm {alarm_name}: {str(e)}"
+                            )
+                            self.log_operation(
+                                "ERROR",
+                                f"Failed to delete cost alarm {alarm_name}: {str(e)}",
+                            )
 
             return deleted_count
 
         except Exception as e:
-            self.log_operation('ERROR', f"Error deleting cost alarms: {str(e)}")
+            self.log_operation("ERROR", f"Error deleting cost alarms: {str(e)}")
             return 0
 
     def is_cluster_related_alarm(self, alarm_name: str, cluster_name: str) -> bool:
@@ -1641,7 +2177,7 @@ class UltraCleanupEKSManager:
             f"-{cluster_name}-",
             f"-{cluster_name}",
             cluster_name.replace("-", "_"),
-            cluster_name.replace("_", "-")
+            cluster_name.replace("_", "-"),
         ]
 
         for pattern in alarm_patterns:
@@ -1649,12 +2185,12 @@ class UltraCleanupEKSManager:
                 return True
 
         # Check for cluster suffix patterns (last part of cluster name)
-        cluster_suffix = cluster_name.split('-')[-1]
+        cluster_suffix = cluster_name.split("-")[-1]
         if len(cluster_suffix) >= 4:  # Only check suffixes that are meaningful
             suffix_patterns = [
                 f"-{cluster_suffix}-",
                 f"-{cluster_suffix}",
-                f"{cluster_suffix}-"
+                f"{cluster_suffix}-",
             ]
 
             for pattern in suffix_patterns:
@@ -1672,7 +2208,7 @@ class UltraCleanupEKSManager:
             f"{cluster_name}-ec2-cost",
             f"{cluster_name}-ebs-cost",
             f"cost-{cluster_name}",
-            f"billing-{cluster_name}"
+            f"billing-{cluster_name}",
         ]
 
         alarm_name_lower = alarm_name.lower()
@@ -1682,12 +2218,12 @@ class UltraCleanupEKSManager:
                 return True
 
         # Check for cluster suffix in cost alarms
-        cluster_suffix = cluster_name.split('-')[-1]
+        cluster_suffix = cluster_name.split("-")[-1]
         if len(cluster_suffix) >= 4:
             suffix_cost_patterns = [
                 f"{cluster_suffix}-daily-cost",
                 f"{cluster_suffix}-cost",
-                f"cost-{cluster_suffix}"
+                f"cost-{cluster_suffix}",
             ]
 
             for pattern in suffix_cost_patterns:
@@ -1696,7 +2232,9 @@ class UltraCleanupEKSManager:
 
         return False
 
-    def delete_tagged_alarms_for_cluster(self, cloudwatch_client, cluster_name: str) -> int:
+    def delete_tagged_alarms_for_cluster(
+        self, cloudwatch_client, cluster_name: str
+    ) -> int:
         """Delete alarms that are tagged with the cluster name"""
         try:
             deleted_count = 0
@@ -1705,15 +2243,15 @@ class UltraCleanupEKSManager:
             all_alarms = []
 
             # Get metric alarms
-            paginator = cloudwatch_client.get_paginator('describe_alarms')
-            for page in paginator.paginate(AlarmTypes=['MetricAlarm']):
-                metric_alarms = page.get('MetricAlarms', [])
-                all_alarms.extend([alarm['AlarmArn'] for alarm in metric_alarms])
+            paginator = cloudwatch_client.get_paginator("describe_alarms")
+            for page in paginator.paginate(AlarmTypes=["MetricAlarm"]):
+                metric_alarms = page.get("MetricAlarms", [])
+                all_alarms.extend([alarm["AlarmArn"] for alarm in metric_alarms])
 
             # Get composite alarms
-            for page in paginator.paginate(AlarmTypes=['CompositeAlarm']):
-                composite_alarms = page.get('CompositeAlarms', [])
-                all_alarms.extend([alarm['AlarmArn'] for alarm in composite_alarms])
+            for page in paginator.paginate(AlarmTypes=["CompositeAlarm"]):
+                composite_alarms = page.get("CompositeAlarms", [])
+                all_alarms.extend([alarm["AlarmArn"] for alarm in composite_alarms])
 
             if not all_alarms:
                 return 0
@@ -1728,18 +2266,20 @@ class UltraCleanupEKSManager:
                         ResourceARN=resource_arn
                     )
 
-                    tags = response.get('Tags', [])
+                    tags = response.get("Tags", [])
 
                     # Check if any tag references the cluster
                     for tag in tags:
-                        tag_key = tag.get('Key', '')
-                        tag_value = tag.get('Value', '')
+                        tag_key = tag.get("Key", "")
+                        tag_value = tag.get("Value", "")
 
-                        if (tag_key == 'Cluster' and tag_value == cluster_name) or \
-                                (cluster_name in tag_value) or \
-                                (tag_key == 'ClusterName' and tag_value == cluster_name):
+                        if (
+                            (tag_key == "Cluster" and tag_value == cluster_name)
+                            or (cluster_name in tag_value)
+                            or (tag_key == "ClusterName" and tag_value == cluster_name)
+                        ):
                             # Extract alarm name from ARN
-                            alarm_name = resource_arn.split(':')[-1]
+                            alarm_name = resource_arn.split(":")[-1]
                             tagged_alarms.append(alarm_name)
                             break
 
@@ -1747,8 +2287,10 @@ class UltraCleanupEKSManager:
                     time.sleep(0.05)
 
                 except Exception as e:
-                    self.log_operation('WARNING',
-                                       f"Failed to check tags for alarm {resource_arn.split(':')[-1]}: {str(e)}")
+                    self.log_operation(
+                        "WARNING",
+                        f"Failed to check tags for alarm {resource_arn.split(':')[-1]}: {str(e)}",
+                    )
 
             # Delete tagged alarms
             if tagged_alarms:
@@ -1758,20 +2300,27 @@ class UltraCleanupEKSManager:
                     try:
                         cloudwatch_client.delete_alarms(AlarmNames=[alarm_name])
                         print(f"         ✅ Deleted tagged alarm: {alarm_name}")
-                        self.log_operation('INFO', f"Deleted tagged alarm: {alarm_name}")
+                        self.log_operation(
+                            "INFO", f"Deleted tagged alarm: {alarm_name}"
+                        )
                         deleted_count += 1
 
                         # Small delay to avoid throttling
                         time.sleep(0.1)
 
                     except Exception as e:
-                        print(f"         ❌ Failed to delete tagged alarm {alarm_name}: {str(e)}")
-                        self.log_operation('ERROR', f"Failed to delete tagged alarm {alarm_name}: {str(e)}")
+                        print(
+                            f"         ❌ Failed to delete tagged alarm {alarm_name}: {str(e)}"
+                        )
+                        self.log_operation(
+                            "ERROR",
+                            f"Failed to delete tagged alarm {alarm_name}: {str(e)}",
+                        )
 
             return deleted_count
 
         except Exception as e:
-            self.log_operation('ERROR', f"Error deleting tagged alarms: {str(e)}")
+            self.log_operation("ERROR", f"Error deleting tagged alarms: {str(e)}")
             return 0
 
     ##########
@@ -1782,43 +2331,67 @@ class UltraCleanupEKSManager:
         This includes Prometheus scrapers, CloudWatch agents, and custom monitoring solutions
         """
         try:
-            self.log_operation('INFO', f"🔍 Identifying monitoring scrapers for cluster {cluster_name}")
-            print(f"   🔍 Identifying monitoring scrapers for cluster {cluster_name}...")
+            self.log_operation(
+                "INFO", f"🔍 Identifying monitoring scrapers for cluster {cluster_name}"
+            )
+            print(
+                f"   🔍 Identifying monitoring scrapers for cluster {cluster_name}..."
+            )
 
             # Create session with the provided credentials
             session = boto3.Session(
                 aws_access_key_id=access_key,
                 aws_secret_access_key=secret_key,
-                region_name=region
+                region_name=region,
             )
 
             # Check and delete CloudWatch Container Insights
-            deleted_count = self.delete_cloudwatch_container_insights(session, cluster_name, region)
+            deleted_count = self.delete_cloudwatch_container_insights(
+                session, cluster_name, region
+            )
 
             # Check and delete Prometheus scrapers
-            prometheus_count = self.delete_prometheus_scrapers(session, cluster_name, region)
+            prometheus_count = self.delete_prometheus_scrapers(
+                session, cluster_name, region
+            )
             deleted_count += prometheus_count
 
             # Check and delete other common monitoring solutions
-            other_count = self.delete_other_monitoring_solutions(session, cluster_name, region)
+            other_count = self.delete_other_monitoring_solutions(
+                session, cluster_name, region
+            )
             deleted_count += other_count
 
             if deleted_count > 0:
-                self.print_colored(Colors.GREEN,
-                                   f"   ✅ Successfully removed {deleted_count} monitoring scrapers for {cluster_name}")
-                self.log_operation('INFO',
-                                   f"Successfully removed {deleted_count} monitoring scrapers for cluster {cluster_name}")
+                self.print_colored(
+                    Colors.GREEN,
+                    f"   ✅ Successfully removed {deleted_count} monitoring scrapers for {cluster_name}",
+                )
+                self.log_operation(
+                    "INFO",
+                    f"Successfully removed {deleted_count} monitoring scrapers for cluster {cluster_name}",
+                )
             else:
-                self.print_colored(Colors.YELLOW,
-                                   f"   ℹ️ No active monitoring scrapers found for cluster {cluster_name}")
-                self.log_operation('INFO', f"No active monitoring scrapers found for cluster {cluster_name}")
+                self.print_colored(
+                    Colors.YELLOW,
+                    f"   ℹ️ No active monitoring scrapers found for cluster {cluster_name}",
+                )
+                self.log_operation(
+                    "INFO",
+                    f"No active monitoring scrapers found for cluster {cluster_name}",
+                )
 
             return True
 
         except Exception as e:
             error_msg = str(e)
-            self.log_operation('ERROR', f"Failed to remove monitoring scrapers for {cluster_name}: {error_msg}")
-            self.print_colored(Colors.RED, f"   ❌ Failed to remove monitoring scrapers: {error_msg}")
+            self.log_operation(
+                "ERROR",
+                f"Failed to remove monitoring scrapers for {cluster_name}: {error_msg}",
+            )
+            self.print_colored(
+                Colors.RED, f"   ❌ Failed to remove monitoring scrapers: {error_msg}"
+            )
             return False
 
     def delete_cloudwatch_container_insights(self, session, cluster_name, region):
@@ -1826,40 +2399,52 @@ class UltraCleanupEKSManager:
         deleted_count = 0
         try:
             # Check if Container Insights is enabled for this cluster
-            cloudwatch = session.client('cloudwatch')
-            logs_client = session.client('logs')
+            session.client("cloudwatch")
+            logs_client = session.client("logs")
 
             # Look for Container Insights log groups
             log_group_prefixes = [
                 f"/aws/containerinsights/{cluster_name}/",
                 f"/aws/eks/{cluster_name}/",
-                f"/aws/eks/containerinsights/{cluster_name}/"
+                f"/aws/eks/containerinsights/{cluster_name}/",
             ]
 
             for prefix in log_group_prefixes:
                 try:
                     response = logs_client.describe_log_groups(
-                        logGroupNamePrefix=prefix,
-                        limit=50
+                        logGroupNamePrefix=prefix, limit=50
                     )
 
-                    for log_group in response.get('logGroups', []):
-                        log_group_name = log_group.get('logGroupName')
+                    for log_group in response.get("logGroups", []):
+                        log_group_name = log_group.get("logGroupName")
                         try:
                             logs_client.delete_log_group(logGroupName=log_group_name)
-                            print(f"      ✅ Deleted Container Insights log group: {log_group_name}")
-                            self.log_operation('INFO', f"Deleted Container Insights log group: {log_group_name}")
+                            print(
+                                f"      ✅ Deleted Container Insights log group: {log_group_name}"
+                            )
+                            self.log_operation(
+                                "INFO",
+                                f"Deleted Container Insights log group: {log_group_name}",
+                            )
                             deleted_count += 1
                         except Exception as e:
-                            print(f"      ❌ Failed to delete log group {log_group_name}: {str(e)}")
-                            self.log_operation('ERROR', f"Failed to delete log group {log_group_name}: {str(e)}")
+                            print(
+                                f"      ❌ Failed to delete log group {log_group_name}: {str(e)}"
+                            )
+                            self.log_operation(
+                                "ERROR",
+                                f"Failed to delete log group {log_group_name}: {str(e)}",
+                            )
                 except Exception as e:
-                    self.log_operation('WARNING', f"Error checking log groups with prefix {prefix}: {str(e)}")
+                    self.log_operation(
+                        "WARNING",
+                        f"Error checking log groups with prefix {prefix}: {str(e)}",
+                    )
 
             return deleted_count
 
         except Exception as e:
-            self.log_operation('ERROR', f"Error deleting Container Insights: {str(e)}")
+            self.log_operation("ERROR", f"Error deleting Container Insights: {str(e)}")
             return deleted_count
 
     def delete_prometheus_scrapers(self, session, cluster_name, region):
@@ -1868,43 +2453,62 @@ class UltraCleanupEKSManager:
         try:
             # Check if AMP (Amazon Managed Prometheus) is being used
             try:
-                amp_client = session.client('amp')  # Amazon Managed Prometheus
+                amp_client = session.client("amp")  # Amazon Managed Prometheus
 
                 # List workspaces
-                workspaces = amp_client.list_workspaces().get('workspaces', [])
+                workspaces = amp_client.list_workspaces().get("workspaces", [])
 
                 for workspace in workspaces:
                     # Check if this workspace is used for the cluster
-                    workspace_id = workspace.get('workspaceId')
-                    workspace_arn = workspace.get('arn')
+                    workspace_id = workspace.get("workspaceId")
+                    workspace_arn = workspace.get("arn")
 
                     # Check workspace tags for the cluster name
                     try:
-                        tags = amp_client.list_tags_for_resource(resourceArn=workspace_arn).get('tags', {})
+                        tags = amp_client.list_tags_for_resource(
+                            resourceArn=workspace_arn
+                        ).get("tags", {})
 
-                        if any(cluster_name.lower() in str(tag).lower() for tag in tags.values()):
+                        if any(
+                            cluster_name.lower() in str(tag).lower()
+                            for tag in tags.values()
+                        ):
                             # This workspace is likely monitoring our cluster
                             try:
                                 amp_client.delete_workspace(workspaceId=workspace_id)
-                                print(f"      ✅ Deleted Prometheus workspace: {workspace_id}")
-                                self.log_operation('INFO', f"Deleted Prometheus workspace: {workspace_id}")
+                                print(
+                                    f"      ✅ Deleted Prometheus workspace: {workspace_id}"
+                                )
+                                self.log_operation(
+                                    "INFO",
+                                    f"Deleted Prometheus workspace: {workspace_id}",
+                                )
                                 deleted_count += 1
                             except Exception as del_err:
-                                print(f"      ❌ Failed to delete Prometheus workspace {workspace_id}: {str(del_err)}")
-                                self.log_operation('ERROR',
-                                                   f"Failed to delete Prometheus workspace {workspace_id}: {str(del_err)}")
+                                print(
+                                    f"      ❌ Failed to delete Prometheus workspace {workspace_id}: {str(del_err)}"
+                                )
+                                self.log_operation(
+                                    "ERROR",
+                                    f"Failed to delete Prometheus workspace {workspace_id}: {str(del_err)}",
+                                )
                     except Exception as tag_err:
-                        self.log_operation('WARNING',
-                                           f"Failed to check tags for workspace {workspace_id}: {str(tag_err)}")
+                        self.log_operation(
+                            "WARNING",
+                            f"Failed to check tags for workspace {workspace_id}: {str(tag_err)}",
+                        )
 
             except Exception as amp_err:
                 # AMP might not be available in this region
-                self.log_operation('DEBUG', f"AMP check failed (might not be available): {str(amp_err)}")
+                self.log_operation(
+                    "DEBUG",
+                    f"AMP check failed (might not be available): {str(amp_err)}",
+                )
 
             return deleted_count
 
         except Exception as e:
-            self.log_operation('ERROR', f"Error deleting Prometheus scrapers: {str(e)}")
+            self.log_operation("ERROR", f"Error deleting Prometheus scrapers: {str(e)}")
             return deleted_count
 
     def delete_other_monitoring_solutions(self, session, cluster_name, region):
@@ -1912,77 +2516,102 @@ class UltraCleanupEKSManager:
         deleted_count = 0
         try:
             # Check and delete related EventBridge rules
-            events_client = session.client('events')
+            events_client = session.client("events")
 
             try:
                 # List rules that might be related to cluster monitoring
-                rules = events_client.list_rules().get('Rules', [])
+                rules = events_client.list_rules().get("Rules", [])
 
                 for rule in rules:
-                    rule_name = rule.get('Name')
+                    rule_name = rule.get("Name")
 
                     # Check if the rule name contains the cluster name
                     if cluster_name.lower() in rule_name.lower():
                         # This rule is likely related to our cluster
                         try:
                             # First, remove targets
-                            targets = events_client.list_targets_by_rule(Rule=rule_name).get('Targets', [])
+                            targets = events_client.list_targets_by_rule(
+                                Rule=rule_name
+                            ).get("Targets", [])
                             if targets:
-                                target_ids = [t.get('Id') for t in targets]
-                                events_client.remove_targets(Rule=rule_name, Ids=target_ids)
+                                target_ids = [t.get("Id") for t in targets]
+                                events_client.remove_targets(
+                                    Rule=rule_name, Ids=target_ids
+                                )
 
                             # Then delete the rule
                             events_client.delete_rule(Name=rule_name)
                             print(f"      ✅ Deleted EventBridge rule: {rule_name}")
-                            self.log_operation('INFO', f"Deleted EventBridge rule: {rule_name}")
+                            self.log_operation(
+                                "INFO", f"Deleted EventBridge rule: {rule_name}"
+                            )
                             deleted_count += 1
                         except Exception as rule_err:
-                            print(f"      ❌ Failed to delete EventBridge rule {rule_name}: {str(rule_err)}")
-                            self.log_operation('ERROR',
-                                               f"Failed to delete EventBridge rule {rule_name}: {str(rule_err)}")
+                            print(
+                                f"      ❌ Failed to delete EventBridge rule {rule_name}: {str(rule_err)}"
+                            )
+                            self.log_operation(
+                                "ERROR",
+                                f"Failed to delete EventBridge rule {rule_name}: {str(rule_err)}",
+                            )
             except Exception as events_err:
-                self.log_operation('WARNING', f"Failed to check EventBridge rules: {str(events_err)}")
+                self.log_operation(
+                    "WARNING", f"Failed to check EventBridge rules: {str(events_err)}"
+                )
 
             return deleted_count
 
         except Exception as e:
-            self.log_operation('ERROR', f"Error deleting other monitoring solutions: {str(e)}")
+            self.log_operation(
+                "ERROR", f"Error deleting other monitoring solutions: {str(e)}"
+            )
             return deleted_count
 
     def delete_all_eks_addons(self, eks_client, cluster_name):
         """Delete all EKS add-ons attached to the cluster."""
         try:
-            addons = eks_client.list_addons(clusterName=cluster_name).get('addons', [])
+            addons = eks_client.list_addons(clusterName=cluster_name).get("addons", [])
             for addon in addons:
                 try:
                     eks_client.delete_addon(clusterName=cluster_name, addonName=addon)
-                    self.log_operation('INFO', f"Deleting EKS add-on {addon} for {cluster_name}")
+                    self.log_operation(
+                        "INFO", f"Deleting EKS add-on {addon} for {cluster_name}"
+                    )
                     # Wait for deletion
                     for _ in range(30):
-                        status = eks_client.describe_addon(clusterName=cluster_name, addonName=addon).get('addon',
-                                                                                                          {}).get(
-                            'status', '')
-                        if status == 'DELETING':
+                        status = (
+                            eks_client.describe_addon(
+                                clusterName=cluster_name, addonName=addon
+                            )
+                            .get("addon", {})
+                            .get("status", "")
+                        )
+                        if status == "DELETING":
                             time.sleep(10)
                         else:
                             break
                 except botocore.exceptions.ClientError as e:
-                    if 'ResourceNotFoundException' in str(e):
+                    if "ResourceNotFoundException" in str(e):
                         continue
-                    self.log_operation('ERROR', f"Failed to delete add-on {addon} for {cluster_name}: {e}")
+                    self.log_operation(
+                        "ERROR",
+                        f"Failed to delete add-on {addon} for {cluster_name}: {e}",
+                    )
             return True
         except Exception as e:
-            self.log_operation('ERROR', f"Failed to delete add-ons for {cluster_name}: {e}")
+            self.log_operation(
+                "ERROR", f"Failed to delete add-ons for {cluster_name}: {e}"
+            )
             return False
 
     def create_eks_client(self, access_key, secret_key, region):
         """Create EKS client using account credentials"""
         try:
             eks_client = boto3.client(
-                'eks',
+                "eks",
                 aws_access_key_id=access_key,
                 aws_secret_access_key=secret_key,
-                region_name=region
+                region_name=region,
             )
 
             # Test the connection
@@ -1990,109 +2619,157 @@ class UltraCleanupEKSManager:
             return eks_client
 
         except Exception as e:
-            self.log_operation('ERROR', f"Failed to create EKS client for {region}: {e}")
+            self.log_operation(
+                "ERROR", f"Failed to create EKS client for {region}: {e}"
+            )
             raise
 
     def get_all_clusters_in_region(self, eks_client, region, account_info):
         """Get all EKS clusters in a specific region"""
         try:
             clusters = []
-            account_name = account_info.get('account_key', 'Unknown')
+            account_name = account_info.get("account_key", "Unknown")
 
-            self.log_operation('INFO', f"🔍 Scanning for EKS clusters in {region} ({account_name})")
+            self.log_operation(
+                "INFO", f"🔍 Scanning for EKS clusters in {region} ({account_name})"
+            )
             print(f"   🔍 Scanning for EKS clusters in {region} ({account_name})...")
 
-            cluster_names = eks_client.list_clusters()['clusters']
+            cluster_names = eks_client.list_clusters()["clusters"]
 
             if not cluster_names:
-                self.log_operation('INFO', f"No EKS clusters found in {region} ({account_name})")
+                self.log_operation(
+                    "INFO", f"No EKS clusters found in {region} ({account_name})"
+                )
                 print(f"   📦 No EKS clusters found in {region}")
                 return []
 
             for cluster_name in cluster_names:
                 try:
-                    cluster_info = eks_client.describe_cluster(name=cluster_name)['cluster']
+                    cluster_info = eks_client.describe_cluster(name=cluster_name)[
+                        "cluster"
+                    ]
 
                     # Extract relevant details
-                    cluster_status = cluster_info.get('status', 'UNKNOWN')
-                    created_at = cluster_info.get('createdAt', 'Unknown')
-                    version = cluster_info.get('version', 'Unknown')
-                    vpc_id = cluster_info.get('resourcesVpcConfig', {}).get('vpcId', 'Unknown')
+                    cluster_status = cluster_info.get("status", "UNKNOWN")
+                    created_at = cluster_info.get("createdAt", "Unknown")
+                    version = cluster_info.get("version", "Unknown")
+                    vpc_id = cluster_info.get("resourcesVpcConfig", {}).get(
+                        "vpcId", "Unknown"
+                    )
 
                     # Get node groups for this cluster
                     nodegroups = []
                     try:
-                        nodegroup_names = eks_client.list_nodegroups(clusterName=cluster_name).get('nodegroups', [])
+                        nodegroup_names = eks_client.list_nodegroups(
+                            clusterName=cluster_name
+                        ).get("nodegroups", [])
 
                         for ng_name in nodegroup_names:
                             try:
                                 ng_details = eks_client.describe_nodegroup(
-                                    clusterName=cluster_name,
-                                    nodegroupName=ng_name
-                                ).get('nodegroup', {})
+                                    clusterName=cluster_name, nodegroupName=ng_name
+                                ).get("nodegroup", {})
 
-                                nodegroups.append({
-                                    'name': ng_name,
-                                    'status': ng_details.get('status', 'UNKNOWN'),
-                                    'instance_types': ng_details.get('instanceTypes', []),
-                                    'ami_type': ng_details.get('amiType', 'Unknown'),
-                                    'created_at': ng_details.get('createdAt', 'Unknown'),
-                                    'min_size': ng_details.get('scalingConfig', {}).get('minSize', 0),
-                                    'max_size': ng_details.get('scalingConfig', {}).get('maxSize', 0),
-                                    'desired_size': ng_details.get('scalingConfig', {}).get('desiredSize', 0),
-                                })
+                                nodegroups.append(
+                                    {
+                                        "name": ng_name,
+                                        "status": ng_details.get("status", "UNKNOWN"),
+                                        "instance_types": ng_details.get(
+                                            "instanceTypes", []
+                                        ),
+                                        "ami_type": ng_details.get(
+                                            "amiType", "Unknown"
+                                        ),
+                                        "created_at": ng_details.get(
+                                            "createdAt", "Unknown"
+                                        ),
+                                        "min_size": ng_details.get(
+                                            "scalingConfig", {}
+                                        ).get("minSize", 0),
+                                        "max_size": ng_details.get(
+                                            "scalingConfig", {}
+                                        ).get("maxSize", 0),
+                                        "desired_size": ng_details.get(
+                                            "scalingConfig", {}
+                                        ).get("desiredSize", 0),
+                                    }
+                                )
                             except Exception as ng_error:
-                                self.log_operation('WARNING',
-                                                   f"Could not get details for nodegroup {ng_name}: {str(ng_error)}")
+                                self.log_operation(
+                                    "WARNING",
+                                    f"Could not get details for nodegroup {ng_name}: {str(ng_error)}",
+                                )
                     except Exception as ng_list_error:
-                        self.log_operation('WARNING',
-                                           f"Could not list nodegroups for cluster {cluster_name}: {str(ng_list_error)}")
+                        self.log_operation(
+                            "WARNING",
+                            f"Could not list nodegroups for cluster {cluster_name}: {str(ng_list_error)}",
+                        )
 
                     cluster_data = {
-                        'cluster_name': cluster_name,
-                        'status': cluster_status,
-                        'created_at': created_at,
-                        'version': version,
-                        'vpc_id': vpc_id,
-                        'region': region,
-                        'account_info': account_info,
-                        'nodegroups': nodegroups
+                        "cluster_name": cluster_name,
+                        "status": cluster_status,
+                        "created_at": created_at,
+                        "version": version,
+                        "vpc_id": vpc_id,
+                        "region": region,
+                        "account_info": account_info,
+                        "nodegroups": nodegroups,
                     }
 
                     clusters.append(cluster_data)
 
                 except Exception as cluster_error:
-                    self.log_operation('ERROR',
-                                       f"Error getting details for cluster {cluster_name}: {str(cluster_error)}")
+                    self.log_operation(
+                        "ERROR",
+                        f"Error getting details for cluster {cluster_name}: {str(cluster_error)}",
+                    )
 
-            self.log_operation('INFO', f"📦 Found {len(clusters)} EKS clusters in {region} ({account_name})")
-            print(f"   📦 Found {len(clusters)} EKS clusters in {region} ({account_name})")
+            self.log_operation(
+                "INFO",
+                f"📦 Found {len(clusters)} EKS clusters in {region} ({account_name})",
+            )
+            print(
+                f"   📦 Found {len(clusters)} EKS clusters in {region} ({account_name})"
+            )
 
             return clusters
 
         except Exception as e:
-            account_name = account_info.get('account_key', 'Unknown')
-            self.log_operation('ERROR', f"Error getting EKS clusters in {region} ({account_name}): {e}")
+            account_name = account_info.get("account_key", "Unknown")
+            self.log_operation(
+                "ERROR", f"Error getting EKS clusters in {region} ({account_name}): {e}"
+            )
             print(f"   ❌ Error getting clusters in {region}: {e}")
             return []
 
-    def delete_nodegroup(self, eks_client, cluster_name, nodegroup_name, region, account_info):
+    def delete_nodegroup(
+        self, eks_client, cluster_name, nodegroup_name, region, account_info
+    ):
         """Delete an EKS nodegroup"""
         try:
-            account_name = account_info.get('account_key', 'Unknown')
-            self.log_operation('INFO',
-                               f"🗑️  Deleting nodegroup {nodegroup_name} in cluster {cluster_name} ({region}, {account_name})")
-            print(f"      🗑️  Deleting nodegroup {nodegroup_name} in cluster {cluster_name}...")
+            account_name = account_info.get("account_key", "Unknown")
+            self.log_operation(
+                "INFO",
+                f"🗑️  Deleting nodegroup {nodegroup_name} in cluster {cluster_name} ({region}, {account_name})",
+            )
+            print(
+                f"      🗑️  Deleting nodegroup {nodegroup_name} in cluster {cluster_name}..."
+            )
 
             # Delete the nodegroup
             eks_client.delete_nodegroup(
-                clusterName=cluster_name,
-                nodegroupName=nodegroup_name
+                clusterName=cluster_name, nodegroupName=nodegroup_name
             )
 
             # Wait for nodegroup deletion to complete
-            print(f"      ⏳ Waiting for nodegroup {nodegroup_name} deletion to complete...")
-            self.log_operation('INFO', f"⏳ Waiting for nodegroup {nodegroup_name} deletion to complete...")
+            print(
+                f"      ⏳ Waiting for nodegroup {nodegroup_name} deletion to complete..."
+            )
+            self.log_operation(
+                "INFO",
+                f"⏳ Waiting for nodegroup {nodegroup_name} deletion to complete...",
+            )
 
             waiter = True
             retry_count = 0
@@ -2101,140 +2778,165 @@ class UltraCleanupEKSManager:
             while waiter and retry_count < max_retries:
                 try:
                     response = eks_client.describe_nodegroup(
-                        clusterName=cluster_name,
-                        nodegroupName=nodegroup_name
+                        clusterName=cluster_name, nodegroupName=nodegroup_name
                     )
-                    status = response['nodegroup']['status']
+                    status = response["nodegroup"]["status"]
 
-                    if status == 'DELETING':
-                        self.log_operation('INFO', f"Nodegroup {nodegroup_name} status: {status} (Waiting...)")
+                    if status == "DELETING":
+                        self.log_operation(
+                            "INFO",
+                            f"Nodegroup {nodegroup_name} status: {status} (Waiting...)",
+                        )
                         time.sleep(30)  # Check every 30 seconds
                         retry_count += 1
                     else:
-                        self.log_operation('WARNING', f"Unexpected nodegroup status: {status}")
+                        self.log_operation(
+                            "WARNING", f"Unexpected nodegroup status: {status}"
+                        )
                         break
                 except ClientError as e:
-                    if 'ResourceNotFoundException' in str(e):
-                        self.log_operation('INFO', f"✅ Nodegroup {nodegroup_name} deleted successfully")
-                        print(f"      ✅ Nodegroup {nodegroup_name} deleted successfully")
+                    if "ResourceNotFoundException" in str(e):
+                        self.log_operation(
+                            "INFO",
+                            f"✅ Nodegroup {nodegroup_name} deleted successfully",
+                        )
+                        print(
+                            f"      ✅ Nodegroup {nodegroup_name} deleted successfully"
+                        )
                         waiter = False
                     else:
-                        self.log_operation('ERROR', f"Error checking nodegroup status: {e}")
+                        self.log_operation(
+                            "ERROR", f"Error checking nodegroup status: {e}"
+                        )
                         raise
 
             if retry_count >= max_retries:
-                self.log_operation('WARNING', f"Timed out waiting for nodegroup {nodegroup_name} deletion")
-                print(f"      ⚠️ Timed out waiting for nodegroup {nodegroup_name} deletion")
+                self.log_operation(
+                    "WARNING",
+                    f"Timed out waiting for nodegroup {nodegroup_name} deletion",
+                )
+                print(
+                    f"      ⚠️ Timed out waiting for nodegroup {nodegroup_name} deletion"
+                )
 
-            self.cleanup_results['deleted_nodegroups'].append({
-                'nodegroup_name': nodegroup_name,
-                'cluster_name': cluster_name,
-                'region': region,
-                'account_info': account_info,
-                'deleted_at': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            })
+            self.cleanup_results["deleted_nodegroups"].append(
+                {
+                    "nodegroup_name": nodegroup_name,
+                    "cluster_name": cluster_name,
+                    "region": region,
+                    "account_info": account_info,
+                    "deleted_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                }
+            )
 
             return True
 
         except Exception as e:
-            account_name = account_info.get('account_key', 'Unknown')
-            self.log_operation('ERROR', f"Failed to delete nodegroup {nodegroup_name}: {e}")
+            account_name = account_info.get("account_key", "Unknown")
+            self.log_operation(
+                "ERROR", f"Failed to delete nodegroup {nodegroup_name}: {e}"
+            )
             print(f"      ❌ Failed to delete nodegroup {nodegroup_name}: {e}")
 
-            self.cleanup_results['failed_deletions'].append({
-                'resource_type': 'nodegroup',
-                'resource_id': nodegroup_name,
-                'cluster_name': cluster_name,
-                'region': region,
-                'account_info': account_info,
-                'error': str(e)
-            })
+            self.cleanup_results["failed_deletions"].append(
+                {
+                    "resource_type": "nodegroup",
+                    "resource_id": nodegroup_name,
+                    "cluster_name": cluster_name,
+                    "region": region,
+                    "account_info": account_info,
+                    "error": str(e),
+                }
+            )
             return False
 
     def delete_cluster(self, eks_client, cluster_info):
         """Delete an EKS cluster with all its nodegroups"""
         try:
-            cluster_name = cluster_info['cluster_name']
-            region = cluster_info['region']
-            account_name = cluster_info['account_info'].get('account_key', 'Unknown')
-            nodegroups = cluster_info.get('nodegroups', [])
+            cluster_name = cluster_info["cluster_name"]
+            region = cluster_info["region"]
+            account_name = cluster_info["account_info"].get("account_key", "Unknown")
+            nodegroups = cluster_info.get("nodegroups", [])
 
-            self.log_operation('INFO', f"🗑️  Deleting EKS cluster {cluster_name} in {region} ({account_name})")
-            print(f"   🗑️  Deleting EKS cluster {cluster_name} in {region} ({account_name})...")
+            self.log_operation(
+                "INFO",
+                f"🗑️  Deleting EKS cluster {cluster_name} in {region} ({account_name})",
+            )
+            print(
+                f"   🗑️  Deleting EKS cluster {cluster_name} in {region} ({account_name})..."
+            )
 
             # Step 1: Delete all nodegroups first
             if nodegroups:
-                self.log_operation('INFO', f"Found {len(nodegroups)} nodegroups to delete in cluster {cluster_name}")
-                print(f"      Found {len(nodegroups)} nodegroups to delete in cluster {cluster_name}")
+                self.log_operation(
+                    "INFO",
+                    f"Found {len(nodegroups)} nodegroups to delete in cluster {cluster_name}",
+                )
+                print(
+                    f"      Found {len(nodegroups)} nodegroups to delete in cluster {cluster_name}"
+                )
 
                 for nodegroup in nodegroups:
-                    nodegroup_name = nodegroup['name']
-                    self.delete_nodegroup(eks_client, cluster_name, nodegroup_name, region,
-                                          cluster_info['account_info'])
+                    nodegroup_name = nodegroup["name"]
+                    self.delete_nodegroup(
+                        eks_client,
+                        cluster_name,
+                        nodegroup_name,
+                        region,
+                        cluster_info["account_info"],
+                    )
             else:
-                self.log_operation('INFO', f"No nodegroups found in cluster {cluster_name}")
+                self.log_operation(
+                    "INFO", f"No nodegroups found in cluster {cluster_name}"
+                )
                 print(f"      No nodegroups found in cluster {cluster_name}")
 
             # Get account credentials from account info
-            access_key = cluster_info['account_info']['access_key']
-            secret_key = cluster_info['account_info']['secret_key']
+            access_key = cluster_info["account_info"]["access_key"]
+            secret_key = cluster_info["account_info"]["secret_key"]
 
             # STEP 2: Delete all monitoring scrapers for this cluster
-            self.delete_eks_scrapers(
-                access_key,
-                secret_key,
-                region,
-                cluster_name
-            )
+            self.delete_eks_scrapers(access_key, secret_key, region, cluster_name)
 
             # STEP 3: Delete all CloudWatch alarms for this cluster
             self.delete_all_cloudwatch_alarms(
-                access_key,
-                secret_key,
-                region,
-                cluster_name
+                access_key, secret_key, region, cluster_name
             )
 
             # STEP 4: Delete EventBridge rules related to this cluster
-            self.delete_related_event_rules(access_key, secret_key, region, cluster_name)
+            self.delete_related_event_rules(
+                access_key, secret_key, region, cluster_name
+            )
 
             # STEP 5: Delete Lambda functions related to this cluster
             self.delete_all_lambda_functions(
-                access_key,
-                secret_key,
-                region,
-                cluster_name
+                access_key, secret_key, region, cluster_name
             )
 
             # STEP 6: Delete IAM roles and policies related to this cluster
             self.delete_all_iam_roles_policies(
-                access_key,
-                secret_key,
-                region,
-                cluster_name
+                access_key, secret_key, region, cluster_name
             )
 
             # STEP 7: Delete security groups related to this cluster
-            if cluster_info.get('vpc_id') and cluster_info['vpc_id'] != 'Unknown':
+            if cluster_info.get("vpc_id") and cluster_info["vpc_id"] != "Unknown":
                 self.delete_all_security_groups(
-                    access_key,
-                    secret_key,
-                    region,
-                    cluster_name,
-                    cluster_info['vpc_id']
+                    access_key, secret_key, region, cluster_name, cluster_info["vpc_id"]
                 )
 
             # STEP 8: Delete all EKS add-ons for this cluster
             self.delete_all_eks_addons(eks_client, cluster_name)
 
             # Step 9: Delete the cluster itself
-            self.log_operation('INFO', f"Deleting the cluster {cluster_name}...")
+            self.log_operation("INFO", f"Deleting the cluster {cluster_name}...")
             print(f"   🗑️  Deleting the cluster {cluster_name}...")
 
             eks_client.delete_cluster(name=cluster_name)
 
             # Wait for cluster deletion to complete
-            self.log_operation('INFO', f"⏳ Waiting for cluster {cluster_name} deletion to complete...")
+            self.log_operation(
+                "INFO", f"⏳ Waiting for cluster {cluster_name} deletion to complete..."
+            )
             print(f"   ⏳ Waiting for cluster {cluster_name} deletion to complete...")
 
             waiter = True
@@ -2244,71 +2946,99 @@ class UltraCleanupEKSManager:
             while waiter and retry_count < max_retries:
                 try:
                     response = eks_client.describe_cluster(name=cluster_name)
-                    status = response['cluster']['status']
+                    status = response["cluster"]["status"]
 
-                    if status == 'DELETING':
+                    if status == "DELETING":
                         if retry_count % 10 == 0:  # Log every 5 minutes
-                            self.log_operation('INFO', f"Cluster {cluster_name} status: {status} (Waiting...)")
-                            print(f"   ⌛ Cluster {cluster_name} status: {status} (Still deleting...)")
+                            self.log_operation(
+                                "INFO",
+                                f"Cluster {cluster_name} status: {status} (Waiting...)",
+                            )
+                            print(
+                                f"   ⌛ Cluster {cluster_name} status: {status} (Still deleting...)"
+                            )
                         time.sleep(30)  # Check every 30 seconds
                         retry_count += 1
                     else:
-                        self.log_operation('WARNING', f"Unexpected cluster status: {status}")
+                        self.log_operation(
+                            "WARNING", f"Unexpected cluster status: {status}"
+                        )
                         break
                 except ClientError as e:
-                    if 'ResourceNotFoundException' in str(e) or 'ResourceNotFound' in str(e):
-                        self.log_operation('INFO', f"✅ Cluster {cluster_name} deleted successfully")
+                    if "ResourceNotFoundException" in str(
+                        e
+                    ) or "ResourceNotFound" in str(e):
+                        self.log_operation(
+                            "INFO", f"✅ Cluster {cluster_name} deleted successfully"
+                        )
                         print(f"   ✅ Cluster {cluster_name} deleted successfully")
                         waiter = False
                     else:
-                        self.log_operation('ERROR', f"Error checking cluster status: {e}")
+                        self.log_operation(
+                            "ERROR", f"Error checking cluster status: {e}"
+                        )
                         raise
 
             if retry_count >= max_retries:
-                self.log_operation('WARNING', f"Timed out waiting for cluster {cluster_name} deletion")
+                self.log_operation(
+                    "WARNING", f"Timed out waiting for cluster {cluster_name} deletion"
+                )
                 print(f"   ⚠️ Timed out waiting for cluster {cluster_name} deletion")
 
-            self.cleanup_results['deleted_clusters'].append({
-                'cluster_name': cluster_name,
-                'version': cluster_info['version'],
-                'vpc_id': cluster_info['vpc_id'],
-                'region': region,
-                'account_info': cluster_info['account_info'],
-                'deleted_at': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            })
+            self.cleanup_results["deleted_clusters"].append(
+                {
+                    "cluster_name": cluster_name,
+                    "version": cluster_info["version"],
+                    "vpc_id": cluster_info["vpc_id"],
+                    "region": region,
+                    "account_info": cluster_info["account_info"],
+                    "deleted_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                }
+            )
 
             return True
 
         except Exception as e:
-            account_name = cluster_info['account_info'].get('account_key', 'Unknown')
-            self.log_operation('ERROR', f"Failed to delete cluster {cluster_info['cluster_name']}: {e}")
+            account_name = cluster_info["account_info"].get("account_key", "Unknown")
+            self.log_operation(
+                "ERROR", f"Failed to delete cluster {cluster_info['cluster_name']}: {e}"
+            )
             print(f"   ❌ Failed to delete cluster {cluster_info['cluster_name']}: {e}")
 
-            self.cleanup_results['failed_deletions'].append({
-                'resource_type': 'cluster',
-                'resource_id': cluster_info['cluster_name'],
-                'region': region,
-                'account_info': cluster_info['account_info'],
-                'error': str(e)
-            })
+            self.cleanup_results["failed_deletions"].append(
+                {
+                    "resource_type": "cluster",
+                    "resource_id": cluster_info["cluster_name"],
+                    "region": region,
+                    "account_info": cluster_info["account_info"],
+                    "error": str(e),
+                }
+            )
             return False
 
     def cleanup_account_region(self, account_info, region):
         """Clean up all EKS resources in a specific account and region"""
         try:
-            access_key = account_info['access_key']
-            secret_key = account_info['secret_key']
-            account_id = account_info['account_id']
-            account_key = account_info['account_key']
+            access_key = account_info["access_key"]
+            secret_key = account_info["secret_key"]
+            account_id = account_info["account_id"]
+            account_key = account_info["account_key"]
 
-            self.log_operation('INFO', f"🧹 Starting EKS cleanup for {account_key} ({account_id}) in {region}")
-            print(f"\n🧹 Starting EKS cleanup for {account_key} ({account_id}) in {region}")
+            self.log_operation(
+                "INFO",
+                f"🧹 Starting EKS cleanup for {account_key} ({account_id}) in {region}",
+            )
+            print(
+                f"\n🧹 Starting EKS cleanup for {account_key} ({account_id}) in {region}"
+            )
 
             # Create EKS client
             try:
                 eks_client = self.create_eks_client(access_key, secret_key, region)
             except Exception as client_error:
-                self.log_operation('ERROR', f"Could not create EKS client for {region}: {client_error}")
+                self.log_operation(
+                    "ERROR", f"Could not create EKS client for {region}: {client_error}"
+                )
                 print(f"   ❌ Could not create EKS client for {region}: {client_error}")
                 return False
 
@@ -2316,33 +3046,42 @@ class UltraCleanupEKSManager:
             clusters = self.get_all_clusters_in_region(eks_client, region, account_info)
 
             if not clusters:
-                self.log_operation('INFO', f"No EKS clusters found in {account_key} ({region})")
+                self.log_operation(
+                    "INFO", f"No EKS clusters found in {account_key} ({region})"
+                )
                 print(f"   ✓ No EKS clusters found in {account_key} ({region})")
                 return True
 
             # Record region summary
             region_summary = {
-                'account_key': account_key,
-                'account_id': account_id,
-                'region': region,
-                'clusters_found': len(clusters),
-                'nodegroups_found': sum(len(cluster.get('nodegroups', [])) for cluster in clusters)
+                "account_key": account_key,
+                "account_id": account_id,
+                "region": region,
+                "clusters_found": len(clusters),
+                "nodegroups_found": sum(
+                    len(cluster.get("nodegroups", [])) for cluster in clusters
+                ),
             }
-            self.cleanup_results['regions_processed'].append(region_summary)
+            self.cleanup_results["regions_processed"].append(region_summary)
 
-            self.log_operation('INFO', f"📊 {account_key} ({region}) EKS resources summary:")
-            self.log_operation('INFO', f"   🧠 Clusters: {len(clusters)}")
-            self.log_operation('INFO', f"   🔄 Nodegroups: {region_summary['nodegroups_found']}")
+            self.log_operation(
+                "INFO", f"📊 {account_key} ({region}) EKS resources summary:"
+            )
+            self.log_operation("INFO", f"   🧠 Clusters: {len(clusters)}")
+            self.log_operation(
+                "INFO", f"   🔄 Nodegroups: {region_summary['nodegroups_found']}"
+            )
 
             print(
-                f"   📊 EKS resources found: {len(clusters)} clusters, {region_summary['nodegroups_found']} nodegroups")
+                f"   📊 EKS resources found: {len(clusters)} clusters, {region_summary['nodegroups_found']} nodegroups"
+            )
 
             # Delete each cluster
             deleted_count = 0
             failed_count = 0
 
             for i, cluster in enumerate(clusters, 1):
-                cluster_name = cluster['cluster_name']
+                cluster_name = cluster["cluster_name"]
                 print(f"   [{i}/{len(clusters)}] Processing cluster {cluster_name}...")
 
                 try:
@@ -2352,24 +3091,31 @@ class UltraCleanupEKSManager:
                         failed_count += 1
                 except Exception as e:
                     failed_count += 1
-                    self.log_operation('ERROR', f"Error deleting cluster {cluster_name}: {e}")
+                    self.log_operation(
+                        "ERROR", f"Error deleting cluster {cluster_name}: {e}"
+                    )
                     print(f"   ❌ Error deleting cluster {cluster_name}: {e}")
 
             print(f"   ✅ Deleted {deleted_count} clusters, ❌ Failed: {failed_count}")
 
-            self.log_operation('INFO', f"✅ EKS cleanup completed for {account_key} ({region})")
+            self.log_operation(
+                "INFO", f"✅ EKS cleanup completed for {account_key} ({region})"
+            )
             print(f"\n   ✅ EKS cleanup completed for {account_key} ({region})")
             return True
 
         except Exception as e:
-            account_key = account_info.get('account_key', 'Unknown')
-            self.log_operation('ERROR', f"Error cleaning up EKS resources in {account_key} ({region}): {e}")
-            print(f"   ❌ Error cleaning up EKS resources in {account_key} ({region}): {e}")
-            self.cleanup_results['errors'].append({
-                'account_info': account_info,
-                'region': region,
-                'error': str(e)
-            })
+            account_key = account_info.get("account_key", "Unknown")
+            self.log_operation(
+                "ERROR",
+                f"Error cleaning up EKS resources in {account_key} ({region}): {e}",
+            )
+            print(
+                f"   ❌ Error cleaning up EKS resources in {account_key} ({region}): {e}"
+            )
+            self.cleanup_results["errors"].append(
+                {"account_info": account_info, "region": region, "error": str(e)}
+            )
             return False
 
     def select_regions_interactive(self) -> Optional[List[str]]:
@@ -2391,27 +3137,37 @@ class UltraCleanupEKSManager:
         while True:
             try:
                 choice = input(
-                    f"Select regions (1-{len(self.user_regions)}, comma-separated, range, or 'all') or 'q' to quit: ").strip()
+                    f"Select regions (1-{len(self.user_regions)}, comma-separated, range, or 'all') or 'q' to quit: "
+                ).strip()
 
-                if choice.lower() == 'q':
+                if choice.lower() == "q":
                     return None
 
                 if choice.lower() == "all" or not choice:
-                    self.print_colored(Colors.GREEN, f"✅ Selected all {len(self.user_regions)} regions")
+                    self.print_colored(
+                        Colors.GREEN,
+                        f"✅ Selected all {len(self.user_regions)} regions",
+                    )
                     return self.user_regions
 
-                selected_indices = self.cred_manager._parse_selection(choice, len(self.user_regions))
+                selected_indices = self.cred_manager._parse_selection(
+                    choice, len(self.user_regions)
+                )
                 if not selected_indices:
                     self.print_colored(Colors.RED, "❌ Invalid selection format")
                     continue
 
                 selected_regions = [self.user_regions[i - 1] for i in selected_indices]
-                self.print_colored(Colors.GREEN,
-                                   f"✅ Selected {len(selected_regions)} regions: {', '.join(selected_regions)}")
+                self.print_colored(
+                    Colors.GREEN,
+                    f"✅ Selected {len(selected_regions)} regions: {', '.join(selected_regions)}",
+                )
                 return selected_regions
 
             except Exception as e:
-                self.print_colored(Colors.RED, f"❌ Error processing selection: {str(e)}")
+                self.print_colored(
+                    Colors.RED, f"❌ Error processing selection: {str(e)}"
+                )
 
     def save_cleanup_report(self):
         """Save comprehensive cleanup results to JSON report"""
@@ -2420,40 +3176,48 @@ class UltraCleanupEKSManager:
             report_filename = f"{self.reports_dir}/ultra_eks_cleanup_report_{self.execution_timestamp}.json"
 
             # Calculate statistics
-            total_clusters_deleted = len(self.cleanup_results['deleted_clusters'])
-            total_nodegroups_deleted = len(self.cleanup_results['deleted_nodegroups'])
-            total_failed = len(self.cleanup_results['failed_deletions'])
-            total_skipped = len(self.cleanup_results['skipped_resources'])
+            total_clusters_deleted = len(self.cleanup_results["deleted_clusters"])
+            total_nodegroups_deleted = len(self.cleanup_results["deleted_nodegroups"])
+            total_failed = len(self.cleanup_results["failed_deletions"])
+            total_skipped = len(self.cleanup_results["skipped_resources"])
 
             # Group deletions by account and region
             deletions_by_account = {}
             deletions_by_region = {}
 
-            for cluster in self.cleanup_results['deleted_clusters']:
-                account = cluster['account_info'].get('account_key', 'Unknown')
-                region = cluster['region']
+            for cluster in self.cleanup_results["deleted_clusters"]:
+                account = cluster["account_info"].get("account_key", "Unknown")
+                region = cluster["region"]
 
                 if account not in deletions_by_account:
-                    deletions_by_account[account] = {'clusters': 0, 'nodegroups': 0, 'regions': set()}
-                deletions_by_account[account]['clusters'] += 1
-                deletions_by_account[account]['regions'].add(region)
+                    deletions_by_account[account] = {
+                        "clusters": 0,
+                        "nodegroups": 0,
+                        "regions": set(),
+                    }
+                deletions_by_account[account]["clusters"] += 1
+                deletions_by_account[account]["regions"].add(region)
 
                 if region not in deletions_by_region:
-                    deletions_by_region[region] = {'clusters': 0, 'nodegroups': 0}
-                deletions_by_region[region]['clusters'] += 1
+                    deletions_by_region[region] = {"clusters": 0, "nodegroups": 0}
+                deletions_by_region[region]["clusters"] += 1
 
-            for nodegroup in self.cleanup_results['deleted_nodegroups']:
-                account = nodegroup['account_info'].get('account_key', 'Unknown')
-                region = nodegroup['region']
+            for nodegroup in self.cleanup_results["deleted_nodegroups"]:
+                account = nodegroup["account_info"].get("account_key", "Unknown")
+                region = nodegroup["region"]
 
                 if account not in deletions_by_account:
-                    deletions_by_account[account] = {'clusters': 0, 'nodegroups': 0, 'regions': set()}
-                deletions_by_account[account]['nodegroups'] += 1
-                deletions_by_account[account]['regions'].add(region)
+                    deletions_by_account[account] = {
+                        "clusters": 0,
+                        "nodegroups": 0,
+                        "regions": set(),
+                    }
+                deletions_by_account[account]["nodegroups"] += 1
+                deletions_by_account[account]["regions"].add(region)
 
                 if region not in deletions_by_region:
-                    deletions_by_region[region] = {'clusters': 0, 'nodegroups': 0}
-                deletions_by_region[region]['nodegroups'] += 1
+                    deletions_by_region[region] = {"clusters": 0, "nodegroups": 0}
+                deletions_by_region[region]["nodegroups"] += 1
 
             report_data = {
                 "metadata": {
@@ -2464,58 +3228,78 @@ class UltraCleanupEKSManager:
                     "execution_timestamp": self.execution_timestamp,
                     "config_dir": self.config_dir,
                     "log_file": self.log_filename,
-                    "regions_processed": self.user_regions
+                    "regions_processed": self.user_regions,
                 },
                 "summary": {
                     "total_accounts_processed": len(
-                        set(rp['account_key'] for rp in self.cleanup_results['regions_processed'])),
+                        set(
+                            rp["account_key"]
+                            for rp in self.cleanup_results["regions_processed"]
+                        )
+                    ),
                     "total_regions_processed": len(
-                        set(rp['region'] for rp in self.cleanup_results['regions_processed'])),
+                        set(
+                            rp["region"]
+                            for rp in self.cleanup_results["regions_processed"]
+                        )
+                    ),
                     "total_clusters_deleted": total_clusters_deleted,
                     "total_nodegroups_deleted": total_nodegroups_deleted,
                     "total_failed_deletions": total_failed,
                     "total_skipped_resources": total_skipped,
                     "deletions_by_account": deletions_by_account,
-                    "deletions_by_region": deletions_by_region
+                    "deletions_by_region": deletions_by_region,
                 },
                 "detailed_results": {
-                    "regions_processed": self.cleanup_results['regions_processed'],
-                    "deleted_clusters": self.cleanup_results['deleted_clusters'],
-                    "deleted_nodegroups": self.cleanup_results['deleted_nodegroups'],
-                    "failed_deletions": self.cleanup_results['failed_deletions'],
-                    "skipped_resources": self.cleanup_results['skipped_resources'],
-                    "errors": self.cleanup_results['errors']
-                }
+                    "regions_processed": self.cleanup_results["regions_processed"],
+                    "deleted_clusters": self.cleanup_results["deleted_clusters"],
+                    "deleted_nodegroups": self.cleanup_results["deleted_nodegroups"],
+                    "failed_deletions": self.cleanup_results["failed_deletions"],
+                    "skipped_resources": self.cleanup_results["skipped_resources"],
+                    "errors": self.cleanup_results["errors"],
+                },
             }
 
-            with open(report_filename, 'w', encoding='utf-8') as f:
+            with open(report_filename, "w", encoding="utf-8") as f:
                 json.dump(report_data, f, indent=2, default=str)
 
-            self.log_operation('INFO', f"✅ Ultra EKS cleanup report saved to: {report_filename}")
+            self.log_operation(
+                "INFO", f"✅ Ultra EKS cleanup report saved to: {report_filename}"
+            )
             return report_filename
 
         except Exception as e:
-            self.log_operation('ERROR', f"❌ Failed to save ultra EKS cleanup report: {e}")
+            self.log_operation(
+                "ERROR", f"❌ Failed to save ultra EKS cleanup report: {e}"
+            )
             return None
 
     def run(self):
         """Main execution method - sequential (no threading)"""
         try:
-            self.log_operation('INFO', "🚨 STARTING ULTRA EKS CLEANUP SESSION 🚨")
+            self.log_operation("INFO", "🚨 STARTING ULTRA EKS CLEANUP SESSION 🚨")
 
             self.print_colored(Colors.YELLOW, "🚨" * 30)
             self.print_colored(Colors.RED, "💥 ULTRA EKS CLEANUP - SEQUENTIAL 💥")
             self.print_colored(Colors.YELLOW, "🚨" * 30)
-            self.print_colored(Colors.WHITE, f"📅 Execution Date/Time: {self.current_time} UTC")
+            self.print_colored(
+                Colors.WHITE, f"📅 Execution Date/Time: {self.current_time} UTC"
+            )
             self.print_colored(Colors.WHITE, f"👤 Executed by: {self.current_user}")
             self.print_colored(Colors.WHITE, f"📋 Log File: {self.log_filename}")
 
             # STEP 1: Select root accounts
-            self.print_colored(Colors.YELLOW, "\n🔑 Select Root AWS Accounts for EKS Cleanup:")
+            self.print_colored(
+                Colors.YELLOW, "\n🔑 Select Root AWS Accounts for EKS Cleanup:"
+            )
 
-            root_accounts = self.cred_manager.select_root_accounts_interactive(allow_multiple=True)
+            root_accounts = self.cred_manager.select_root_accounts_interactive(
+                allow_multiple=True
+            )
             if not root_accounts:
-                self.print_colored(Colors.RED, "❌ No root accounts selected, exiting...")
+                self.print_colored(
+                    Colors.RED, "❌ No root accounts selected, exiting..."
+                )
                 return
             selected_accounts = root_accounts
 
@@ -2531,13 +3315,20 @@ class UltraCleanupEKSManager:
             self.print_colored(Colors.YELLOW, f"\n🎯 EKS CLEANUP CONFIGURATION")
             self.print_colored(Colors.YELLOW, "=" * 80)
             self.print_colored(Colors.WHITE, f"🔑 Credential source: ROOT ACCOUNTS")
-            self.print_colored(Colors.WHITE, f"🏦 Selected accounts: {len(selected_accounts)}")
-            self.print_colored(Colors.WHITE, f"🌍 Regions per account: {len(selected_regions)}")
+            self.print_colored(
+                Colors.WHITE, f"🏦 Selected accounts: {len(selected_accounts)}"
+            )
+            self.print_colored(
+                Colors.WHITE, f"🌍 Regions per account: {len(selected_regions)}"
+            )
             self.print_colored(Colors.WHITE, f"📋 Total operations: {total_operations}")
             self.print_colored(Colors.YELLOW, "=" * 80)
 
             # Show what will be cleaned up
-            self.print_colored(Colors.RED, f"\n⚠️  WARNING: This will delete ALL of the following EKS resources:")
+            self.print_colored(
+                Colors.RED,
+                f"\n⚠️  WARNING: This will delete ALL of the following EKS resources:",
+            )
             self.print_colored(Colors.WHITE, f"    • EKS Clusters")
             self.print_colored(Colors.WHITE, f"    • EKS Node Groups")
             self.print_colored(Colors.WHITE, f"    • EKS Add-ons")
@@ -2547,32 +3338,38 @@ class UltraCleanupEKSManager:
             self.print_colored(Colors.WHITE, f"    • EventBridge Rules")
             self.print_colored(Colors.WHITE, f"    • CloudWatch Alarms and Log Groups")
             self.print_colored(Colors.WHITE, f"    • Monitoring Scrapers")
-            self.print_colored(Colors.WHITE,
-                               f"    across {len(selected_accounts)} accounts in {len(selected_regions)} regions ({total_operations} operations)")
+            self.print_colored(
+                Colors.WHITE,
+                f"    across {len(selected_accounts)} accounts in {len(selected_regions)} regions ({total_operations} operations)",
+            )
             self.print_colored(Colors.RED, f"    This action CANNOT be undone!")
 
             # First confirmation - simple y/n
             confirm1 = input(f"\nContinue with EKS cleanup? (y/n): ").strip().lower()
-            self.log_operation('INFO', f"First confirmation: '{confirm1}'")
+            self.log_operation("INFO", f"First confirmation: '{confirm1}'")
 
-            if confirm1 not in ['y', 'yes']:
-                self.log_operation('INFO', "Ultra EKS cleanup cancelled by user")
+            if confirm1 not in ["y", "yes"]:
+                self.log_operation("INFO", "Ultra EKS cleanup cancelled by user")
                 self.print_colored(Colors.RED, "❌ Cleanup cancelled")
                 return
 
             # Second confirmation - final check
             confirm2 = input(f"Are you sure? Type 'yes' to confirm: ").strip().lower()
-            self.log_operation('INFO', f"Final confirmation: '{confirm2}'")
+            self.log_operation("INFO", f"Final confirmation: '{confirm2}'")
 
-            if confirm2 != 'yes':
-                self.log_operation('INFO', "Ultra EKS cleanup cancelled at final confirmation")
+            if confirm2 != "yes":
+                self.log_operation(
+                    "INFO", "Ultra EKS cleanup cancelled at final confirmation"
+                )
                 self.print_colored(Colors.RED, "❌ Cleanup cancelled")
                 return
 
             # STEP 4: Start the cleanup sequentially
             self.print_colored(Colors.RED, f"\n💥 STARTING EKS CLEANUP...")
-            self.log_operation('INFO',
-                               f"🚨 EKS CLEANUP INITIATED - {len(selected_accounts)} accounts, {len(selected_regions)} regions")
+            self.log_operation(
+                "INFO",
+                f"🚨 EKS CLEANUP INITIATED - {len(selected_accounts)} accounts, {len(selected_regions)} regions",
+            )
 
             start_time = time.time()
 
@@ -2587,8 +3384,11 @@ class UltraCleanupEKSManager:
 
             # Process each task sequentially
             for i, (account_info, region) in enumerate(tasks, 1):
-                account_key = account_info.get('account_key', 'Unknown')
-                self.print_colored(Colors.CYAN, f"\n[{i}/{len(tasks)}] Processing {account_key} in {region}...")
+                account_key = account_info.get("account_key", "Unknown")
+                self.print_colored(
+                    Colors.CYAN,
+                    f"\n[{i}/{len(tasks)}] Processing {account_key} in {region}...",
+                )
 
                 try:
                     success = self.cleanup_account_region(account_info, region)
@@ -2598,84 +3398,141 @@ class UltraCleanupEKSManager:
                         failed_tasks += 1
                 except Exception as e:
                     failed_tasks += 1
-                    self.log_operation('ERROR', f"Task failed for {account_key} ({region}): {e}")
-                    self.print_colored(Colors.RED, f"❌ Task failed for {account_key} ({region}): {e}")
+                    self.log_operation(
+                        "ERROR", f"Task failed for {account_key} ({region}): {e}"
+                    )
+                    self.print_colored(
+                        Colors.RED, f"❌ Task failed for {account_key} ({region}): {e}"
+                    )
 
             end_time = time.time()
             total_time = int(end_time - start_time)
 
             # STEP 5: Display final results
-            self.print_colored(Colors.YELLOW, f"\n💥" + "=" * 25 + " EKS CLEANUP COMPLETE " + "=" * 25)
-            self.print_colored(Colors.WHITE, f"⏱️  Total execution time: {total_time} seconds")
-            self.print_colored(Colors.GREEN, f"✅ Successful operations: {successful_tasks}")
+            self.print_colored(
+                Colors.YELLOW, f"\n💥" + "=" * 25 + " EKS CLEANUP COMPLETE " + "=" * 25
+            )
+            self.print_colored(
+                Colors.WHITE, f"⏱️  Total execution time: {total_time} seconds"
+            )
+            self.print_colored(
+                Colors.GREEN, f"✅ Successful operations: {successful_tasks}"
+            )
             self.print_colored(Colors.RED, f"❌ Failed operations: {failed_tasks}")
-            self.print_colored(Colors.WHITE, f"🧠 Clusters deleted: {len(self.cleanup_results['deleted_clusters'])}")
-            self.print_colored(Colors.WHITE,
-                               f"🔄 Nodegroups deleted: {len(self.cleanup_results['deleted_nodegroups'])}")
-            self.print_colored(Colors.WHITE,
-                               f"⏭️  Resources skipped: {len(self.cleanup_results['skipped_resources'])}")
-            self.print_colored(Colors.RED, f"❌ Failed deletions: {len(self.cleanup_results['failed_deletions'])}")
+            self.print_colored(
+                Colors.WHITE,
+                f"🧠 Clusters deleted: {len(self.cleanup_results['deleted_clusters'])}",
+            )
+            self.print_colored(
+                Colors.WHITE,
+                f"🔄 Nodegroups deleted: {len(self.cleanup_results['deleted_nodegroups'])}",
+            )
+            self.print_colored(
+                Colors.WHITE,
+                f"⏭️  Resources skipped: {len(self.cleanup_results['skipped_resources'])}",
+            )
+            self.print_colored(
+                Colors.RED,
+                f"❌ Failed deletions: {len(self.cleanup_results['failed_deletions'])}",
+            )
 
-            self.log_operation('INFO', f"EKS CLEANUP COMPLETED")
-            self.log_operation('INFO', f"Execution time: {total_time} seconds")
-            self.log_operation('INFO', f"Clusters deleted: {len(self.cleanup_results['deleted_clusters'])}")
-            self.log_operation('INFO', f"Nodegroups deleted: {len(self.cleanup_results['deleted_nodegroups'])}")
+            self.log_operation("INFO", f"EKS CLEANUP COMPLETED")
+            self.log_operation("INFO", f"Execution time: {total_time} seconds")
+            self.log_operation(
+                "INFO",
+                f"Clusters deleted: {len(self.cleanup_results['deleted_clusters'])}",
+            )
+            self.log_operation(
+                "INFO",
+                f"Nodegroups deleted: {len(self.cleanup_results['deleted_nodegroups'])}",
+            )
 
             # STEP 6: Show account summary
-            if self.cleanup_results['deleted_clusters'] or self.cleanup_results['deleted_nodegroups']:
+            if (
+                self.cleanup_results["deleted_clusters"]
+                or self.cleanup_results["deleted_nodegroups"]
+            ):
                 self.print_colored(Colors.YELLOW, f"\n📊 Deletion Summary by Account:")
 
                 # Group by account
                 account_summary = {}
-                for cluster in self.cleanup_results['deleted_clusters']:
-                    account = cluster['account_info'].get('account_key', 'Unknown')
+                for cluster in self.cleanup_results["deleted_clusters"]:
+                    account = cluster["account_info"].get("account_key", "Unknown")
                     if account not in account_summary:
-                        account_summary[account] = {'clusters': 0, 'nodegroups': 0, 'regions': set()}
-                    account_summary[account]['clusters'] += 1
-                    account_summary[account]['regions'].add(cluster['region'])
+                        account_summary[account] = {
+                            "clusters": 0,
+                            "nodegroups": 0,
+                            "regions": set(),
+                        }
+                    account_summary[account]["clusters"] += 1
+                    account_summary[account]["regions"].add(cluster["region"])
 
-                for nodegroup in self.cleanup_results['deleted_nodegroups']:
-                    account = nodegroup['account_info'].get('account_key', 'Unknown')
+                for nodegroup in self.cleanup_results["deleted_nodegroups"]:
+                    account = nodegroup["account_info"].get("account_key", "Unknown")
                     if account not in account_summary:
-                        account_summary[account] = {'clusters': 0, 'nodegroups': 0, 'regions': set()}
-                    account_summary[account]['nodegroups'] += 1
-                    account_summary[account]['regions'].add(nodegroup['region'])
+                        account_summary[account] = {
+                            "clusters": 0,
+                            "nodegroups": 0,
+                            "regions": set(),
+                        }
+                    account_summary[account]["nodegroups"] += 1
+                    account_summary[account]["regions"].add(nodegroup["region"])
 
                 for account, summary in account_summary.items():
-                    regions_list = ', '.join(sorted(summary['regions']))
+                    regions_list = ", ".join(sorted(summary["regions"]))
                     self.print_colored(Colors.PURPLE, f"   🏦 {account}:")
-                    self.print_colored(Colors.WHITE, f"      🧠 Clusters: {summary['clusters']}")
-                    self.print_colored(Colors.WHITE, f"      🔄 Nodegroups: {summary['nodegroups']}")
-                    self.print_colored(Colors.WHITE, f"      🌍 Regions: {regions_list}")
+                    self.print_colored(
+                        Colors.WHITE, f"      🧠 Clusters: {summary['clusters']}"
+                    )
+                    self.print_colored(
+                        Colors.WHITE, f"      🔄 Nodegroups: {summary['nodegroups']}"
+                    )
+                    self.print_colored(
+                        Colors.WHITE, f"      🌍 Regions: {regions_list}"
+                    )
 
             # STEP 7: Show failures if any
-            if self.cleanup_results['failed_deletions']:
+            if self.cleanup_results["failed_deletions"]:
                 self.print_colored(Colors.RED, f"\n❌ Failed Deletions:")
-                for failure in self.cleanup_results['failed_deletions'][:10]:  # Show first 10
-                    account_key = failure['account_info'].get('account_key', 'Unknown')
-                    self.print_colored(Colors.WHITE,
-                                       f"   • {failure['resource_type']} {failure['resource_id']} in {account_key} ({failure['region']})")
+                for failure in self.cleanup_results["failed_deletions"][
+                    :10
+                ]:  # Show first 10
+                    account_key = failure["account_info"].get("account_key", "Unknown")
+                    self.print_colored(
+                        Colors.WHITE,
+                        f"   • {failure['resource_type']} {failure['resource_id']} in {account_key} ({failure['region']})",
+                    )
                     self.print_colored(Colors.WHITE, f"     Error: {failure['error']}")
 
-                if len(self.cleanup_results['failed_deletions']) > 10:
-                    remaining = len(self.cleanup_results['failed_deletions']) - 10
-                    self.print_colored(Colors.WHITE, f"   ... and {remaining} more failures (see detailed report)")
+                if len(self.cleanup_results["failed_deletions"]) > 10:
+                    remaining = len(self.cleanup_results["failed_deletions"]) - 10
+                    self.print_colored(
+                        Colors.WHITE,
+                        f"   ... and {remaining} more failures (see detailed report)",
+                    )
 
             # Save comprehensive report
             self.print_colored(Colors.CYAN, f"\n📄 Saving EKS cleanup report...")
             report_file = self.save_cleanup_report()
             if report_file:
-                self.print_colored(Colors.GREEN, f"✅ EKS cleanup report saved to: {report_file}")
+                self.print_colored(
+                    Colors.GREEN, f"✅ EKS cleanup report saved to: {report_file}"
+                )
 
-            self.print_colored(Colors.GREEN, f"✅ Session log saved to: {self.log_filename}")
+            self.print_colored(
+                Colors.GREEN, f"✅ Session log saved to: {self.log_filename}"
+            )
 
             self.print_colored(Colors.RED, f"\n💥 EKS CLEANUP COMPLETE! 💥")
             self.print_colored(Colors.YELLOW, "🚨" * 30)
 
         except Exception as e:
-            self.log_operation('ERROR', f"FATAL ERROR in EKS cleanup execution: {str(e)}")
+            self.log_operation(
+                "ERROR", f"FATAL ERROR in EKS cleanup execution: {str(e)}"
+            )
             self.print_colored(Colors.RED, f"\n❌ FATAL ERROR: {e}")
             import traceback
+
             traceback.print_exc()
             raise
 

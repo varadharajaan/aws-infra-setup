@@ -1,14 +1,14 @@
+import argparse
+import glob
 import json
 import os
-import sys
+
 import boto3
-import argparse
-from datetime import datetime
-import glob
+
 
 class SessionRollback:
     def __init__(self):
-        self.current_user = 'varadharajaan'
+        self.current_user = "varadharajaan"
 
     def list_available_sessions(self):
         session_files = glob.glob("session_*.json")
@@ -18,36 +18,48 @@ class SessionRollback:
         sessions = []
         for session_file in session_files:
             try:
-                with open(session_file, 'r') as f:
+                with open(session_file, "r") as f:
                     session_data = json.load(f)
-                    sessions.append({
-                        'file': session_file,
-                        'session_id': session_data['session_id'],
-                        'created_at': session_data['created_at'],
-                        'user': session_data.get('user', 'Unknown'),
-                        'resource_count': len(session_data.get('created_resources', [])),
-                        'dry_run': session_data.get('dry_run', False)
-                    })
+                    sessions.append(
+                        {
+                            "file": session_file,
+                            "session_id": session_data["session_id"],
+                            "created_at": session_data["created_at"],
+                            "user": session_data.get("user", "Unknown"),
+                            "resource_count": len(
+                                session_data.get("created_resources", [])
+                            ),
+                            "dry_run": session_data.get("dry_run", False),
+                        }
+                    )
             except Exception as e:
                 print(f"⚠️ Could not read session file {session_file}: {e}")
-        sessions.sort(key=lambda x: x['created_at'], reverse=True)
+        sessions.sort(key=lambda x: x["created_at"], reverse=True)
         return sessions
 
     def display_sessions(self, sessions):
         print("\n📋 Available Sessions:")
-        print("="*80)
-        print(f"{'#':<3} {'Session ID':<25} {'Created':<20} {'User':<15} {'Resources':<10} {'Type':<8}")
-        print("-"*80)
+        print("=" * 80)
+        print(
+            f"{'#':<3} {'Session ID':<25} {'Created':<20} {'User':<15} {'Resources':<10} {'Type':<8}"
+        )
+        print("-" * 80)
         for i, session in enumerate(sessions, 1):
-            created_at = session['created_at'][:19] if session['created_at'] else 'Unknown'
-            session_type = 'DRY-RUN' if session['dry_run'] else 'REAL'
-            print(f"{i:<3} {session['session_id']:<25} {created_at:<20} {session['user']:<15} {session['resource_count']:<10} {session_type:<8}")
+            created_at = (
+                session["created_at"][:19] if session["created_at"] else "Unknown"
+            )
+            session_type = "DRY-RUN" if session["dry_run"] else "REAL"
+            print(
+                f"{i:<3} {session['session_id']:<25} {created_at:<20} {session['user']:<15} {session['resource_count']:<10} {session_type:<8}"
+            )
 
     def select_session(self, sessions):
         while True:
             try:
-                choice = input(f"\nSelect session to rollback (1-{len(sessions)}, or 'q' to quit): ").strip()
-                if choice.lower() == 'q':
+                choice = input(
+                    f"\nSelect session to rollback (1-{len(sessions)}, or 'q' to quit): "
+                ).strip()
+                if choice.lower() == "q":
                     return None
                 choice_num = int(choice)
                 if 1 <= choice_num <= len(sessions):
@@ -59,76 +71,78 @@ class SessionRollback:
 
     def load_session_resources(self, session_file):
         try:
-            with open(session_file, 'r') as f:
+            with open(session_file, "r") as f:
                 session_data = json.load(f)
-                return session_data.get('created_resources', [])
+                return session_data.get("created_resources", [])
         except Exception as e:
             print(f"❌ Error loading session file: {e}")
             return []
 
     def display_session_resources(self, resources):
         print(f"\n📊 Resources in Session ({len(resources)} total):")
-        print("-"*60)
+        print("-" * 60)
         resource_types = {}
         for resource in resources:
-            rtype = resource['resource_type']
+            rtype = resource["resource_type"]
             if rtype not in resource_types:
                 resource_types[rtype] = []
             resource_types[rtype].append(resource)
         for rtype, res_list in resource_types.items():
             print(f"\n{rtype.upper()}S ({len(res_list)}):")
             for resource in res_list:
-                print(f"   • {resource['resource_id']} ({resource['account']} - {resource['region']})")
+                print(
+                    f"   • {resource['resource_id']} ({resource['account']} - {resource['region']})"
+                )
 
     def confirm_rollback(self, resources):
         print(f"\n⚠️ WARNING: This will DELETE {len(resources)} resources!")
         print("This action cannot be undone.")
-        confirm1 = input("\nAre you sure you want to proceed? (yes/no): ").strip().lower()
-        if confirm1 != 'yes':
+        confirm1 = (
+            input("\nAre you sure you want to proceed? (yes/no): ").strip().lower()
+        )
+        if confirm1 != "yes":
             return False
         confirm2 = input("Type 'DELETE' to confirm resource deletion: ").strip()
-        return confirm2 == 'DELETE'
+        return confirm2 == "DELETE"
 
     def delete_resource(self, resource):
-        resource_type = resource['resource_type']
-        resource_id = resource['resource_id']
+        resource_type = resource["resource_type"]
+        resource_id = resource["resource_id"]
         try:
-            if resource_type == 'instance':
+            if resource_type == "instance":
                 ec2_client = boto3.client(
-                    'ec2',
-                    aws_access_key_id=resource['access_key'],
-                    aws_secret_access_key=resource['secret_key'],
-                    region_name=resource['region']
+                    "ec2",
+                    aws_access_key_id=resource["access_key"],
+                    aws_secret_access_key=resource["secret_key"],
+                    region_name=resource["region"],
                 )
                 print(f"   🗑️ Terminating instance {resource_id}...")
                 ec2_client.terminate_instances(InstanceIds=[resource_id])
                 return True
-            elif resource_type == 'auto-scaling-group':
+            elif resource_type == "auto-scaling-group":
                 asg_client = boto3.client(
-                    'autoscaling',
-                    aws_access_key_id=resource['access_key'],
-                    aws_secret_access_key=resource['secret_key'],
-                    region_name=resource['region']
+                    "autoscaling",
+                    aws_access_key_id=resource["access_key"],
+                    aws_secret_access_key=resource["secret_key"],
+                    region_name=resource["region"],
                 )
                 print(f"   🗑️ Deleting ASG {resource_id}...")
                 asg_client.update_auto_scaling_group(
-                    AutoScalingGroupName=resource_id,
-                    DesiredCapacity=0,
-                    MinSize=0
+                    AutoScalingGroupName=resource_id, DesiredCapacity=0, MinSize=0
                 )
                 import time
+
                 time.sleep(2)
                 asg_client.delete_auto_scaling_group(
-                    AutoScalingGroupName=resource_id,
-                    ForceDelete=True
+                    AutoScalingGroupName=resource_id, ForceDelete=True
                 )
                 return True
-            elif resource_type == 'launch-template':
+            elif resource_type == "launch-template":
                 ec2_client = boto3.client(
-                    'ec2',
-                    aws_access_key_id=resource['access_key'],
-                    aws_secret_access_key=resource['secret_key'],
-                    region_name=resource['region']
+                    "ec2",
+                    aws_access_key_id=resource["access_key"],
+                    aws_secret_access_key=resource["secret_key"],
+                    region_name=resource["region"],
                 )
                 print(f"   🗑️ Deleting launch template {resource_id}...")
                 ec2_client.delete_launch_template(LaunchTemplateId=resource_id)
@@ -146,10 +160,12 @@ class SessionRollback:
             print("❌ No resources found in session")
             return False
         try:
-            with open(session_file, 'r') as f:
+            with open(session_file, "r") as f:
                 session_data = json.load(f)
-                if session_data.get('dry_run', False):
-                    print("❌ This was a DRY-RUN session - no actual resources to delete")
+                if session_data.get("dry_run", False):
+                    print(
+                        "❌ This was a DRY-RUN session - no actual resources to delete"
+                    )
                     return False
         except:
             pass
@@ -178,10 +194,13 @@ class SessionRollback:
             print(f"   📄 Session file archived as: {archive_name}")
         return success_count > 0
 
+
 def main():
-    parser = argparse.ArgumentParser(description='Session Rollback Tool')
-    parser.add_argument('--rollback', action='store_true', help='Start rollback for session')
-    args = parser.parse_args()
+    parser = argparse.ArgumentParser(description="Session Rollback Tool")
+    parser.add_argument(
+        "--rollback", action="store_true", help="Start rollback for session"
+    )
+    parser.parse_args()
 
     tool = SessionRollback()
     sessions = tool.list_available_sessions()
@@ -190,7 +209,8 @@ def main():
     tool.display_sessions(sessions)
     session = tool.select_session(sessions)
     if session:
-        tool.rollback_session(session['file'])
+        tool.rollback_session(session["file"])
+
 
 if __name__ == "__main__":
     main()

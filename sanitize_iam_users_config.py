@@ -1,9 +1,9 @@
+import glob
 import json
 import os
-import glob
 import re
-from datetime import datetime
 import sys
+from datetime import datetime
 
 
 def sanitize_credentials(input_file=None, output_dir=None):
@@ -36,7 +36,7 @@ def sanitize_credentials(input_file=None, output_dir=None):
     print(f"🔍 Processing file: {input_file}")
 
     try:
-        with open(input_file, 'r') as f:
+        with open(input_file, "r") as f:
             creds_data = json.load(f)
 
         # Load metadata
@@ -57,9 +57,9 @@ def sanitize_credentials(input_file=None, output_dir=None):
                 return "masked"
 
         def mask_email(email):
-            if not isinstance(email, str) or '@' not in email:
+            if not isinstance(email, str) or "@" not in email:
                 return "masked@masked.com"
-            user, _ = email.split('@', 1)
+            user, _ = email.split("@", 1)
             masked_user = user[:3] + "*" * 6 if len(user) > 3 else "***"
             return masked_user + "@masked.com"
 
@@ -75,14 +75,14 @@ def sanitize_credentials(input_file=None, output_dir=None):
             "sanitized": True,
             "sanitized_by": "varadharajaan",
             "sanitized_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "accounts": {}
+            "accounts": {},
         }
 
         for account_id, account in creds_data.get("accounts", {}).items():
             sanitized_account = {
                 "account_id": account.get("account_id", ""),
                 "account_email": mask_email(account.get("account_email", "")),
-                "users": []
+                "users": [],
             }
 
             for user in account.get("users", []):
@@ -93,13 +93,15 @@ def sanitize_credentials(input_file=None, output_dir=None):
                         "first_name": mask(real_user.get("first_name", "")),
                         "last_name": mask(real_user.get("last_name", "")),
                         "full_name": mask(real_user.get("full_name", "")),
-                        "email": mask_email(real_user.get("email", ""))
+                        "email": mask_email(real_user.get("email", "")),
                     },
                     "region": user.get("region", ""),
                     "access_key_id": mask(user.get("access_key_id", "")),
                     "secret_access_key": mask(user.get("secret_access_key", "")),
-                    "console_password": mask(user.get("console_password", ""), keep_ends=False),
-                    "console_url": mask_console_url(user.get("console_url", ""))
+                    "console_password": mask(
+                        user.get("console_password", ""), keep_ends=False
+                    ),
+                    "console_url": mask_console_url(user.get("console_url", "")),
                 }
                 sanitized_account["users"].append(sanitized_user)
 
@@ -111,7 +113,7 @@ def sanitize_credentials(input_file=None, output_dir=None):
         output_path = os.path.join(output_dir, output_filename)
 
         # Write to file
-        with open(output_path, 'w') as f:
+        with open(output_path, "w") as f:
             json.dump(sanitized_data, f, indent=2)
 
         print(f"✅ Successfully sanitized credentials")

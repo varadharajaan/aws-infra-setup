@@ -5,11 +5,13 @@ from datetime import datetime
 with open("user_mapping.json") as f:
     data = json.load(f)
 
+
 # Masking function (first 3 + 6 asterisks + last 3)
 def mask(value, stars=6):
     if not isinstance(value, str) or len(value) <= 6:
         return "*" * len(value)
     return value[:3] + "*" * stars + value[-3:]
+
 
 # Mask fields in user_mappings
 for user_id, user_info in data.get("user_mappings", {}).items():
