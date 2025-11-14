@@ -1,0 +1,738 @@
+#!/usr/bin/env python3
+
+import boto3
+import json
+import sys
+import os
+import time
+from datetime import datetime
+from botocore.exceptions import ClientError, BotoCoreError
+
+class UltraAMICleanupManager:
+    def __init__(self, config_file='aws_accounts_config.json'):
+        self.config_file = config_file
+        self.current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.current_user = "varadharajaan"
+        
+        # Generate timestamp for output files
+        self.execution_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        # Initialize log file
+        self.setup_detailed_logging()
+        
+        # Load configuration
+        self.load_configuration()
+        
+        # Storage for cleanup results
+        self.cleanup_results = {
+            'accounts_processed': [],
+            'regions_processed': [],
+            'deleted_amis': [],
+            'deleted_snapshots': [],
+            'skipped_amis': [],
+            'failed_deletions': [],
+            'errors': []
+        }
+
+    def setup_detailed_logging(self):
+        """Setup detailed logging to file"""
+        try:
+            log_dir = "aws/ami/logs"
+            os.makedirs(log_dir, exist_ok=True)
+        
+            self.log_filename = f"{log_dir}/ultra_ami_cleanup_log_{self.execution_timestamp}.log"
+            
+            import logging
+            
+            self.operation_logger = logging.getLogger('ultra_ami_cleanup')
+            self.operation_logger.setLevel(logging.INFO)
+            
+            for handler in self.operation_logger.handlers[:]:
+                self.operation_logger.removeHandler(handler)
+            
+            file_handler = logging.FileHandler(self.log_filename, encoding='utf-8')
+            file_handler.setLevel(logging.INFO)
+            
+            console_handler = logging.StreamHandler()
+            console_handler.setLevel(logging.INFO)
+            
+            formatter = logging.Formatter(
+                '%(asctime)s | %(levelname)8s | %(message)s',
+                datefmt='%Y-%m-%d %H:%M:%S'
+            )
+            
+            file_handler.setFormatter(formatter)
+            console_handler.setFormatter(formatter)
+            
+            self.operation_logger.addHandler(file_handler)
+            self.operation_logger.addHandler(console_handler)
+            
+            self.operation_logger.info("=" * 100)
+            self.operation_logger.info("🚨 ULTRA AMI CLEANUP SESSION STARTED 🚨")
+            self.operation_logger.info("=" * 100)
+            self.operation_logger.info(f"Execution Time: {self.current_time} UTC")
+            self.operation_logger.info(f"Executed By: {self.current_user}")
+            self.operation_logger.info(f"Config File: {self.config_file}")
+            self.operation_logger.info(f"Log File: {self.log_filename}")
+            self.operation_logger.info("=" * 100)
+            
+        except Exception as e:
+            print(f"Warning: Could not setup detailed logging: {e}")
+            self.operation_logger = None
+
+    def log_operation(self, level, message):
+        """Simple logging operation"""
+        if self.operation_logger:
+            if level.upper() == 'INFO':
+                self.operation_logger.info(message)
+            elif level.upper() == 'WARNING':
+                self.operation_logger.warning(message)
+            elif level.upper() == 'ERROR':
+                self.operation_logger.error(message)
+            elif level.upper() == 'DEBUG':
+                self.operation_logger.debug(message)
+        else:
+            print(f"[{level.upper()}] {message}")
+
+    def load_configuration(self):
+        """Load AWS accounts configuration"""
+        try:
+            if not os.path.exists(self.config_file):
+                raise FileNotFoundError(f"Configuration file '{self.config_file}' not found")
+            
+            with open(self.config_file, 'r', encoding='utf-8') as f:
+                self.config_data = json.load(f)
+            
+            self.log_operation('INFO', f"✅ Configuration loaded from: {self.config_file}")
+            
+            if 'accounts' not in self.config_data:
+                raise ValueError("No 'accounts' section found in configuration")
+            
+            valid_accounts = {}
+            for account_name, account_data in self.config_data['accounts'].items():
+                if (account_data.get('access_key') and 
+                    account_data.get('secret_key') and
+                    account_data.get('account_id') and
+                    not account_data.get('access_key').startswith('ADD_')):
+                    valid_accounts[account_name] = account_data
+                else:
+                    self.log_operation('WARNING', f"Skipping incomplete account: {account_name}")
+            
+            self.config_data['accounts'] = valid_accounts
+            
+            self.log_operation('INFO', f"📊 Valid accounts loaded: {len(valid_accounts)}")
+            for account_name, account_data in valid_accounts.items():
+                account_id = account_data.get('account_id', 'Unknown')
+                email = account_data.get('email', 'Unknown')
+                self.log_operation('INFO', f"   • {account_name}: {account_id} ({email})")
+            
+            self.user_regions = self.config_data.get('user_settings', {}).get('user_regions', [
+                'us-east-1', 'us-east-2', 'us-west-1', 'us-west-2', 'ap-south-1'
+            ])
+            
+            self.log_operation('INFO', f"🌍 Regions to process: {self.user_regions}")
+            
+        except FileNotFoundError as e:
+            self.log_operation('ERROR', f"Configuration file error: {e}")
+            sys.exit(1)
+        except json.JSONDecodeError as e:
+            self.log_operation('ERROR', f"Invalid JSON in configuration file: {e}")
+            sys.exit(1)
+        except Exception as e:
+            self.log_operation('ERROR', f"Error loading configuration: {e}")
+            sys.exit(1)
+
+    def create_ec2_client(self, access_key, secret_key, region):
+        """Create EC2 client using account credentials"""
+        try:
+            client = boto3.client(
+                'ec2',
+                aws_access_key_id=access_key,
+                aws_secret_access_key=secret_key,
+                region_name=region
+            )
+            
+            # Test the connection
+            client.describe_images(Owners=['self'], MaxResults=5)
+            
+            return client
+            
+        except Exception as e:
+            self.log_operation('ERROR', f"Failed to create EC2 client for {region}: {e}")
+            raise
+
+    def get_all_amis(self, ec2_client, region, account_name, account_id):
+        """Get all AMIs owned by this account in a specific region"""
+        try:
+            amis = []
+            
+            self.log_operation('INFO', f"🔍 Scanning for AMIs in {region} ({account_name})")
+            print(f"   🔍 Scanning for AMIs in {region} ({account_name})...")
+            
+            # Get AMIs owned by this account
+            response = ec2_client.describe_images(Owners=[account_id])
+            
+            for image in response.get('Images', []):
+                ami_id = image['ImageId']
+                name = image.get('Name', 'N/A')
+                description = image.get('Description', 'N/A')
+                state = image.get('State', 'N/A')
+                creation_date = image.get('CreationDate', 'N/A')
+                architecture = image.get('Architecture', 'N/A')
+                platform = image.get('Platform', 'Linux/Unix')
+                
+                # Get snapshot IDs from block device mappings
+                snapshot_ids = []
+                for bdm in image.get('BlockDeviceMappings', []):
+                    if 'Ebs' in bdm and 'SnapshotId' in bdm['Ebs']:
+                        snapshot_ids.append(bdm['Ebs']['SnapshotId'])
+                
+                # Get tags
+                tags = {tag['Key']: tag['Value'] for tag in image.get('Tags', [])}
+                
+                ami_info = {
+                    'ami_id': ami_id,
+                    'name': name,
+                    'description': description,
+                    'state': state,
+                    'creation_date': creation_date,
+                    'architecture': architecture,
+                    'platform': platform,
+                    'snapshot_ids': snapshot_ids,
+                    'snapshot_count': len(snapshot_ids),
+                    'tags': tags,
+                    'region': region,
+                    'account_name': account_name
+                }
+                
+                amis.append(ami_info)
+            
+            self.log_operation('INFO', f"📸 Found {len(amis)} AMIs in {region} ({account_name})")
+            print(f"   📸 Found {len(amis)} AMIs in {region} ({account_name})")
+            
+            # Count by state
+            available_count = sum(1 for a in amis if a['state'] == 'available')
+            other_count = len(amis) - available_count
+            
+            if amis:
+                print(f"      ✓ Available: {available_count}, Other states: {other_count}")
+            
+            return amis
+            
+        except Exception as e:
+            self.log_operation('ERROR', f"Error getting AMIs in {region} ({account_name}): {e}")
+            print(f"   ❌ Error getting AMIs in {region}: {e}")
+            return []
+
+    def check_ami_in_use(self, ec2_client, ami_id):
+        """Check if AMI is currently being used by any instances"""
+        try:
+            # Check for running instances using this AMI
+            response = ec2_client.describe_instances(
+                Filters=[
+                    {'Name': 'image-id', 'Values': [ami_id]},
+                    {'Name': 'instance-state-name', 'Values': ['running', 'stopped', 'stopping', 'pending']}
+                ]
+            )
+            
+            instances = []
+            for reservation in response.get('Reservations', []):
+                for instance in reservation.get('Instances', []):
+                    instances.append({
+                        'instance_id': instance['InstanceId'],
+                        'state': instance['State']['Name']
+                    })
+            
+            return len(instances) > 0, instances
+            
+        except Exception as e:
+            self.log_operation('WARNING', f"Could not check if AMI {ami_id} is in use: {e}")
+            return False, []
+
+    def deregister_ami(self, ec2_client, ami_info):
+        """Deregister (delete) an AMI and optionally its snapshots"""
+        try:
+            ami_id = ami_info['ami_id']
+            region = ami_info['region']
+            account_name = ami_info['account_name']
+            
+            # Check if AMI is in use
+            in_use, instances = self.check_ami_in_use(ec2_client, ami_id)
+            
+            if in_use:
+                instance_ids = [inst['instance_id'] for inst in instances]
+                self.log_operation('INFO', f"⏭️  Skipping AMI {ami_id} ({ami_info['name']}) - in use by instances: {', '.join(instance_ids)}")
+                print(f"      ⏭️  Skipping {ami_id} ({ami_info['name']}) - in use by {len(instances)} instance(s)")
+                
+                self.cleanup_results['skipped_amis'].append({
+                    'ami_id': ami_id,
+                    'name': ami_info['name'],
+                    'region': region,
+                    'account_name': account_name,
+                    'reason': f'In use by instances: {", ".join(instance_ids)}'
+                })
+                
+                return False
+            
+            # Deregister AMI
+            self.log_operation('INFO', f"🗑️  Deregistering AMI {ami_id} ({ami_info['name']}) - {ami_info['snapshot_count']} snapshots")
+            print(f"      🗑️  Deregistering AMI {ami_id} ({ami_info['name']})")
+            
+            ec2_client.deregister_image(ImageId=ami_id)
+            
+            self.log_operation('INFO', f"✅ Successfully deregistered AMI {ami_id}")
+            
+            # Delete associated snapshots
+            deleted_snapshots = []
+            if ami_info['snapshot_ids']:
+                print(f"         🗑️  Deleting {len(ami_info['snapshot_ids'])} associated snapshots...")
+                
+                for snapshot_id in ami_info['snapshot_ids']:
+                    try:
+                        self.log_operation('INFO', f"Deleting snapshot {snapshot_id} for AMI {ami_id}")
+                        ec2_client.delete_snapshot(SnapshotId=snapshot_id)
+                        deleted_snapshots.append(snapshot_id)
+                        self.log_operation('INFO', f"✅ Deleted snapshot {snapshot_id}")
+                        
+                        self.cleanup_results['deleted_snapshots'].append({
+                            'snapshot_id': snapshot_id,
+                            'ami_id': ami_id,
+                            'ami_name': ami_info['name'],
+                            'region': region,
+                            'account_name': account_name,
+                            'deleted_at': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        })
+                        
+                    except ClientError as snap_error:
+                        error_code = snap_error.response.get('Error', {}).get('Code', 'Unknown')
+                        
+                        if error_code == 'InvalidSnapshot.InUse':
+                            self.log_operation('WARNING', f"Snapshot {snapshot_id} is in use, skipping")
+                            print(f"         ⚠️  Snapshot {snapshot_id} is in use, skipping")
+                        else:
+                            self.log_operation('ERROR', f"Failed to delete snapshot {snapshot_id}: {snap_error}")
+                            print(f"         ❌ Failed to delete snapshot {snapshot_id}: {snap_error}")
+                        
+                        self.cleanup_results['failed_deletions'].append({
+                            'resource_type': 'snapshot',
+                            'resource_id': snapshot_id,
+                            'ami_id': ami_id,
+                            'region': region,
+                            'account_name': account_name,
+                            'error': str(snap_error)
+                        })
+                    except Exception as snap_error:
+                        self.log_operation('ERROR', f"Unexpected error deleting snapshot {snapshot_id}: {snap_error}")
+                        print(f"         ❌ Error deleting snapshot {snapshot_id}: {snap_error}")
+            
+            # Record the AMI deletion
+            self.cleanup_results['deleted_amis'].append({
+                'ami_id': ami_id,
+                'name': ami_info['name'],
+                'description': ami_info['description'],
+                'creation_date': ami_info['creation_date'],
+                'architecture': ami_info['architecture'],
+                'platform': ami_info['platform'],
+                'snapshot_count': len(ami_info['snapshot_ids']),
+                'snapshots_deleted': len(deleted_snapshots),
+                'snapshot_ids': ami_info['snapshot_ids'],
+                'region': region,
+                'account_name': account_name,
+                'deleted_at': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            })
+            
+            return True
+            
+        except Exception as e:
+            self.log_operation('ERROR', f"Failed to deregister AMI {ami_info['ami_id']}: {e}")
+            print(f"      ❌ Failed to deregister AMI {ami_info['ami_id']}: {e}")
+            
+            self.cleanup_results['failed_deletions'].append({
+                'resource_type': 'ami',
+                'resource_id': ami_info['ami_id'],
+                'name': ami_info['name'],
+                'region': ami_info['region'],
+                'account_name': ami_info['account_name'],
+                'error': str(e)
+            })
+            return False
+
+    def cleanup_account_region(self, account_name, account_data, region):
+        """Clean up all AMIs in a specific account and region"""
+        try:
+            access_key = account_data['access_key']
+            secret_key = account_data['secret_key']
+            account_id = account_data['account_id']
+        
+            self.log_operation('INFO', f"🧹 Starting cleanup for {account_name} ({account_id}) in {region}")
+            print(f"\n🧹 Starting cleanup for {account_name} ({account_id}) in {region}")
+        
+            # Create EC2 client
+            try:
+                ec2_client = self.create_ec2_client(access_key, secret_key, region)
+            except Exception as client_error:
+                self.log_operation('ERROR', f"Could not create EC2 client for {region}: {client_error}")
+                print(f"   ❌ Could not create EC2 client for {region}: {client_error}")
+                return False
+        
+            # Get all AMIs
+            amis = self.get_all_amis(ec2_client, region, account_name, account_id)
+        
+            if not amis:
+                self.log_operation('INFO', f"No AMIs found in {account_name} ({region})")
+                print(f"   ✓ No AMIs found in {account_name} ({region})")
+                return True
+        
+            # Record region summary
+            region_summary = {
+                'account_name': account_name,
+                'account_id': account_id,
+                'region': region,
+                'amis_found': len(amis),
+                'total_snapshots': sum(ami['snapshot_count'] for ami in amis)
+            }
+            self.cleanup_results['regions_processed'].append(region_summary)
+        
+            # Add account to processed accounts if not already there
+            if account_name not in [a['account_name'] for a in self.cleanup_results['accounts_processed']]:
+                self.cleanup_results['accounts_processed'].append({
+                    'account_name': account_name,
+                    'account_id': account_id
+                })
+            
+            # Deregister each AMI
+            if amis:
+                print(f"\n   🗑️  Processing {len(amis)} AMIs...")
+                for ami in amis:
+                    self.deregister_ami(ec2_client, ami)
+        
+            self.log_operation('INFO', f"✅ Cleanup completed for {account_name} ({region})")
+            print(f"   ✅ Cleanup completed for {account_name} ({region})")
+            return True
+        
+        except Exception as e:
+            self.log_operation('ERROR', f"Error cleaning up {account_name} ({region}): {e}")
+            print(f"   ❌ Error cleaning up {account_name} ({region}): {e}")
+            self.cleanup_results['errors'].append({
+                'account_name': account_name,
+                'region': region,
+                'error': str(e)
+            })
+            return False
+
+    def save_cleanup_report(self):
+        """Save comprehensive cleanup results to JSON report"""
+        try:
+            report_dir = "aws/ami/reports"
+            os.makedirs(report_dir, exist_ok=True)
+            report_filename = f"{report_dir}/ultra_ami_cleanup_report_{self.execution_timestamp}.json"
+            
+            total_amis_deleted = len(self.cleanup_results['deleted_amis'])
+            total_snapshots_deleted = len(self.cleanup_results['deleted_snapshots'])
+            total_amis_skipped = len(self.cleanup_results['skipped_amis'])
+            total_failed = len(self.cleanup_results['failed_deletions'])
+            
+            # Group by account and region
+            deletions_by_account = {}
+            deletions_by_region = {}
+            
+            for ami in self.cleanup_results['deleted_amis']:
+                account = ami['account_name']
+                region = ami['region']
+                
+                if account not in deletions_by_account:
+                    deletions_by_account[account] = {'amis': 0, 'snapshots': 0}
+                deletions_by_account[account]['amis'] += 1
+                deletions_by_account[account]['snapshots'] += ami['snapshots_deleted']
+                
+                if region not in deletions_by_region:
+                    deletions_by_region[region] = {'amis': 0, 'snapshots': 0}
+                deletions_by_region[region]['amis'] += 1
+                deletions_by_region[region]['snapshots'] += ami['snapshots_deleted']
+            
+            report_data = {
+                "metadata": {
+                    "cleanup_type": "ULTRA_AMI_CLEANUP",
+                    "cleanup_date": self.current_time.split()[0],
+                    "cleanup_time": self.current_time.split()[1],
+                    "cleaned_by": self.current_user,
+                    "execution_timestamp": self.execution_timestamp,
+                    "config_file": self.config_file,
+                    "log_file": self.log_filename,
+                    "accounts_in_config": list(self.config_data['accounts'].keys()),
+                    "regions_processed": self.user_regions
+                },
+                "summary": {
+                    "total_accounts_processed": len(self.cleanup_results['accounts_processed']),
+                    "total_regions_processed": len(self.cleanup_results['regions_processed']),
+                    "total_amis_deleted": total_amis_deleted,
+                    "total_snapshots_deleted": total_snapshots_deleted,
+                    "total_amis_skipped": total_amis_skipped,
+                    "total_failed_deletions": total_failed,
+                    "deletions_by_account": deletions_by_account,
+                    "deletions_by_region": deletions_by_region
+                },
+                "detailed_results": {
+                    "accounts_processed": self.cleanup_results['accounts_processed'],
+                    "regions_processed": self.cleanup_results['regions_processed'],
+                    "deleted_amis": self.cleanup_results['deleted_amis'],
+                    "deleted_snapshots": self.cleanup_results['deleted_snapshots'],
+                    "skipped_amis": self.cleanup_results['skipped_amis'],
+                    "failed_deletions": self.cleanup_results['failed_deletions'],
+                    "errors": self.cleanup_results['errors']
+                }
+            }
+            
+            with open(report_filename, 'w', encoding='utf-8') as f:
+                json.dump(report_data, f, indent=2, default=str)
+            
+            self.log_operation('INFO', f"✅ Ultra cleanup report saved to: {report_filename}")
+            return report_filename
+            
+        except Exception as e:
+            self.log_operation('ERROR', f"❌ Failed to save ultra cleanup report: {e}")
+            return None
+
+    def run(self):
+        """Main execution method"""
+        try:
+            self.log_operation('INFO', "🚨 STARTING ULTRA AMI CLEANUP SESSION 🚨")
+            
+            print("🚨" * 30)
+            print("💥 ULTRA AMI (Amazon Machine Image) CLEANUP 💥")
+            print("🚨" * 30)
+            print(f"📅 Execution Date/Time: {self.current_time} UTC")
+            print(f"👤 Executed by: {self.current_user}")
+            print(f"📋 Log File: {self.log_filename}")
+            
+            # Display available accounts
+            accounts = self.config_data['accounts']
+            
+            print(f"\n🏦 AVAILABLE AWS ACCOUNTS:")
+            print("=" * 80)
+            
+            account_list = []
+            
+            for i, (account_name, account_data) in enumerate(accounts.items(), 1):
+                account_id = account_data.get('account_id', 'Unknown')
+                email = account_data.get('email', 'Unknown')
+                
+                account_list.append({
+                    'name': account_name,
+                    'account_id': account_id,
+                    'email': email,
+                    'data': account_data
+                })
+                
+                print(f"  {i}. {account_name}: {account_id} ({email})")
+            
+            # Selection prompt
+            print("\nAccount Selection Options:")
+            print("  • Single accounts: 1,3,5")
+            print("  • Ranges: 1-3")
+            print("  • Mixed: 1-2,4")
+            print("  • All accounts: 'all' or press Enter")
+            print("  • Cancel: 'cancel' or 'quit'")
+            
+            selection = input("\n🔢 Select accounts to process: ").strip().lower()
+            
+            if selection in ['cancel', 'quit']:
+                self.log_operation('INFO', "AMI cleanup cancelled by user")
+                print("❌ Cleanup cancelled")
+                return
+            
+            # Process account selection
+            selected_accounts = {}
+            if not selection or selection == 'all':
+                selected_accounts = accounts
+                self.log_operation('INFO', f"All accounts selected: {len(accounts)}")
+                print(f"✅ Selected all {len(accounts)} accounts")
+            else:
+                try:
+                    parts = []
+                    for part in selection.split(','):
+                        if '-' in part:
+                            start, end = map(int, part.split('-'))
+                            if start < 1 or end > len(account_list):
+                                raise ValueError(f"Range {part} out of bounds (1-{len(account_list)})")
+                            parts.extend(range(start, end + 1))
+                        else:
+                            num = int(part)
+                            if num < 1 or num > len(account_list):
+                                raise ValueError(f"Selection {part} out of bounds (1-{len(account_list)})")
+                            parts.append(num)
+                    
+                    for idx in parts:
+                        account = account_list[idx-1]
+                        selected_accounts[account['name']] = account['data']
+                    
+                    if not selected_accounts:
+                        raise ValueError("No valid accounts selected")
+                    
+                    self.log_operation('INFO', f"Selected accounts: {list(selected_accounts.keys())}")
+                    print(f"✅ Selected {len(selected_accounts)} accounts: {', '.join(selected_accounts.keys())}")
+                    
+                except ValueError as e:
+                    self.log_operation('ERROR', f"Invalid account selection: {e}")
+                    print(f"❌ Invalid selection: {e}")
+                    return
+            
+            regions = self.user_regions
+            
+            # Calculate total operations
+            total_operations = len(selected_accounts) * len(regions)
+            
+            print(f"\n🎯 CLEANUP CONFIGURATION")
+            print("=" * 80)
+            print(f"🏦 Selected accounts: {len(selected_accounts)}")
+            print(f"🌍 Regions per account: {len(regions)}")
+            print(f"📋 Total operations: {total_operations}")
+            print(f"🗑️  Target: All AMIs owned by account + Associated snapshots")
+            print(f"⏭️  Skipped: AMIs in use by running/stopped instances")
+            print("=" * 80)
+            
+            # Confirmation
+            print(f"\n⚠️  WARNING: This will:")
+            print(f"    • Deregister ALL AMIs owned by the account")
+            print(f"    • Delete ALL snapshots associated with those AMIs")
+            print(f"    • Across {len(selected_accounts)} accounts in {len(regions)} regions")
+            print(f"    • AMIs in use by instances will be SKIPPED")
+            print(f"    This action CANNOT be undone!")
+            
+            confirm1 = input(f"\nContinue with cleanup? (y/n): ").strip().lower()
+            self.log_operation('INFO', f"First confirmation: '{confirm1}'")
+            
+            if confirm1 not in ['y', 'yes']:
+                self.log_operation('INFO', "Ultra cleanup cancelled by user")
+                print("❌ Cleanup cancelled")
+                return
+            
+            confirm2 = input(f"Are you sure? Type 'yes' to confirm: ").strip().lower()
+            self.log_operation('INFO', f"Final confirmation: '{confirm2}'")
+            
+            if confirm2 != 'yes':
+                self.log_operation('INFO', "Ultra cleanup cancelled at final confirmation")
+                print("❌ Cleanup cancelled")
+                return
+            
+            # Start cleanup
+            print(f"\n💥 STARTING CLEANUP...")
+            self.log_operation('INFO', f"🚨 CLEANUP INITIATED - {len(selected_accounts)} accounts, {len(regions)} regions")
+            
+            start_time = time.time()
+            
+            successful_tasks = 0
+            failed_tasks = 0
+            
+            # Create tasks list
+            tasks = []
+            for account_name, account_data in selected_accounts.items():
+                for region in regions:
+                    tasks.append((account_name, account_data, region))
+            
+            # Process each task sequentially
+            for i, (account_name, account_data, region) in enumerate(tasks, 1):
+                print(f"\n[{i}/{len(tasks)}] Processing {account_name} in {region}...")
+                
+                try:
+                    success = self.cleanup_account_region(account_name, account_data, region)
+                    if success:
+                        successful_tasks += 1
+                    else:
+                        failed_tasks += 1
+                except Exception as e:
+                    failed_tasks += 1
+                    self.log_operation('ERROR', f"Task failed for {account_name} ({region}): {e}")
+                    print(f"❌ Task failed for {account_name} ({region}): {e}")
+            
+            end_time = time.time()
+            total_time = int(end_time - start_time)
+            
+            # Display final results
+            print(f"\n💥" + "="*25 + " CLEANUP COMPLETE " + "="*25)
+            print(f"⏱️  Total execution time: {total_time} seconds")
+            print(f"✅ Successful operations: {successful_tasks}")
+            print(f"❌ Failed operations: {failed_tasks}")
+            print(f"📸 AMIs deleted: {len(self.cleanup_results['deleted_amis'])}")
+            print(f"💾 Snapshots deleted: {len(self.cleanup_results['deleted_snapshots'])}")
+            print(f"⏭️  AMIs skipped (in-use): {len(self.cleanup_results['skipped_amis'])}")
+            print(f"❌ Failed deletions: {len(self.cleanup_results['failed_deletions'])}")
+            
+            self.log_operation('INFO', f"CLEANUP COMPLETED")
+            self.log_operation('INFO', f"Execution time: {total_time} seconds")
+            self.log_operation('INFO', f"AMIs deleted: {len(self.cleanup_results['deleted_amis'])}")
+            self.log_operation('INFO', f"Snapshots deleted: {len(self.cleanup_results['deleted_snapshots'])}")
+            
+            # Show account summary
+            if self.cleanup_results['deleted_amis']:
+                print(f"\n📊 Deletion Summary by Account:")
+                
+                account_summary = {}
+                for ami in self.cleanup_results['deleted_amis']:
+                    account = ami['account_name']
+                    if account not in account_summary:
+                        account_summary[account] = {'amis': 0, 'snapshots': 0, 'regions': set()}
+                    account_summary[account]['amis'] += 1
+                    account_summary[account]['snapshots'] += ami['snapshots_deleted']
+                    account_summary[account]['regions'].add(ami['region'])
+                
+                for account, summary in account_summary.items():
+                    regions_list = ', '.join(sorted(summary['regions']))
+                    print(f"   🏦 {account}:")
+                    print(f"      📸 AMIs: {summary['amis']}")
+                    print(f"      💾 Snapshots: {summary['snapshots']}")
+                    print(f"      🌍 Regions: {regions_list}")
+            
+            # Show failures if any
+            if self.cleanup_results['failed_deletions']:
+                print(f"\n❌ Failed Deletions:")
+                for failure in self.cleanup_results['failed_deletions'][:10]:
+                    print(f"   • {failure['resource_type']} {failure['resource_id']} in {failure['account_name']} ({failure['region']})")
+                    print(f"     Error: {failure['error']}")
+                
+                if len(self.cleanup_results['failed_deletions']) > 10:
+                    remaining = len(self.cleanup_results['failed_deletions']) - 10
+                    print(f"   ... and {remaining} more failures (see detailed report)")
+            
+            # Show skipped AMIs
+            if self.cleanup_results['skipped_amis']:
+                print(f"\n⏭️  Skipped AMIs (in use by instances):")
+                for skipped in self.cleanup_results['skipped_amis'][:5]:
+                    print(f"   • {skipped['ami_id']} ({skipped['name']}) - {skipped['reason']}")
+                
+                if len(self.cleanup_results['skipped_amis']) > 5:
+                    remaining = len(self.cleanup_results['skipped_amis']) - 5
+                    print(f"   ... and {remaining} more (see detailed report)")
+            
+            # Save report
+            print(f"\n📄 Saving cleanup report...")
+            report_file = self.save_cleanup_report()
+            if report_file:
+                print(f"✅ Cleanup report saved to: {report_file}")
+            
+            print(f"✅ Session log saved to: {self.log_filename}")
+            
+            print(f"\n💥 CLEANUP COMPLETE! 💥")
+            print("🚨" * 30)
+            
+        except Exception as e:
+            self.log_operation('ERROR', f"FATAL ERROR in cleanup execution: {str(e)}")
+            print(f"\n❌ FATAL ERROR: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
+
+def main():
+    """Main function"""
+    try:
+        manager = UltraAMICleanupManager()
+        manager.run()
+    except KeyboardInterrupt:
+        print("\n\n❌ Cleanup interrupted by user")
+        sys.exit(1)
+    except Exception as e:
+        print(f"❌ Unexpected error: {e}")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
