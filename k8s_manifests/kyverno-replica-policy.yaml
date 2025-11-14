@@ -1,0 +1,22 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: limit-replicas
+spec:
+  validationFailureAction: enforce
+  background: true
+  rules:
+    - name: validate-replicas
+      match:
+        resources:
+          kinds:
+            - Deployment
+            - StatefulSet
+            - ReplicaSet
+          apiGroups:
+            - apps
+      validate:
+        message: "Replica count must not exceed 3."
+        pattern:
+          spec:
+            replicas: "?<=3"

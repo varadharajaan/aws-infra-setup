@@ -1073,71 +1073,48 @@ class AutoScalingGroupManager:
             print(f"⚠️ Warning: Could not get VPC ID for subnet {subnet_id}: {e}")
             return 'Unknown'
 
-    def build_asg_config(self, cred_info: CredentialInfo, instance_selections: Dict[str, List[str]], 
-            launch_template_id: str, strategy: str, enable_scheduled_scaling: bool = True) -> ASGConfig:
-        """Build ASG configuration based on selections"""
+    def build_asg_config(self, cred_info: CredentialInfo, instance_selections: Dict[str, list],
+                         launch_template_id: str, strategy: str, enable_scheduled_scaling: bool = True) -> ASGConfig:
+        """
+        Build ASG configuration based on user selections.
+        For mixed, combines on-demand and spot instance types without duplicates.
+        """
+        from datetime import datetime
+        import boto3
+
         region = cred_info.regions[0]
-        timestamp = datetime.now().strftime('%Y%m%d-%H%M%S')
+        suffix = self.generate_random_suffix()
 
-        # Use the static method properly
-        suffix = self.generate_random_suffix()  # Using class method
-
-        # Only include the instance types explicitly selected by the user
-        all_instance_types = []
-    
-        # Get the appropriate instance types based on the strategy
-        if strategy == 'on-demand' and 'on-demand' in instance_selections:
-            # For on-demand strategy, only use the on-demand instance types
+        # Build the full list of instance types
+        if strategy == 'on-demand' and instance_selections.get('on-demand'):
             all_instance_types = instance_selections['on-demand']
-            print(f"DEBUG: Selected on-demand instance types: {all_instance_types}")
-        
-        elif strategy == 'spot' and 'spot' in instance_selections:
-            # For spot strategy, only use the spot instance types
+        elif strategy == 'spot' and instance_selections.get('spot'):
             all_instance_types = instance_selections['spot']
-            print(f"DEBUG: Selected spot instance types: {all_instance_types}")
-        
         elif strategy == 'mixed':
-            # For mixed strategy, include both on-demand and spot types
-            mixed_instance_types = []
-        
-            # Add on-demand types first (they get priority in the ASG)
-            if 'on-demand' in instance_selections:
-                mixed_instance_types.extend(instance_selections['on-demand'])
-            
-            # Then add spot types
-            if 'spot' in instance_selections:
-                # Add any spot types that aren't already in the list
-                for spot_type in instance_selections['spot']:
-                    if spot_type not in mixed_instance_types:
-                        mixed_instance_types.append(spot_type)
-                    
-            all_instance_types = mixed_instance_types
-            print(f"DEBUG: Mixed strategy instance types: {all_instance_types}")
+            combined = instance_selections.get('on-demand', []) + instance_selections.get('spot', [])
+            # Remove duplicates, preserve order
+            seen = set()
+            all_instance_types = []
+            for t in combined:
+                if t not in seen:
+                    all_instance_types.append(t)
+                    seen.add(t)
+        else:
+            raise ValueError("No instance types selected for ASG strategy!")
 
-        # Get availability zones
+        # Get availability zones for the region
         ec2_client = boto3.client(
             'ec2',
             aws_access_key_id=cred_info.access_key,
             aws_secret_access_key=cred_info.secret_key,
             region_name=region
         )
-
         azs_response = ec2_client.describe_availability_zones()
         availability_zones = [az['ZoneName'] for az in azs_response['AvailabilityZones']]
 
-        # Prompt for capacity settings
-        #declare default value
+        # Capacity settings (can be customized or prompted)
         min_size, desired_capacity, max_size = (1, 1, 3)
-       # min_size, desired_capacity, max_size = self.prompt_capacity_settings()
-
-        # Update ASG naming format to include random 4-character suffix
         asg_name = f"asg-{cred_info.account_name}-{strategy}-{suffix}"
-
-        # Verify that we have instance types before continuing
-        if not all_instance_types:
-            error_msg = f"No instance types selected for {strategy} strategy!"
-            print(f"❌ {error_msg}")
-            raise ValueError(error_msg)
 
         return ASGConfig(
             name=asg_name,
@@ -1153,6 +1130,7 @@ class AutoScalingGroupManager:
             spot_allocation_strategy='capacity-optimized' if strategy in ['spot', 'mixed'] else None,
             on_demand_percentage=instance_selections.get('on_demand_percentage', 50) if strategy == 'mixed' else None
         )
+
     def prompt_capacity_settings(self) -> Tuple[int, int, int]:
         """Prompt user for ASG capacity settings"""
         print("\n" + "="*50)
@@ -1253,7 +1231,6 @@ class AutoScalingGroupManager:
         except Exception as e:
             self.log_operation('WARNING', f"Failed to load unsupported AZs from mapping file: {str(e)}")
 
-
     def attach_scheduled_actions(self, asg_client, asg_name: str, region: str) -> bool:
         """Attach scheduled scaling actions directly to the ASG with conflict handling"""
         try:
@@ -1282,32 +1259,32 @@ class AutoScalingGroupManager:
             unique_start_time = tomorrow.replace(
                 hour=0, minute=0, second=0, microsecond=0
             ) + timedelta(seconds=offset_seconds)
-        
-            # Business hours (8 AM IST = 2:30 AM UTC)
+
+            # Business hours (11 AM IST = 5:30 AM UTC)
             scale_up_name = f"{asg_name}-scale-up"
             asg_client.put_scheduled_update_group_action(
                 AutoScalingGroupName=asg_name,
                 ScheduledActionName=scale_up_name,
                 StartTime=unique_start_time,
-                Recurrence="30 2 * * 1-5",  # 2 AM UTC (8 AM IST), Monday-Friday
+                Recurrence="30 5 * * *",  # 5:30 AM UTC (11:00 AM IST), All days
                 MinSize=1,
                 MaxSize=3,
                 DesiredCapacity=1
             )
-            print(f"✅ Created scale-up action: {scale_up_name} (starts at 8:00 AM IST on weekdays)")
-        
-            # After business hours (7 PM IST = 1:30 PM UTC)
+            print(f"✅ Created scale-up action: {scale_up_name} (starts at 11:00 AM IST on weekdays)")
+
+            # After business hours (9 PM IST = 3:30 PM UTC)
             scale_down_name = f"{asg_name}-scale-down"
             asg_client.put_scheduled_update_group_action(
                 AutoScalingGroupName=asg_name,
                 ScheduledActionName=scale_down_name,
                 StartTime=unique_start_time + timedelta(minutes=1),  # Ensure different start time
-                Recurrence="30 13 * * 1-5",  # 1 PM UTC (7 PM IST), Monday-Friday
+                Recurrence="30 15 * * *",  # 3:30 PM UTC (9:00 PM IST), All days
                 MinSize=0,
                 MaxSize=3,
                 DesiredCapacity=0
             )
-            print(f"✅ Created scale-down action: {scale_down_name} (starts at 7:00 PM IST on weekdays)")
+            print(f"✅ Created scale-down action: {scale_down_name} (starts at 9:00 PM IST on weekdays)")
             print(f"🗓️ Scaling actions will begin tomorrow and repeat on weekdays thereafter")
         
             print(f"✅ Scheduled scaling actions attached to ASG {asg_name}")

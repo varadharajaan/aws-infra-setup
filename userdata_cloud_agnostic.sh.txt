@@ -1,0 +1,132 @@
+#!/bin/bash
+set -e
+
+echo "📦 Detecting OS..."
+if [ -f /etc/os-release ]; then
+  source /etc/os-release
+  OS=$ID
+  VERSION=$VERSION_ID
+else
+  echo "❌ Cannot detect OS version"
+  exit 1
+fi
+echo "🔎 OS Detected: $OS $VERSION"
+
+# Detect cloud provider
+echo "🌐 Detecting cloud vendor..."
+if curl -s --connect-timeout 1 http://169.254.169.254/latest/meta-data/ >/dev/null; then
+    CLOUD_VENDOR="aws"
+elif curl -s --connect-timeout 1 -H "Metadata:true" "http://169.254.169.254/metadata/instance?api-version=2021-02-01" | grep azure >/dev/null; then
+    CLOUD_VENDOR="azure"
+elif curl -s --connect-timeout 1 http://metadata.google.internal >/dev/null; then
+    CLOUD_VENDOR="gcp"
+elif curl -s --connect-timeout 1 http://169.254.169.254/opc/v1/instance/ >/dev/null; then
+    CLOUD_VENDOR="oci"
+else
+    CLOUD_VENDOR="unknown"
+fi
+echo "☁️ Cloud Vendor: $CLOUD_VENDOR"
+
+# Set package manager
+if command -v apt >/dev/null 2>&1; then
+  PKG_UPDATE="sudo apt update -y"
+  PKG_INSTALL="sudo apt install -y"
+elif command -v dnf >/dev/null 2>&1; then
+  PKG_UPDATE="sudo dnf update -y"
+  PKG_INSTALL="sudo dnf install -y"
+elif command -v yum >/dev/null 2>&1; then
+  PKG_UPDATE="sudo yum update -y"
+  PKG_INSTALL="sudo yum install -y"
+elif command -v zypper >/dev/null 2>&1; then
+  PKG_UPDATE="sudo zypper refresh"
+  PKG_INSTALL="sudo zypper install -y"
+else
+  echo "❌ Unsupported package manager"
+  exit 1
+fi
+
+echo "📦 Updating system..."
+eval "$PKG_UPDATE"
+
+echo "📥 Installing base packages..."
+eval "$PKG_INSTALL git vim htop curl wget unzip python3-pip jq docker conntrack openssl"
+
+# Enable Docker
+echo "🔧 Enabling Docker service..."
+sudo systemctl enable --now docker || true
+
+# Get default user
+DEFAULT_USER=$(getent passwd 1000 | cut -d: -f1)
+DEFAULT_USER=${DEFAULT_USER:-ec2-user}
+echo "👤 Default user: $DEFAULT_USER"
+sudo usermod -aG docker "$DEFAULT_USER"
+
+# Create demouser
+echo "👤 Creating user 'demouser'..."
+sudo useradd -m demouser || true
+echo "demouser:demouser@123" | sudo chpasswd
+echo "demouser ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/demouser
+
+# SSH password auth setup
+echo "🔐 Enabling SSH password login..."
+sudo sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
+sudo sed -i 's/^#\?ChallengeResponseAuthentication.*/ChallengeResponseAuthentication yes/' /etc/ssh/sshd_config
+sudo systemctl restart sshd || sudo systemctl restart ssh || true
+
+# Disable requiretty (for sudo in some OS)
+sudo sed -i 's/^Defaults\s\+requiretty/#Defaults requiretty/' /etc/sudoers || true
+
+# AWS CLI config if AWS credentials provided
+echo "☁️ Configuring AWS CLI for $DEFAULT_USER..."
+sudo -u "$DEFAULT_USER" mkdir -p /home/"$DEFAULT_USER"/.aws
+sudo chown -R "$DEFAULT_USER":"$DEFAULT_USER" /home/"$DEFAULT_USER"/.aws
+
+if [[ -n "${AWS_ACCESS_KEY_ID}" && -n "${AWS_SECRET_ACCESS_KEY}" ]]; then
+  sudo -u "$DEFAULT_USER" aws configure set aws_access_key_id "$AWS_ACCESS_KEY_ID"
+  sudo -u "$DEFAULT_USER" aws configure set aws_secret_access_key "$AWS_SECRET_ACCESS_KEY"
+  sudo -u "$DEFAULT_USER" aws configure set default.region "${AWS_DEFAULT_REGION:-us-east-1}"
+  sudo -u "$DEFAULT_USER" aws configure set default.output text
+  sudo -u "$DEFAULT_USER" aws sts get-caller-identity || echo "⚠️ Invalid AWS credentials"
+else
+  echo "⚠️ AWS credentials not found in environment. Skipping CLI config."
+fi
+
+# Install kubectl
+echo "📦 Installing kubectl..."
+curl -LO "https://dl.k8s.io/release/$(curl -Ls https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+chmod +x kubectl
+sudo mv kubectl /usr/local/bin/kubectl
+
+# Install eksctl
+echo "📦 Installing eksctl..."
+curl -sL "https://github.com/eksctl-io/eksctl/releases/latest/download/eksctl_Linux_amd64.tar.gz" | tar xz -C /tmp
+sudo mv /tmp/eksctl /usr/local/bin
+
+# Install Minikube (RPM or binary depending on distro)
+echo "📦 Installing Minikube..."
+if [[ "$OS" == "amzn" || "$OS" == "rhel" || "$OS" == "centos" || "$OS" == "oracle" ]]; then
+  curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-latest.x86_64.rpm
+  sudo rpm -Uvh minikube-latest.x86_64.rpm
+else
+  curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
+  sudo install minikube-linux-amd64 /usr/local/bin/minikube
+fi
+
+# EC2 Instance Connect (if on AWS + supported OS)
+if [[ "$CLOUD_VENDOR" == "aws" && ( "$OS" == "amzn" || "$OS" == "ubuntu" ) ]]; then
+  echo "📦 Installing EC2 Instance Connect..."
+  eval "$PKG_INSTALL ec2-instance-connect"
+else
+  echo "⚠️ Skipping EC2 Instance Connect (not AWS or unsupported OS)"
+fi
+
+# Final summary
+echo ""
+echo "✅ Setup completed at $(date)"
+echo "🔍 Tool Versions:"
+echo "Docker:    $(docker --version)"
+echo "kubectl:   $(kubectl version --client --short)"
+echo "eksctl:    $(eksctl version)"
+echo "Minikube:  $(minikube version | grep version || true)"
+echo "AWS CLI:   $(aws --version)"
+echo "User data script completed successfully at $(date)" > /tmp/userdata-completion.log

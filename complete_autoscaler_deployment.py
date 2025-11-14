@@ -660,7 +660,7 @@ spec:
         self.print_colored(self.colors.WHITE, f"   • Tagged ASGs: {len(tagged_asgs)}", 1)
         self.print_colored(self.colors.WHITE, f"   • Deployment Time: {elapsed_time:.1f} seconds", 1)
         self.print_colored(self.colors.WHITE, f"   • Fast Scaling: 4 minute delays configured", 1)
-        self.print_colored(self.colors.WHITE, f"   • Protected Nodes: Nodes with label 'no-delete=true' will be skipped", 1)
+        self.print_colored(self.colors.WHITE, f"   • Protected Nodes: Nodes with label 'no_delete=true' will be skipped", 1)
 
         self.print_colored(self.colors.YELLOW, "\n🧪 Testing Commands:")
         self.print_colored(self.colors.WHITE, "   # Scale up test (trigger node addition):", 1)
@@ -701,7 +701,7 @@ spec:
             self.print_colored(self.colors.WHITE, f"   • Access Key: {access_key[:8]}...", 1)
             self.print_colored(self.colors.WHITE, f"   • Account ID: {account_id}", 1)
             self.print_colored(self.colors.WHITE, f"   • Fast Scaling: 4 minute delays", 1)
-            self.print_colored(self.colors.WHITE, f"   • Protected Nodes: Using 'no-delete=true' label", 1)
+            self.print_colored(self.colors.WHITE, f"   • Protected Nodes: Using 'no_delete=true' label", 1)
             
             # Step 1: Check prerequisites
             if not self.check_prerequisites():

@@ -207,15 +207,15 @@ class EKSClusterContinuationFromErrors:
                 cluster_name = cluster_info['cluster_name']
                 error_msg = cluster_info['error_message']
 
-                # Extract region from cluster name if possible
-                parts = cluster_name.split('-')
-                region = 'unknown'
-                if len(parts) >= 4:
-                    for part in parts:
-                        if part.startswith('us-') or part.startswith('eu-') or part.startswith(
-                                'ap-') or part.startswith('ca-') or part.startswith('sa-'):
-                            region = part
-                            break
+                # Extract region from cluster name using regex
+                import re
+                region_pattern = r'(us|eu|ap|ca|sa|me|af)-(east|west|north|south|central|northeast|northwest|southeast|southwest)-\d+'
+                region_match = re.search(region_pattern, cluster_name)
+
+                if region_match:
+                    region = region_match.group(0)
+                else:
+                    region = 'unknown'
 
                 print(f"  {i}. {cluster_name}")
                 print(f"     Region: {region}")
@@ -1551,8 +1551,8 @@ class EKSClusterContinuationFromErrors:
                         self.print_colored('RED', f"❌ Cluster {cluster_name} verification failed")
                         continue
 
-                    # Analyze existing components
-                    #self.analyze_existing_components(cluster_name, region, admin_access_key, admin_secret_key)
+                    #Analyze existing components
+                    self.analyze_existing_components(cluster_name, region, admin_access_key, admin_secret_key)
 
                     # Main configuration loop for this cluster
                     print(f"\n🔧 Starting configuration for {cluster_name}...")
@@ -1592,7 +1592,7 @@ class EKSClusterContinuationFromErrors:
         """Configure a single cluster interactively"""
         try:
             # Show status once at the start
-            self.display_cluster_status()
+            self.display_cluster_status()  # ← Fixed indentation
 
             while True:
                 changed = False
@@ -1633,10 +1633,33 @@ class EKSClusterContinuationFromErrors:
                     )
                 elif choice_num == 11:
                     self.print_colored(Colors.CYAN, "\n🔒 Setting up node protection with NO_DELETE labels...")
-                    self.eks_manager.apply_no_delete_to_matching_nodegroups(cluster_name, region, access_key,
-                                                                            secret_key)
+
+                    # Apply initial node protection
+                    protection_result = self.eks_manager.apply_no_delete_to_matching_nodegroups(
+                        cluster_name, region, access_key, secret_key
+                    )
+
                     self.eks_manager.protect_nodes_with_no_delete_label(cluster_name, region, access_key, secret_key)
-                    changed = True
+
+                    nodegroup_names = protection_result.get('all_nodegroups', [])
+
+                    if protection_result.get('success'):
+                        self.print_colored(Colors.GREEN, f"✅ Initial node protection applied")
+
+                        # Setup automated monitoring
+                        self.print_colored(Colors.YELLOW, f"\n⏰ Setting up automated node protection monitoring...")
+                        monitoring_setup = self.eks_manager.setup_node_protection_monitoring(
+                            cluster_name, region, access_key, secret_key, nodegroup_names
+                        )
+
+                        if monitoring_setup:
+                            self.print_colored(Colors.GREEN, f"✅ Automated node protection monitoring enabled")
+                            self.print_colored(Colors.CYAN,
+                                               f"   📋 Lambda will run every time a ec2 is terminated to ensure node protection")
+                        else:
+                            self.print_colored(Colors.YELLOW,
+                                               f"⚠️ Automated monitoring setup failed - manual monitoring required")
+
                 elif choice_num == 12:
                     self.print_colored(Colors.CYAN, "\n🔒 Configuring custom cloudwatch agent...")
                     if False:
@@ -1648,10 +1671,10 @@ class EKSClusterContinuationFromErrors:
                 else:
                     self.print_colored(Colors.RED, f"❌ Invalid choice: {choice_num}")
 
-                # Only re-analyze and show status if something changed
-                if changed:
-                    self.analyze_existing_components(cluster_name, region, access_key, secret_key)
-                    self.display_cluster_status()
+                # # Only re-analyze and show status if something changed
+                # if changed:
+                #     self.analyze_existing_components(cluster_name, region, access_key, secret_key)
+                #     self.display_cluster_status()
 
                 continue_choice = input("\nContinue configuring this cluster? (Y/n): ").strip().lower()
                 if continue_choice == 'n':
@@ -2017,7 +2040,7 @@ class EKSClusterContinuationFromErrors:
             # Validate values
             if min_size < 0 or desired_size < 0 or max_size < 0:
                 print("❌ Negative values are not allowed. Using defaults.")
-                min_size, desired_size, max_size = 1, 1, 3
+                min_size, desired_size, max_size = 1, 1, 8
 
             if min_size > desired_size or desired_size > max_size:
                 print("❌ Invalid values (should be min ≤ desired ≤ max). Adjusting...")
@@ -2027,7 +2050,7 @@ class EKSClusterContinuationFromErrors:
 
         except ValueError:
             print("❌ Invalid number format. Using defaults.")
-            min_size, desired_size, max_size = 1, 1, 3
+            min_size, desired_size, max_size = 1, 1, 8
 
         # Instance selections based on strategy
         instance_selections = {}
@@ -2493,8 +2516,8 @@ class EKSClusterContinuationFromErrors:
                     if not self.verify_cluster_exists(cluster_name, region, access_key, secret_key):
                         self.print_colored(Colors.RED, f"❌ Could not access cluster {cluster_name}, skipping")
                         continue
+                    self.print_colored(Colors.GREEN, f"✅ Cluster {cluster_name} is accessible")
 
-                    # Analyze existing components
                     self.analyze_existing_components(cluster_name, region, access_key, secret_key)
 
                     # Configure the cluster
@@ -2625,9 +2648,9 @@ def main():
     print("=" * 60)
 
     try:
-        #cluster_names= ['eks-cluster-account01_clouduser01-us-east-1-igku']
+        cluster_names= ['eks-cluster-account02_clouduser02-us-east-2-vlch']
         continuation = EKSClusterContinuationFromErrors()
-        cluster_names = continuation.select_clusters_from_eks_accounts()
+        #cluster_names = continuation.select_clusters_from_eks_accounts()
         #success = continuation.continue_cluster_setup_from_errors()
         success = continuation.reconfigure_cluster(cluster_names)
 

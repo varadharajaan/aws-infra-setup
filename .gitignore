@@ -12,6 +12,8 @@ __pycache__/
 
 ./aws
 ./aws/*
+aws_bk/*
+./aws_bk/*
 ./cache
 ./cache/*
 /logs
@@ -152,3 +154,11 @@ get-pipx.py
 user_mini_instructions_*
 reports/*
 aws_bkk/*
+./aws_bkk/*
+sanitized_iam_users_credentials*
+user_mapping*
+user_mapping.json
+user_mapping-bk.json
+
+*_*_*_report.html
+account0*.html

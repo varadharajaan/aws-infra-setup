@@ -30,4 +30,4 @@ echo -e "\n🏗️ NODEGROUP TAGS CHECK:"
 aws ec2 describe-instances \
     --filters "Name=tag:eks:cluster-name,Values=eks-cluster-root-account03-us-west-1-diuh" \
     --region us-west-1 \
-    --query 'Reservations[].Instances[].Tags[?Key==`k8s.io/cluster-autoscaler/enabled` || Key==`k8s.io/cluster-autoscaler/eks-cluster-root-account03-us-west-1-diuh`]' 2>/dev/null || echo "Cannot check instance tags"
+    --query 'Reservations[].Instances[].Tags[?Key==`k8s.io/cluster-autoscaler/enabled` || Key==`k8s.io/cluster-autoscaler/eks-cluster-account01_clouduser01-us-east-1-rtip`]' 2>/dev/null || echo "Cannot check instance tags"

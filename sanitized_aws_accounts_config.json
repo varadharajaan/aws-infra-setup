@@ -1,67 +1,223 @@
 {
   "accounts": {
-    "account01": {
-      "account_id": "145548337206",
-      "email": "varadharajan_cloud_002@proton.me",
-      "access_key": "AKIAS**********PGQWV",
-      "secret_key": "N8/PJ******************************xdRRK",
+    "account06": {
+      "account_id": "407291110373",
+      "email": "clouduser.aws.demo.account@proton.me",
+      "password": "mym******23@",
+      "canonical_user_id": "277******bed",
+      "Billing": {
+        "billing_method": "Pay-As-You-Go",
+        "currency": "ZAR",
+        "billing_cycle": "Monthly",
+        "payment_method": "Credit Card",
+        "payment_card_short": {
+          "card_type": "Amex",
+          "last_four_digits": "1005",
+          "card_name": "Platinum Reserve"
+        },
+        "billing_address": {
+          "street": "NO ******ank",
+          "city": "Cud******ore",
+          "state": "Tam******adu",
+          "zip_code": "******",
+          "country": "*****"
+        },
+        "billing_country": "zimbabwe",
+        "billing_country_short": "ZW",
+        "phone_county_code": "+263"
+      },
+      "access_key": "AKI******RKL",
+      "secret_key": "E7M******Zjk",
+      "backup_access_key": "AKI******C3J",
+      "backup_secret_key": "Fw3******dku",
       "users_per_account": 5
     },
     "account02": {
-      "account_id": "996335889295",
-      "email": "varadharajan.ai@pm.me",
-      "access_key": "AKIA6**********MQ5X3",
-      "secret_key": "lSslP******************************DRhc4",
+      "account_id": "891086154038",
+      "email": "varad.automation.env@protonmail.ch",
+      "password": "mym******23@",
+      "canonical_user_id": "3d0******a47",
+      "Billing": {
+        "billing_method": "Pay-As-You-Go",
+        "currency": "ZAR",
+        "billing_cycle": "Monthly",
+        "payment_method": "Credit Card",
+        "payment_card_short": {
+          "card_type": "Amex",
+          "last_four_digits": "1005",
+          "card_name": "Platinum Reserve"
+        },
+        "billing_address": {
+          "street": "NO ******ank",
+          "city": "Cud******ore",
+          "state": "Tam******adu",
+          "zip_code": "******",
+          "country": "*****"
+        },
+        "billing_country": "zimbabwe",
+        "billing_country_short": "ZW",
+        "phone_county_code": "+263"
+      },
+      "access_key": "AKI******HVD",
+      "secret_key": "Rc2******SJk",
+      "backup_access_key": "AKI******CVZ",
+      "backup_secret_key": "Z3m******vyE",
       "users_per_account": 5
     },
     "account03": {
-      "account_id": "534739421744",
-      "email": "varadharajan.ai@proton.me",
-      "access_key": "AKIAX**********IU6GG",
-      "secret_key": "SU4fu******************************mgnlc",
+      "account_id": "912405945861",
+      "email": "rohit.infra.builds@protonmail.ch",
+      "password": "mym******23@",
+      "canonical_user_id": "daa******ce6",
+      "Billing": {
+        "billing_method": "Pay-As-You-Go",
+        "currency": "ZAR",
+        "billing_cycle": "Monthly",
+        "payment_method": "Credit Card",
+        "payment_card_short": {
+          "card_type": "Amex",
+          "last_four_digits": "1005",
+          "card_name": "Platinum Reserve"
+        },
+        "billing_address": {
+          "street": "NO ******ank",
+          "city": "Cud******ore",
+          "state": "Tam******adu",
+          "zip_code": "******",
+          "country": "*****"
+        },
+        "billing_country": "zimbabwe",
+        "billing_country_short": "ZW",
+        "phone_county_code": "+263"
+      },
+      "access_key": "AKI******6PV",
+      "secret_key": "llj******7st",
+      "backup_access_key": "AKI******3HM",
+      "backup_secret_key": "h9O******0G3",
       "users_per_account": 5
     },
     "account04": {
-      "account_id": "135521914217",
-      "email": "mergerawsaccount001@proton.me",
-      "access_key": "AKIAR**********2NNVL",
-      "secret_key": "pQbRr******************************0vjJG",
-      "users_per_account": 6
-    },
-    "account05": {
-      "account_id": "984974410376",
-      "email": "varadharajan_cloud_001@proton.me",
-      "access_key": "AKIA6**********HGC3P",
-      "secret_key": "05ifH******************************B1ow1",
+      "account_id": "797065139755",
+      "email": "mark.trialstack.dev@protonmail.ch",
+      "password": "mym******23@",
+      "canonical_user_id": "9df******a07",
+      "Billing": {
+        "billing_method": "Pay-As-You-Go",
+        "currency": "ZAR",
+        "billing_cycle": "Monthly",
+        "payment_method": "Credit Card",
+        "payment_card_short": {
+          "card_type": "Amex",
+          "last_four_digits": "1005",
+          "card_name": "Platinum Reserve"
+        },
+        "billing_address": {
+          "street": "NO ******ank",
+          "city": "Cud******ore",
+          "state": "Tam******adu",
+          "zip_code": "******",
+          "country": "*****"
+        },
+        "billing_country": "zimbabwe",
+        "billing_country_short": "ZW",
+        "phone_county_code": "+263"
+      },
+      "access_key": "AKI******DGA",
+      "secret_key": "aJA******HNF",
+      "backup_access_key": "AKI******HNR",
+      "backup_secret_key": "Zn3******0C2",
       "users_per_account": 0
     },
-    "account06": {
-      "account_id": "984974410376",
-      "email": "varadharajaan@proton.me",
-      "access_key": "AKIA6**********HGC3P",
-      "secret_key": "05ifH******************************B1ow1",
+    "account05": {
+      "account_id": "914559461113",
+      "email": "david.holloway.workbox@proton.me",
+      "password": "mym******23@",
+      "canonical_user_id": "7ee******590",
+      "Billing": {
+        "billing_method": "Pay-As-You-Go",
+        "currency": "ZAR",
+        "billing_cycle": "Monthly",
+        "payment_method": "Credit Card",
+        "payment_card_short": {
+          "card_type": "Amex",
+          "last_four_digits": "1005",
+          "card_name": "Platinum Reserve"
+        },
+        "billing_address": {
+          "street": "NO ******ank",
+          "city": "Cud******ore",
+          "state": "Tam******adu",
+          "zip_code": "******",
+          "country": "*****"
+        },
+        "billing_country": "zimbabwe",
+        "billing_country_short": "ZW",
+        "phone_county_code": "+263"
+      },
+      "access_key": "AKI******BUA",
+      "secret_key": "a90******MyT",
+      "backup_access_key": "AKI******77C",
+      "backup_secret_key": "Z8X******sF+",
+      "users_per_account": 0
+    },
+    "account01": {
+      "account_id": "145548337206",
+      "email": "varadharajan_cloud_002@proton.me",
+      "password": "mym******23@",
+      "canonical_user_id": "04b******b0e",
+      "Billing": {
+        "billing_method": "Pay-As-You-Go",
+        "currency": "ZAR",
+        "billing_cycle": "Monthly",
+        "payment_method": "Credit Card",
+        "payment_card_short": {
+          "card_type": "Amex",
+          "last_four_digits": "1005",
+          "card_name": "Platinum Reserve"
+        },
+        "billing_address": {
+          "street": "NO ******ank",
+          "city": "Cud******ore",
+          "state": "Tam******adu",
+          "zip_code": "******",
+          "country": "*****"
+        },
+        "billing_country": "zimbabwe",
+        "billing_country_short": "ZW",
+        "phone_county_code": "+263"
+      },
+      "access_key": "AKI******QWV",
+      "secret_key": "N8/******RRK",
+      "backup_access_key": "AKI******RVX",
+      "backup_secret_key": "lP2******jtn",
       "users_per_account": 0
     }
   },
   "user_settings": {
     "password": "DemoUser@123",
     "allowed_instance_types": [
-      "t2.micro",
-      "t3.micro",
+      "t2.small",
+      "t2.medium",
+      "t3.small",
       "t3.medium",
-      "t3a.medium",
-      "t4g.medium",
       "t3.large",
+      "t3a.small",
+      "t3a.medium",
       "t3a.large",
-      "t4g.large",
+      "c4.large",
+      "c5.large",
+      "c5a.large",
       "c6a.large",
       "c6i.large",
-      "c5.large",
+      "m4.large",
+      "m5.large",
+      "m5a.large",
       "m6a.large",
-      "m6i.large",
-      "m5.large"
+      "r5.large",
+      "r5a.large",
+      "r6a.large"
     ],
-    "users_per_account": 5,
+    "users_per_account": 4,
     "user_regions": [
       "us-east-1",
       "us-east-2",
@@ -70,9 +226,9 @@
       "ap-south-1"
     ]
   },
-  "default_instance_type": "t3.micro",
+  "default_instance_type": "t3.medium",
   "metadata": {
-    "created_at": "2025-06-25 08:56:22",
+    "created_at": "2025-07-05 20:09:48",
     "sanitized": true,
     "created_by": "varadharajaan",
     "source_file": "aws_accounts_config.json"

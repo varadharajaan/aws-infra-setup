@@ -868,6 +868,173 @@ class EKSClusterManager:
                 
         except Exception as e:
             logger.error(f"Error during resource cleanup: {e}")
+
+    def cleanup_node_protection_lambda_functions(self, session: boto3.Session, cluster_name: str, region: str) -> bool:
+        """Clean up Lambda functions and EventBridge rules associated with node protection monitoring"""
+        try:
+            logger.info(f"Cleaning up node protection Lambda functions for cluster: {cluster_name}")
+            print(f"   🔍 Searching for node protection Lambda functions related to cluster {cluster_name}...")
+
+            # Extract cluster suffix for matching
+            cluster_parts = cluster_name.split('-')
+            if len(cluster_parts) >= 2:
+                cluster_suffix = cluster_parts[-1]
+            else:
+                cluster_suffix = cluster_name
+
+            logger.info(f"Using cluster suffix for node protection matching: {cluster_suffix}")
+
+            lambda_client = session.client('lambda', region_name=region)
+
+            # List all Lambda functions (use paginator to handle large numbers)
+            paginator = lambda_client.get_paginator('list_functions')
+
+            deleted_functions = []
+            for page in paginator.paginate():
+                for function in page.get('Functions', []):
+                    function_name = function['FunctionName']
+                    function_arn = function['FunctionArn']
+
+                    # Check if function is related to node protection monitoring
+                    if (f"node-protection-monitor-eks-{cluster_suffix}" in function_name or
+                            f"node-protection-monitor-{cluster_name}" in function_name or
+                            (function_name.startswith(
+                                "node-protection-monitor-eks") and cluster_suffix in function_name)):
+
+                        logger.info(f"Found node protection Lambda function: {function_name}")
+
+                        # Get function tags to confirm association when possible
+                        try:
+                            tags_response = lambda_client.list_tags(Resource=function_arn)
+                            tags = tags_response.get('Tags', {})
+
+                            # Additional confirmation via tags when available
+                            tag_match = (tags.get('Cluster') == cluster_name or
+                                         tags.get('cluster') == cluster_name or
+                                         tags.get('ClusterSuffix') == cluster_suffix or
+                                         'node-protection' in tags.get('Purpose', '').lower() or
+                                         cluster_name in tags.get('Purpose', '') or
+                                         cluster_suffix in tags.get('Purpose', ''))
+
+                            # Delete if name pattern matches or tags confirm association
+                            if (f"node-protection-monitor-eks-{cluster_suffix}" in function_name or
+                                    f"node-protection-monitor-{cluster_name}" in function_name or
+                                    tag_match):
+
+                                logger.info(f"Deleting node protection Lambda function: {function_name}")
+
+                                # Delete event source mappings first
+                                try:
+                                    mappings_response = lambda_client.list_event_source_mappings(
+                                        FunctionName=function_name
+                                    )
+                                    for mapping in mappings_response.get('EventSourceMappings', []):
+                                        lambda_client.delete_event_source_mapping(
+                                            UUID=mapping['UUID']
+                                        )
+                                        logger.info(f"Deleted event source mapping: {mapping['UUID']}")
+                                except ClientError as e:
+                                    logger.warning(f"Error deleting event source mappings: {e}")
+
+                                # Delete the function
+                                lambda_client.delete_function(FunctionName=function_name)
+                                deleted_functions.append(function_name)
+
+                        except ClientError as e:
+                            logger.warning(f"Error processing node protection Lambda function {function_name}: {e}")
+
+            if deleted_functions:
+                logger.info(
+                    f"Successfully deleted {len(deleted_functions)} node protection Lambda functions: {deleted_functions}")
+                print(
+                    f"   ✅ Deleted {len(deleted_functions)} node protection Lambda functions related to cluster {cluster_name}")
+            else:
+                logger.info(f"No node protection Lambda functions found for deletion related to cluster {cluster_name}")
+                print(f"   ℹ️ No node protection Lambda functions found related to cluster {cluster_name}")
+
+            # Clean up CloudWatch Events/EventBridge rules for node protection
+            events_client = session.client('events', region_name=region)
+            try:
+                # Try matching with node protection rule patterns
+                rule_prefixes = [
+                    f"node-protection-monitor-eks-{cluster_suffix}",
+                    f"node-protection-monitor-{cluster_name}",
+                    f"node-protection-{cluster_suffix}",
+                    f"eks-node-protection-{cluster_suffix}"
+                ]
+
+                deleted_rules = []
+
+                # Check for each potential rule prefix
+                for prefix in rule_prefixes:
+                    try:
+                        rules_response = events_client.list_rules(NamePrefix=prefix)
+                        for rule in rules_response.get('Rules', []):
+                            rule_name = rule['Name']
+                            logger.info(f"Found node protection EventBridge rule: {rule_name}")
+
+                            try:
+                                # Remove targets first
+                                targets_response = events_client.list_targets_by_rule(Rule=rule_name)
+                                if targets_response.get('Targets'):
+                                    target_ids = [target['Id'] for target in targets_response['Targets']]
+                                    events_client.remove_targets(Rule=rule_name, Ids=target_ids)
+                                    logger.info(f"Removed {len(target_ids)} targets from rule {rule_name}")
+
+                                # Delete the rule
+                                events_client.delete_rule(Name=rule_name)
+                                deleted_rules.append(rule_name)
+                                logger.info(f"Deleted node protection EventBridge rule: {rule_name}")
+                            except ClientError as e:
+                                logger.warning(f"Error deleting node protection EventBridge rule {rule_name}: {e}")
+                    except ClientError as e:
+                        logger.debug(f"No matching node protection rules found for prefix {prefix}: {e}")
+
+                # Also check for rules that might contain the cluster name or suffix
+                try:
+                    all_rules_response = events_client.list_rules()
+                    for rule in all_rules_response.get('Rules', []):
+                        rule_name = rule['Name']
+                        if (('node-protection' in rule_name.lower() or 'nodeprotection' in rule_name.lower()) and
+                                (cluster_name in rule_name or cluster_suffix in rule_name)):
+
+                            if rule_name not in deleted_rules:  # Avoid duplicate deletion
+                                logger.info(f"Found additional node protection EventBridge rule: {rule_name}")
+                                try:
+                                    # Remove targets first
+                                    targets_response = events_client.list_targets_by_rule(Rule=rule_name)
+                                    if targets_response.get('Targets'):
+                                        target_ids = [target['Id'] for target in targets_response['Targets']]
+                                        events_client.remove_targets(Rule=rule_name, Ids=target_ids)
+                                        logger.info(f"Removed {len(target_ids)} targets from rule {rule_name}")
+
+                                    # Delete the rule
+                                    events_client.delete_rule(Name=rule_name)
+                                    deleted_rules.append(rule_name)
+                                    logger.info(f"Deleted additional node protection EventBridge rule: {rule_name}")
+                                except ClientError as e:
+                                    logger.warning(
+                                        f"Error deleting additional node protection EventBridge rule {rule_name}: {e}")
+                except ClientError as e:
+                    logger.debug(f"Error checking for additional node protection rules: {e}")
+
+                if deleted_rules:
+                    logger.info(f"Successfully deleted {len(deleted_rules)} node protection EventBridge rules")
+                    print(
+                        f"   ✅ Deleted {len(deleted_rules)} node protection EventBridge rules related to cluster {cluster_name}")
+                else:
+                    logger.info("No relevant node protection EventBridge rules found for deletion")
+
+            except ClientError as e:
+                logger.warning(f"Error cleaning up node protection EventBridge rules: {e}")
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Error cleaning up node protection Lambda functions: {e}")
+            print(f"   ❌ Failed to clean up node protection Lambda functions: {e}")
+            return False
+
     
     def delete_cluster(self, cluster_data: Dict) -> bool:
         """Delete a single EKS cluster with comprehensive cleanup"""
@@ -906,6 +1073,7 @@ class EKSClusterManager:
                     self.cleanup_prometheus_scrapers(session, cluster_name, region)
                     self.cleanup_lambda_functions(session, cluster_name, region)
                     self.delete_all_event_rules(session, cluster_name, region)
+                    self.cleanup_node_protection_lambda_functions(session, cluster_name, region)
                     return True
 
             except ClientError as e:
@@ -915,6 +1083,8 @@ class EKSClusterManager:
                     self.cleanup_prometheus_scrapers(session, cluster_name, region)
                     self.cleanup_lambda_functions(session, cluster_name, region)
                     self.delete_all_event_rules(session, cluster_name, region)
+                    self.cleanup_node_protection_lambda_functions(session, cluster_name, region)
+
                     return True
                 else:
                     logger.error(f"Error checking cluster status: {e}")
@@ -933,6 +1103,11 @@ class EKSClusterManager:
             logger.info("Step 3: Cleaning up Lambda functions...")
             if not self.cleanup_lambda_functions(session, cluster_name, region):
                 logger.warning("Some Lambda functions may not have been cleaned up properly")
+
+            logger.info("Step 3.5: Cleaning up node protection Lambda functions...")
+            if not self.cleanup_node_protection_lambda_functions(session, cluster_name, region):
+                logger.warning("Some node protection Lambda functions may not have been cleaned up properly")
+
             
             # Step 3: Delete addons
             logger.info("Step 4: Deleting cluster addons...")

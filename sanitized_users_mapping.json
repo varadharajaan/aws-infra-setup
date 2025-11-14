@@ -1,0 +1,117 @@
+{
+  "metadata": {
+    "last_updated": "2025-07-04 12:45:00",
+    "updated_by": "varadharajaan",
+    "total_users": 15,
+    "organization": "Bak******hes",
+    "version": "1.2",
+    "training_event": {
+      "course": "Kubernetes Advance Training",
+      "location": "Online",
+      "dates": "July 09th,10th & 11th 2025",
+      "mode": "Online"
+    },
+    "sanitized": true,
+    "sanitized_at": "2025-07-05 20:10:12",
+    "sanitized_by": "varadharajaan"
+  },
+  "user_mappings": {
+    "account01_clouduser01": {
+      "first_name": "Fur******tap",
+      "last_name": "******",
+      "email": "FUR******com"
+    },
+    "account01_clouduser02": {
+      "first_name": "******",
+      "last_name": "Fie******ler",
+      "email": "Nik******com"
+    },
+    "account01_clouduser03": {
+      "first_name": "A N******sif",
+      "last_name": "Hos******ain",
+      "email": "Asi******com"
+    },
+    "account01_clouduser04": {
+      "first_name": "***",
+      "last_name": "Kla******fer",
+      "email": "udo******com"
+    },
+    "account01_clouduser05": {
+      "first_name": "Mar******o V",
+      "last_name": "*****",
+      "email": "Mar******com"
+    },
+    "account02_clouduser01": {
+      "first_name": "******",
+      "last_name": "*****",
+      "email": "Pie******com"
+    },
+    "account02_clouduser02": {
+      "first_name": "*****",
+      "last_name": "****",
+      "email": "Dam******com"
+    },
+    "account02_clouduser03": {
+      "first_name": "Spe******cer",
+      "last_name": "*****",
+      "email": "Spe******com"
+    },
+    "account02_clouduser04": {
+      "first_name": "*****",
+      "last_name": "Vee******tra",
+      "email": "Arn******com"
+    },
+    "account02_clouduser05": {
+      "first_name": "Ale******der",
+      "last_name": "Zab******uda",
+      "email": "Ale******com"
+    },
+    "account03_clouduser01": {
+      "first_name": "*****",
+      "last_name": "******",
+      "email": "Dus******com"
+    },
+    "account03_clouduser02": {
+      "first_name": "Mon******rul",
+      "last_name": "*****",
+      "email": "Mon******com"
+    },
+    "account03_clouduser03": {
+      "first_name": "******",
+      "last_name": "AlM******jed",
+      "email": "Ban******com"
+    },
+    "account03_clouduser04": {
+      "first_name": "Ama******eet",
+      "last_name": "*****",
+      "email": "ama******com"
+    },
+    "account03_clouduser05": {
+      "first_name": "Var******jan",
+      "last_name": "Dam******ran",
+      "email": "var******com"
+    }
+  },
+  "account_distribution": {
+    "account01": {
+      "users": 5,
+      "description": "Team 1"
+    },
+    "account02": {
+      "users": 5,
+      "description": "Team 2"
+    },
+    "account03": {
+      "users": 5,
+      "description": "Team 3"
+    }
+  },
+  "statistics": {
+    "total_accounts": 3,
+    "active_accounts": 3,
+    "total_users": 15,
+    "last_sync": "2025-07-04 12:45:00",
+    "created_by": "varadharajaan",
+    "purpose": "K8S Advance Training - July 2025"
+  }
+}

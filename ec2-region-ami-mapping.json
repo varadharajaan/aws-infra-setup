@@ -1,10 +1,32 @@
 {
   "region_ami_mapping": {
-    "us-east-1": "ami-0953476d60561c955",
-    "us-east-2": "ami-06c8f2ec674c67112",
-    "us-west-1": "ami-07706bb32254a7fe5",
-    "us-west-2": "ami-04999cd8f2624f834",
-    "ap-south-1": "ami-0af9569868786b23a"
+    "us-east-1": "ami-0fd26c36a83ae0088",
+    "us-east-2": "ami-0c373e44f012305af",
+    "us-west-1": "ami-034c30ea932272b9b",
+    "us-west-2": "ami-0897831b586e1015f",
+    "ap-south-1": "ami-0f9eda62922c0d4f8",
+    "eu-north-1": "ami-0d4a872ae9552d8b2",
+    "eu-central-1": "ami-058d53f28163986eb",
+    "eu-west-1": "ami-0a7f9fa6f8781184d",
+    "eu-west-2": "ami-0bdc581854a627d2b",
+    "eu-west-3": "ami-0864cfc771a8e433e",
+    "ca-central-1": "ami-0e91b97386d7741b1"
+  },
+  "region_ami_ALI2_mapping": {
+    "us-east-1": "ami-0c6ebb5b9bce4ba15",
+    "us-east-2": "ami-054d057aaa6f1aa39",
+    "us-west-1": "ami-0f0af0181e2173769",
+    "us-west-2": "ami-08bfb3ff75119bd97",
+    "ap-south-1": "ami-0321cd3e0040c7000",
+    "eu-central-1": "ami-0c55825bb0a77f4cf",
+    "eu-west-1": "ami-03bc5ad4846872e39",
+    "eu-west-2": "ami-09410346f72897d08",
+    "eu-west-3": "ami-091119e7f2d3f9482",
+    "ap-southeast-1": "ami-0735430021c6c1526",
+    "ap-southeast-2": "ami-0e6874cbf738602e7",
+    "ap-northeast-1": "ami-0940b505aa5220023",
+    "ap-northeast-2": "ami-096990086b675eb99",
+    "sa-east-1": "ami-0e5d44b5794d8fe75"
   },
   "allowed_instance_types": [
     "t2.small",
@@ -30,16 +52,25 @@
   ],
   "default_instance_type": "t3.micro",
   "eks_unsupported_azs": {
-    "us-east-1": [ "us-east-1e" ],
-    "us-west-1": [ "" ],
-    "ap-south-1": [ "" ],
-    "ap-northeast-1": [ "" ],
-    "eu-west-1": [ "" ],
-    "ca-central-1": [ "" ]
+  "us-east-1": [ "us-east-1e" ],
+  "us-east-2": [ "" ],
+  "us-west-1": [ "" ],
+  "us-west-2": [ "" ],
+  "ap-south-1": [ "" ],
+  "eu-central-1": [ "" ],
+  "eu-west-1": [ "" ],
+  "eu-west-2": [ "" ],
+  "eu-west-3": [ "" ],
+  "ap-southeast-1": [ "" ],
+  "ap-southeast-2": [ "" ],
+  "ap-northeast-1": [ "" ],
+  "ap-northeast-2": [ "" ],
+  "sa-east-1": [ "" ],
+  "ca-central-1": [ "ca-central-1b" ]
   },
   "eks_config": {
-    "supported_versions": [ "1.27", "1.28", "1.29" ],
-    "default_version": "1.28",
+    "supported_versions": [ "1.28", "1.29", "1.30" , "1.31" , "1.32", "1.33" ],
+    "default_version": "1.33",
     "min_subnets_required": 2,
     "min_azs_required": 2,
     "ami_type": "AL2023_x86_64_STANDARD"

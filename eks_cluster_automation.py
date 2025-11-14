@@ -149,7 +149,7 @@ class EKSAutomation:
 
             # Get EKS configuration from mapping file
             eks_config = self.get_eks_config()
-            default_version = eks_config.get("default_version", "1.27")
+            default_version = eks_config.get("default_version", "1.33")
             default_ami_type = eks_config.get("ami_type", "AL2_x86_64")
 
             print(f"📋 EKS Default Settings:")
@@ -172,7 +172,7 @@ class EKSAutomation:
                     eks_version = "1.32"
                     break
                 elif version_choice == '3':
-                    custom_version = input("Enter EKS version (e.g., 1.28): ").strip()
+                    custom_version = input("Enter EKS version (e.g., 1.33): ").strip()
                     if custom_version:
                         eks_version = custom_version
                         break
@@ -696,7 +696,8 @@ class EKSAutomation:
         from datetime import datetime, timedelta
 
         region = credentials.regions[0]
-        cache_file = f"quota_cache_{region}_{credentials.account_id}.pkl"
+        os.makedirs("cache", exist_ok=True)
+        cache_file = f"cache/quota_cache_{region}_{credentials.account_id}.pkl"
         cache_duration = timedelta(hours=1)  # Cache for 1 hour
 
         # Check if cache exists and is valid
