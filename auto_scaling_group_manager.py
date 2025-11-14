@@ -595,17 +595,8 @@ class AutoScalingGroupManager:
             else:
                 print("❌ Invalid choice. Please enter 1, 2, or 3.")
     
-    def select_instance_types_for_strategy(self, cred_info: CredentialInfo, 
-                                         strategy: str, allowed_types: List[str]) -> Dict[str, List[str]]:
-        """Select instance types based on strategy"""
-        if strategy == 'on-demand':
-            return self.select_ondemand_instance_types(cred_info, allowed_types)
-        elif strategy == 'spot':
-            return self.select_spot_instance_types(cred_info, allowed_types)
-        else:  # mixed
-            return self.select_mixed_instance_types(cred_info, allowed_types)
     
-    def select_ondemand_instance_types(self, cred_info: CredentialInfo, 
+    def select_ondemand_instance_types(self, cred_info: CredentialInfo,
                                  allowed_types: List[str]) -> Dict[str, List[str]]:
         """Select instance types for On-Demand strategy"""
         print("\n" + "="*60)
@@ -926,135 +917,6 @@ class AutoScalingGroupManager:
         except Exception as e:
             print(f"⚠️ Warning: Could not save spot analysis summary: {e}")
     
-    def create_asg_with_strategy(self, cred_info: CredentialInfo, instance_selections: Dict[str, List[str]], 
-                           launch_template_id: str, strategy: str, enable_scheduled_scaling: bool = True) -> Dict:
-        """Create Auto Scaling Group with specified strategy"""
-        region = cred_info.regions[0]
-        execution_timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    
-        try:
-            # Create ASG client
-            asg_client = boto3.client(
-                'autoscaling',
-                aws_access_key_id=cred_info.access_key,
-                aws_secret_access_key=cred_info.secret_key,
-                region_name=region
-            )
-        
-            # Create ASG configuration
-            asg_config = self.build_asg_config(cred_info, instance_selections, launch_template_id, strategy, enable_scheduled_scaling)
-        
-            print(f"\n🚀 Creating Auto Scaling Group: {asg_config.name}")
-            print(f"   📍 Region: {region}")
-            print(f"   📊 Strategy: {strategy.upper()}")
-            print(f"   💻 Instance Types: {', '.join(asg_config.instance_types)}")
-            print(f"   📈 Capacity: Min={asg_config.min_size}, Desired={asg_config.desired_capacity}, Max={asg_config.max_size}")
-        
-            # Get subnet information for reporting
-            subnets = self._get_subnets_for_azs(asg_config.availability_zones, asg_config.region, cred_info)
-        
-            # Create the ASG based on strategy
-            if strategy == 'on-demand':
-                asg_response = self.create_ondemand_asg(asg_client, asg_config, cred_info, enable_scheduled_scaling)
-            elif strategy == 'spot':
-                asg_response = self.create_spot_asg(asg_client, asg_config, cred_info, enable_scheduled_scaling)
-            else:  # mixed
-                asg_response = self.create_mixed_asg(asg_client, asg_config, instance_selections, cred_info, enable_scheduled_scaling)
-        
-            print(f"✅ Auto Scaling Group created successfully!")
-
-            # After ASG creation, add scaling policies and alarms
-            scaling_policy_result = self.create_asg_scaling_policies(asg_config.name, cred_info)
-            if scaling_policy_result['status'] == 'success':
-                print(f"✅ Scaling policies and alarms attached to ASG: {asg_config.name}")
-            else:
-                print(f"⚠️ Failed to attach scaling policies: {scaling_policy_result['error_message']}")
-
-            # Save ASG details
-            self.save_asg_details(cred_info, asg_config, asg_response, scaling_policy_result)
-        
-            # Create detailed result dictionary for the report
-            result = {
-                'asg_name': asg_config.name,
-                'strategy': strategy,
-                'instance_types': asg_config.instance_types,
-                'region': region,
-                'launch_template_id': launch_template_id,
-                'min_size': asg_config.min_size,
-                'max_size': asg_config.max_size,
-                'desired_capacity': asg_config.desired_capacity,
-                'spot_allocation_strategy': asg_config.spot_allocation_strategy,
-                'on_demand_percentage': asg_config.on_demand_percentage,
-                'subnets': subnets,
-                'created_at': self.current_time,
-                'enabled_scheduled_scaling': enable_scheduled_scaling,
-                # Get VPC ID from the first subnet
-                'vpc_id': self._get_vpc_from_subnet(subnets[0], region, cred_info) if subnets else 'Unknown'
-            }
-        
-            # Generate and save the comprehensive report
-            self.generate_asg_report(cred_info, result, instance_selections, execution_timestamp)
-        
-            # Print summary with email
-            print("\n" + "="*50)
-            print("📋 SUMMARY:")
-            print(f"   🔑 Credential Type: {cred_info.credential_type}")
-            print(f"   🏢 Account: {cred_info.account_name}")
-            print(f"   📧 Email: {cred_info.email}")
-            print(f"   🌍 Region: {region}")
-            print(f"   🚀 ASG Name: {asg_config.name}")
-            print(f"   📊 ASG Strategy: {strategy.upper()}")
-            print(f"   📁 Output saved to: aws/asg/{cred_info.account_name}/")
-            print(f"   📊 Report: aws/asg/{cred_info.account_name}/asg_report_{execution_timestamp}.json")
-            print("="*50)
-        
-            return result
-        
-        except Exception as e:
-            # Handle failures and generate report with failed information
-            print(f"❌ Error creating Auto Scaling Group: {e}")
-        
-            # Create failed result dictionary
-            failed_result = {
-                "metadata": {
-                    "creation_date": datetime.now().strftime('%Y-%m-%d'),
-                    "creation_time": datetime.now().strftime('%H:%M:%S'),
-                    "created_by": self.current_user,
-                    "execution_timestamp": execution_timestamp,
-                    "strategy": strategy
-                },
-                "summary": {
-                    "total_created": 0,
-                    "total_failed": 1,
-                    "success_rate": "0.0%",
-                    "accounts_processed": 1,
-                    "regions_used": [region]
-                },
-                "created_asgs": [],
-                "failed_asgs": [{
-                    "region": region,
-                    "strategy": strategy,
-                    "instance_types": instance_selections.get('on-demand', []) + instance_selections.get('spot', []),
-                    "launch_template_id": launch_template_id,
-                    "account_name": cred_info.account_name,
-                    "account_id": cred_info.account_id,
-                    "account_email": cred_info.email,
-                    "attempted_at": self.current_time,
-                    "error": str(e)
-                }]
-            }
-        
-            # Create output directory
-            output_dir = f"aws/asg/{cred_info.account_name}"
-            os.makedirs(output_dir, exist_ok=True)
-        
-            # Save failed report to JSON file
-            failed_filename = f"{output_dir}/asg_report_failed_{execution_timestamp}.json"
-            with open(failed_filename, 'w') as f:
-                json.dump(failed_result, f, indent=2)
-        
-            print(f"📊 Failed ASG report saved to: {failed_filename}")
-            raise
 
     def _get_vpc_from_subnet(self, subnet_id: str, region: str, cred_info: CredentialInfo) -> str:
         """Get VPC ID for a subnet"""
@@ -1131,43 +993,6 @@ class AutoScalingGroupManager:
             on_demand_percentage=instance_selections.get('on_demand_percentage', 50) if strategy == 'mixed' else None
         )
 
-    def prompt_capacity_settings(self) -> Tuple[int, int, int]:
-        """Prompt user for ASG capacity settings"""
-        print("\n" + "="*50)
-        print("📊 AUTO SCALING GROUP CAPACITY SETTINGS")
-        print("="*50)
-        
-        while True:
-            try:
-                min_size = int(input("Minimum capacity (default 1): ").strip() or "1")
-                if min_size < 0:
-                    print("❌ Minimum capacity must be >= 0")
-                    continue
-                break
-            except ValueError:
-                print("❌ Please enter a valid number")
-        
-        while True:
-            try:
-                desired_capacity = int(input(f"Desired capacity (default {max(1, min_size)}): ").strip() or str(max(1, min_size)))
-                if desired_capacity < min_size:
-                    print(f"❌ Desired capacity must be >= minimum capacity ({min_size})")
-                    continue
-                break
-            except ValueError:
-                print("❌ Please enter a valid number")
-        
-        while True:
-            try:
-                max_size = int(input(f"Maximum capacity (default {max(desired_capacity, 5)}): ").strip() or str(max(desired_capacity, 5)))
-                if max_size < desired_capacity:
-                    print(f"❌ Maximum capacity must be >= desired capacity ({desired_capacity})")
-                    continue
-                break
-            except ValueError:
-                print("❌ Please enter a valid number")
-        
-        return min_size, desired_capacity, max_size
 
     def save_asg_details(self, cred_info, asg_config, asg_response, scaling_policy_result=None):
         """Save ASG details to output folder"""
