@@ -5,7 +5,7 @@ import json
 import sys
 import os
 from datetime import datetime
-from botocore.exceptions import ClientError, BotoCoreError
+from botocore.exceptions import ClientError
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 

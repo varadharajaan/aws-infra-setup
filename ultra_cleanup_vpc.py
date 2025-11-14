@@ -6,7 +6,7 @@ import sys
 import os
 import time
 from datetime import datetime
-from botocore.exceptions import ClientError, BotoCoreError
+from botocore.exceptions import ClientError
 from typing import List, Dict, Any, Set, Optional, Tuple
 import logging
 from  root_iam_credential_manager import AWSCredentialManager

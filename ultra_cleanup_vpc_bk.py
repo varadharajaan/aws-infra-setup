@@ -6,7 +6,7 @@ import sys
 import os
 import time
 from datetime import datetime
-from botocore.exceptions import ClientError, BotoCoreError
+from botocore.exceptions import ClientError
 
 # Import the credential manager
 from root_iam_credential_manager import AWSCredentialManager

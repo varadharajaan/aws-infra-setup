@@ -1,6 +1,6 @@
 import boto3
 import logging
-from botocore.exceptions import ClientError, NoCredentialsError
+from botocore.exceptions import ClientError
 from typing import List, Optional, Dict, Any
 import time
 from datetime import datetime

@@ -16,7 +16,7 @@ from collections import defaultdict
 from typing import Dict, List, Tuple, Any
 import logging
 import subprocess
-from botocore.exceptions import ClientError, NoCredentialsError
+from botocore.exceptions import ClientError
 
 # Configure logging
 import os

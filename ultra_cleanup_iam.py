@@ -7,7 +7,7 @@ import time
 import subprocess
 from datetime import datetime
 from typing import Dict, List, Optional, Any, Set
-from botocore.exceptions import ClientError, BotoCoreError
+from botocore.exceptions import ClientError
 from root_iam_credential_manager import AWSCredentialManager, Colors
 
 

@@ -30,7 +30,6 @@ from jinja2 import Environment, FileSystemLoader
 import logging
 from logging.handlers import RotatingFileHandler
 from complete_autoscaler_deployment import CompleteAutoscalerDeployer
-from timing_utils import timing_decorator, add_timing_methods
 
 
 class Colors:

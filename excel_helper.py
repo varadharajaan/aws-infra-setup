@@ -7,7 +7,6 @@ from typing import List, Dict, Any
 from datetime import datetime
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-from openpyxl.utils.dataframe import dataframe_to_rows
 
 class ExcelCredentialsExporter:
     """Enhanced Excel export functionality for IAM credentials"""

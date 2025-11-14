@@ -17,7 +17,7 @@ import tempfile
 import time
 import boto3
 import json
-from botocore.exceptions import ClientError, NoCredentialsError
+from botocore.exceptions import ClientError
 from typing import List, Dict, Tuple, Optional
 class Colors:
     GREEN = '\033[92m'

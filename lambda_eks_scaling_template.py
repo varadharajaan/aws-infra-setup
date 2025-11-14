@@ -15,7 +15,7 @@ import os
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Any, Optional
-from botocore.exceptions import ClientError, BotoCoreError
+from botocore.exceptions import ClientError
 
 # Configure enhanced logging
 logger = logging.getLogger()

@@ -6,7 +6,7 @@ import boto3
 import time
 from datetime import datetime
 from typing import Dict, List, Optional, Any
-from botocore.exceptions import ClientError, BotoCoreError
+from botocore.exceptions import ClientError
 import botocore
 from root_iam_credential_manager import AWSCredentialManager, Colors
 

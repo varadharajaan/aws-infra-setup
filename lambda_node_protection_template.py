@@ -16,7 +16,7 @@ import logging
 import time
 import base64
 import tempfile
-from botocore.exceptions import ClientError, BotoCoreError
+from botocore.exceptions import ClientError
 
 # Configure enhanced logging
 logger = logging.getLogger()
