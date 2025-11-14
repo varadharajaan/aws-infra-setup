@@ -200,8 +200,7 @@ class TestEKSClusterManager(unittest.TestCase):
             mock.assert_called()
     
     @patch('boto3.Session')
-    @patch.object(EKSClusterManager, 'create_eks_control_plane', return_value=False)
-    def test_create_cluster_failure(self, mock_create_control_plane, mock_session):
+    def test_create_cluster_failure(self, mock_session):
         """Test cluster creation failure"""
         # Call the create_cluster method with a failing control plane creation
         result = self.manager.create_cluster(self.cluster_config)

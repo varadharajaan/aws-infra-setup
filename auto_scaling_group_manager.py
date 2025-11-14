@@ -936,7 +936,7 @@ class AutoScalingGroupManager:
             return 'Unknown'
 
     def build_asg_config(self, cred_info: CredentialInfo, instance_selections: Dict[str, list],
-                         launch_template_id: str, strategy: str, enable_scheduled_scaling: bool = True) -> ASGConfig:
+                         launch_template_id: str, strategy: str) -> ASGConfig:
         """
         Build ASG configuration based on user selections.
         For mixed, combines on-demand and spot instance types without duplicates.

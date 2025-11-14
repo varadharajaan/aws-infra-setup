@@ -307,7 +307,7 @@ class UltraEC2CleanupManager:
             self.log_operation('ERROR', f"Error correlating instances and security groups: {e}")
             return [], []
 
-    def terminate_instance(self, ec2_client, instance_info, wait_for_termination=False):
+    def terminate_instance(self, ec2_client, instance_info):
         """Terminate an EC2 instance"""
         try:
             instance_id = instance_info['instance_id']
