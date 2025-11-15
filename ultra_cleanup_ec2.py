@@ -51,6 +51,7 @@ class UltraCleanupEC2Manager:
             'regions_processed': [],
             'deleted_instances': [],
             'deleted_security_groups': [],
+            'deleted_eips': [],
             'failed_deletions': [],
             'skipped_resources': [],
             'errors': []
@@ -729,6 +730,134 @@ class UltraCleanupEC2Manager:
             })
             return False
 
+    def get_all_elastic_ips_in_region(self, ec2_client, region, account_info):
+        """Get all Elastic IPs in a region"""
+        elastic_ips = []
+        try:
+            self.log_operation('INFO', f"🔍 Discovering Elastic IPs in {region}...")
+            print(f"   🔍 Discovering Elastic IPs in {region}...")
+            
+            response = ec2_client.describe_addresses()
+            
+            for eip in response.get('Addresses', []):
+                eip_info = {
+                    'allocation_id': eip.get('AllocationId'),
+                    'public_ip': eip.get('PublicIp'),
+                    'private_ip': eip.get('PrivateIpAddress'),
+                    'association_id': eip.get('AssociationId'),
+                    'instance_id': eip.get('InstanceId'),
+                    'network_interface_id': eip.get('NetworkInterfaceId'),
+                    'is_associated': eip.get('AssociationId') is not None,
+                    'domain': eip.get('Domain'),
+                    'tags': {tag['Key']: tag['Value'] for tag in eip.get('Tags', [])},
+                    'region': region,
+                    'account_info': account_info
+                }
+                elastic_ips.append(eip_info)
+            
+            associated_count = sum(1 for eip in elastic_ips if eip['is_associated'])
+            unassociated_count = len(elastic_ips) - associated_count
+            
+            self.log_operation('INFO', f"✅ Found {len(elastic_ips)} Elastic IP(s) in {region}")
+            self.log_operation('INFO', f"   - {associated_count} associated")
+            self.log_operation('INFO', f"   - {unassociated_count} unassociated")
+            print(f"   ✅ Found {len(elastic_ips)} Elastic IP(s): {associated_count} associated, {unassociated_count} unassociated")
+            
+            return elastic_ips
+            
+        except ClientError as e:
+            error_code = e.response['Error']['Code']
+            if error_code == 'UnauthorizedOperation':
+                self.log_operation('ERROR', f"Unauthorized to describe Elastic IPs in {region}")
+                print(f"   ❌ Unauthorized to describe Elastic IPs")
+            else:
+                self.log_operation('ERROR', f"Error describing Elastic IPs in {region}: {e}")
+                print(f"   ❌ Error describing Elastic IPs: {e}")
+            return []
+        except Exception as e:
+            self.log_operation('ERROR', f"Unexpected error getting Elastic IPs in {region}: {e}")
+            print(f"   ❌ Unexpected error getting Elastic IPs: {e}")
+            return []
+
+    def release_elastic_ip(self, ec2_client, eip_info):
+        """Release an Elastic IP address"""
+        try:
+            allocation_id = eip_info['allocation_id']
+            public_ip = eip_info['public_ip']
+            region = eip_info['region']
+            account_name = eip_info['account_info'].get('account_key', 'Unknown')
+            
+            # Check if it's associated
+            if eip_info['is_associated']:
+                self.log_operation('WARNING', f"⚠️ Elastic IP {public_ip} ({allocation_id}) is still associated with {eip_info.get('instance_id', 'unknown resource')}")
+                print(f"   ⚠️ Elastic IP {public_ip} is still associated, skipping...")
+                return False
+            
+            self.log_operation('INFO', f"🗑️ Releasing Elastic IP {public_ip} ({allocation_id}) in {region} ({account_name})")
+            print(f"   🗑️ Releasing Elastic IP {public_ip}...")
+            
+            ec2_client.release_address(AllocationId=allocation_id)
+            
+            self.log_operation('INFO', f"✅ Successfully released Elastic IP {public_ip}")
+            print(f"   ✅ Successfully released Elastic IP {public_ip}")
+            
+            self.cleanup_results['deleted_eips'].append({
+                'allocation_id': allocation_id,
+                'public_ip': public_ip,
+                'private_ip': eip_info.get('private_ip'),
+                'domain': eip_info.get('domain'),
+                'tags': eip_info.get('tags', {}),
+                'region': region,
+                'account_info': eip_info['account_info'],
+                'released_at': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            })
+            
+            return True
+            
+        except ClientError as e:
+            error_code = e.response['Error']['Code']
+            account_name = eip_info['account_info'].get('account_key', 'Unknown')
+            if error_code == 'InvalidAllocationID.NotFound':
+                self.log_operation('INFO', f"Elastic IP {allocation_id} does not exist")
+                return True
+            elif error_code == 'AuthFailure':
+                self.log_operation('ERROR', f"Authorization failure releasing Elastic IP {allocation_id}")
+                print(f"   ❌ Authorization failure releasing Elastic IP {public_ip}")
+                self.cleanup_results['failed_deletions'].append({
+                    'resource_type': 'elastic_ip',
+                    'resource_id': allocation_id,
+                    'public_ip': public_ip,
+                    'region': region,
+                    'account_info': eip_info['account_info'],
+                    'error': 'Authorization failure'
+                })
+                return False
+            else:
+                self.log_operation('ERROR', f"Failed to release Elastic IP {allocation_id}: {e}")
+                print(f"   ❌ Failed to release Elastic IP {public_ip}: {e}")
+                self.cleanup_results['failed_deletions'].append({
+                    'resource_type': 'elastic_ip',
+                    'resource_id': allocation_id,
+                    'public_ip': public_ip,
+                    'region': region,
+                    'account_info': eip_info['account_info'],
+                    'error': str(e)
+                })
+                return False
+        except Exception as e:
+            account_name = eip_info['account_info'].get('account_key', 'Unknown')
+            self.log_operation('ERROR', f"Unexpected error releasing Elastic IP {allocation_id}: {e}")
+            print(f"   ❌ Unexpected error releasing Elastic IP {public_ip}: {e}")
+            self.cleanup_results['failed_deletions'].append({
+                'resource_type': 'elastic_ip',
+                'resource_id': allocation_id,
+                'public_ip': public_ip,
+                'region': region,
+                'account_info': eip_info['account_info'],
+                'error': str(e)
+            })
+            return False
+
     def cleanup_account_region(self, account_info, region):
         """Clean up all EC2 resources in a specific account and region"""
         try:
@@ -746,6 +875,7 @@ class UltraCleanupEC2Manager:
             # Initialize variables
             instances = []
             security_groups = []
+            elastic_ips = []
             attached_sgs = []
             unattached_sgs = []
 
@@ -755,6 +885,9 @@ class UltraCleanupEC2Manager:
 
                 # Get all security groups
                 security_groups = self.get_all_security_groups_in_region(ec2_client, region, account_info)
+
+                # Get all Elastic IPs
+                elastic_ips = self.get_all_elastic_ips_in_region(ec2_client, region, account_info)
 
                 # Correlate instances and security groups
                 attached_sgs, unattached_sgs = self.correlate_instances_and_security_groups(instances, security_groups)
@@ -771,7 +904,8 @@ class UltraCleanupEC2Manager:
                 'instances_found': len(instances),
                 'attached_security_groups': len(attached_sgs),
                 'unattached_security_groups': len(unattached_sgs),
-                'total_security_groups': len(security_groups)
+                'total_security_groups': len(security_groups),
+                'elastic_ips_found': len(elastic_ips)
             }
 
             self.cleanup_results['regions_processed'].append(region_summary)
@@ -781,11 +915,12 @@ class UltraCleanupEC2Manager:
             self.log_operation('INFO', f"   🛡️  Total Security Groups: {len(security_groups)}")
             self.log_operation('INFO', f"   📎 Attached SGs: {len(attached_sgs)}")
             self.log_operation('INFO', f"   🔓 Unattached SGs: {len(unattached_sgs)}")
+            self.log_operation('INFO', f"   🌐 Elastic IPs: {len(elastic_ips)}")
 
-            print(f"   📊 EC2 resources found: {len(instances)} instances, {len(security_groups)} security groups")
+            print(f"   📊 EC2 resources found: {len(instances)} instances, {len(security_groups)} security groups, {len(elastic_ips)} elastic IPs")
             print(f"   📎 Attached SGs: {len(attached_sgs)}, 🔓 Unattached SGs: {len(unattached_sgs)}")
 
-            if not instances and not security_groups:
+            if not instances and not security_groups and not elastic_ips:
                 self.log_operation('INFO', f"No EC2 resources found in {account_key} ({region})")
                 print(f"   ✅ No EC2 resources to clean up in {region}")
                 return True
@@ -821,7 +956,39 @@ class UltraCleanupEC2Manager:
                     print(f"   ⏳ Waiting 60 seconds for instances to start terminating...")
                     time.sleep(60)
 
-            # Step 2: Delete unattached security groups first
+            # Step 2: Release unassociated Elastic IPs
+            if elastic_ips:
+                # Filter for unassociated EIPs
+                unassociated_eips = [eip for eip in elastic_ips if not eip['is_associated']]
+                
+                if unassociated_eips:
+                    self.log_operation('INFO', f"🗑️  Releasing {len(unassociated_eips)} unassociated Elastic IP(s) in {account_key} ({region})")
+                    print(f"\n   🗑️  Releasing {len(unassociated_eips)} unassociated Elastic IP(s)...")
+                    
+                    eip_released = 0
+                    eip_failed = 0
+                    
+                    for i, eip in enumerate(unassociated_eips, 1):
+                        public_ip = eip['public_ip']
+                        print(f"   [{i}/{len(unassociated_eips)}] Processing Elastic IP {public_ip}...")
+                        
+                        try:
+                            success = self.release_elastic_ip(ec2_client, eip)
+                            if success:
+                                eip_released += 1
+                            else:
+                                eip_failed += 1
+                        except Exception as e:
+                            eip_failed += 1
+                            self.log_operation('ERROR', f"Error releasing Elastic IP {public_ip}: {e}")
+                            print(f"   ❌ Error releasing Elastic IP {public_ip}: {e}")
+                    
+                    print(f"   ✅ Released {eip_released} Elastic IP(s), ❌ Failed: {eip_failed}")
+                else:
+                    self.log_operation('INFO', f"No unassociated Elastic IPs to release in {account_key} ({region})")
+                    print(f"   ✅ No unassociated Elastic IPs to release")
+
+            # Step 3: Delete unattached security groups first
             if unattached_sgs:
                 self.log_operation('INFO', f"🗑️  Deleting {len(unattached_sgs)} unattached security groups in {account_key} ({region})")
                 print(f"\n   🗑️  Deleting {len(unattached_sgs)} unattached security groups...")
@@ -846,7 +1013,7 @@ class UltraCleanupEC2Manager:
 
                 print(f"   ✅ Deleted {sg_success} unattached security groups, ❌ Failed: {sg_failed}")
 
-            # Step 3: Delete attached security groups with multiple passes for cross-references
+            # Step 4: Delete attached security groups with multiple passes for cross-references
             if attached_sgs:
                 self.log_operation('INFO', f"🗑️  Deleting {len(attached_sgs)} attached security groups in {account_key} ({region})")
                 print(f"\n   🗑️  Deleting {len(attached_sgs)} attached security groups...")
@@ -964,6 +1131,7 @@ class UltraCleanupEC2Manager:
             # Calculate statistics
             total_instances_deleted = len(self.cleanup_results['deleted_instances'])
             total_sgs_deleted = len(self.cleanup_results['deleted_security_groups'])
+            total_eips_released = len(self.cleanup_results['deleted_eips'])
             total_failed = len(self.cleanup_results['failed_deletions'])
             total_skipped = len(self.cleanup_results['skipped_resources'])
 
@@ -976,12 +1144,12 @@ class UltraCleanupEC2Manager:
                 region = instance['region']
 
                 if account not in deletions_by_account:
-                    deletions_by_account[account] = {'instances': 0, 'security_groups': 0, 'regions': set()}
+                    deletions_by_account[account] = {'instances': 0, 'security_groups': 0, 'elastic_ips': 0, 'regions': set()}
                 deletions_by_account[account]['instances'] += 1
                 deletions_by_account[account]['regions'].add(region)
 
                 if region not in deletions_by_region:
-                    deletions_by_region[region] = {'instances': 0, 'security_groups': 0}
+                    deletions_by_region[region] = {'instances': 0, 'security_groups': 0, 'elastic_ips': 0}
                 deletions_by_region[region]['instances'] += 1
 
             for sg in self.cleanup_results['deleted_security_groups']:
@@ -989,13 +1157,26 @@ class UltraCleanupEC2Manager:
                 region = sg['region']
 
                 if account not in deletions_by_account:
-                    deletions_by_account[account] = {'instances': 0, 'security_groups': 0, 'regions': set()}
+                    deletions_by_account[account] = {'instances': 0, 'security_groups': 0, 'elastic_ips': 0, 'regions': set()}
                 deletions_by_account[account]['security_groups'] += 1
                 deletions_by_account[account]['regions'].add(region)
 
                 if region not in deletions_by_region:
-                    deletions_by_region[region] = {'instances': 0, 'security_groups': 0}
+                    deletions_by_region[region] = {'instances': 0, 'security_groups': 0, 'elastic_ips': 0}
                 deletions_by_region[region]['security_groups'] += 1
+
+            for eip in self.cleanup_results['deleted_eips']:
+                account = eip['account_info'].get('account_key', 'Unknown')
+                region = eip['region']
+
+                if account not in deletions_by_account:
+                    deletions_by_account[account] = {'instances': 0, 'security_groups': 0, 'elastic_ips': 0, 'regions': set()}
+                deletions_by_account[account]['elastic_ips'] += 1
+                deletions_by_account[account]['regions'].add(region)
+
+                if region not in deletions_by_region:
+                    deletions_by_region[region] = {'instances': 0, 'security_groups': 0, 'elastic_ips': 0}
+                deletions_by_region[region]['elastic_ips'] += 1
 
             report_data = {
                 "metadata": {
@@ -1015,6 +1196,7 @@ class UltraCleanupEC2Manager:
                         set(rp['region'] for rp in self.cleanup_results['regions_processed'])),
                     "total_instances_deleted": total_instances_deleted,
                     "total_security_groups_deleted": total_sgs_deleted,
+                    "total_elastic_ips_released": total_eips_released,
                     "total_failed_deletions": total_failed,
                     "total_skipped_resources": total_skipped,
                     "deletions_by_account": deletions_by_account,
@@ -1024,6 +1206,7 @@ class UltraCleanupEC2Manager:
                     "regions_processed": self.cleanup_results['regions_processed'],
                     "deleted_instances": self.cleanup_results['deleted_instances'],
                     "deleted_security_groups": self.cleanup_results['deleted_security_groups'],
+                    "deleted_elastic_ips": self.cleanup_results['deleted_eips'],
                     "failed_deletions": self.cleanup_results['failed_deletions'],
                     "skipped_resources": self.cleanup_results['skipped_resources'],
                     "errors": self.cleanup_results['errors']
@@ -1145,6 +1328,7 @@ class UltraCleanupEC2Manager:
             self.print_colored(Colors.RED, f"❌ Failed operations: {failed_tasks}")
             self.print_colored(Colors.WHITE, f"💻 Instances deleted: {len(self.cleanup_results['deleted_instances'])}")
             self.print_colored(Colors.WHITE, f"🛡️  Security groups deleted: {len(self.cleanup_results['deleted_security_groups'])}")
+            self.print_colored(Colors.WHITE, f"🌐 Elastic IPs released: {len(self.cleanup_results['deleted_eips'])}")
             self.print_colored(Colors.WHITE, f"⏭️  Resources skipped: {len(self.cleanup_results['skipped_resources'])}")
             self.print_colored(Colors.RED, f"❌ Failed deletions: {len(self.cleanup_results['failed_deletions'])}")
 
@@ -1152,9 +1336,10 @@ class UltraCleanupEC2Manager:
             self.log_operation('INFO', f"Execution time: {total_time} seconds")
             self.log_operation('INFO', f"Instances deleted: {len(self.cleanup_results['deleted_instances'])}")
             self.log_operation('INFO', f"Security groups deleted: {len(self.cleanup_results['deleted_security_groups'])}")
+            self.log_operation('INFO', f"Elastic IPs released: {len(self.cleanup_results['deleted_eips'])}")
 
             # STEP 6: Show account summary
-            if self.cleanup_results['deleted_instances'] or self.cleanup_results['deleted_security_groups']:
+            if self.cleanup_results['deleted_instances'] or self.cleanup_results['deleted_security_groups'] or self.cleanup_results['deleted_eips']:
                 self.print_colored(Colors.YELLOW, f"\n📊 Deletion Summary by Account:")
 
                 # Group by account
@@ -1162,22 +1347,30 @@ class UltraCleanupEC2Manager:
                 for instance in self.cleanup_results['deleted_instances']:
                     account = instance['account_info'].get('account_key', 'Unknown')
                     if account not in account_summary:
-                        account_summary[account] = {'instances': 0, 'security_groups': 0, 'regions': set()}
+                        account_summary[account] = {'instances': 0, 'security_groups': 0, 'elastic_ips': 0, 'regions': set()}
                     account_summary[account]['instances'] += 1
                     account_summary[account]['regions'].add(instance['region'])
 
                 for sg in self.cleanup_results['deleted_security_groups']:
                     account = sg['account_info'].get('account_key', 'Unknown')
                     if account not in account_summary:
-                        account_summary[account] = {'instances': 0, 'security_groups': 0, 'regions': set()}
+                        account_summary[account] = {'instances': 0, 'security_groups': 0, 'elastic_ips': 0, 'regions': set()}
                     account_summary[account]['security_groups'] += 1
                     account_summary[account]['regions'].add(sg['region'])
+
+                for eip in self.cleanup_results['deleted_eips']:
+                    account = eip['account_info'].get('account_key', 'Unknown')
+                    if account not in account_summary:
+                        account_summary[account] = {'instances': 0, 'security_groups': 0, 'elastic_ips': 0, 'regions': set()}
+                    account_summary[account]['elastic_ips'] += 1
+                    account_summary[account]['regions'].add(eip['region'])
 
                 for account, summary in account_summary.items():
                     regions_list = ', '.join(sorted(summary['regions']))
                     self.print_colored(Colors.PURPLE, f"   🏦 {account}:")
                     self.print_colored(Colors.WHITE, f"      💻 Instances: {summary['instances']}")
                     self.print_colored(Colors.WHITE, f"      🛡️  Security Groups: {summary['security_groups']}")
+                    self.print_colored(Colors.WHITE, f"      🌐 Elastic IPs: {summary['elastic_ips']}")
                     self.print_colored(Colors.WHITE, f"      🌍 Regions: {regions_list}")
 
             # STEP 7: Show failures if any
