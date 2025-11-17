@@ -1,0 +1,36 @@
+DEMO: Creating a new environment when local environments exist
+
+Step 1: Run the environment manager
+$ python .\env_manager.py
+
+Step 2: You'll see all existing environments listed
+
+Step 3: You'll see these options:
+  Options:
+    - Enter environment number to show activation commands
+    - Enter 'c' or 'create' to create a new environment
+    - Press Enter to skip
+
+Step 4: Enter 'c' or 'create' to create a new environment
+
+Step 5: Choose from 7 environment types:
+  1. venv (Python virtual environment)
+  2. conda (Conda environment)
+  3. poetry (Poetry dependency manager)
+  4. pipenv (Pipenv package manager)
+  5. pdm (PDM package manager)
+  6. hatch (Hatch project manager)
+  7. pyenv (Install Python version)
+
+Step 6: The new environment is created and automatically activated!
+
+All activation scripts are now generated automatically:
+  - activate_venv.ps1
+  - activate_conda.ps1
+  - activate_poetry.ps1
+  - activate_pdm.ps1
+  - activate_pipenv.ps1
+  - activate_hatch.ps1
+  - activate_pyenv.ps1
+
+Just run .\env_wrapper.ps1 to auto-activate any of them!
