@@ -19,7 +19,7 @@ import json
 import time
 from datetime import datetime
 from botocore.exceptions import ClientError
-from root_iam_credential_manager import RootIAMCredentialManager
+from root_iam_credential_manager import AWSCredentialManager
 
 
 class Colors:
@@ -38,7 +38,7 @@ class UltraCleanupS3Manager:
 
     def __init__(self):
         """Initialize the S3 cleanup manager"""
-        self.cred_manager = RootIAMCredentialManager()
+        self.cred_manager = AWSCredentialManager()
         self.current_time = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
         self.current_user = os.getenv('USERNAME') or os.getenv('USER') or 'unknown'
         self.execution_timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
