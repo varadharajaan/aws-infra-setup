@@ -39,11 +39,11 @@ class EKSLambdaScaler:
         iam_files = self.cred_manager.scan_iam_credentials_files()
 
         if not iam_files:
-            self.print_colored(Colors.RED, "❌ No IAM credential files found")
+            self.print_colored(Colors.RED, "[ERROR] No IAM credential files found")
             return None
 
         if len(iam_files) == 1:
-            self.print_colored(Colors.GREEN, f"✅ Using single IAM credentials file: {iam_files[0]['filename']}")
+            self.print_colored(Colors.GREEN, f"[OK] Using single IAM credentials file: {iam_files[0]['filename']}")
             return iam_files[0]['file_path']
 
         # Sort by timestamp (newest first)
@@ -64,7 +64,7 @@ class EKSLambdaScaler:
 
         sorted_files = sorted(iam_files, key=get_sort_key, reverse=True)
 
-        self.print_colored(Colors.YELLOW, f"\n📁 Found {len(sorted_files)} IAM credential files:")
+        self.print_colored(Colors.YELLOW, f"\n[FOLDER] Found {len(sorted_files)} IAM credential files:")
         self.print_colored(Colors.YELLOW, "=" * 80)
 
         for i, file_info in enumerate(sorted_files, 1):
@@ -85,7 +85,7 @@ class EKSLambdaScaler:
                 self.print_colored(Colors.CYAN, f"   {i}. [{timestamp_str}] {filename}")
 
         self.print_colored(Colors.YELLOW, "=" * 80)
-        self.print_colored(Colors.YELLOW, "💡 Press Enter to use default (latest file) or select by number")
+        self.print_colored(Colors.YELLOW, "[TIP] Press Enter to use default (latest file) or select by number")
         self.print_colored(Colors.YELLOW, "=" * 80)
 
         while True:
@@ -99,35 +99,35 @@ class EKSLambdaScaler:
                 # Use default (latest file)
                 if choice == '':
                     selected_file = sorted_files[0]
-                    self.print_colored(Colors.GREEN, f"✅ Using default: {selected_file['filename']}")
+                    self.print_colored(Colors.GREEN, f"[OK] Using default: {selected_file['filename']}")
                     return selected_file['file_path']
 
                 # Parse selection
                 selection = int(choice)
                 if 1 <= selection <= len(sorted_files):
                     selected_file = sorted_files[selection - 1]
-                    self.print_colored(Colors.GREEN, f"✅ Selected: {selected_file['filename']}")
+                    self.print_colored(Colors.GREEN, f"[OK] Selected: {selected_file['filename']}")
                     return selected_file['file_path']
                 else:
-                    self.print_colored(Colors.RED, f"❌ Invalid selection. Please enter 1-{len(sorted_files)}")
+                    self.print_colored(Colors.RED, f"[ERROR] Invalid selection. Please enter 1-{len(sorted_files)}")
 
             except ValueError:
-                self.print_colored(Colors.RED, "❌ Invalid input. Please enter a number")
+                self.print_colored(Colors.RED, "[ERROR] Invalid input. Please enter a number")
             except Exception as e:
-                self.print_colored(Colors.RED, f"❌ Error processing selection: {str(e)}")
+                self.print_colored(Colors.RED, f"[ERROR] Error processing selection: {str(e)}")
 
     def _check_required_files(self):
         """Check if required files exist."""
         if not os.path.exists(self.eks_dir):
-            self.print_colored(Colors.YELLOW, f"⚠️  Warning: AWS EKS directory not found: {self.eks_dir}")
+            self.print_colored(Colors.YELLOW, f"[WARN]  Warning: AWS EKS directory not found: {self.eks_dir}")
 
         if not os.path.exists(self.lambda_scale_up_file):
             self.print_colored(Colors.YELLOW,
-                               f"⚠️  Warning: Lambda scale up event file not found: {self.lambda_scale_up_file}")
+                               f"[WARN]  Warning: Lambda scale up event file not found: {self.lambda_scale_up_file}")
 
         if not os.path.exists(self.lambda_scale_down_file):
             self.print_colored(Colors.YELLOW,
-                               f"⚠️  Warning: Lambda scale down event file not found: {self.lambda_scale_down_file}")
+                               f"[WARN]  Warning: Lambda scale down event file not found: {self.lambda_scale_down_file}")
 
     def scan_eks_files(self) -> Dict[str, List[Dict[str, Any]]]:
         """
@@ -136,14 +136,14 @@ class EKSLambdaScaler:
         Returns:
             Dict mapping dates to lists of file information
         """
-        self.print_colored(Colors.CYAN, f"🔍 Scanning for EKS cluster files...")
+        self.print_colored(Colors.CYAN, f"[SCAN] Scanning for EKS cluster files...")
 
         # Look for all eks cluster files under all account directories
         eks_pattern = os.path.join(self.eks_dir, "*", "eks_cluster_*-*-*.json")
         all_files = glob.glob(eks_pattern)
 
         if not all_files:
-            self.print_colored(Colors.RED, f"❌ No EKS cluster files found")
+            self.print_colored(Colors.RED, f"[ERROR] No EKS cluster files found")
             return {}
 
         # Group files by date (day)
@@ -178,7 +178,7 @@ class EKSLambdaScaler:
                 files_by_date[date_key].append(file_info)
 
             except Exception as e:
-                self.print_colored(Colors.YELLOW, f"⚠️  Error processing {file_path}: {str(e)}")
+                self.print_colored(Colors.YELLOW, f"[WARN]  Error processing {file_path}: {str(e)}")
 
         # Sort dates in reverse order (newest first)
         sorted_files_by_date = {
@@ -188,19 +188,19 @@ class EKSLambdaScaler:
 
         total_files = sum(len(files) for files in sorted_files_by_date.values())
         self.print_colored(Colors.GREEN,
-                           f"✅ Found {total_files} EKS cluster files across {len(sorted_files_by_date)} dates")
+                           f"[OK] Found {total_files} EKS cluster files across {len(sorted_files_by_date)} dates")
 
         return sorted_files_by_date
 
     def select_dates_interactive(self, files_by_date: Dict[str, List[Dict[str, Any]]]) -> Optional[List[str]]:
         """Interactive date selection for EKS files."""
         if not files_by_date:
-            self.print_colored(Colors.RED, "❌ No EKS dates available")
+            self.print_colored(Colors.RED, "[ERROR] No EKS dates available")
             return None
 
         dates = list(files_by_date.keys())
 
-        self.print_colored(Colors.YELLOW, "\n📅 Available EKS Cluster File Dates:")
+        self.print_colored(Colors.YELLOW, "\n[DATE] Available EKS Cluster File Dates:")
         self.print_colored(Colors.YELLOW, "=" * 80)
 
         for i, date in enumerate(dates, 1):
@@ -209,7 +209,7 @@ class EKSLambdaScaler:
             self.print_colored(Colors.WHITE, f"      Files: {file_count}")
 
         self.print_colored(Colors.YELLOW, "=" * 80)
-        self.print_colored(Colors.YELLOW, "💡 Selection options:")
+        self.print_colored(Colors.YELLOW, "[TIP] Selection options:")
         self.print_colored(Colors.WHITE, "   • Single: 1")
         self.print_colored(Colors.WHITE, "   • Multiple: 1,3,5")
         self.print_colored(Colors.WHITE, "   • Range: 1-5")
@@ -225,20 +225,20 @@ class EKSLambdaScaler:
                     return None
 
                 if choice.lower() == "all":
-                    self.print_colored(Colors.GREEN, f"✅ Selected all {len(dates)} dates")
+                    self.print_colored(Colors.GREEN, f"[OK] Selected all {len(dates)} dates")
                     return dates
 
                 selected_indices = self.cred_manager._parse_selection(choice, len(dates))
                 if not selected_indices:
-                    self.print_colored(Colors.RED, "❌ Invalid selection format")
+                    self.print_colored(Colors.RED, "[ERROR] Invalid selection format")
                     continue
 
                 selected_dates = [dates[i - 1] for i in selected_indices]
-                self.print_colored(Colors.GREEN, f"✅ Selected {len(selected_dates)} dates")
+                self.print_colored(Colors.GREEN, f"[OK] Selected {len(selected_dates)} dates")
                 return selected_dates
 
             except Exception as e:
-                self.print_colored(Colors.RED, f"❌ Error processing selection: {str(e)}")
+                self.print_colored(Colors.RED, f"[ERROR] Error processing selection: {str(e)}")
 
     def load_clusters_from_files(self, files: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
@@ -304,17 +304,17 @@ class EKSLambdaScaler:
                         })
 
             except Exception as e:
-                self.print_colored(Colors.YELLOW, f"⚠️  Error loading clusters from {file_path}: {str(e)}")
+                self.print_colored(Colors.YELLOW, f"[WARN]  Error loading clusters from {file_path}: {str(e)}")
 
         return clusters
 
     def select_clusters_interactive(self, clusters: List[Dict[str, Any]]) -> Optional[List[Dict[str, Any]]]:
         """Interactive cluster selection."""
         if not clusters:
-            self.print_colored(Colors.RED, "❌ No clusters found")
+            self.print_colored(Colors.RED, "[ERROR] No clusters found")
             return None
 
-        self.print_colored(Colors.YELLOW, "\n🚀 Available EKS Clusters:")
+        self.print_colored(Colors.YELLOW, "\n[START] Available EKS Clusters:")
         self.print_colored(Colors.YELLOW, "=" * 100)
 
         # Create a flat list for proper indexing while still grouping for display
@@ -327,7 +327,7 @@ class EKSLambdaScaler:
 
         # Display clusters grouped by account but maintain correct indexing
         for account, account_clusters in clusters_by_account.items():
-            self.print_colored(Colors.PURPLE, f"\n📋 Account: {account}")
+            self.print_colored(Colors.PURPLE, f"\n[LIST] Account: {account}")
 
             for cluster in account_clusters:
                 # Find the correct index in the original clusters list
@@ -337,7 +337,7 @@ class EKSLambdaScaler:
 
         total_clusters = len(clusters)
         self.print_colored(Colors.YELLOW, "=" * 100)
-        self.print_colored(Colors.YELLOW, "💡 Selection options:")
+        self.print_colored(Colors.YELLOW, "[TIP] Selection options:")
         self.print_colored(Colors.WHITE, "   • Single: 1")
         self.print_colored(Colors.WHITE, "   • Multiple: 1,3,5")
         self.print_colored(Colors.WHITE, "   • Range: 1-5")
@@ -353,25 +353,25 @@ class EKSLambdaScaler:
                     return None
 
                 if choice.lower() == "all":
-                    self.print_colored(Colors.GREEN, f"✅ Selected all {total_clusters} clusters")
+                    self.print_colored(Colors.GREEN, f"[OK] Selected all {total_clusters} clusters")
                     return clusters
 
                 selected_indices = self.cred_manager._parse_selection(choice, total_clusters)
                 if not selected_indices:
-                    self.print_colored(Colors.RED, "❌ Invalid selection format")
+                    self.print_colored(Colors.RED, "[ERROR] Invalid selection format")
                     continue
 
                 selected_clusters = [clusters[i - 1] for i in selected_indices]
 
                 # Show what was actually selected for confirmation
-                self.print_colored(Colors.GREEN, f"✅ Selected {len(selected_clusters)} clusters:")
+                self.print_colored(Colors.GREEN, f"[OK] Selected {len(selected_clusters)} clusters:")
                 for cluster in selected_clusters:
                     self.print_colored(Colors.WHITE, f"   • {cluster['name']} ({cluster['account_key']})")
 
                 return selected_clusters
 
             except Exception as e:
-                self.print_colored(Colors.RED, f"❌ Error processing selection: {str(e)}")
+                self.print_colored(Colors.RED, f"[ERROR] Error processing selection: {str(e)}")
 
     def get_lambda_event_template(self, action: str) -> Optional[Dict[str, Any]]:
         """Get the Lambda event template for the specified action."""
@@ -379,7 +379,7 @@ class EKSLambdaScaler:
 
         try:
             if not os.path.exists(template_file):
-                self.print_colored(Colors.RED, f"❌ Lambda {action} event template not found: {template_file}")
+                self.print_colored(Colors.RED, f"[ERROR] Lambda {action} event template not found: {template_file}")
                 return None
 
             with open(template_file, 'r') as f:
@@ -388,7 +388,7 @@ class EKSLambdaScaler:
             return data
 
         except Exception as e:
-            self.print_colored(Colors.RED, f"❌ Error loading Lambda event template: {str(e)}")
+            self.print_colored(Colors.RED, f"[ERROR] Error loading Lambda event template: {str(e)}")
             return None
 
     def get_lambda_function_name(self, cluster_name: str) -> str:
@@ -494,13 +494,13 @@ class EKSLambdaScaler:
     def run(self):
         """Main execution flow for the EKS Lambda scaler."""
         self.print_colored(Colors.YELLOW, "=" * 80)
-        self.print_colored(Colors.YELLOW, "🚀 EKS Lambda Cluster Scaling Tool")
+        self.print_colored(Colors.YELLOW, "[START] EKS Lambda Cluster Scaling Tool")
         self.print_colored(Colors.YELLOW, "=" * 80)
 
         # Scan and select dates
         selected_iam_file = self.select_iam_credentials_file()
         if not selected_iam_file:
-            self.print_colored(Colors.RED, "❌ No IAM credentials file selected, exiting...")
+            self.print_colored(Colors.RED, "[ERROR] No IAM credentials file selected, exiting...")
             return
 
         files_by_date = self.scan_eks_files()
@@ -509,7 +509,7 @@ class EKSLambdaScaler:
 
         selected_dates = self.select_dates_interactive(files_by_date)
         if not selected_dates:
-            self.print_colored(Colors.RED, "❌ No dates selected, exiting...")
+            self.print_colored(Colors.RED, "[ERROR] No dates selected, exiting...")
             return
 
         # Collect all files from selected dates
@@ -520,17 +520,17 @@ class EKSLambdaScaler:
         # Load clusters from files
         all_clusters = self.load_clusters_from_files(selected_files)
         if not all_clusters:
-            self.print_colored(Colors.RED, "❌ No clusters found in selected files")
+            self.print_colored(Colors.RED, "[ERROR] No clusters found in selected files")
             return
 
         # Select clusters
         selected_clusters = self.select_clusters_interactive(all_clusters)
         if not selected_clusters:
-            self.print_colored(Colors.RED, "❌ No clusters selected, exiting...")
+            self.print_colored(Colors.RED, "[ERROR] No clusters selected, exiting...")
             return
 
         # Choose scale action
-        self.print_colored(Colors.YELLOW, "\n🔧 Select Scaling Action:")
+        self.print_colored(Colors.YELLOW, "\n[CONFIG] Select Scaling Action:")
         self.print_colored(Colors.YELLOW, "=" * 80)
         self.print_colored(Colors.CYAN, "   1. Scale Up")
         self.print_colored(Colors.CYAN, "   2. Scale Down")
@@ -548,12 +548,12 @@ class EKSLambdaScaler:
             elif choice == '2':
                 action = 'down'
             else:
-                self.print_colored(Colors.RED, "❌ Invalid choice. Please enter 1 or 2")
+                self.print_colored(Colors.RED, "[ERROR] Invalid choice. Please enter 1 or 2")
 
         action_display = "Scale Up" if action == "up" else "Scale Down"
 
         # Confirm before proceeding
-        self.print_colored(Colors.YELLOW, f"\n⚠️  You are about to {action_display} {len(selected_clusters)} clusters:")
+        self.print_colored(Colors.YELLOW, f"\n[WARN]  You are about to {action_display} {len(selected_clusters)} clusters:")
         for cluster in selected_clusters[:5]:
             self.print_colored(Colors.WHITE, f"   • {cluster['name']} ({cluster['account_key']})")
 
@@ -562,11 +562,11 @@ class EKSLambdaScaler:
 
         confirmation = input(f"\nConfirm {action_display} for all selected clusters? (y/n): ").strip().lower()
         if confirmation != 'y':
-            self.print_colored(Colors.RED, "❌ Operation canceled")
+            self.print_colored(Colors.RED, "[ERROR] Operation canceled")
             return
 
         # Process clusters
-        self.print_colored(Colors.YELLOW, f"\n🚀 Executing {action_display} on {len(selected_clusters)} clusters...")
+        self.print_colored(Colors.YELLOW, f"\n[START] Executing {action_display} on {len(selected_clusters)} clusters...")
 
         results = {
             'success': [],
@@ -580,7 +580,7 @@ class EKSLambdaScaler:
             # Get credentials for this cluster
             creds = self.get_credentials_for_cluster(cluster)
             if not creds:
-                self.print_colored(Colors.RED, f"   ❌ Failed to get credentials for account {cluster['account_id']}")
+                self.print_colored(Colors.RED, f"   [ERROR] Failed to get credentials for account {cluster['account_id']}")
                 results['failed'].append({
                     'cluster': cluster,
                     'error': 'No credentials found'
@@ -592,7 +592,7 @@ class EKSLambdaScaler:
 
             if result['success']:
                 function_name = result.get('function_name', 'unknown')
-                self.print_colored(Colors.GREEN, f"   ✅ Successfully invoked Lambda: {function_name}")
+                self.print_colored(Colors.GREEN, f"   [OK] Successfully invoked Lambda: {function_name}")
                 results['success'].append({
                     'cluster': cluster,
                     'result': result
@@ -600,20 +600,20 @@ class EKSLambdaScaler:
             else:
                 error = result.get('error', 'unknown error')
                 function_name = result.get('function_name', 'unknown')
-                self.print_colored(Colors.RED, f"   ❌ Failed to invoke Lambda {function_name}: {error}")
+                self.print_colored(Colors.RED, f"   [ERROR] Failed to invoke Lambda {function_name}: {error}")
                 results['failed'].append({
                     'cluster': cluster,
                     'error': error
                 })
 
         # Summary
-        self.print_colored(Colors.YELLOW, "\n📊 Summary:")
+        self.print_colored(Colors.YELLOW, "\n[STATS] Summary:")
         self.print_colored(Colors.GREEN,
-                           f"   ✅ Successfully executed {action_display} on {len(results['success'])} clusters")
+                           f"   [OK] Successfully executed {action_display} on {len(results['success'])} clusters")
 
         if results['failed']:
             self.print_colored(Colors.RED,
-                               f"   ❌ Failed to execute {action_display} on {len(results['failed'])} clusters")
+                               f"   [ERROR] Failed to execute {action_display} on {len(results['failed'])} clusters")
 
 if __name__ == "__main__":
     scaler = EKSLambdaScaler()

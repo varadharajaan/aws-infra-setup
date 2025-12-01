@@ -136,7 +136,7 @@ class AutoScalingGroupManager:
         with open(filename, 'w') as f:
             json.dump(report, f, indent=2)
     
-        print(f"📊 ASG report saved to: {filename}")
+        print(f"[STATS] ASG report saved to: {filename}")
         return report
 
     def create_asg_scaling_policies(self, asg_name, cred_info):
@@ -278,15 +278,15 @@ class AutoScalingGroupManager:
                 ]
             )
             
-            print(f"✅ On-Demand ASG created successfully")
+            print(f"[OK] On-Demand ASG created successfully")
             # Attach scheduled scaling actions if requested
             if schedule_scaling:
                 self.attach_scheduled_actions(asg_client, asg_config.name, asg_config.region)
-                print(f"✅ On-Demand ASG created successfully with scheduled scaling")
+                print(f"[OK] On-Demand ASG created successfully with scheduled scaling")
             return response
             
         except Exception as e:
-            print(f"❌ Error creating On-Demand ASG: {e}")
+            print(f"[ERROR] Error creating On-Demand ASG: {e}")
             raise
     
     def create_spot_asg(self, asg_client, asg_config: ASGConfig, cred_info: CredentialInfo, schedule_scaling: bool = True) -> Dict:
@@ -377,16 +377,16 @@ class AutoScalingGroupManager:
                 ]
             )
             
-            print(f"✅ Spot ASG created successfully")
+            print(f"[OK] Spot ASG created successfully")
             # Attach scheduled scaling actions if requested
             schedule_scaling = True  # This should be passed as a parameter or class attribute
             if schedule_scaling:
                 self.attach_scheduled_actions(asg_client, asg_config.name, asg_config.region)
-                print(f"✅ Spot ASG created successfully with scheduled scaling")
+                print(f"[OK] Spot ASG created successfully with scheduled scaling")
             return response
             
         except Exception as e:
-            print(f"❌ Error creating Spot ASG: {e}")
+            print(f"[ERROR] Error creating Spot ASG: {e}")
             raise
     
     def create_mixed_asg(self, asg_client, asg_config: ASGConfig, instance_selections: Dict, cred_info: CredentialInfo, schedule_scaling: bool = True) -> Dict:
@@ -502,16 +502,16 @@ class AutoScalingGroupManager:
                 ]
             )
             
-            print(f"✅ Mixed ASG created successfully")
+            print(f"[OK] Mixed ASG created successfully")
             # Attach scheduled scaling actions if requested
             schedule_scaling = True  # This should be passed as a parameter or class attribute
             if schedule_scaling:
                 self.attach_scheduled_actions(asg_client, asg_config.name, asg_config.region)
-            print(f"✅ Mixed ASG created successfully with scheduled scaling")
+            print(f"[OK] Mixed ASG created successfully with scheduled scaling")
             return response
             
         except Exception as e:
-            print(f"❌ Error creating Mixed ASG: {e}")
+            print(f"[ERROR] Error creating Mixed ASG: {e}")
             raise
     
     def _get_subnets_for_azs(self, availability_zones: List[str], region: str, cred_info: CredentialInfo) -> List[str]:
@@ -532,7 +532,7 @@ class AutoScalingGroupManager:
             unsupported_azs = self._get_unsupported_azs(region)
             supported_azs = [az for az in availability_zones if az not in unsupported_azs]
             if not supported_azs:
-                print("⚠️ No supported availability zones after filtering unsupported AZs.")
+                print("[WARN] No supported availability zones after filtering unsupported AZs.")
                 return []
 
             # Get default VPC
@@ -562,21 +562,21 @@ class AutoScalingGroupManager:
                 )
                 subnet_ids = [subnet['SubnetId'] for subnet in all_subnets['Subnets']]
 
-            print(f"   🌐 Using subnets: {', '.join(subnet_ids)}")
+            print(f"   [NETWORK] Using subnets: {', '.join(subnet_ids)}")
             print(f"DEBUG: availability_zones: {availability_zones}")
             print(f"DEBUG: supported_azs: {supported_azs}")
             print(f"DEBUG: default_vpc_id: {default_vpc_id}")
             return subnet_ids
 
         except Exception as e:
-            print(f"⚠️ Error getting subnets: {e}")
+            print(f"[WARN] Error getting subnets: {e}")
             # Return empty list - ASG creation will use default subnets
             return []
     
     def prompt_asg_strategy(self) -> str:
         """Prompt user to select ASG strategy"""
         print("\n" + "="*70)
-        print("🚀 AUTO SCALING GROUP STRATEGY SELECTION")
+        print("[START] AUTO SCALING GROUP STRATEGY SELECTION")
         print("="*70)
         print("Choose your ASG strategy:")
         print("1. On-Demand Only (Reliable, Higher Cost)")
@@ -593,7 +593,7 @@ class AutoScalingGroupManager:
             elif choice == '3':
                 return 'mixed'
             else:
-                print("❌ Invalid choice. Please enter 1, 2, or 3.")
+                print("[ERROR] Invalid choice. Please enter 1, 2, or 3.")
     
     def select_instance_types_for_strategy(self, cred_info: CredentialInfo, 
                                          strategy: str, allowed_types: List[str]) -> Dict[str, List[str]]:
@@ -609,7 +609,7 @@ class AutoScalingGroupManager:
                                  allowed_types: List[str]) -> Dict[str, List[str]]:
         """Select instance types for On-Demand strategy"""
         print("\n" + "="*60)
-        print("💰 ON-DEMAND INSTANCE TYPE SELECTION")
+        print("[COST] ON-DEMAND INSTANCE TYPE SELECTION")
         print("="*60)
         print("Analyzing service quotas for On-Demand instances...")
     
@@ -617,7 +617,7 @@ class AutoScalingGroupManager:
         quota_info = self.spot_analyzer.analyze_service_quotas(cred_info, allowed_types)
     
         # Display quota information
-        print("\n📊 Service Quota Analysis:")
+        print("\n[STATS] Service Quota Analysis:")
         print("-" * 50)
     
         # Create a list of available types with their quota info for sorting
@@ -641,9 +641,9 @@ class AutoScalingGroupManager:
             
                 # Display in the current format
                 if available_capacity > 0:
-                    print(f"✅ {instance_type:15} | Available: {available_capacity:3} | Used: {current_usage:3}/{quota_limit}")
+                    print(f"[OK] {instance_type:15} | Available: {available_capacity:3} | Used: {current_usage:3}/{quota_limit}")
                 else:
-                    print(f"❌ {instance_type:15} | No capacity available ({current_usage}/{quota_limit})")
+                    print(f"[ERROR] {instance_type:15} | No capacity available ({current_usage}/{quota_limit})")
             else:
                 # Include with default values if no quota info
                 available_instance_data.append({
@@ -652,7 +652,7 @@ class AutoScalingGroupManager:
                     'current_usage': 0,
                     'quota_limit': 32
                 })
-                print(f"⚠️  {instance_type:15} | Quota info unavailable (using default 32)")
+                print(f"[WARN]  {instance_type:15} | Quota info unavailable (using default 32)")
     
         # Sort by available capacity (highest first)
         sorted_instances = sorted(available_instance_data, key=lambda x: -x['available_capacity'])
@@ -661,7 +661,7 @@ class AutoScalingGroupManager:
         available_types = [item['instance_type'] for item in sorted_instances]
     
         if not available_types:
-            print("❌ No instance types available due to quota limits!")
+            print("[ERROR] No instance types available due to quota limits!")
             raise ValueError("No available instance types")
     
         # Let user select multiple instance types
@@ -747,7 +747,7 @@ class AutoScalingGroupManager:
         
         # Get On-Demand percentage
         print("\n" + "="*50)
-        print("⚖️ On-Demand vs Spot Percentage")
+        print("[BALANCE] On-Demand vs Spot Percentage")
         print("="*50)
         print("Default: 50% On-Demand, 50% Spot")
         
@@ -762,9 +762,9 @@ class AutoScalingGroupManager:
                 if 0 <= percentage <= 100:
                     break
                 else:
-                    print("❌ Please enter a value between 0 and 100")
+                    print("[ERROR] Please enter a value between 0 and 100")
             except ValueError:
-                print("❌ Please enter a valid number")
+                print("[ERROR] Please enter a valid number")
         
         return {
             'on-demand': ondemand_selection['on-demand'],
@@ -774,7 +774,7 @@ class AutoScalingGroupManager:
     
     def multi_select_instance_types(self, available_types: List[str], strategy_name: str) -> List[str]:
         """Allow user to select multiple instance types"""
-        print(f"\n📝 Select {strategy_name} Instance Types:")
+        print(f"\n[LOG] Select {strategy_name} Instance Types:")
         print("You can select multiple types for better availability")
         print("-" * 50)
         
@@ -794,12 +794,12 @@ class AutoScalingGroupManager:
                 
                 if selected_indices:
                     selected_types = [available_types[i-1] for i in selected_indices]
-                    print(f"✅ Selected {strategy_name} types: {', '.join(selected_types)}")
+                    print(f"[OK] Selected {strategy_name} types: {', '.join(selected_types)}")
                     return selected_types
                 else:
-                    print("❌ No valid selection made")
+                    print("[ERROR] No valid selection made")
             except ValueError as e:
-                print(f"❌ {e}")
+                print(f"[ERROR] {e}")
     
     def parse_selection(self, selection: str, max_count: int) -> List[int]:
         """Parse user selection string into list of indices"""
@@ -864,14 +864,14 @@ class AutoScalingGroupManager:
     def display_spot_analysis_results(self, analyses: List[SpotAnalysis]):
         """Display spot analysis results in a formatted table"""
         if not analyses:
-            print("❌ No spot analysis results available")
+            print("[ERROR] No spot analysis results available")
             return
 
         # Sort by both score and quota_available (gives higher priority to score, then quota)
         sorted_analyses = sorted(analyses, key=lambda x: (x.score, x.quota_available), reverse=True)
 
         print("\n" + "="*100)
-        print("📊 SPOT INSTANCE ANALYSIS RESULTS")
+        print("[STATS] SPOT INSTANCE ANALYSIS RESULTS")
         print("="*100)
 
         print(f"{'Type':<12} {'Zone':<15} {'Price':<8} {'Avg':<8} {'Interrupt':<10} {'Quota':<6} {'Score':<6}")
@@ -912,11 +912,11 @@ class AutoScalingGroupManager:
             with open(filename, 'w') as f:
                 json.dump(summary, f, indent=2)
             
-            print(f"📁 Spot analysis saved to: {filename}")
+            print(f"[FOLDER] Spot analysis saved to: {filename}")
             
             # Display summary
             print("\n" + "="*60)
-            print("📋 SPOT ANALYSIS SUMMARY")
+            print("[LIST] SPOT ANALYSIS SUMMARY")
             print("="*60)
             print(f"Total instances analyzed: {summary['analysis_summary']['total_analyzed']}")
             print(f"High score (>70): {summary['analysis_summary']['high_score_count']}")
@@ -924,7 +924,7 @@ class AutoScalingGroupManager:
             print(f"Low score (<40): {summary['analysis_summary']['low_score_count']}")
             
         except Exception as e:
-            print(f"⚠️ Warning: Could not save spot analysis summary: {e}")
+            print(f"[WARN] Warning: Could not save spot analysis summary: {e}")
     
     def create_asg_with_strategy(self, cred_info: CredentialInfo, instance_selections: Dict[str, List[str]], 
                            launch_template_id: str, strategy: str, enable_scheduled_scaling: bool = True) -> Dict:
@@ -944,10 +944,10 @@ class AutoScalingGroupManager:
             # Create ASG configuration
             asg_config = self.build_asg_config(cred_info, instance_selections, launch_template_id, strategy, enable_scheduled_scaling)
         
-            print(f"\n🚀 Creating Auto Scaling Group: {asg_config.name}")
-            print(f"   📍 Region: {region}")
-            print(f"   📊 Strategy: {strategy.upper()}")
-            print(f"   💻 Instance Types: {', '.join(asg_config.instance_types)}")
+            print(f"\n[START] Creating Auto Scaling Group: {asg_config.name}")
+            print(f"   [ROUNDPIN] Region: {region}")
+            print(f"   [STATS] Strategy: {strategy.upper()}")
+            print(f"   [COMPUTE] Instance Types: {', '.join(asg_config.instance_types)}")
             print(f"   📈 Capacity: Min={asg_config.min_size}, Desired={asg_config.desired_capacity}, Max={asg_config.max_size}")
         
             # Get subnet information for reporting
@@ -961,14 +961,14 @@ class AutoScalingGroupManager:
             else:  # mixed
                 asg_response = self.create_mixed_asg(asg_client, asg_config, instance_selections, cred_info, enable_scheduled_scaling)
         
-            print(f"✅ Auto Scaling Group created successfully!")
+            print(f"[OK] Auto Scaling Group created successfully!")
 
             # After ASG creation, add scaling policies and alarms
             scaling_policy_result = self.create_asg_scaling_policies(asg_config.name, cred_info)
             if scaling_policy_result['status'] == 'success':
-                print(f"✅ Scaling policies and alarms attached to ASG: {asg_config.name}")
+                print(f"[OK] Scaling policies and alarms attached to ASG: {asg_config.name}")
             else:
-                print(f"⚠️ Failed to attach scaling policies: {scaling_policy_result['error_message']}")
+                print(f"[WARN] Failed to attach scaling policies: {scaling_policy_result['error_message']}")
 
             # Save ASG details
             self.save_asg_details(cred_info, asg_config, asg_response, scaling_policy_result)
@@ -997,22 +997,22 @@ class AutoScalingGroupManager:
         
             # Print summary with email
             print("\n" + "="*50)
-            print("📋 SUMMARY:")
-            print(f"   🔑 Credential Type: {cred_info.credential_type}")
-            print(f"   🏢 Account: {cred_info.account_name}")
+            print("[LIST] SUMMARY:")
+            print(f"   [KEY] Credential Type: {cred_info.credential_type}")
+            print(f"   [ACCOUNT] Account: {cred_info.account_name}")
             print(f"   📧 Email: {cred_info.email}")
-            print(f"   🌍 Region: {region}")
-            print(f"   🚀 ASG Name: {asg_config.name}")
-            print(f"   📊 ASG Strategy: {strategy.upper()}")
-            print(f"   📁 Output saved to: aws/asg/{cred_info.account_name}/")
-            print(f"   📊 Report: aws/asg/{cred_info.account_name}/asg_report_{execution_timestamp}.json")
+            print(f"   [REGION] Region: {region}")
+            print(f"   [START] ASG Name: {asg_config.name}")
+            print(f"   [STATS] ASG Strategy: {strategy.upper()}")
+            print(f"   [FOLDER] Output saved to: aws/asg/{cred_info.account_name}/")
+            print(f"   [STATS] Report: aws/asg/{cred_info.account_name}/asg_report_{execution_timestamp}.json")
             print("="*50)
         
             return result
         
         except Exception as e:
             # Handle failures and generate report with failed information
-            print(f"❌ Error creating Auto Scaling Group: {e}")
+            print(f"[ERROR] Error creating Auto Scaling Group: {e}")
         
             # Create failed result dictionary
             failed_result = {
@@ -1053,7 +1053,7 @@ class AutoScalingGroupManager:
             with open(failed_filename, 'w') as f:
                 json.dump(failed_result, f, indent=2)
         
-            print(f"📊 Failed ASG report saved to: {failed_filename}")
+            print(f"[STATS] Failed ASG report saved to: {failed_filename}")
             raise
 
     def _get_vpc_from_subnet(self, subnet_id: str, region: str, cred_info: CredentialInfo) -> str:
@@ -1070,7 +1070,7 @@ class AutoScalingGroupManager:
                 return subnet_response['Subnets'][0].get('VpcId', 'Unknown')
             return 'Unknown'
         except Exception as e:
-            print(f"⚠️ Warning: Could not get VPC ID for subnet {subnet_id}: {e}")
+            print(f"[WARN] Warning: Could not get VPC ID for subnet {subnet_id}: {e}")
             return 'Unknown'
 
     def build_asg_config(self, cred_info: CredentialInfo, instance_selections: Dict[str, list],
@@ -1134,38 +1134,38 @@ class AutoScalingGroupManager:
     def prompt_capacity_settings(self) -> Tuple[int, int, int]:
         """Prompt user for ASG capacity settings"""
         print("\n" + "="*50)
-        print("📊 AUTO SCALING GROUP CAPACITY SETTINGS")
+        print("[STATS] AUTO SCALING GROUP CAPACITY SETTINGS")
         print("="*50)
         
         while True:
             try:
                 min_size = int(input("Minimum capacity (default 1): ").strip() or "1")
                 if min_size < 0:
-                    print("❌ Minimum capacity must be >= 0")
+                    print("[ERROR] Minimum capacity must be >= 0")
                     continue
                 break
             except ValueError:
-                print("❌ Please enter a valid number")
+                print("[ERROR] Please enter a valid number")
         
         while True:
             try:
                 desired_capacity = int(input(f"Desired capacity (default {max(1, min_size)}): ").strip() or str(max(1, min_size)))
                 if desired_capacity < min_size:
-                    print(f"❌ Desired capacity must be >= minimum capacity ({min_size})")
+                    print(f"[ERROR] Desired capacity must be >= minimum capacity ({min_size})")
                     continue
                 break
             except ValueError:
-                print("❌ Please enter a valid number")
+                print("[ERROR] Please enter a valid number")
         
         while True:
             try:
                 max_size = int(input(f"Maximum capacity (default {max(desired_capacity, 5)}): ").strip() or str(max(desired_capacity, 5)))
                 if max_size < desired_capacity:
-                    print(f"❌ Maximum capacity must be >= desired capacity ({desired_capacity})")
+                    print(f"[ERROR] Maximum capacity must be >= desired capacity ({desired_capacity})")
                     continue
                 break
             except ValueError:
-                print("❌ Please enter a valid number")
+                print("[ERROR] Please enter a valid number")
         
         return min_size, desired_capacity, max_size
 
@@ -1199,10 +1199,10 @@ class AutoScalingGroupManager:
             with open(filename, 'w') as f:
                 json.dump(details, f, indent=2)
             
-            print(f"📁 ASG details saved to: {filename}")
+            print(f"[FOLDER] ASG details saved to: {filename}")
             
         except Exception as e:
-            print(f"⚠️ Warning: Could not save ASG details: {e}")
+            print(f"[WARN] Warning: Could not save ASG details: {e}")
 
     def _get_unsupported_azs(self, region: str) -> Set[str]:
         """Load unsupported AZs from ec2-region-ami-mapping.json file"""
@@ -1235,7 +1235,7 @@ class AutoScalingGroupManager:
         """Attach scheduled scaling actions directly to the ASG with conflict handling"""
         try:
             self.log_operation('INFO', f"Attaching scheduled scaling actions to ASG {asg_name}")
-            print(f"🕒 Attaching scheduled scaling actions to ASG {asg_name}...")
+            print(f"[TIME] Attaching scheduled scaling actions to ASG {asg_name}...")
         
             # First, check for existing scheduled actions
             try:
@@ -1246,11 +1246,11 @@ class AutoScalingGroupManager:
             
                 if existing_actions:
                     action_names = [action['ScheduledActionName'] for action in existing_actions]
-                    print(f"⚠️ Found {len(existing_actions)} existing scheduled actions: {', '.join(action_names)}")
+                    print(f"[WARN] Found {len(existing_actions)} existing scheduled actions: {', '.join(action_names)}")
                     print("ℹ️ These actions will be used for scheduled scaling")
                     return True
             except Exception as e:
-                print(f"⚠️ Warning: Could not check for existing scheduled actions: {str(e)}")
+                print(f"[WARN] Warning: Could not check for existing scheduled actions: {str(e)}")
         
             # Generate unique timestamp for start time
             tomorrow = datetime.now() + timedelta(days=1)
@@ -1271,7 +1271,7 @@ class AutoScalingGroupManager:
                 MaxSize=3,
                 DesiredCapacity=1
             )
-            print(f"✅ Created scale-up action: {scale_up_name} (starts at 11:00 AM IST on weekdays)")
+            print(f"[OK] Created scale-up action: {scale_up_name} (starts at 11:00 AM IST on weekdays)")
 
             # After business hours (9 PM IST = 3:30 PM UTC)
             scale_down_name = f"{asg_name}-scale-down"
@@ -1284,16 +1284,16 @@ class AutoScalingGroupManager:
                 MaxSize=3,
                 DesiredCapacity=0
             )
-            print(f"✅ Created scale-down action: {scale_down_name} (starts at 9:00 PM IST on weekdays)")
-            print(f"🗓️ Scaling actions will begin tomorrow and repeat on weekdays thereafter")
+            print(f"[OK] Created scale-down action: {scale_down_name} (starts at 9:00 PM IST on weekdays)")
+            print(f"[CALENDAR] Scaling actions will begin tomorrow and repeat on weekdays thereafter")
         
-            print(f"✅ Scheduled scaling actions attached to ASG {asg_name}")
+            print(f"[OK] Scheduled scaling actions attached to ASG {asg_name}")
             self.log_operation('INFO', f"Successfully attached scheduled scaling actions to ASG {asg_name}")
             return True
     
         except Exception as e:
             self.log_operation('ERROR', f"Failed to attach scheduled scaling actions to ASG {asg_name}: {str(e)}")
-            print(f"❌ Failed to attach scheduled scaling actions: {str(e)}")
+            print(f"[ERROR] Failed to attach scheduled scaling actions: {str(e)}")
             return False
 
     def log_operation(self, level, message):

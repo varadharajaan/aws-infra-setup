@@ -69,7 +69,7 @@ class UltraEBSVolumeCleanupManager:
             self.operation_logger.addHandler(console_handler)
             
             self.operation_logger.info("=" * 100)
-            self.operation_logger.info("🚨 ULTRA EBS VOLUME & SNAPSHOT CLEANUP SESSION STARTED 🚨")
+            self.operation_logger.info("[ALERT] ULTRA EBS VOLUME & SNAPSHOT CLEANUP SESSION STARTED [ALERT]")
             self.operation_logger.info("=" * 100)
             self.operation_logger.info(f"Execution Time: {self.current_time} UTC")
             self.operation_logger.info(f"Executed By: {self.current_user}")
@@ -104,7 +104,7 @@ class UltraEBSVolumeCleanupManager:
             with open(self.config_file, 'r', encoding='utf-8') as f:
                 self.config_data = json.load(f)
             
-            self.log_operation('INFO', f"✅ Configuration loaded from: {self.config_file}")
+            self.log_operation('INFO', f"[OK] Configuration loaded from: {self.config_file}")
             
             if 'accounts' not in self.config_data:
                 raise ValueError("No 'accounts' section found in configuration")
@@ -121,7 +121,7 @@ class UltraEBSVolumeCleanupManager:
             
             self.config_data['accounts'] = valid_accounts
             
-            self.log_operation('INFO', f"📊 Valid accounts loaded: {len(valid_accounts)}")
+            self.log_operation('INFO', f"[STATS] Valid accounts loaded: {len(valid_accounts)}")
             for account_name, account_data in valid_accounts.items():
                 account_id = account_data.get('account_id', 'Unknown')
                 email = account_data.get('email', 'Unknown')
@@ -131,7 +131,7 @@ class UltraEBSVolumeCleanupManager:
                 'us-east-1', 'us-east-2', 'us-west-1', 'us-west-2', 'ap-south-1'
             ])
             
-            self.log_operation('INFO', f"🌍 Regions to process: {self.user_regions}")
+            self.log_operation('INFO', f"[REGION] Regions to process: {self.user_regions}")
             
         except FileNotFoundError as e:
             self.log_operation('ERROR', f"Configuration file error: {e}")
@@ -167,8 +167,8 @@ class UltraEBSVolumeCleanupManager:
         try:
             volumes = []
             
-            self.log_operation('INFO', f"🔍 Scanning for EBS volumes in {region} ({account_name})")
-            print(f"   🔍 Scanning for EBS volumes in {region} ({account_name})...")
+            self.log_operation('INFO', f"[SCAN] Scanning for EBS volumes in {region} ({account_name})")
+            print(f"   [SCAN] Scanning for EBS volumes in {region} ({account_name})...")
             
             paginator = ec2_client.get_paginator('describe_volumes')
             
@@ -207,8 +207,8 @@ class UltraEBSVolumeCleanupManager:
                     
                     volumes.append(volume_info)
             
-            self.log_operation('INFO', f"📦 Found {len(volumes)} EBS volumes in {region} ({account_name})")
-            print(f"   📦 Found {len(volumes)} EBS volumes in {region} ({account_name})")
+            self.log_operation('INFO', f"[PACKAGE] Found {len(volumes)} EBS volumes in {region} ({account_name})")
+            print(f"   [PACKAGE] Found {len(volumes)} EBS volumes in {region} ({account_name})")
             
             # Count by state
             available_count = sum(1 for v in volumes if v['state'] == 'available')
@@ -221,7 +221,7 @@ class UltraEBSVolumeCleanupManager:
             
         except Exception as e:
             self.log_operation('ERROR', f"Error getting EBS volumes in {region} ({account_name}): {e}")
-            print(f"   ❌ Error getting volumes in {region}: {e}")
+            print(f"   [ERROR] Error getting volumes in {region}: {e}")
             return []
 
     def get_all_snapshots(self, ec2_client, region, account_name, account_id):
@@ -229,8 +229,8 @@ class UltraEBSVolumeCleanupManager:
         try:
             snapshots = []
             
-            self.log_operation('INFO', f"🔍 Scanning for EBS snapshots in {region} ({account_name})")
-            print(f"   🔍 Scanning for EBS snapshots in {region} ({account_name})...")
+            self.log_operation('INFO', f"[SCAN] Scanning for EBS snapshots in {region} ({account_name})")
+            print(f"   [SCAN] Scanning for EBS snapshots in {region} ({account_name})...")
             
             paginator = ec2_client.get_paginator('describe_snapshots')
             
@@ -265,14 +265,14 @@ class UltraEBSVolumeCleanupManager:
                     
                     snapshots.append(snapshot_info)
             
-            self.log_operation('INFO', f"📸 Found {len(snapshots)} EBS snapshots in {region} ({account_name})")
-            print(f"   📸 Found {len(snapshots)} EBS snapshots in {region} ({account_name})")
+            self.log_operation('INFO', f"[SNAPSHOT] Found {len(snapshots)} EBS snapshots in {region} ({account_name})")
+            print(f"   [SNAPSHOT] Found {len(snapshots)} EBS snapshots in {region} ({account_name})")
             
             return snapshots
             
         except Exception as e:
             self.log_operation('ERROR', f"Error getting EBS snapshots in {region} ({account_name}): {e}")
-            print(f"   ❌ Error getting snapshots in {region}: {e}")
+            print(f"   [ERROR] Error getting snapshots in {region}: {e}")
             return []
 
     def delete_volume(self, ec2_client, volume_info):
@@ -285,8 +285,8 @@ class UltraEBSVolumeCleanupManager:
             
             # Skip volumes that are in-use
             if state == 'in-use':
-                self.log_operation('INFO', f"⏭️  Skipping volume {volume_id} - currently in use (attached to {volume_info['attached_to']})")
-                print(f"      ⏭️  Skipping {volume_id} - in use")
+                self.log_operation('INFO', f"[SKIP]  Skipping volume {volume_id} - currently in use (attached to {volume_info['attached_to']})")
+                print(f"      [SKIP]  Skipping {volume_id} - in use")
                 
                 self.cleanup_results['skipped_volumes'].append({
                     'volume_id': volume_id,
@@ -302,12 +302,12 @@ class UltraEBSVolumeCleanupManager:
             
             # Delete available volumes
             if state == 'available':
-                self.log_operation('INFO', f"🗑️  Deleting volume {volume_id} ({volume_info['name']}) - {volume_info['size']}GB, {volume_info['volume_type']}")
-                print(f"      🗑️  Deleting {volume_id} ({volume_info['name']}) - {volume_info['size']}GB")
+                self.log_operation('INFO', f"[DELETE]  Deleting volume {volume_id} ({volume_info['name']}) - {volume_info['size']}GB, {volume_info['volume_type']}")
+                print(f"      [DELETE]  Deleting {volume_id} ({volume_info['name']}) - {volume_info['size']}GB")
                 
                 ec2_client.delete_volume(VolumeId=volume_id)
                 
-                self.log_operation('INFO', f"✅ Successfully deleted volume {volume_id}")
+                self.log_operation('INFO', f"[OK] Successfully deleted volume {volume_id}")
                 
                 self.cleanup_results['deleted_volumes'].append({
                     'volume_id': volume_id,
@@ -324,8 +324,8 @@ class UltraEBSVolumeCleanupManager:
                 return True
             else:
                 # Skip volumes in other states (creating, deleting, error)
-                self.log_operation('WARNING', f"⏭️  Skipping volume {volume_id} - state: {state}")
-                print(f"      ⏭️  Skipping {volume_id} - state: {state}")
+                self.log_operation('WARNING', f"[SKIP]  Skipping volume {volume_id} - state: {state}")
+                print(f"      [SKIP]  Skipping {volume_id} - state: {state}")
                 
                 self.cleanup_results['skipped_volumes'].append({
                     'volume_id': volume_id,
@@ -340,7 +340,7 @@ class UltraEBSVolumeCleanupManager:
             
         except Exception as e:
             self.log_operation('ERROR', f"Failed to delete volume {volume_info['volume_id']}: {e}")
-            print(f"      ❌ Failed to delete {volume_info['volume_id']}: {e}")
+            print(f"      [ERROR] Failed to delete {volume_info['volume_id']}: {e}")
             
             self.cleanup_results['failed_deletions'].append({
                 'resource_type': 'volume',
@@ -359,12 +359,12 @@ class UltraEBSVolumeCleanupManager:
             region = snapshot_info['region']
             account_name = snapshot_info['account_name']
             
-            self.log_operation('INFO', f"🗑️  Deleting snapshot {snapshot_id} ({snapshot_info['name']}) - {snapshot_info['volume_size']}GB")
-            print(f"      🗑️  Deleting snapshot {snapshot_id} ({snapshot_info['name']}) - {snapshot_info['volume_size']}GB")
+            self.log_operation('INFO', f"[DELETE]  Deleting snapshot {snapshot_id} ({snapshot_info['name']}) - {snapshot_info['volume_size']}GB")
+            print(f"      [DELETE]  Deleting snapshot {snapshot_id} ({snapshot_info['name']}) - {snapshot_info['volume_size']}GB")
             
             ec2_client.delete_snapshot(SnapshotId=snapshot_id)
             
-            self.log_operation('INFO', f"✅ Successfully deleted snapshot {snapshot_id}")
+            self.log_operation('INFO', f"[OK] Successfully deleted snapshot {snapshot_id}")
             
             self.cleanup_results['deleted_snapshots'].append({
                 'snapshot_id': snapshot_id,
@@ -383,7 +383,7 @@ class UltraEBSVolumeCleanupManager:
             
         except Exception as e:
             self.log_operation('ERROR', f"Failed to delete snapshot {snapshot_info['snapshot_id']}: {e}")
-            print(f"      ❌ Failed to delete snapshot {snapshot_info['snapshot_id']}: {e}")
+            print(f"      [ERROR] Failed to delete snapshot {snapshot_info['snapshot_id']}: {e}")
             
             self.cleanup_results['failed_deletions'].append({
                 'resource_type': 'snapshot',
@@ -402,15 +402,15 @@ class UltraEBSVolumeCleanupManager:
             secret_key = account_data['secret_key']
             account_id = account_data['account_id']
         
-            self.log_operation('INFO', f"🧹 Starting cleanup for {account_name} ({account_id}) in {region}")
-            print(f"\n🧹 Starting cleanup for {account_name} ({account_id}) in {region}")
+            self.log_operation('INFO', f"[CLEANUP] Starting cleanup for {account_name} ({account_id}) in {region}")
+            print(f"\n[CLEANUP] Starting cleanup for {account_name} ({account_id}) in {region}")
         
             # Create EC2 client
             try:
                 ec2_client = self.create_ec2_client(access_key, secret_key, region)
             except Exception as client_error:
                 self.log_operation('ERROR', f"Could not create EC2 client for {region}: {client_error}")
-                print(f"   ❌ Could not create EC2 client for {region}: {client_error}")
+                print(f"   [ERROR] Could not create EC2 client for {region}: {client_error}")
                 return False
         
             # Get all EBS volumes
@@ -448,7 +448,7 @@ class UltraEBSVolumeCleanupManager:
                 available_volumes = [v for v in volumes if v['state'] == 'available']
                 
                 if available_volumes:
-                    print(f"\n   🗑️  Deleting {len(available_volumes)} available volumes...")
+                    print(f"\n   [DELETE]  Deleting {len(available_volumes)} available volumes...")
                     for volume in available_volumes:
                         self.delete_volume(ec2_client, volume)
                 else:
@@ -456,17 +456,17 @@ class UltraEBSVolumeCleanupManager:
             
             # Delete all snapshots
             if snapshots:
-                print(f"\n   🗑️  Deleting {len(snapshots)} snapshots...")
+                print(f"\n   [DELETE]  Deleting {len(snapshots)} snapshots...")
                 for snapshot in snapshots:
                     self.delete_snapshot(ec2_client, snapshot)
         
-            self.log_operation('INFO', f"✅ Cleanup completed for {account_name} ({region})")
-            print(f"   ✅ Cleanup completed for {account_name} ({region})")
+            self.log_operation('INFO', f"[OK] Cleanup completed for {account_name} ({region})")
+            print(f"   [OK] Cleanup completed for {account_name} ({region})")
             return True
         
         except Exception as e:
             self.log_operation('ERROR', f"Error cleaning up {account_name} ({region}): {e}")
-            print(f"   ❌ Error cleaning up {account_name} ({region}): {e}")
+            print(f"   [ERROR] Error cleaning up {account_name} ({region}): {e}")
             self.cleanup_results['errors'].append({
                 'account_name': account_name,
                 'region': region,
@@ -561,29 +561,29 @@ class UltraEBSVolumeCleanupManager:
             with open(report_filename, 'w', encoding='utf-8') as f:
                 json.dump(report_data, f, indent=2, default=str)
             
-            self.log_operation('INFO', f"✅ Ultra cleanup report saved to: {report_filename}")
+            self.log_operation('INFO', f"[OK] Ultra cleanup report saved to: {report_filename}")
             return report_filename
             
         except Exception as e:
-            self.log_operation('ERROR', f"❌ Failed to save ultra cleanup report: {e}")
+            self.log_operation('ERROR', f"[ERROR] Failed to save ultra cleanup report: {e}")
             return None
 
     def run(self):
         """Main execution method"""
         try:
-            self.log_operation('INFO', "🚨 STARTING ULTRA EBS VOLUME & SNAPSHOT CLEANUP SESSION 🚨")
+            self.log_operation('INFO', "[ALERT] STARTING ULTRA EBS VOLUME & SNAPSHOT CLEANUP SESSION [ALERT]")
             
-            print("🚨" * 30)
-            print("💥 ULTRA EBS VOLUME & SNAPSHOT CLEANUP 💥")
-            print("🚨" * 30)
-            print(f"📅 Execution Date/Time: {self.current_time} UTC")
-            print(f"👤 Executed by: {self.current_user}")
-            print(f"📋 Log File: {self.log_filename}")
+            print("[ALERT]" * 30)
+            print("[START] ULTRA EBS VOLUME & SNAPSHOT CLEANUP MANAGER")
+            print("[ALERT]" * 30)
+            print(f"[DATE] Execution Date/Time: {self.current_time} UTC")
+            print(f"[USER] Executed by: {self.current_user}")
+            print(f"[LIST] Log File: {self.log_filename}")
             
             # Display available accounts
             accounts = self.config_data['accounts']
             
-            print(f"\n🏦 AVAILABLE AWS ACCOUNTS:")
+            print(f"\n[BANK] AVAILABLE AWS ACCOUNTS:")
             print("=" * 80)
             
             account_list = []
@@ -613,7 +613,7 @@ class UltraEBSVolumeCleanupManager:
             
             if selection in ['cancel', 'quit']:
                 self.log_operation('INFO', "EBS cleanup cancelled by user")
-                print("❌ Cleanup cancelled")
+                print("[ERROR] Cleanup cancelled")
                 return
             
             # Process account selection
@@ -621,7 +621,7 @@ class UltraEBSVolumeCleanupManager:
             if not selection or selection == 'all':
                 selected_accounts = accounts
                 self.log_operation('INFO', f"All accounts selected: {len(accounts)}")
-                print(f"✅ Selected all {len(accounts)} accounts")
+                print(f"[OK] Selected all {len(accounts)} accounts")
             else:
                 try:
                     parts = []
@@ -645,11 +645,11 @@ class UltraEBSVolumeCleanupManager:
                         raise ValueError("No valid accounts selected")
                     
                     self.log_operation('INFO', f"Selected accounts: {list(selected_accounts.keys())}")
-                    print(f"✅ Selected {len(selected_accounts)} accounts: {', '.join(selected_accounts.keys())}")
+                    print(f"[OK] Selected {len(selected_accounts)} accounts: {', '.join(selected_accounts.keys())}")
                     
                 except ValueError as e:
                     self.log_operation('ERROR', f"Invalid account selection: {e}")
-                    print(f"❌ Invalid selection: {e}")
+                    print(f"[ERROR] Invalid selection: {e}")
                     return
             
             regions = self.user_regions
@@ -657,17 +657,17 @@ class UltraEBSVolumeCleanupManager:
             # Calculate total operations
             total_operations = len(selected_accounts) * len(regions)
             
-            print(f"\n🎯 CLEANUP CONFIGURATION")
+            print(f"\n[TARGET] CLEANUP CONFIGURATION")
             print("=" * 80)
-            print(f"🏦 Selected accounts: {len(selected_accounts)}")
-            print(f"🌍 Regions per account: {len(regions)}")
-            print(f"📋 Total operations: {total_operations}")
-            print(f"🗑️  Target: Available EBS volumes + All snapshots")
-            print(f"⏭️  Skipped: In-use volumes (attached to instances)")
+            print(f"[BANK] Selected accounts: {len(selected_accounts)}")
+            print(f"[REGION] Regions per account: {len(regions)}")
+            print(f"[LIST] Total operations: {total_operations}")
+            print(f"[DELETE]  Target: Available EBS volumes + All snapshots")
+            print(f"[SKIP]  Skipped: In-use volumes (attached to instances)")
             print("=" * 80)
             
             # Confirmation
-            print(f"\n⚠️  WARNING: This will delete:")
+            print(f"\n[WARN]  WARNING: This will delete:")
             print(f"    • ALL available (unattached) EBS volumes")
             print(f"    • ALL EBS snapshots owned by the account")
             print(f"    • Across {len(selected_accounts)} accounts in {len(regions)} regions")
@@ -679,7 +679,7 @@ class UltraEBSVolumeCleanupManager:
             
             if confirm1 not in ['y', 'yes']:
                 self.log_operation('INFO', "Ultra cleanup cancelled by user")
-                print("❌ Cleanup cancelled")
+                print("[ERROR] Cleanup cancelled")
                 return
             
             confirm2 = input(f"Are you sure? Type 'yes' to confirm: ").strip().lower()
@@ -687,12 +687,12 @@ class UltraEBSVolumeCleanupManager:
             
             if confirm2 != 'yes':
                 self.log_operation('INFO', "Ultra cleanup cancelled at final confirmation")
-                print("❌ Cleanup cancelled")
+                print("[ERROR] Cleanup cancelled")
                 return
             
             # Start cleanup
-            print(f"\n💥 STARTING CLEANUP...")
-            self.log_operation('INFO', f"🚨 CLEANUP INITIATED - {len(selected_accounts)} accounts, {len(regions)} regions")
+            print(f"\n[START] Starting cleanup...")
+            self.log_operation('INFO', f"[ALERT] CLEANUP INITIATED - {len(selected_accounts)} accounts, {len(regions)} regions")
             
             start_time = time.time()
             
@@ -718,7 +718,7 @@ class UltraEBSVolumeCleanupManager:
                 except Exception as e:
                     failed_tasks += 1
                     self.log_operation('ERROR', f"Task failed for {account_name} ({region}): {e}")
-                    print(f"❌ Task failed for {account_name} ({region}): {e}")
+                    print(f"[ERROR] Task failed for {account_name} ({region}): {e}")
             
             end_time = time.time()
             total_time = int(end_time - start_time)
@@ -729,15 +729,17 @@ class UltraEBSVolumeCleanupManager:
             total_storage_freed = total_gb_freed + total_snapshot_gb_freed
             
             # Display final results
-            print(f"\n💥" + "="*25 + " CLEANUP COMPLETE " + "="*25)
-            print(f"⏱️  Total execution time: {total_time} seconds")
-            print(f"✅ Successful operations: {successful_tasks}")
-            print(f"❌ Failed operations: {failed_tasks}")
-            print(f"💾 Volumes deleted: {len(self.cleanup_results['deleted_volumes'])} ({total_gb_freed} GB)")
-            print(f"📸 Snapshots deleted: {len(self.cleanup_results['deleted_snapshots'])} ({total_snapshot_gb_freed} GB)")
-            print(f"💰 Total storage freed: {total_storage_freed} GB")
-            print(f"⏭️  Volumes skipped (in-use): {len(self.cleanup_results['skipped_volumes'])}")
-            print(f"❌ Failed deletions: {len(self.cleanup_results['failed_deletions'])}")
+            print(f"\n" + "=" * 100)
+            print("[OK] CLEANUP COMPLETE")
+            print("=" * 100)
+            print(f"[TIMER]  Total execution time: {total_time} seconds")
+            print(f"[OK] Successful operations: {successful_tasks}")
+            print(f"[ERROR] Failed operations: {failed_tasks}")
+            print(f"[INSTANCE] Volumes deleted: {len(self.cleanup_results['deleted_volumes'])} ({total_gb_freed} GB)")
+            print(f"[SNAPSHOT] Snapshots deleted: {len(self.cleanup_results['deleted_snapshots'])} ({total_snapshot_gb_freed} GB)")
+            print(f"[COST] Total storage freed: {total_storage_freed} GB")
+            print(f"[SKIP]  Volumes skipped (in-use): {len(self.cleanup_results['skipped_volumes'])}")
+            print(f"[ERROR] Failed deletions: {len(self.cleanup_results['failed_deletions'])}")
             
             self.log_operation('INFO', f"CLEANUP COMPLETED")
             self.log_operation('INFO', f"Execution time: {total_time} seconds")
@@ -746,7 +748,7 @@ class UltraEBSVolumeCleanupManager:
             
             # Show account summary
             if self.cleanup_results['deleted_volumes'] or self.cleanup_results['deleted_snapshots']:
-                print(f"\n📊 Deletion Summary by Account:")
+                print(f"\n[STATS] Deletion Summary by Account:")
                 
                 account_summary = {}
                 for volume in self.cleanup_results['deleted_volumes']:
@@ -767,15 +769,15 @@ class UltraEBSVolumeCleanupManager:
                 
                 for account, summary in account_summary.items():
                     regions_list = ', '.join(sorted(summary['regions']))
-                    print(f"   🏦 {account}:")
-                    print(f"      💾 Volumes: {summary['volumes']}")
-                    print(f"      📸 Snapshots: {summary['snapshots']}")
-                    print(f"      💰 Storage freed: {summary['gb']} GB")
-                    print(f"      🌍 Regions: {regions_list}")
+                    print(f"   [BANK] {account}:")
+                    print(f"      [INSTANCE] Volumes: {summary['volumes']}")
+                    print(f"      [SNAPSHOT] Snapshots: {summary['snapshots']}")
+                    print(f"      [COST] Storage freed: {summary['gb']} GB")
+                    print(f"      [REGION] Regions: {regions_list}")
             
             # Show failures if any
             if self.cleanup_results['failed_deletions']:
-                print(f"\n❌ Failed Deletions:")
+                print(f"\n[ERROR] Failed Deletions:")
                 for failure in self.cleanup_results['failed_deletions'][:10]:
                     print(f"   • {failure['resource_type']} {failure['resource_id']} in {failure['account_name']} ({failure['region']})")
                     print(f"     Error: {failure['error']}")
@@ -785,19 +787,19 @@ class UltraEBSVolumeCleanupManager:
                     print(f"   ... and {remaining} more failures (see detailed report)")
             
             # Save report
-            print(f"\n📄 Saving cleanup report...")
+            print(f"\n[FILE] Saving cleanup report...")
             report_file = self.save_cleanup_report()
             if report_file:
-                print(f"✅ Cleanup report saved to: {report_file}")
+                print(f"[OK] Cleanup report saved to: {report_file}")
             
-            print(f"✅ Session log saved to: {self.log_filename}")
+            print(f"[OK] Session log saved to: {self.log_filename}")
             
-            print(f"\n💥 CLEANUP COMPLETE! 💥")
-            print("🚨" * 30)
+            print(f"\n[OK] Cleanup completed successfully!")
+            print("[ALERT]" * 30)
             
         except Exception as e:
             self.log_operation('ERROR', f"FATAL ERROR in cleanup execution: {str(e)}")
-            print(f"\n❌ FATAL ERROR: {e}")
+            print(f"\n[ERROR] FATAL ERROR: {e}")
             import traceback
             traceback.print_exc()
             raise
@@ -808,10 +810,10 @@ def main():
         manager = UltraEBSVolumeCleanupManager()
         manager.run()
     except KeyboardInterrupt:
-        print("\n\n❌ Cleanup interrupted by user")
+        print("\n\n[ERROR] Cleanup interrupted by user")
         sys.exit(1)
     except Exception as e:
-        print(f"❌ Unexpected error: {e}")
+        print(f"[ERROR] Unexpected error: {e}")
         sys.exit(1)
 
 if __name__ == "__main__":

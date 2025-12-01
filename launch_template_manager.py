@@ -40,17 +40,17 @@ class LaunchTemplateManager:
         """Load AWS account configurations"""
         try:
             if not os.path.exists(self.accounts_file):
-                print(f"❌ Accounts file '{self.accounts_file}' not found")
+                print(f"[ERROR] Accounts file '{self.accounts_file}' not found")
                 sys.exit(1)
             
             with open(self.accounts_file, 'r') as f:
                 config = json.load(f)
             
-            print(f"✅ Loaded {len(config['accounts'])} accounts from: {self.accounts_file}")
+            print(f"[OK] Loaded {len(config['accounts'])} accounts from: {self.accounts_file}")
             return config["accounts"]
         
         except Exception as e:
-            print(f"❌ Error loading accounts: {e}")
+            print(f"[ERROR] Error loading accounts: {e}")
             sys.exit(1)
     
     def select_accounts(self) -> List[str]:
@@ -58,7 +58,7 @@ class LaunchTemplateManager:
         account_names = list(self.accounts.keys())
         
         print("\n" + "="*80)
-        print("📋 Available AWS Accounts:")
+        print("[LIST] Available AWS Accounts:")
         print("="*80)
         
         for i, acc_name in enumerate(account_names, 1):
@@ -85,26 +85,26 @@ class LaunchTemplateManager:
                             if 1 <= start <= end <= len(account_names):
                                 selected_indices.update(range(start, end + 1))
                             else:
-                                print(f"⚠️ Invalid range: {part}")
+                                print(f"[WARN] Invalid range: {part}")
                         except ValueError:
-                            print(f"⚠️ Invalid range format: {part}")
+                            print(f"[WARN] Invalid range format: {part}")
                     else:
                         try:
                             idx = int(part)
                             if 1 <= idx <= len(account_names):
                                 selected_indices.add(idx)
                             else:
-                                print(f"⚠️ Invalid index: {idx}")
+                                print(f"[WARN] Invalid index: {idx}")
                         except ValueError:
-                            print(f"⚠️ Invalid input: {part}")
+                            print(f"[WARN] Invalid input: {part}")
                 
                 if selected_indices:
                     return [account_names[i-1] for i in selected_indices]
                 else:
-                    print("❌ No valid selections made")
+                    print("[ERROR] No valid selections made")
             
             except Exception as e:
-                print(f"❌ Error during account selection: {e}")
+                print(f"[ERROR] Error during account selection: {e}")
     
     def select_regions(self) -> List[str]:
         """Prompt user to select regions to process"""
@@ -135,26 +135,26 @@ class LaunchTemplateManager:
                             if 1 <= start <= end <= len(REGIONS):
                                 selected_indices.update(range(start, end + 1))
                             else:
-                                print(f"⚠️ Invalid range: {part}")
+                                print(f"[WARN] Invalid range: {part}")
                         except ValueError:
-                            print(f"⚠️ Invalid range format: {part}")
+                            print(f"[WARN] Invalid range format: {part}")
                     else:
                         try:
                             idx = int(part)
                             if 1 <= idx <= len(REGIONS):
                                 selected_indices.add(idx)
                             else:
-                                print(f"⚠️ Invalid index: {idx}")
+                                print(f"[WARN] Invalid index: {idx}")
                         except ValueError:
-                            print(f"⚠️ Invalid input: {part}")
+                            print(f"[WARN] Invalid input: {part}")
                 
                 if selected_indices:
                     return [REGIONS[i-1] for i in selected_indices]
                 else:
-                    print("❌ No valid selections made")
+                    print("[ERROR] No valid selections made")
             
             except Exception as e:
-                print(f"❌ Error during region selection: {e}")
+                print(f"[ERROR] Error during region selection: {e}")
 
     def process_accounts(self, selected_accounts: List[str], selected_regions: List[str], age_days: int) -> Dict:
         """Process selected accounts and regions to list and optionally delete old launch templates"""
@@ -163,8 +163,8 @@ class LaunchTemplateManager:
         total_old_templates = 0
         total_deleted = 0
         
-        print(f"\n🔍 Searching for launch templates older than {age_days} days ({cutoff_date.strftime('%Y-%m-%d')})")
-        print(f"🌐 Scanning {len(selected_regions)} regions across {len(selected_accounts)} accounts")
+        print(f"\n[SCAN] Searching for launch templates older than {age_days} days ({cutoff_date.strftime('%Y-%m-%d')})")
+        print(f"[NETWORK] Scanning {len(selected_regions)} regions across {len(selected_accounts)} accounts")
         
         for account_name in selected_accounts:
             self.results["accounts_scanned"] += 1
@@ -180,7 +180,7 @@ class LaunchTemplateManager:
             }
             
             print(f"\n{'='*100}")
-            print(f"🏢 Processing account: {account_name} (ID: {account_info['account_id']})")
+            print(f"[ACCOUNT] Processing account: {account_name} (ID: {account_info['account_id']})")
             print(f"{'='*100}")
             
             account_templates = 0
@@ -208,13 +208,13 @@ class LaunchTemplateManager:
                         templates.extend(page.get('LaunchTemplates', []))
                     
                     if not templates:
-                        print(f"   📭 No launch templates found in {region}")
+                        print(f"   [MAILBOX] No launch templates found in {region}")
                         continue
                     
                     # Sort templates by creation time (newest first)
                     templates.sort(key=lambda x: x.get('CreateTime', datetime.min), reverse=True)
                     
-                    print(f"   📋 Found {len(templates)} launch templates in {region}")
+                    print(f"   [LIST] Found {len(templates)} launch templates in {region}")
                     account_templates += len(templates)
                     total_templates += len(templates)
                     self.results["lt_found"] += len(templates)
@@ -240,13 +240,13 @@ class LaunchTemplateManager:
                         
                         status = ""
                         if any(template_name.startswith(prefix) for prefix in PROTECTED_PREFIXES):
-                            status = "🔒 PROTECTED"
+                            status = "[SECURE] PROTECTED"
                             protected_templates.append(tpl)
                         elif age_days_actual >= age_days:
-                            status = "⚠️ OLD"
+                            status = "[WARN] OLD"
                             old_templates.append(tpl)
                         else:
-                            status = "✅ KEEP"
+                            status = "[OK] KEEP"
                         
                         print(f"   {template_id:<25} {template_name[:38]:<40} {create_time.strftime('%Y-%m-%d %H:%M:%S'):<20} {age_days_actual:<10} {status}")
                     
@@ -255,7 +255,7 @@ class LaunchTemplateManager:
                     
                     # Prompt for deletion if old templates exist
                     if old_templates:
-                        print(f"\n   ⚠️ Found {len(old_templates)} templates older than {age_days} days")
+                        print(f"\n   [WARN] Found {len(old_templates)} templates older than {age_days} days")
                         
                         delete_choice = input(f"   Delete these {len(old_templates)} old templates in {region}? (y/n): ").strip().lower()
                         if delete_choice == 'y':
@@ -265,36 +265,36 @@ class LaunchTemplateManager:
                                 template_name = tpl['LaunchTemplateName']
                                 try:
                                     ec2_client.delete_launch_template(LaunchTemplateId=template_id)
-                                    print(f"   ✅ Deleted: {template_name} ({template_id})")
+                                    print(f"   [OK] Deleted: {template_name} ({template_id})")
                                     deleted_count += 1
                                     account_deleted += 1
                                     total_deleted += 1
                                     self.results["lt_deleted"] += 1
                                 except Exception as e:
                                     error_msg = f"Failed to delete template {template_id} in {region} for {account_name}: {str(e)}"
-                                    print(f"   ❌ {error_msg}")
+                                    print(f"   [ERROR] {error_msg}")
                                     self.results["errors"].append(error_msg)
                             
-                            print(f"   ✅ Deleted {deleted_count} templates in {region}")
+                            print(f"   [OK] Deleted {deleted_count} templates in {region}")
                         else:
                             print(f"   ℹ️ Skipped deletion in {region}")
                     
                     if protected_templates:
-                        print(f"\n   🔒 {len(protected_templates)} templates are protected due to name prefixes")
+                        print(f"\n   [SECURE] {len(protected_templates)} templates are protected due to name prefixes")
                 
                 except Exception as e:
                     error_msg = f"Error processing {region} in account {account_name}: {str(e)}"
-                    print(f"   ❌ {error_msg}")
+                    print(f"   [ERROR] {error_msg}")
                     self.results["errors"].append(error_msg)
             
-            print(f"\n📊 Account Summary for {account_name}:")
+            print(f"\n[STATS] Account Summary for {account_name}:")
             print(f"   - Total templates: {account_templates}")
             print(f"   - Templates older than {age_days} days: {account_old_templates}")
             print(f"   - Templates deleted: {account_deleted}")
         
         # Overall summary
         print(f"\n{'='*100}")
-        print(f"📊 FINAL SUMMARY")
+        print(f"[STATS] FINAL SUMMARY")
         print(f"{'='*100}")
         print(f"Total accounts processed: {len(selected_accounts)}")
         print(f"Total regions scanned: {len(selected_regions)}")
@@ -303,7 +303,7 @@ class LaunchTemplateManager:
         print(f"Total templates deleted: {total_deleted}")
         
         if self.results["errors"]:
-            print(f"\n⚠️ There were {len(self.results['errors'])} errors during processing")
+            print(f"\n[WARN] There were {len(self.results['errors'])} errors during processing")
             print("See the generated report for details.")
         
         return self.results
@@ -335,12 +335,12 @@ class LaunchTemplateManager:
         with open(filename, 'w') as f:
             json.dump(report, f, indent=2)
         
-        print(f"\n📄 Report saved to: {filename}")
+        print(f"\n[FILE] Report saved to: {filename}")
         return filename
 
 def main():
     print("\n" + "="*100)
-    print("🚀 Launch Template Manager - List and cleanup old launch templates across AWS accounts")
+    print("[START] Launch Template Manager - List and cleanup old launch templates across AWS accounts")
     print("="*100)
     
     # Initialize manager
@@ -349,13 +349,13 @@ def main():
     # Select accounts
     selected_accounts = manager.select_accounts()
     if not selected_accounts:
-        print("❌ No accounts selected. Exiting.")
+        print("[ERROR] No accounts selected. Exiting.")
         sys.exit(1)
     
     # Select regions
     selected_regions = manager.select_regions()
     if not selected_regions:
-        print("❌ No regions selected. Exiting.")
+        print("[ERROR] No regions selected. Exiting.")
         sys.exit(1)
     
     # Get age threshold
@@ -365,13 +365,13 @@ def main():
             age_input = input("\nEnter age threshold in days (templates older than this will be considered for deletion): ")
             age_days = int(age_input)
             if age_days <= 0:
-                print("❌ Please enter a positive number of days")
+                print("[ERROR] Please enter a positive number of days")
         except ValueError:
-            print("❌ Please enter a valid number")
+            print("[ERROR] Please enter a valid number")
     
-    print(f"\n✅ Selected {len(selected_accounts)} accounts")
-    print(f"✅ Selected {len(selected_regions)} regions")
-    print(f"✅ Age threshold: {age_days} days")
+    print(f"\n[OK] Selected {len(selected_accounts)} accounts")
+    print(f"[OK] Selected {len(selected_regions)} regions")
+    print(f"[OK] Age threshold: {age_days} days")
     
     # Confirm before proceeding
     confirm = input("\nProceed with scanning and potential deletion? (y/n): ").strip().lower()

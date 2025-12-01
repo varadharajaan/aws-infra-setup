@@ -1,28 +1,62 @@
 #!/usr/bin/env python3
 
-import boto3
-import json
-import sys
+"""
+Ultra AMI Cleanup Manager
+
+Tool to perform comprehensive cleanup of AMI resources across AWS accounts.
+
+Manages deletion of:
+- Amazon Machine Images (AMIs)
+- Associated EBS Snapshots
+- Orphaned Snapshots
+
+PROTECTIONS:
+- AMIs in use by instances are SKIPPED
+- Running/Stopped instances using AMIs are preserved
+
+Author: varadharajaan
+Created: 2025-11-24
+"""
+
 import os
+import json
+import boto3
 import time
 from datetime import datetime
+from typing import Dict, List, Optional, Any
 from botocore.exceptions import ClientError, BotoCoreError
+import botocore
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from root_iam_credential_manager import AWSCredentialManager, Colors
 
-class UltraAMICleanupManager:
-    def __init__(self, config_file='aws_accounts_config.json'):
-        self.config_file = config_file
+
+class UltraCleanupAMIManager:
+    """
+    Tool to perform comprehensive cleanup of AMI resources across AWS accounts.
+    """
+
+    def __init__(self, config_dir: str = None):
+        """Initialize the AMI Cleanup Manager."""
+        self.cred_manager = AWSCredentialManager(config_dir)
+        self.config_dir = self.cred_manager.config_dir
         self.current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.current_user = "varadharajaan"
-        
+
         # Generate timestamp for output files
         self.execution_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        
+
+        # Set up directory paths
+        self.ami_dir = os.path.join(self.config_dir, "aws", "ami")
+        self.reports_dir = os.path.join(self.ami_dir, "reports")
+
         # Initialize log file
         self.setup_detailed_logging()
-        
-        # Load configuration
-        self.load_configuration()
-        
+
+        # Get user regions from config
+        self.user_regions = self._get_user_regions()
+
         # Storage for cleanup results
         self.cleanup_results = {
             'accounts_processed': [],
@@ -34,13 +68,30 @@ class UltraAMICleanupManager:
             'errors': []
         }
 
+    def print_colored(self, color: str, message: str):
+        """Print colored message to console"""
+        print(f"{color}{message}{Colors.END}")
+
+    def _get_user_regions(self) -> List[str]:
+        """Get user regions from root accounts config."""
+        try:
+            config = self.cred_manager.load_root_accounts_config()
+            if config:
+                return config.get('user_settings', {}).get('user_regions', [
+                    'us-east-1', 'us-east-2', 'us-west-1', 'us-west-2', 'ap-south-1'
+                ])
+        except Exception as e:
+            self.print_colored(Colors.YELLOW, f"[WARN]  Warning: Could not load user regions: {e}")
+
+        return ['us-east-1', 'us-east-2', 'us-west-1', 'us-west-2', 'ap-south-1']
+
     def setup_detailed_logging(self):
         """Setup detailed logging to file"""
         try:
-            log_dir = "aws/ami/logs"
-            os.makedirs(log_dir, exist_ok=True)
-        
-            self.log_filename = f"{log_dir}/ultra_ami_cleanup_log_{self.execution_timestamp}.log"
+            os.makedirs(self.ami_dir, exist_ok=True)
+
+            # Save log file in the aws/ami directory
+            self.log_filename = f"{self.ami_dir}/ultra_ami_cleanup_log_{self.execution_timestamp}.log"
             
             import logging
             
@@ -68,11 +119,11 @@ class UltraAMICleanupManager:
             self.operation_logger.addHandler(console_handler)
             
             self.operation_logger.info("=" * 100)
-            self.operation_logger.info("🚨 ULTRA AMI CLEANUP SESSION STARTED 🚨")
+            self.operation_logger.info("[ALERT] ULTRA AMI CLEANUP SESSION STARTED [ALERT]")
             self.operation_logger.info("=" * 100)
             self.operation_logger.info(f"Execution Time: {self.current_time} UTC")
             self.operation_logger.info(f"Executed By: {self.current_user}")
-            self.operation_logger.info(f"Config File: {self.config_file}")
+            self.operation_logger.info(f"Config Dir: {self.config_dir}")
             self.operation_logger.info(f"Log File: {self.log_filename}")
             self.operation_logger.info("=" * 100)
             
@@ -93,54 +144,6 @@ class UltraAMICleanupManager:
                 self.operation_logger.debug(message)
         else:
             print(f"[{level.upper()}] {message}")
-
-    def load_configuration(self):
-        """Load AWS accounts configuration"""
-        try:
-            if not os.path.exists(self.config_file):
-                raise FileNotFoundError(f"Configuration file '{self.config_file}' not found")
-            
-            with open(self.config_file, 'r', encoding='utf-8') as f:
-                self.config_data = json.load(f)
-            
-            self.log_operation('INFO', f"✅ Configuration loaded from: {self.config_file}")
-            
-            if 'accounts' not in self.config_data:
-                raise ValueError("No 'accounts' section found in configuration")
-            
-            valid_accounts = {}
-            for account_name, account_data in self.config_data['accounts'].items():
-                if (account_data.get('access_key') and 
-                    account_data.get('secret_key') and
-                    account_data.get('account_id') and
-                    not account_data.get('access_key').startswith('ADD_')):
-                    valid_accounts[account_name] = account_data
-                else:
-                    self.log_operation('WARNING', f"Skipping incomplete account: {account_name}")
-            
-            self.config_data['accounts'] = valid_accounts
-            
-            self.log_operation('INFO', f"📊 Valid accounts loaded: {len(valid_accounts)}")
-            for account_name, account_data in valid_accounts.items():
-                account_id = account_data.get('account_id', 'Unknown')
-                email = account_data.get('email', 'Unknown')
-                self.log_operation('INFO', f"   • {account_name}: {account_id} ({email})")
-            
-            self.user_regions = self.config_data.get('user_settings', {}).get('user_regions', [
-                'us-east-1', 'us-east-2', 'us-west-1', 'us-west-2', 'ap-south-1'
-            ])
-            
-            self.log_operation('INFO', f"🌍 Regions to process: {self.user_regions}")
-            
-        except FileNotFoundError as e:
-            self.log_operation('ERROR', f"Configuration file error: {e}")
-            sys.exit(1)
-        except json.JSONDecodeError as e:
-            self.log_operation('ERROR', f"Invalid JSON in configuration file: {e}")
-            sys.exit(1)
-        except Exception as e:
-            self.log_operation('ERROR', f"Error loading configuration: {e}")
-            sys.exit(1)
 
     def create_ec2_client(self, access_key, secret_key, region):
         """Create EC2 client using account credentials"""
@@ -166,8 +169,8 @@ class UltraAMICleanupManager:
         try:
             amis = []
             
-            self.log_operation('INFO', f"🔍 Scanning for AMIs in {region} ({account_name})")
-            print(f"   🔍 Scanning for AMIs in {region} ({account_name})...")
+            self.log_operation('INFO', f"[SCAN] Scanning for AMIs in {region} ({account_name})")
+            print(f"   [SCAN] Scanning for AMIs in {region} ({account_name})...")
             
             # Get AMIs owned by this account
             response = ec2_client.describe_images(Owners=[account_id])
@@ -207,8 +210,8 @@ class UltraAMICleanupManager:
                 
                 amis.append(ami_info)
             
-            self.log_operation('INFO', f"📸 Found {len(amis)} AMIs in {region} ({account_name})")
-            print(f"   📸 Found {len(amis)} AMIs in {region} ({account_name})")
+            self.log_operation('INFO', f"[SNAPSHOT] Found {len(amis)} AMIs in {region} ({account_name})")
+            print(f"   [SNAPSHOT] Found {len(amis)} AMIs in {region} ({account_name})")
             
             # Count by state
             available_count = sum(1 for a in amis if a['state'] == 'available')
@@ -221,7 +224,7 @@ class UltraAMICleanupManager:
             
         except Exception as e:
             self.log_operation('ERROR', f"Error getting AMIs in {region} ({account_name}): {e}")
-            print(f"   ❌ Error getting AMIs in {region}: {e}")
+            print(f"   [ERROR] Error getting AMIs in {region}: {e}")
             return []
 
     def check_ami_in_use(self, ec2_client, ami_id):
@@ -261,8 +264,8 @@ class UltraAMICleanupManager:
             
             if in_use:
                 instance_ids = [inst['instance_id'] for inst in instances]
-                self.log_operation('INFO', f"⏭️  Skipping AMI {ami_id} ({ami_info['name']}) - in use by instances: {', '.join(instance_ids)}")
-                print(f"      ⏭️  Skipping {ami_id} ({ami_info['name']}) - in use by {len(instances)} instance(s)")
+                self.log_operation('INFO', f"[SKIP]  Skipping AMI {ami_id} ({ami_info['name']}) - in use by instances: {', '.join(instance_ids)}")
+                print(f"      [SKIP]  Skipping {ami_id} ({ami_info['name']}) - in use by {len(instances)} instance(s)")
                 
                 self.cleanup_results['skipped_amis'].append({
                     'ami_id': ami_id,
@@ -275,24 +278,24 @@ class UltraAMICleanupManager:
                 return False
             
             # Deregister AMI
-            self.log_operation('INFO', f"🗑️  Deregistering AMI {ami_id} ({ami_info['name']}) - {ami_info['snapshot_count']} snapshots")
-            print(f"      🗑️  Deregistering AMI {ami_id} ({ami_info['name']})")
+            self.log_operation('INFO', f"[DELETE]  Deregistering AMI {ami_id} ({ami_info['name']}) - {ami_info['snapshot_count']} snapshots")
+            print(f"      [DELETE]  Deregistering AMI {ami_id} ({ami_info['name']})")
             
             ec2_client.deregister_image(ImageId=ami_id)
             
-            self.log_operation('INFO', f"✅ Successfully deregistered AMI {ami_id}")
+            self.log_operation('INFO', f"[OK] Successfully deregistered AMI {ami_id}")
             
             # Delete associated snapshots
             deleted_snapshots = []
             if ami_info['snapshot_ids']:
-                print(f"         🗑️  Deleting {len(ami_info['snapshot_ids'])} associated snapshots...")
+                print(f"         [DELETE]  Deleting {len(ami_info['snapshot_ids'])} associated snapshots...")
                 
                 for snapshot_id in ami_info['snapshot_ids']:
                     try:
                         self.log_operation('INFO', f"Deleting snapshot {snapshot_id} for AMI {ami_id}")
                         ec2_client.delete_snapshot(SnapshotId=snapshot_id)
                         deleted_snapshots.append(snapshot_id)
-                        self.log_operation('INFO', f"✅ Deleted snapshot {snapshot_id}")
+                        self.log_operation('INFO', f"[OK] Deleted snapshot {snapshot_id}")
                         
                         self.cleanup_results['deleted_snapshots'].append({
                             'snapshot_id': snapshot_id,
@@ -308,10 +311,10 @@ class UltraAMICleanupManager:
                         
                         if error_code == 'InvalidSnapshot.InUse':
                             self.log_operation('WARNING', f"Snapshot {snapshot_id} is in use, skipping")
-                            print(f"         ⚠️  Snapshot {snapshot_id} is in use, skipping")
+                            print(f"         [WARN]  Snapshot {snapshot_id} is in use, skipping")
                         else:
                             self.log_operation('ERROR', f"Failed to delete snapshot {snapshot_id}: {snap_error}")
-                            print(f"         ❌ Failed to delete snapshot {snapshot_id}: {snap_error}")
+                            print(f"         [ERROR] Failed to delete snapshot {snapshot_id}: {snap_error}")
                         
                         self.cleanup_results['failed_deletions'].append({
                             'resource_type': 'snapshot',
@@ -323,7 +326,7 @@ class UltraAMICleanupManager:
                         })
                     except Exception as snap_error:
                         self.log_operation('ERROR', f"Unexpected error deleting snapshot {snapshot_id}: {snap_error}")
-                        print(f"         ❌ Error deleting snapshot {snapshot_id}: {snap_error}")
+                        print(f"         [ERROR] Error deleting snapshot {snapshot_id}: {snap_error}")
             
             # Record the AMI deletion
             self.cleanup_results['deleted_amis'].append({
@@ -345,7 +348,7 @@ class UltraAMICleanupManager:
             
         except Exception as e:
             self.log_operation('ERROR', f"Failed to deregister AMI {ami_info['ami_id']}: {e}")
-            print(f"      ❌ Failed to deregister AMI {ami_info['ami_id']}: {e}")
+            print(f"      [ERROR] Failed to deregister AMI {ami_info['ami_id']}: {e}")
             
             self.cleanup_results['failed_deletions'].append({
                 'resource_type': 'ami',
@@ -357,22 +360,24 @@ class UltraAMICleanupManager:
             })
             return False
 
-    def cleanup_account_region(self, account_name, account_data, region):
+    def cleanup_account_region(self, account_info: dict, region: str) -> bool:
         """Clean up all AMIs in a specific account and region"""
         try:
-            access_key = account_data['access_key']
-            secret_key = account_data['secret_key']
-            account_id = account_data['account_id']
+            account_name = account_info.get('name', 'Unknown')
+            account_id = account_info.get('account_id', 'Unknown')
+            access_key = account_info.get('access_key')
+            secret_key = account_info.get('secret_key')
         
-            self.log_operation('INFO', f"🧹 Starting cleanup for {account_name} ({account_id}) in {region}")
-            print(f"\n🧹 Starting cleanup for {account_name} ({account_id}) in {region}")
+            self.log_operation('INFO', f"[CLEANUP] Starting cleanup for {account_name} ({account_id}) in {region}")
+            self.print_colored(Colors.CYAN, f"\n[CLEANUP] Starting cleanup for {account_name} ({account_id}) in {region}")
         
             # Create EC2 client
             try:
                 ec2_client = self.create_ec2_client(access_key, secret_key, region)
             except Exception as client_error:
-                self.log_operation('ERROR', f"Could not create EC2 client for {region}: {client_error}")
-                print(f"   ❌ Could not create EC2 client for {region}: {client_error}")
+                error_msg = f"Could not create EC2 client for {region}: {client_error}"
+                self.log_operation('ERROR', error_msg)
+                self.print_colored(Colors.RED, f"   [ERROR] {error_msg}")
                 return False
         
             # Get all AMIs
@@ -380,7 +385,7 @@ class UltraAMICleanupManager:
         
             if not amis:
                 self.log_operation('INFO', f"No AMIs found in {account_name} ({region})")
-                print(f"   ✓ No AMIs found in {account_name} ({region})")
+                self.print_colored(Colors.GREEN, f"   ✓ No AMIs found in {account_name} ({region})")
                 return True
         
             # Record region summary
@@ -402,17 +407,18 @@ class UltraAMICleanupManager:
             
             # Deregister each AMI
             if amis:
-                print(f"\n   🗑️  Processing {len(amis)} AMIs...")
+                print(f"\n   [DELETE]  Processing {len(amis)} AMIs...")
                 for ami in amis:
                     self.deregister_ami(ec2_client, ami)
         
-            self.log_operation('INFO', f"✅ Cleanup completed for {account_name} ({region})")
-            print(f"   ✅ Cleanup completed for {account_name} ({region})")
+            self.log_operation('INFO', f"[OK] Cleanup completed for {account_name} ({region})")
+            self.print_colored(Colors.GREEN, f"   [OK] Cleanup completed for {account_name} ({region})")
             return True
         
         except Exception as e:
-            self.log_operation('ERROR', f"Error cleaning up {account_name} ({region}): {e}")
-            print(f"   ❌ Error cleaning up {account_name} ({region}): {e}")
+            error_msg = f"Error cleaning up {account_name} ({region}): {e}"
+            self.log_operation('ERROR', error_msg)
+            self.print_colored(Colors.RED, f"   [ERROR] {error_msg}")
             self.cleanup_results['errors'].append({
                 'account_name': account_name,
                 'region': region,
@@ -423,9 +429,8 @@ class UltraAMICleanupManager:
     def save_cleanup_report(self):
         """Save comprehensive cleanup results to JSON report"""
         try:
-            report_dir = "aws/ami/reports"
-            os.makedirs(report_dir, exist_ok=True)
-            report_filename = f"{report_dir}/ultra_ami_cleanup_report_{self.execution_timestamp}.json"
+            os.makedirs(self.reports_dir, exist_ok=True)
+            report_filename = f"{self.reports_dir}/ultra_ami_cleanup_report_{self.execution_timestamp}.json"
             
             total_amis_deleted = len(self.cleanup_results['deleted_amis'])
             total_snapshots_deleted = len(self.cleanup_results['deleted_snapshots'])
@@ -457,9 +462,8 @@ class UltraAMICleanupManager:
                     "cleanup_time": self.current_time.split()[1],
                     "cleaned_by": self.current_user,
                     "execution_timestamp": self.execution_timestamp,
-                    "config_file": self.config_file,
+                    "config_dir": self.config_dir,
                     "log_file": self.log_filename,
-                    "accounts_in_config": list(self.config_data['accounts'].keys()),
                     "regions_processed": self.user_regions
                 },
                 "summary": {
@@ -486,177 +490,111 @@ class UltraAMICleanupManager:
             with open(report_filename, 'w', encoding='utf-8') as f:
                 json.dump(report_data, f, indent=2, default=str)
             
-            self.log_operation('INFO', f"✅ Ultra cleanup report saved to: {report_filename}")
+            self.log_operation('INFO', f"[OK] Ultra cleanup report saved to: {report_filename}")
             return report_filename
             
         except Exception as e:
-            self.log_operation('ERROR', f"❌ Failed to save ultra cleanup report: {e}")
+            self.log_operation('ERROR', f"[ERROR] Failed to save ultra cleanup report: {e}")
             return None
 
     def run(self):
         """Main execution method"""
         try:
-            self.log_operation('INFO', "🚨 STARTING ULTRA AMI CLEANUP SESSION 🚨")
+            self.log_operation('INFO', "[ALERT] STARTING ULTRA AMI CLEANUP SESSION [ALERT]")
             
-            print("🚨" * 30)
-            print("💥 ULTRA AMI (Amazon Machine Image) CLEANUP 💥")
-            print("🚨" * 30)
-            print(f"📅 Execution Date/Time: {self.current_time} UTC")
-            print(f"👤 Executed by: {self.current_user}")
-            print(f"📋 Log File: {self.log_filename}")
+            self.print_colored(Colors.CYAN, "\n" + "[ALERT]" * 30)
+            self.print_colored(Colors.BLUE, "[START] ULTRA AMI (Amazon Machine Image) CLEANUP MANAGER")
+            self.print_colored(Colors.CYAN, "[ALERT]" * 30)
+            self.print_colored(Colors.WHITE, f"[DATE] Execution Date/Time: {self.current_time} UTC")
+            self.print_colored(Colors.WHITE, f"[USER] Executed by: {self.current_user}")
+            self.print_colored(Colors.WHITE, f"[LIST] Log File: {self.log_filename}")
             
-            # Display available accounts
-            accounts = self.config_data['accounts']
+            # Select accounts using AWSCredentialManager
+            selected_accounts = self.cred_manager.select_root_accounts_interactive()
             
-            print(f"\n🏦 AVAILABLE AWS ACCOUNTS:")
-            print("=" * 80)
-            
-            account_list = []
-            
-            for i, (account_name, account_data) in enumerate(accounts.items(), 1):
-                account_id = account_data.get('account_id', 'Unknown')
-                email = account_data.get('email', 'Unknown')
-                
-                account_list.append({
-                    'name': account_name,
-                    'account_id': account_id,
-                    'email': email,
-                    'data': account_data
-                })
-                
-                print(f"  {i}. {account_name}: {account_id} ({email})")
-            
-            # Selection prompt
-            print("\nAccount Selection Options:")
-            print("  • Single accounts: 1,3,5")
-            print("  • Ranges: 1-3")
-            print("  • Mixed: 1-2,4")
-            print("  • All accounts: 'all' or press Enter")
-            print("  • Cancel: 'cancel' or 'quit'")
-            
-            selection = input("\n🔢 Select accounts to process: ").strip().lower()
-            
-            if selection in ['cancel', 'quit']:
-                self.log_operation('INFO', "AMI cleanup cancelled by user")
-                print("❌ Cleanup cancelled")
+            if not selected_accounts:
+                self.print_colored(Colors.YELLOW, "[ERROR] No accounts selected. Exiting.")
                 return
             
-            # Process account selection
-            selected_accounts = {}
-            if not selection or selection == 'all':
-                selected_accounts = accounts
-                self.log_operation('INFO', f"All accounts selected: {len(accounts)}")
-                print(f"✅ Selected all {len(accounts)} accounts")
-            else:
-                try:
-                    parts = []
-                    for part in selection.split(','):
-                        if '-' in part:
-                            start, end = map(int, part.split('-'))
-                            if start < 1 or end > len(account_list):
-                                raise ValueError(f"Range {part} out of bounds (1-{len(account_list)})")
-                            parts.extend(range(start, end + 1))
-                        else:
-                            num = int(part)
-                            if num < 1 or num > len(account_list):
-                                raise ValueError(f"Selection {part} out of bounds (1-{len(account_list)})")
-                            parts.append(num)
-                    
-                    for idx in parts:
-                        account = account_list[idx-1]
-                        selected_accounts[account['name']] = account['data']
-                    
-                    if not selected_accounts:
-                        raise ValueError("No valid accounts selected")
-                    
-                    self.log_operation('INFO', f"Selected accounts: {list(selected_accounts.keys())}")
-                    print(f"✅ Selected {len(selected_accounts)} accounts: {', '.join(selected_accounts.keys())}")
-                    
-                except ValueError as e:
-                    self.log_operation('ERROR', f"Invalid account selection: {e}")
-                    print(f"❌ Invalid selection: {e}")
-                    return
+            # Get user regions
+            self.user_regions = self._get_user_regions()
             
-            regions = self.user_regions
+            # Select regions
+            selected_regions = self.select_regions_interactive(self.user_regions)
+            
+            if not selected_regions:
+                self.print_colored(Colors.YELLOW, "[ERROR] No regions selected. Exiting.")
+                return
             
             # Calculate total operations
-            total_operations = len(selected_accounts) * len(regions)
+            total_operations = len(selected_accounts) * len(selected_regions)
             
-            print(f"\n🎯 CLEANUP CONFIGURATION")
-            print("=" * 80)
-            print(f"🏦 Selected accounts: {len(selected_accounts)}")
-            print(f"🌍 Regions per account: {len(regions)}")
-            print(f"📋 Total operations: {total_operations}")
-            print(f"🗑️  Target: All AMIs owned by account + Associated snapshots")
-            print(f"⏭️  Skipped: AMIs in use by running/stopped instances")
-            print("=" * 80)
+            self.print_colored(Colors.CYAN, f"\n[TARGET] CLEANUP CONFIGURATION")
+            self.print_colored(Colors.CYAN, "=" * 80)
+            self.print_colored(Colors.WHITE, f"[BANK] Selected accounts: {len(selected_accounts)}")
+            self.print_colored(Colors.WHITE, f"[REGION] Regions per account: {len(selected_regions)}")
+            self.print_colored(Colors.WHITE, f"[LIST] Total operations: {total_operations}")
+            self.print_colored(Colors.WHITE, f"[DELETE]  Target: All AMIs owned by account + Associated snapshots")
+            self.print_colored(Colors.WHITE, f"[SKIP]  Skipped: AMIs in use by running/stopped instances")
+            self.print_colored(Colors.CYAN, "=" * 80)
             
             # Confirmation
-            print(f"\n⚠️  WARNING: This will:")
-            print(f"    • Deregister ALL AMIs owned by the account")
-            print(f"    • Delete ALL snapshots associated with those AMIs")
-            print(f"    • Across {len(selected_accounts)} accounts in {len(regions)} regions")
-            print(f"    • AMIs in use by instances will be SKIPPED")
-            print(f"    This action CANNOT be undone!")
+            self.print_colored(Colors.RED, f"\n[WARN]  WARNING: This will:")
+            self.print_colored(Colors.RED, f"    • Deregister ALL AMIs owned by the account")
+            self.print_colored(Colors.RED, f"    • Delete ALL snapshots associated with those AMIs")
+            self.print_colored(Colors.RED, f"    • Across {len(selected_accounts)} accounts in {len(selected_regions)} regions")
+            self.print_colored(Colors.RED, f"    • AMIs in use by instances will be SKIPPED")
+            self.print_colored(Colors.RED, f"    This action CANNOT be undone!")
             
-            confirm1 = input(f"\nContinue with cleanup? (y/n): ").strip().lower()
-            self.log_operation('INFO', f"First confirmation: '{confirm1}'")
+            # Final destructive confirmation
+            self.print_colored(Colors.YELLOW, f"\n[WARN]  Type 'DELETE' to confirm this destructive action:")
+            confirm = input("   → ").strip()
             
-            if confirm1 not in ['y', 'yes']:
+            if confirm.upper() != 'DELETE':
                 self.log_operation('INFO', "Ultra cleanup cancelled by user")
-                print("❌ Cleanup cancelled")
-                return
-            
-            confirm2 = input(f"Are you sure? Type 'yes' to confirm: ").strip().lower()
-            self.log_operation('INFO', f"Final confirmation: '{confirm2}'")
-            
-            if confirm2 != 'yes':
-                self.log_operation('INFO', "Ultra cleanup cancelled at final confirmation")
-                print("❌ Cleanup cancelled")
+                self.print_colored(Colors.YELLOW, "[ERROR] Cleanup cancelled")
                 return
             
             # Start cleanup
-            print(f"\n💥 STARTING CLEANUP...")
-            self.log_operation('INFO', f"🚨 CLEANUP INITIATED - {len(selected_accounts)} accounts, {len(regions)} regions")
+            self.print_colored(Colors.CYAN, f"\n[START] Starting cleanup...")
+            self.log_operation('INFO', f"[ALERT] CLEANUP INITIATED - {len(selected_accounts)} accounts, {len(selected_regions)} regions")
             
             start_time = time.time()
             
             successful_tasks = 0
             failed_tasks = 0
             
-            # Create tasks list
-            tasks = []
-            for account_name, account_data in selected_accounts.items():
-                for region in regions:
-                    tasks.append((account_name, account_data, region))
-            
-            # Process each task sequentially
-            for i, (account_name, account_data, region) in enumerate(tasks, 1):
-                print(f"\n[{i}/{len(tasks)}] Processing {account_name} in {region}...")
+            # Process each account and region
+            for account_info in selected_accounts:
+                account_name = account_info.get('name', 'Unknown')
                 
-                try:
-                    success = self.cleanup_account_region(account_name, account_data, region)
-                    if success:
-                        successful_tasks += 1
-                    else:
+                for region in selected_regions:
+                    try:
+                        success = self.cleanup_account_region(account_info, region)
+                        if success:
+                            successful_tasks += 1
+                        else:
+                            failed_tasks += 1
+                    except Exception as e:
                         failed_tasks += 1
-                except Exception as e:
-                    failed_tasks += 1
-                    self.log_operation('ERROR', f"Task failed for {account_name} ({region}): {e}")
-                    print(f"❌ Task failed for {account_name} ({region}): {e}")
+                        error_msg = f"Task failed for {account_name} ({region}): {e}"
+                        self.log_operation('ERROR', error_msg)
+                        self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
             
             end_time = time.time()
             total_time = int(end_time - start_time)
             
             # Display final results
-            print(f"\n💥" + "="*25 + " CLEANUP COMPLETE " + "="*25)
-            print(f"⏱️  Total execution time: {total_time} seconds")
-            print(f"✅ Successful operations: {successful_tasks}")
-            print(f"❌ Failed operations: {failed_tasks}")
-            print(f"📸 AMIs deleted: {len(self.cleanup_results['deleted_amis'])}")
-            print(f"💾 Snapshots deleted: {len(self.cleanup_results['deleted_snapshots'])}")
-            print(f"⏭️  AMIs skipped (in-use): {len(self.cleanup_results['skipped_amis'])}")
-            print(f"❌ Failed deletions: {len(self.cleanup_results['failed_deletions'])}")
+            self.print_colored(Colors.GREEN, f"\n" + "=" * 100)
+            self.print_colored(Colors.GREEN, "[OK] CLEANUP COMPLETE")
+            self.print_colored(Colors.GREEN, "=" * 100)
+            self.print_colored(Colors.WHITE, f"[TIMER]  Total execution time: {total_time} seconds")
+            self.print_colored(Colors.GREEN, f"[OK] Successful operations: {successful_tasks}")
+            self.print_colored(Colors.RED, f"[ERROR] Failed operations: {failed_tasks}")
+            self.print_colored(Colors.WHITE, f"[SNAPSHOT] AMIs deleted: {len(self.cleanup_results['deleted_amis'])}")
+            self.print_colored(Colors.WHITE, f"[INSTANCE] Snapshots deleted: {len(self.cleanup_results['deleted_snapshots'])}")
+            self.print_colored(Colors.YELLOW, f"[SKIP]  AMIs skipped (in-use): {len(self.cleanup_results['skipped_amis'])}")
+            self.print_colored(Colors.RED, f"[ERROR] Failed deletions: {len(self.cleanup_results['failed_deletions'])}")
             
             self.log_operation('INFO', f"CLEANUP COMPLETED")
             self.log_operation('INFO', f"Execution time: {total_time} seconds")
@@ -665,7 +603,7 @@ class UltraAMICleanupManager:
             
             # Show account summary
             if self.cleanup_results['deleted_amis']:
-                print(f"\n📊 Deletion Summary by Account:")
+                self.print_colored(Colors.CYAN, f"\n[STATS] Deletion Summary by Account:")
                 
                 account_summary = {}
                 for ami in self.cleanup_results['deleted_amis']:
@@ -678,61 +616,100 @@ class UltraAMICleanupManager:
                 
                 for account, summary in account_summary.items():
                     regions_list = ', '.join(sorted(summary['regions']))
-                    print(f"   🏦 {account}:")
-                    print(f"      📸 AMIs: {summary['amis']}")
-                    print(f"      💾 Snapshots: {summary['snapshots']}")
-                    print(f"      🌍 Regions: {regions_list}")
+                    self.print_colored(Colors.WHITE, f"   [BANK] {account}:")
+                    self.print_colored(Colors.WHITE, f"      [SNAPSHOT] AMIs: {summary['amis']}")
+                    self.print_colored(Colors.WHITE, f"      [INSTANCE] Snapshots: {summary['snapshots']}")
+                    self.print_colored(Colors.WHITE, f"      [REGION] Regions: {regions_list}")
             
             # Show failures if any
             if self.cleanup_results['failed_deletions']:
-                print(f"\n❌ Failed Deletions:")
+                self.print_colored(Colors.RED, f"\n[ERROR] Failed Deletions:")
                 for failure in self.cleanup_results['failed_deletions'][:10]:
-                    print(f"   • {failure['resource_type']} {failure['resource_id']} in {failure['account_name']} ({failure['region']})")
-                    print(f"     Error: {failure['error']}")
+                    self.print_colored(Colors.RED, f"   • {failure['resource_type']} {failure['resource_id']} in {failure['account_name']} ({failure['region']})")
+                    self.print_colored(Colors.RED, f"     Error: {failure['error']}")
                 
                 if len(self.cleanup_results['failed_deletions']) > 10:
                     remaining = len(self.cleanup_results['failed_deletions']) - 10
-                    print(f"   ... and {remaining} more failures (see detailed report)")
+                    self.print_colored(Colors.RED, f"   ... and {remaining} more failures (see detailed report)")
             
             # Show skipped AMIs
             if self.cleanup_results['skipped_amis']:
-                print(f"\n⏭️  Skipped AMIs (in use by instances):")
+                self.print_colored(Colors.YELLOW, f"\n[SKIP]  Skipped AMIs (in use by instances):")
                 for skipped in self.cleanup_results['skipped_amis'][:5]:
-                    print(f"   • {skipped['ami_id']} ({skipped['name']}) - {skipped['reason']}")
+                    self.print_colored(Colors.YELLOW, f"   • {skipped['ami_id']} ({skipped['name']}) - {skipped['reason']}")
                 
                 if len(self.cleanup_results['skipped_amis']) > 5:
                     remaining = len(self.cleanup_results['skipped_amis']) - 5
-                    print(f"   ... and {remaining} more (see detailed report)")
+                    self.print_colored(Colors.YELLOW, f"   ... and {remaining} more (see detailed report)")
             
             # Save report
-            print(f"\n📄 Saving cleanup report...")
+            self.print_colored(Colors.CYAN, f"\n[FILE] Saving cleanup report...")
             report_file = self.save_cleanup_report()
             if report_file:
-                print(f"✅ Cleanup report saved to: {report_file}")
+                self.print_colored(Colors.GREEN, f"[OK] Cleanup report saved to: {report_file}")
             
-            print(f"✅ Session log saved to: {self.log_filename}")
+            self.print_colored(Colors.GREEN, f"[OK] Session log saved to: {self.log_filename}")
             
-            print(f"\n💥 CLEANUP COMPLETE! 💥")
-            print("🚨" * 30)
+            self.print_colored(Colors.GREEN, f"\n[OK] Cleanup completed successfully!")
+            self.print_colored(Colors.CYAN, "[ALERT]" * 30)
             
         except Exception as e:
             self.log_operation('ERROR', f"FATAL ERROR in cleanup execution: {str(e)}")
-            print(f"\n❌ FATAL ERROR: {e}")
+            self.print_colored(Colors.RED, f"\n[ERROR] FATAL ERROR: {e}")
             import traceback
             traceback.print_exc()
             raise
 
+    def select_regions_interactive(self, available_regions: List[str]) -> List[str]:
+        """Interactive region selection"""
+        self.print_colored(Colors.CYAN, f"\n[REGION] AVAILABLE REGIONS:")
+        self.print_colored(Colors.CYAN, "=" * 80)
+        
+        for i, region in enumerate(available_regions, 1):
+            self.print_colored(Colors.WHITE, f"  {i}. {region}")
+        
+        self.print_colored(Colors.WHITE, "\nRegion Selection Options:")
+        self.print_colored(Colors.WHITE, "  • Single regions: 1,3,5")
+        self.print_colored(Colors.WHITE, "  • Ranges: 1-3")
+        self.print_colored(Colors.WHITE, "  • Mixed: 1-2,4")
+        self.print_colored(Colors.WHITE, "  • All regions: 'all' or press Enter")
+        self.print_colored(Colors.WHITE, "  • Cancel: 'cancel' or 'quit'")
+        
+        selection = input("\n🔢 Select regions to process: ").strip().lower()
+        
+        if selection in ['cancel', 'quit']:
+            return []
+        
+        if not selection or selection == 'all':
+            self.log_operation('INFO', f"All regions selected: {len(available_regions)}")
+            self.print_colored(Colors.GREEN, f"[OK] Selected all {len(available_regions)} regions")
+            return available_regions
+        
+        # Parse selection
+        selected_regions = []
+        try:
+            indices = self.cred_manager._parse_selection(selection, len(available_regions))
+            selected_regions = [available_regions[i] for i in indices]
+            
+            self.log_operation('INFO', f"Selected regions: {selected_regions}")
+            self.print_colored(Colors.GREEN, f"[OK] Selected {len(selected_regions)} regions: {', '.join(selected_regions)}")
+            
+        except ValueError as e:
+            self.log_operation('ERROR', f"Invalid region selection: {e}")
+            self.print_colored(Colors.RED, f"[ERROR] Invalid selection: {e}")
+            return []
+        
+        return selected_regions
+
 def main():
     """Main function"""
     try:
-        manager = UltraAMICleanupManager()
+        manager = UltraCleanupAMIManager()
         manager.run()
     except KeyboardInterrupt:
-        print("\n\n❌ Cleanup interrupted by user")
-        sys.exit(1)
+        print("\n\n[ERROR] Cleanup interrupted by user")
     except Exception as e:
-        print(f"❌ Unexpected error: {e}")
-        sys.exit(1)
+        print(f"[ERROR] Unexpected error: {e}")
 
 if __name__ == "__main__":
     main()

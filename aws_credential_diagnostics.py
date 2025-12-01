@@ -21,7 +21,7 @@ class AWSCredentialDiagnostics:
             with open(self.config_file, 'r', encoding='utf-8') as f:
                 self.config_data = json.load(f)
             
-            print(f"✅ Configuration loaded from: {self.config_file}")
+            print(f"[OK] Configuration loaded from: {self.config_file}")
             
             # Validate accounts
             if 'accounts' not in self.config_data:
@@ -36,21 +36,21 @@ class AWSCredentialDiagnostics:
                     not account_data.get('access_key').startswith('ADD_')):
                     valid_accounts[account_name] = account_data
                 else:
-                    print(f"⚠️  Skipping incomplete account: {account_name}")
+                    print(f"[WARN]  Skipping incomplete account: {account_name}")
             
             self.config_data['accounts'] = valid_accounts
             
-            print(f"📊 Valid accounts found: {len(valid_accounts)}")
+            print(f"[STATS] Valid accounts found: {len(valid_accounts)}")
             return True
             
         except Exception as e:
-            print(f"❌ Error loading configuration: {e}")
+            print(f"[ERROR] Error loading configuration: {e}")
             return False
 
     def test_default_aws_credentials(self):
         """Test default AWS credentials (AWS CLI profile)"""
         print(f"\n{'='*60}")
-        print("🔍 TESTING DEFAULT AWS CREDENTIALS")
+        print("[SCAN] TESTING DEFAULT AWS CREDENTIALS")
         print(f"{'='*60}")
         
         try:
@@ -59,35 +59,35 @@ class AWSCredentialDiagnostics:
             sts_client = session.client('sts')
             identity = sts_client.get_caller_identity()
             
-            print(f"✅ Default AWS credentials work!")
+            print(f"[OK] Default AWS credentials work!")
             print(f"   👤 User: {identity.get('Arn', 'Unknown')}")
-            print(f"   🏦 Account: {identity.get('Account', 'Unknown')}")
-            print(f"   📋 User ID: {identity.get('UserId', 'Unknown')}")
+            print(f"   [BANK] Account: {identity.get('Account', 'Unknown')}")
+            print(f"   [LIST] User ID: {identity.get('UserId', 'Unknown')}")
             
             # Test EC2 access
             ec2_client = session.client('ec2', region_name='us-east-1')
             regions = ec2_client.describe_regions()
-            print(f"   🌍 EC2 access: ✅ (Found {len(regions['Regions'])} regions)")
+            print(f"   [REGION] EC2 access: [OK] (Found {len(regions['Regions'])} regions)")
             
             return True
             
         except Exception as e:
-            print(f"❌ Default AWS credentials failed: {e}")
+            print(f"[ERROR] Default AWS credentials failed: {e}")
             return False
 
     def test_account_credentials(self, account_name, account_data, test_regions=['us-east-1', 'us-west-1']):
         """Test specific account credentials"""
         print(f"\n{'='*60}")
-        print(f"🔍 TESTING ACCOUNT: {account_name}")
+        print(f"[SCAN] TESTING ACCOUNT: {account_name}")
         print(f"{'='*60}")
         
         access_key = account_data['access_key']
         secret_key = account_data['secret_key']
         account_id = account_data['account_id']
         
-        print(f"   📄 Config Account ID: {account_id}")
-        print(f"   🔑 Access Key: {access_key[:10]}...{access_key[-4:]}")
-        print(f"   🔐 Secret Key: {secret_key[:10]}...****")
+        print(f"   [FILE] Config Account ID: {account_id}")
+        print(f"   [KEY] Access Key: {access_key[:10]}...{access_key[-4:]}")
+        print(f"   [LOCKED] Secret Key: {secret_key[:10]}...****")
         
         results = {
             'account_name': account_name,
@@ -100,7 +100,7 @@ class AWSCredentialDiagnostics:
         
         try:
             # Test STS (identity)
-            print(f"\n   🔍 Testing STS (Identity)...")
+            print(f"\n   [SCAN] Testing STS (Identity)...")
             sts_client = boto3.client(
                 'sts',
                 aws_access_key_id=access_key,
@@ -112,10 +112,10 @@ class AWSCredentialDiagnostics:
             user_arn = identity.get('Arn', 'Unknown')
             user_id = identity.get('UserId', 'Unknown')
             
-            print(f"   ✅ STS Identity successful!")
+            print(f"   [OK] STS Identity successful!")
             print(f"      👤 User ARN: {user_arn}")
-            print(f"      🏦 Actual Account: {actual_account_id}")
-            print(f"      📋 User ID: {user_id}")
+            print(f"      [BANK] Actual Account: {actual_account_id}")
+            print(f"      [LIST] User ID: {user_id}")
             
             results['credentials_valid'] = True
             results['identity_info'] = {
@@ -127,13 +127,13 @@ class AWSCredentialDiagnostics:
             # Check if account IDs match
             if actual_account_id != account_id:
                 error_msg = f"Account ID mismatch! Config: {account_id}, Actual: {actual_account_id}"
-                print(f"   ⚠️  {error_msg}")
+                print(f"   [WARN]  {error_msg}")
                 results['errors'].append(error_msg)
             else:
-                print(f"   ✅ Account ID matches config")
+                print(f"   [OK] Account ID matches config")
             
             # Test EC2 in different regions
-            print(f"\n   🔍 Testing EC2 access in regions...")
+            print(f"\n   [SCAN] Testing EC2 access in regions...")
             for region in test_regions:
                 try:
                     print(f"      Testing {region}...")
@@ -146,17 +146,17 @@ class AWSCredentialDiagnostics:
                     
                     # Test describe_regions (same as cleanup script)
                     regions_response = ec2_client.describe_regions(RegionNames=[region])
-                    print(f"      ✅ {region}: describe_regions successful")
+                    print(f"      [OK] {region}: describe_regions successful")
                     
                     # Test describe_instances
                     instances_response = ec2_client.describe_instances()
                     instance_count = sum(len(r['Instances']) for r in instances_response['Reservations'])
-                    print(f"      ✅ {region}: Found {instance_count} instances")
+                    print(f"      [OK] {region}: Found {instance_count} instances")
                     
                     # Test describe_security_groups
                     sgs_response = ec2_client.describe_security_groups()
                     sg_count = len(sgs_response['SecurityGroups'])
-                    print(f"      ✅ {region}: Found {sg_count} security groups")
+                    print(f"      [OK] {region}: Found {sg_count} security groups")
                     
                     results['regions_tested'][region] = {
                         'success': True,
@@ -166,7 +166,7 @@ class AWSCredentialDiagnostics:
                     
                 except Exception as e:
                     error_msg = f"EC2 access failed in {region}: {e}"
-                    print(f"      ❌ {region}: {e}")
+                    print(f"      [ERROR] {region}: {e}")
                     results['errors'].append(error_msg)
                     results['regions_tested'][region] = {
                         'success': False,
@@ -175,7 +175,7 @@ class AWSCredentialDiagnostics:
             
         except Exception as e:
             error_msg = f"STS/Identity test failed: {e}"
-            print(f"   ❌ {error_msg}")
+            print(f"   [ERROR] {error_msg}")
             results['errors'].append(error_msg)
         
         return results
@@ -183,12 +183,12 @@ class AWSCredentialDiagnostics:
     def compare_credential_sources(self):
         """Compare different credential sources"""
         print(f"\n{'='*60}")
-        print("🔍 COMPARING CREDENTIAL SOURCES")
+        print("[SCAN] COMPARING CREDENTIAL SOURCES")
         print(f"{'='*60}")
         
         # Check environment variables
         env_vars = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN', 'AWS_PROFILE']
-        print(f"\n📌 Environment Variables:")
+        print(f"\n[PIN] Environment Variables:")
         for var in env_vars:
             value = os.environ.get(var)
             if value:
@@ -198,22 +198,22 @@ class AWSCredentialDiagnostics:
                 print(f"   {var}: Not set")
         
         # Check AWS config files
-        print(f"\n📌 AWS Configuration Files:")
+        print(f"\n[PIN] AWS Configuration Files:")
         aws_config_dir = os.path.expanduser('~/.aws')
         for file in ['credentials', 'config']:
             file_path = os.path.join(aws_config_dir, file)
             if os.path.exists(file_path):
-                print(f"   ✅ {file_path} exists")
+                print(f"   [OK] {file_path} exists")
             else:
-                print(f"   ❌ {file_path} not found")
+                print(f"   [ERROR] {file_path} not found")
 
     def run_diagnostics(self):
         """Run comprehensive diagnostics"""
-        print("🚨" * 30)
-        print("🔍 AWS CREDENTIAL DIAGNOSTICS")
-        print("🚨" * 30)
-        print(f"📅 Execution Time: {self.current_time} UTC")
-        print(f"📄 Config File: {self.config_file}")
+        print("[ALERT]" * 30)
+        print("[SCAN] AWS CREDENTIAL DIAGNOSTICS")
+        print("[ALERT]" * 30)
+        print(f"[DATE] Execution Time: {self.current_time} UTC")
+        print(f"[FILE] Config File: {self.config_file}")
         
         # Load configuration
         if not self.load_configuration():
@@ -235,30 +235,30 @@ class AWSCredentialDiagnostics:
         
         # Summary
         print(f"\n{'='*60}")
-        print("📊 DIAGNOSTIC SUMMARY")
+        print("[STATS] DIAGNOSTIC SUMMARY")
         print(f"{'='*60}")
         
-        print(f"🔧 Default AWS credentials: {'✅ Working' if default_works else '❌ Failed'}")
+        print(f"[CONFIG] Default AWS credentials: {'[OK] Working' if default_works else '[ERROR] Failed'}")
         
         for result in all_results:
-            status = "✅ Working" if result['credentials_valid'] and not result['errors'] else "❌ Issues"
-            print(f"🏦 {result['account_name']}: {status}")
+            status = "[OK] Working" if result['credentials_valid'] and not result['errors'] else "[ERROR] Issues"
+            print(f"[BANK] {result['account_name']}: {status}")
             
             if result['errors']:
                 for error in result['errors']:
-                    print(f"   ⚠️  {error}")
+                    print(f"   [WARN]  {error}")
         
         # Recommendations
         print(f"\n{'='*60}")
-        print("💡 RECOMMENDATIONS")
+        print("[TIP] RECOMMENDATIONS")
         print(f"{'='*60}")
         
         failed_accounts = [r for r in all_results if not r['credentials_valid'] or r['errors']]
         
         if failed_accounts:
-            print("🔧 Issues found with JSON config accounts:")
+            print("[CONFIG] Issues found with JSON config accounts:")
             for result in failed_accounts:
-                print(f"\n🏦 {result['account_name']}:")
+                print(f"\n[BANK] {result['account_name']}:")
                 if not result['credentials_valid']:
                     print("   • Credentials are invalid or expired")
                     print("   • Check if access key and secret key are correct")
@@ -273,10 +273,10 @@ class AWSCredentialDiagnostics:
                         print("   • Permission denied - check IAM permissions")
         
         if default_works and failed_accounts:
-            print(f"\n💡 Your default AWS credentials work but JSON config has issues.")
+            print(f"\n[TIP] Your default AWS credentials work but JSON config has issues.")
             print(f"   Consider updating your JSON config with working credentials.")
         
-        print(f"\n🎯 Next steps:")
+        print(f"\n[TARGET] Next steps:")
         print(f"   1. Fix any credential issues identified above")
         print(f"   2. Ensure all accounts have necessary EC2 permissions")
         print(f"   3. Re-run the cleanup script")
@@ -294,10 +294,10 @@ def main():
         diagnostics = AWSCredentialDiagnostics(args.config)
         diagnostics.run_diagnostics()
     except KeyboardInterrupt:
-        print("\n\n❌ Diagnostics interrupted by user")
+        print("\n\n[ERROR] Diagnostics interrupted by user")
         sys.exit(1)
     except Exception as e:
-        print(f"❌ Unexpected error: {e}")
+        print(f"[ERROR] Unexpected error: {e}")
         sys.exit(1)
 
 if __name__ == "__main__":

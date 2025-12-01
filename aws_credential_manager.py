@@ -44,18 +44,18 @@ class AWSCredentialManager:
             self.user_settings = config['user_settings']
             self.config_data = config
             
-            print(f"✅ Configuration loaded from: {self.config_file}")
-            print(f"📊 Found {len(self.aws_accounts)} AWS accounts")
+            print(f"[OK] Configuration loaded from: {self.config_file}")
+            print(f"[STATS] Found {len(self.aws_accounts)} AWS accounts")
             
         except FileNotFoundError as e:
-            print(f"❌ {e}")
+            print(f"[ERROR] {e}")
             print("Please ensure the configuration file exists in the same directory.")
             raise
         except json.JSONDecodeError as e:
-            print(f"❌ Invalid JSON in configuration file: {e}")
+            print(f"[ERROR] Invalid JSON in configuration file: {e}")
             raise
         except Exception as e:
-            print(f"❌ Error loading configuration: {e}")
+            print(f"[ERROR] Error loading configuration: {e}")
             raise
 
 
@@ -72,7 +72,7 @@ class AWSCredentialManager:
         """Load user mapping from JSON file - reuse existing method"""
         try:
             if not os.path.exists(self.mapping_file):
-                print(f"⚠️  User mapping file '{self.mapping_file}' not found")
+                print(f"[WARN]  User mapping file '{self.mapping_file}' not found")
                 self.user_mappings = {}
                 return
             
@@ -80,11 +80,11 @@ class AWSCredentialManager:
                 mapping_data = json.load(f)
             
             self.user_mappings = mapping_data['user_mappings']
-            print(f"✅ User mapping loaded from: {self.mapping_file}")
+            print(f"[OK] User mapping loaded from: {self.mapping_file}")
             print(f"👥 Found mappings for {len(self.user_mappings)} users")
             
         except Exception as e:
-            print(f"⚠️  Warning: Error loading user mapping: {e}")
+            print(f"[WARN]  Warning: Error loading user mapping: {e}")
             self.user_mappings = {}
 
     def get_user_info(self, username):
@@ -121,7 +121,7 @@ class AWSCredentialManager:
     def prompt_credential_type(self) -> str:
         """Prompt user to select credential type"""
         print("\n" + "="*60)
-        print("🔑 CREDENTIAL SELECTION")
+        print("[KEY] CREDENTIAL SELECTION")
         print("="*60)
         print("Choose your credential type:")
         print("1. Root Credentials (Full account access)")
@@ -135,7 +135,7 @@ class AWSCredentialManager:
             elif choice == '2':
                 return 'iam'
             else:
-                print("❌ Invalid choice. Please enter 1 or 2.")
+                print("[ERROR] Invalid choice. Please enter 1 or 2.")
     
     def display_root_accounts(self) -> List[Dict]:
         """Display available Root accounts"""
@@ -143,7 +143,7 @@ class AWSCredentialManager:
         root_accounts = []
         
         print("\n" + "="*80)
-        print("🏢 AVAILABLE ROOT ACCOUNTS")
+        print("[ACCOUNT] AVAILABLE ROOT ACCOUNTS")
         print("="*80)
         
         for i, (account_name, account_data) in enumerate(accounts.items(), 1):
@@ -154,7 +154,7 @@ class AWSCredentialManager:
             print(f"  {i:2}. {account_name}")
             print(f"      📧 Email: {email}")
             print(f"      🆔 Account ID: {account_id}")
-            print(f"      🌍 Available Regions: {', '.join(user_regions)}")
+            print(f"      [REGION] Available Regions: {', '.join(user_regions)}")
             print()
             
             root_accounts.append({
@@ -227,9 +227,9 @@ class AWSCredentialManager:
                         regions=[selected_region]
                     )
                 else:
-                    print(f"❌ Invalid choice. Please enter a number between 1 and {len(root_accounts)}")
+                    print(f"[ERROR] Invalid choice. Please enter a number between 1 and {len(root_accounts)}")
             except ValueError:
-                print("❌ Please enter a valid number")
+                print("[ERROR] Please enter a valid number")
 
     def select_iam_credentials(self) -> CredentialInfo:
             """Handle IAM user selection with proper IAM credential files"""
@@ -245,9 +245,9 @@ class AWSCredentialManager:
                         selected_account = iam_accounts[account_index]
                         break
                     else:
-                        print(f"❌ Invalid choice. Please enter a number between 1 and {len(iam_accounts)}")
+                        print(f"[ERROR] Invalid choice. Please enter a number between 1 and {len(iam_accounts)}")
                 except ValueError:
-                    print("❌ Please enter a valid number")
+                    print("[ERROR] Please enter a valid number")
     
             # Step 2: Select user from the account
             users_regions = selected_account['users_regions']
@@ -267,9 +267,9 @@ class AWSCredentialManager:
                         selected_username, selected_region = user_list[user_index]
                         break
                     else:
-                        print(f"❌ Invalid choice. Please enter a number between 1 and {len(user_list)}")
+                        print(f"[ERROR] Invalid choice. Please enter a number between 1 and {len(user_list)}")
                 except ValueError:
-                    print("❌ Please enter a valid number")
+                    print("[ERROR] Please enter a valid number")
     
             # Step 3: Find IAM credential files for this user
             try:
@@ -285,7 +285,7 @@ class AWSCredentialManager:
                         })
         
                 if not iam_cred_files:
-                    print(f"❌ No IAM credential files found")
+                    print(f"[ERROR] No IAM credential files found")
                     print("Please run the IAM user creation script first")
                     raise ValueError("No IAM credential files found")
         
@@ -293,7 +293,7 @@ class AWSCredentialManager:
                 sorted_files = sorted(iam_cred_files, key=lambda x: x['timestamp'], reverse=True)
         
                 # Display options for credential files
-                print("\n📂 IAM Credential Files Available (sorted by timestamp, newest first):")
+                print("\n[OPENFOLDER] IAM Credential Files Available (sorted by timestamp, newest first):")
                 for i, file_info in enumerate(sorted_files, 1):
                     timestamp = datetime.fromtimestamp(file_info['timestamp']).strftime('%Y-%m-%d %H:%M:%S')
                     print(f"  {i}. {file_info['filename']} ({timestamp})")
@@ -308,7 +308,7 @@ class AWSCredentialManager:
                 if file_choice == '1' or not file_choice:
                     # Use the latest file
                     selected_file = sorted_files[0]['path']
-                    print(f"✅ Using latest file: {sorted_files[0]['filename']}")
+                    print(f"[OK] Using latest file: {sorted_files[0]['filename']}")
                 else:
                     # Let user select file
                     while True:
@@ -316,12 +316,12 @@ class AWSCredentialManager:
                             file_index = int(input(f"Select file (1-{len(sorted_files)}): ").strip()) - 1
                             if 0 <= file_index < len(sorted_files):
                                 selected_file = sorted_files[file_index]['path']
-                                print(f"✅ Selected file: {sorted_files[file_index]['filename']}")
+                                print(f"[OK] Selected file: {sorted_files[file_index]['filename']}")
                                 break
                             else:
-                                print(f"❌ Invalid choice. Please enter a number between 1 and {len(sorted_files)}")
+                                print(f"[ERROR] Invalid choice. Please enter a number between 1 and {len(sorted_files)}")
                         except ValueError:
-                            print("❌ Please enter a valid number")
+                            print("[ERROR] Please enter a valid number")
         
                 # Load selected IAM credential file
                 with open(selected_file, 'r') as f:
@@ -334,13 +334,13 @@ class AWSCredentialManager:
         
                 # Debug information to help trace the issue
                 if 'accounts' not in iam_creds_data:
-                    print(f"⚠️ 'accounts' key not found in credentials file")
+                    print(f"[WARN] 'accounts' key not found in credentials file")
                     print(f"Keys found: {list(iam_creds_data.keys())}")
                 elif account_name not in iam_creds_data['accounts']:
-                    print(f"⚠️ Account '{account_name}' not found in credentials file")
+                    print(f"[WARN] Account '{account_name}' not found in credentials file")
                     print(f"Available accounts: {list(iam_creds_data['accounts'].keys())}")
                 elif 'users' not in iam_creds_data['accounts'][account_name]:
-                    print(f"⚠️ 'users' not found for account '{account_name}'")
+                    print(f"[WARN] 'users' not found for account '{account_name}'")
                 else:
                     # Correct access pattern: accounts -> account_name -> users -> [user_list]
                     users = iam_creds_data['accounts'][account_name]['users']
@@ -350,10 +350,10 @@ class AWSCredentialManager:
                             break
         
                 if not user_creds:
-                    print(f"❌ Credentials for user {selected_username} not found in the selected file")
+                    print(f"[ERROR] Credentials for user {selected_username} not found in the selected file")
                     raise ValueError(f"Credentials for {selected_username} not found")
         
-                print(f"✅ Credentials found for user {selected_username}")
+                print(f"[OK] Credentials found for user {selected_username}")
         
                 # Return user-specific credentials
                 return CredentialInfo(
@@ -368,17 +368,17 @@ class AWSCredentialManager:
                 )
         
             except Exception as e:
-                print(f"❌ Error accessing user credentials: {e}")
+                print(f"[ERROR] Error accessing user credentials: {e}")
                 raise
   
     def select_region(self, available_regions: List[str]) -> str:
         """Select region from available regions"""
         if len(available_regions) == 1:
-            print(f"🌍 Using region: {available_regions[0]}")
+            print(f"[REGION] Using region: {available_regions[0]}")
             return available_regions[0]
         
         print("\n" + "="*50)
-        print("🌍 SELECT REGION")
+        print("[REGION] SELECT REGION")
         print("="*50)
         
         for i, region in enumerate(available_regions, 1):
@@ -393,9 +393,9 @@ class AWSCredentialManager:
                     print(available_regions[region_index])
                     return available_regions[region_index]
                 else:
-                    print(f"❌ Invalid choice. Please enter a number between 1 and {len(available_regions)}")
+                    print(f"[ERROR] Invalid choice. Please enter a number between 1 and {len(available_regions)}")
             except ValueError:
-                print("❌ Please enter a valid number")
+                print("[ERROR] Please enter a valid number")
     
     def get_credentials(self) -> CredentialInfo:
         """Main method to get credentials based on user choice"""
@@ -409,7 +409,7 @@ class AWSCredentialManager:
     def validate_credentials(self, cred_info: CredentialInfo) -> bool:
         """Validate credentials by making a test AWS call"""
         try:
-            print(f"\n🔍 Validating {cred_info.credential_type} credentials...")
+            print(f"\n[SCAN] Validating {cred_info.credential_type} credentials...")
 
             sts_client = boto3.client(
                 'sts',
@@ -422,19 +422,19 @@ class AWSCredentialManager:
             actual_account_id = identity.get('Account')
 
             if actual_account_id == cred_info.account_id:
-                print(f"✅ Credentials validated successfully")
+                print(f"[OK] Credentials validated successfully")
                 print(f"   👤 User ARN: {identity.get('Arn', 'Unknown')}")
                 if cred_info.username:
                     print(f"   👥 Selected IAM User: {cred_info.username}")
                 return True
             else:
-                print(f"❌ Account ID mismatch!")
+                print(f"[ERROR] Account ID mismatch!")
                 print(f"   Expected: {cred_info.account_id}")
                 print(f"   Actual: {actual_account_id}")
                 return False
 
         except Exception as e:
-            print(f"❌ Credential validation failed: {e}")
+            print(f"[ERROR] Credential validation failed: {e}")
             return False
 
 
@@ -453,7 +453,7 @@ class AWSCredentialManager:
         try:
             # Check if we have user mappings loaded
             if not hasattr(self, 'user_mappings') or not self.user_mappings:
-                print(f"⚠️ No user mappings available")
+                print(f"[WARN] No user mappings available")
                 return []
         
             # Filter users that match the account prefix
@@ -466,7 +466,7 @@ class AWSCredentialManager:
                     matching_users[username] = user_data
         
             if not matching_users:
-                print(f"⚠️ No users found for account {account_name} in user mapping")
+                print(f"[WARN] No users found for account {account_name} in user mapping")
                 return []
         
             # Get account data if available
@@ -500,7 +500,7 @@ class AWSCredentialManager:
                 })
         
         except Exception as e:
-            print(f"⚠️ Error getting users for account {account_name}: {e}")
+            print(f"[WARN] Error getting users for account {account_name}: {e}")
     
         return users
 
@@ -547,7 +547,7 @@ class AWSCredentialManager:
                     })
         
         except Exception as e:
-            print(f"⚠️ Error retrieving accounts: {e}")
+            print(f"[WARN] Error retrieving accounts: {e}")
     
         return accounts
 

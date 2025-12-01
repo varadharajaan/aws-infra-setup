@@ -89,7 +89,7 @@ class LiveCostCalculator:
             with open(self.config_file, 'r', encoding='utf-8') as f:
                 self.aws_config = json.load(f)
             
-            self.logger.info(f"✅ AWS accounts configuration loaded from: {self.config_file}")
+            self.logger.info(f"[OK] AWS accounts configuration loaded from: {self.config_file}")
             
             # Validate accounts
             if 'accounts' not in self.aws_config:
@@ -115,13 +115,13 @@ class LiveCostCalculator:
                 if account_id:
                     self.account_id_to_name[account_id] = account_name
             
-            self.logger.info(f"📊 Valid accounts loaded: {len(valid_accounts)}")
+            self.logger.info(f"[STATS] Valid accounts loaded: {len(valid_accounts)}")
             
             # Get default regions
             self.default_regions = self.aws_config.get('user_settings', {}).get('user_regions', 
                 ['us-east-1', 'us-east-2', 'us-west-1', 'us-west-2', 'ap-south-1'])
             
-            self.logger.info(f"📍 Default regions: {self.default_regions}")
+            self.logger.info(f"[ROUNDPIN] Default regions: {self.default_regions}")
             
         except json.JSONDecodeError as e:
             self.logger.error(f"Invalid JSON in configuration file: {e}")
@@ -1795,7 +1795,7 @@ class LiveCostCalculator:
             with open(output_file, 'w', encoding='utf-8') as f:
                 json.dump(results, f, indent=2, default=str)
             self.logger.info(f"EKS cost calculation saved to: {output_file}")
-            print(f"✅ EKS results saved: {results['cluster_count']} clusters, ${results['total_cost']:.2f}")
+            print(f"[OK] EKS results saved: {results['cluster_count']} clusters, ${results['total_cost']:.2f}")
         except Exception as e:
             self.logger.error(f"Failed to save EKS results to {output_file}: {e}")
 
@@ -1807,18 +1807,18 @@ class LiveCostCalculator:
     def display_ec2_cost_summary(self, cost_data):
         """Display EC2 cost summary to console"""
         print("\n" + "=" * 80)
-        print(f"💰 EC2 COST SUMMARY FOR ACCOUNT: {cost_data['account_id']} ({cost_data['account_name']})")
+        print(f"[COST] EC2 COST SUMMARY FOR ACCOUNT: {cost_data['account_id']} ({cost_data['account_name']})")
         print("=" * 80)
         
         # Display total
-        print(f"📊 TOTAL EC2 COST: ${cost_data['total_cost']:.2f}")
-        print(f"📊 TOTAL INSTANCES: {cost_data['instance_count']}")
-        print(f"📊 CALCULATED AT: {cost_data['calculated_at']}")
+        print(f"[STATS] TOTAL EC2 COST: ${cost_data['total_cost']:.2f}")
+        print(f"[STATS] TOTAL INSTANCES: {cost_data['instance_count']}")
+        print(f"[STATS] CALCULATED AT: {cost_data['calculated_at']}")
         
         # Display by region
         for region, region_data in cost_data['regions'].items():
             if region_data['instance_count'] > 0:
-                print(f"\n🌍 REGION: {region}")
+                print(f"\n[REGION] REGION: {region}")
                 print(f"   Cost: ${region_data['total_cost']:.2f}")
                 print(f"   Instances: {region_data['instance_count']}")
                 
@@ -1846,18 +1846,18 @@ class LiveCostCalculator:
     def display_eks_cost_summary(self, cost_data):
         """Display EKS cost summary to console"""
         print("\n" + "=" * 80)
-        print(f"💰 EKS COST SUMMARY FOR ACCOUNT: {cost_data['account_id']} ({cost_data['account_name']})")
+        print(f"[COST] EKS COST SUMMARY FOR ACCOUNT: {cost_data['account_id']} ({cost_data['account_name']})")
         print("=" * 80)
         
         # Display total
-        print(f"📊 TOTAL EKS COST: ${cost_data['total_cost']:.2f}")
-        print(f"📊 TOTAL CLUSTERS: {cost_data['cluster_count']}")
-        print(f"📊 CALCULATED AT: {cost_data['calculated_at']}")
+        print(f"[STATS] TOTAL EKS COST: ${cost_data['total_cost']:.2f}")
+        print(f"[STATS] TOTAL CLUSTERS: {cost_data['cluster_count']}")
+        print(f"[STATS] CALCULATED AT: {cost_data['calculated_at']}")
         
         # Display by region
         for region, region_data in cost_data['regions'].items():
             if region_data['cluster_count'] > 0:
-                print(f"\n🌍 REGION: {region}")
+                print(f"\n[REGION] REGION: {region}")
                 print(f"   Cost: ${region_data['total_cost']:.2f}")
                 print(f"   Clusters: {region_data['cluster_count']}")
                 
@@ -1865,7 +1865,7 @@ class LiveCostCalculator:
                 clusters = sorted(region_data['clusters'], key=lambda x: x['total_cost'], reverse=True)
                 
                 for cluster in clusters:
-                    print(f"\n   📦 CLUSTER: {cluster['cluster_name']} (v{cluster['version']})")
+                    print(f"\n   [PACKAGE] CLUSTER: {cluster['cluster_name']} (v{cluster['version']})")
                     print(f"      Status: {cluster['status']}")
                     print(f"      Uptime: {cluster['uptime_hours']:.2f} hours")
                     print(f"      Control Plane Cost: ${cluster['control_plane']['cost']:.2f}")
@@ -1990,11 +1990,11 @@ class LiveCostCalculator:
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC")
 
         print("\n" + "=" * 80)
-        print(f"🔍 ACTIVE RESOURCES IN ACCOUNT: {account_id} ({account_name})")
+        print(f"[SCAN] ACTIVE RESOURCES IN ACCOUNT: {account_id} ({account_name})")
         print("=" * 80)
-        print(f"📅 Scan Time: {now_str}")
+        print(f"[DATE] Scan Time: {now_str}")
         print(f"👤 Scanned by: varadharajaan")
-        print(f"🌍 Regions: {', '.join(regions)}")
+        print(f"[REGION] Regions: {', '.join(regions)}")
         print("=" * 80)
 
         has_active_resources = False
@@ -2016,9 +2016,9 @@ class LiveCostCalculator:
         all_instances = []
         ec2_regions_with_instances = []  # Correctly defined here
 
-        print("\n🖥️  SCANNING EC2 INSTANCES...")
+        print("\n[DESKTOP]  SCANNING EC2 INSTANCES...")
         for region in regions:
-            print(f"   🔍 Scanning {region}...", end=" ")
+            print(f"   [SCAN] Scanning {region}...", end=" ")
             instances = self.list_active_ec2_instances(access_key, secret_key, region)
             if instances:
                 ec2_regions_with_instances.append(region)  # Add region if instances found
@@ -2055,13 +2055,13 @@ class LiveCostCalculator:
                         total_estimated_hourly_cost += 0.05
 
                 all_instances.extend(instances)
-                print(f"✅ Found {len(instances)} instances")
+                print(f"[OK] Found {len(instances)} instances")
             else:
-                print("📭 No instances")
+                print("[MAILBOX] No instances")
 
         if all_instances:
             has_active_resources = True
-            print(f"\n🖥️  ACTIVE EC2 INSTANCES ({len(all_instances)} total):")
+            print(f"\n[DESKTOP]  ACTIVE EC2 INSTANCES ({len(all_instances)} total):")
             print("-" * 120)
             print(
                 f"   {'Instance ID':<20} {'Name':<25} {'Type':<15} {'Region':<12} {'Uptime':<10} {'Est.Cost/hr':<12} {'Launch Time'}")
@@ -2078,22 +2078,22 @@ class LiveCostCalculator:
                       f"{cost_str:<12} {instance['launch_time']}")
 
             print("-" * 120)
-            print(f"   📊 Summary: {len(all_instances)} instances across {len(ec2_regions_with_instances)} regions")
+            print(f"   [STATS] Summary: {len(all_instances)} instances across {len(ec2_regions_with_instances)} regions")
             print(
-                f"   💰 Estimated Total Hourly Cost: ${sum(i.get('estimated_hourly_cost', 0) for i in all_instances):.4f}")
-            print(f"   🌍 Regions with instances: {', '.join(ec2_regions_with_instances)}")
+                f"   [COST] Estimated Total Hourly Cost: ${sum(i.get('estimated_hourly_cost', 0) for i in all_instances):.4f}")
+            print(f"   [REGION] Regions with instances: {', '.join(ec2_regions_with_instances)}")
 
             # Show top cost instances
             if len(all_instances) > 3:
                 top_instances = sorted_instances[:3]
-                print(f"   🔥 Top 3 Most Expensive:")
+                print(f"   [FIRE] Top 3 Most Expensive:")
                 for i, instance in enumerate(top_instances, 1):
                     print(
                         f"      {i}. {instance['instance_id']} ({instance['instance_type']}) - ${instance.get('estimated_hourly_cost', 0):.4f}/hr")
 
             scan_summary["ec2_instances"] = all_instances
         else:
-            print("\n🖥️  No active EC2 instances found in selected regions.")
+            print("\n[DESKTOP]  No active EC2 instances found in selected regions.")
 
         # Display EKS clusters
         all_clusters = []
@@ -2102,7 +2102,7 @@ class LiveCostCalculator:
 
         print(f"\n🚢 SCANNING EKS CLUSTERS...")
         for region in regions:
-            print(f"   🔍 Scanning {region}...", end=" ")
+            print(f"   [SCAN] Scanning {region}...", end=" ")
             clusters = self.list_active_eks_clusters(access_key, secret_key, region)
             if clusters:
                 eks_regions_with_clusters.append(region)  # Add region if clusters found
@@ -2136,9 +2136,9 @@ class LiveCostCalculator:
                         total_eks_hourly_cost += 0.10
 
                 all_clusters.extend(clusters)
-                print(f"✅ Found {len(clusters)} clusters")
+                print(f"[OK] Found {len(clusters)} clusters")
             else:
-                print("📭 No clusters")
+                print("[MAILBOX] No clusters")
 
         if all_clusters:
             has_active_resources = True
@@ -2159,9 +2159,9 @@ class LiveCostCalculator:
                       f"{cost_str:<12} {cluster['created_at']}")
 
             print("-" * 130)
-            print(f"   📊 Summary: {len(all_clusters)} clusters across {len(eks_regions_with_clusters)} regions")
-            print(f"   💰 Estimated Total Hourly Cost: ${total_eks_hourly_cost:.4f}")
-            print(f"   🌍 Regions with clusters: {', '.join(eks_regions_with_clusters)}")
+            print(f"   [STATS] Summary: {len(all_clusters)} clusters across {len(eks_regions_with_clusters)} regions")
+            print(f"   [COST] Estimated Total Hourly Cost: ${total_eks_hourly_cost:.4f}")
+            print(f"   [REGION] Regions with clusters: {', '.join(eks_regions_with_clusters)}")
 
             # Show cluster breakdown
             total_control_plane_cost = len(all_clusters) * 0.10
@@ -2177,49 +2177,49 @@ class LiveCostCalculator:
         total_resources = len(all_instances) + len(all_clusters)
         total_hourly_cost = total_estimated_hourly_cost + total_eks_hourly_cost
 
-        print(f"\n📊 RESOURCE SUMMARY:")
+        print(f"\n[STATS] RESOURCE SUMMARY:")
         print("=" * 80)
 
         if has_active_resources:
-            print(f"✅ Total Active Resources: {total_resources}")
-            print(f"   🖥️  EC2 Instances: {len(all_instances)}")
+            print(f"[OK] Total Active Resources: {total_resources}")
+            print(f"   [DESKTOP]  EC2 Instances: {len(all_instances)}")
             print(f"   🚢 EKS Clusters: {len(all_clusters)}")
-            print(f"   🌍 Regions with resources: {len(set(ec2_regions_with_instances + eks_regions_with_clusters))}")
-            print(f"   💰 Estimated Total Hourly Cost: ${total_hourly_cost:.4f}")
-            print(f"   📅 Estimated Daily Cost: ${total_hourly_cost * 24:.2f}")
-            print(f"   📆 Estimated Monthly Cost: ${total_hourly_cost * 24 * 30:.2f}")
+            print(f"   [REGION] Regions with resources: {len(set(ec2_regions_with_instances + eks_regions_with_clusters))}")
+            print(f"   [COST] Estimated Total Hourly Cost: ${total_hourly_cost:.4f}")
+            print(f"   [DATE] Estimated Daily Cost: ${total_hourly_cost * 24:.2f}")
+            print(f"   [DATES] Estimated Monthly Cost: ${total_hourly_cost * 24 * 30:.2f}")
 
             # Cost breakdown
             if total_hourly_cost > 0:
                 ec2_percentage = (total_estimated_hourly_cost / total_hourly_cost) * 100
                 eks_percentage = (total_eks_hourly_cost / total_hourly_cost) * 100
                 print(f"\n💹 Cost Breakdown:")
-                print(f"   🖥️  EC2: ${total_estimated_hourly_cost:.4f}/hr ({ec2_percentage:.1f}%)")
+                print(f"   [DESKTOP]  EC2: ${total_estimated_hourly_cost:.4f}/hr ({ec2_percentage:.1f}%)")
                 print(f"   🚢 EKS: ${total_eks_hourly_cost:.4f}/hr ({eks_percentage:.1f}%)")
 
             # Alerts and recommendations
-            print(f"\n💡 INSIGHTS & RECOMMENDATIONS:")
+            print(f"\n[TIP] INSIGHTS & RECOMMENDATIONS:")
             if total_hourly_cost > 5.0:
-                print(f"   ⚠️  High hourly cost detected (>${total_hourly_cost:.2f}/hr)")
-                print(f"   💡 Consider reviewing resource utilization and right-sizing")
+                print(f"   [WARN]  High hourly cost detected (>${total_hourly_cost:.2f}/hr)")
+                print(f"   [TIP] Consider reviewing resource utilization and right-sizing")
 
             if len(all_instances) > 10:
                 print(f"   📈 Large number of EC2 instances ({len(all_instances)})")
-                print(f"   💡 Consider using auto-scaling or spot instances for cost optimization")
+                print(f"   [TIP] Consider using auto-scaling or spot instances for cost optimization")
 
             if len(all_clusters) > 3:
                 print(f"   🚢 Multiple EKS clusters detected ({len(all_clusters)})")
-                print(f"   💡 Consider cluster consolidation if workloads allow")
+                print(f"   [TIP] Consider cluster consolidation if workloads allow")
 
             # Security and compliance
-            print(f"\n🔒 SECURITY NOTES:")
-            print(f"   📝 Review instance security groups and access policies")
-            print(f"   🔐 Ensure proper IAM roles and policies are applied")
-            print(f"   📊 Monitor resource utilization for optimization opportunities")
+            print(f"\n[SECURE] SECURITY NOTES:")
+            print(f"   [LOG] Review instance security groups and access policies")
+            print(f"   [LOCKED] Ensure proper IAM roles and policies are applied")
+            print(f"   [STATS] Monitor resource utilization for optimization opportunities")
 
         else:
-            print("⚠️  No active EC2 instances or EKS clusters found in selected regions.")
-            print("💡 This could indicate:")
+            print("[WARN]  No active EC2 instances or EKS clusters found in selected regions.")
+            print("[TIP] This could indicate:")
             print("   • Resources are in different regions")
             print("   • Instances are stopped/terminated")
             print("   • Access permissions may be limited")
@@ -2247,7 +2247,7 @@ class LiveCostCalculator:
             with open(scan_file, 'w', encoding='utf-8') as f:
                 json.dump(scan_summary, f, indent=2, default=str)
 
-            print(f"📄 Scan results saved to: {scan_file}")
+            print(f"[FILE] Scan results saved to: {scan_file}")
 
         except Exception as e:
             self.logger.warning(f"Could not save scan results: {e}")
@@ -2262,7 +2262,7 @@ class LiveCostCalculator:
         print("=" * 80)
 
         # Step 1: Account selection with multiple account support
-        print("\n🏦 ACCOUNT SELECTION")
+        print("\n[BANK] ACCOUNT SELECTION")
         print("-" * 80)
 
         accounts = []
@@ -2333,7 +2333,7 @@ class LiveCostCalculator:
                 return
 
         # Step 2: Region selection
-        print("\n🌍 REGION SELECTION")
+        print("\n[REGION] REGION SELECTION")
         print("-" * 80)
 
         print("Available Regions:")
@@ -2401,7 +2401,7 @@ class LiveCostCalculator:
             account_resources[account_id] = resources
 
         # Step 3: Service scope selection
-        print("\n🔍 SERVICE SCOPE SELECTION")
+        print("\n[SCAN] SERVICE SCOPE SELECTION")
         print("-" * 80)
 
         print("Available Service Scopes:")
@@ -2428,7 +2428,7 @@ class LiveCostCalculator:
         # EC2 instance selection (if applicable)
         ec2_selection = 'all'
         if calculate_ec2:
-            print("\n💻 EC2 INSTANCE SELECTION")
+            print("\n[COMPUTE] EC2 INSTANCE SELECTION")
             print("-" * 80)
 
             print("EC2 Selection Options:")
@@ -2471,10 +2471,10 @@ class LiveCostCalculator:
         # Calculate for each selected account
         for account_id in selected_account_ids:
             account_name = self.account_id_to_name.get(account_id, "Unknown")
-            print(f"\n📊 Processing account: {account_name} ({account_id})")
+            print(f"\n[STATS] Processing account: {account_name} ({account_id})")
 
             if calculate_ec2:
-                print(f"  💻 Calculating EC2 costs...")
+                print(f"  [COMPUTE] Calculating EC2 costs...")
                 ec2_results = self.calculate_ec2_costs(account_id, selected_regions, ec2_selection)
                 all_ec2_results[account_id] = ec2_results
 
@@ -2523,12 +2523,12 @@ class LiveCostCalculator:
         if calculate_eks:
             print(f"  • EKS: ${total_eks_cost:.2f} ({total_eks_clusters} clusters)")
 
-        print(f"\n📊 HISTORICAL & FORECAST ANALYSIS:")
+        print(f"\n[STATS] HISTORICAL & FORECAST ANALYSIS:")
         print(f"  • Last 9 hours cost: ${total_historical_cost:.2f}")
         print(f"  • Next 9 hours forecast: ${total_forecast_cost:.2f}")
 
         # Per-account breakdown
-        print("\n📊 COST BREAKDOWN BY ACCOUNT:")
+        print("\n[STATS] COST BREAKDOWN BY ACCOUNT:")
 
         for account_id in selected_account_ids:
             account_name = self.account_id_to_name.get(account_id, "Unknown")
@@ -2590,29 +2590,29 @@ class LiveCostCalculator:
             json.dump(aggregated_results, f, indent=2, default=str)
 
         # Generate HTML Report
-        print("\n📊 Generating comprehensive HTML report...")
+        print("\n[STATS] Generating comprehensive HTML report...")
         html_filename = self.generate_html_report(aggregated_results, all_ec2_results, all_eks_results,
                                                   all_historical_results, all_forecast_results)
 
         # Output file locations
-        print("\n📄 OUTPUT FILES:")
-        print(f"   📊 HTML Report: {html_filename}")
-        print(f"   📋 Aggregated Cost Report: {aggregated_output_file}")
+        print("\n[FILE] OUTPUT FILES:")
+        print(f"   [STATS] HTML Report: {html_filename}")
+        print(f"   [LIST] Aggregated Cost Report: {aggregated_output_file}")
 
         # Show individual file locations with updated paths
         for account_id in selected_account_ids:
             account_save_name = self.account_id_to_name.get(account_id, "Unknown")
             if calculate_ec2 and account_id in all_ec2_results:
                 print(
-                    f"   💻 EC2 Cost Report ({account_id}): {self.ec2_output_dir}/{account_save_name}/ec2_cost_{account_save_name}_{self.execution_timestamp}.json")
+                    f"   [COMPUTE] EC2 Cost Report ({account_id}): {self.ec2_output_dir}/{account_save_name}/ec2_cost_{account_save_name}_{self.execution_timestamp}.json")
 
             if calculate_eks and account_id in all_eks_results:
                 print(
                     f"   🚢 EKS Cost Report ({account_id}): {self.eks_output_dir}/{account_save_name}/eks_cost_{account_save_name}_{self.execution_timestamp}.json")
 
-        print(f"   📝 Log File: {self.log_filename}")
+        print(f"   [LOG] Log File: {self.log_filename}")
 
-        print("\n✅ Cost calculation and analysis complete!\n")
+        print("\n[OK] Cost calculation and analysis complete!\n")
 
     def generate_data_tables_html(self, aggregated_results):
         """Generate HTML for data tables"""
@@ -2625,7 +2625,7 @@ class LiveCostCalculator:
         if aggregated_results.get('ec2', {}).get('accounts'):
             html += f'''
             <div class="table-container">
-                <div class="table-header">🖥️ EC2 Instances Summary - Generated: {current_timestamp} by {current_user}</div>
+                <div class="table-header">[DESKTOP] EC2 Instances Summary - Generated: {current_timestamp} by {current_user}</div>
                 <table>
                     <thead>
                         <tr>
@@ -2693,7 +2693,7 @@ class LiveCostCalculator:
                     </tbody>
                 </table>
                 <div style="padding: 15px; background: #f8f9fa; border-top: 1px solid #e9ecef;">
-                    <small>💡 <strong>Health Status:</strong> Data collected from CloudWatch metrics. CPU utilization shows average over last hour.</small>
+                    <small>[TIP] <strong>Health Status:</strong> Data collected from CloudWatch metrics. CPU utilization shows average over last hour.</small>
                 </div>
             </div>
             '''
@@ -2759,7 +2759,7 @@ class LiveCostCalculator:
                     </tbody>
                 </table>
                 <div style="padding: 15px; background: #f8f9fa; border-top: 1px solid #e9ecef;">
-                    <small>💡 <strong>Cost Breakdown:</strong> Control Plane = $0.10/hour per cluster. Worker Nodes = EC2 instance costs in nodegroups.</small>
+                    <small>[TIP] <strong>Cost Breakdown:</strong> Control Plane = $0.10/hour per cluster. Worker Nodes = EC2 instance costs in nodegroups.</small>
                 </div>
             </div>
             '''
@@ -2800,7 +2800,7 @@ class LiveCostCalculator:
                         html += f'''
                         <tr>
                             <td><strong>{account_name}</strong><br><small>{account_id}</small></td>
-                            <td>🖥️ EC2</td>
+                            <td>[DESKTOP] EC2</td>
                             <td><span class="metric-badge">{region}</span></td>
                             <td>{len(ec2_instances)}</td>
                             <td>{historical_data.get('start_time', 'N/A')} - {historical_data.get('end_time', 'N/A')}</td>
@@ -2836,7 +2836,7 @@ class LiveCostCalculator:
                     </tbody>
                 </table>
                 <div style="padding: 15px; background: #f8f9fa; border-top: 1px solid #e9ecef;">
-                    <small>📊 <strong>Historical Analysis:</strong> Costs calculated based on actual running time during the last 9 hours.</small>
+                    <small>[STATS] <strong>Historical Analysis:</strong> Costs calculated based on actual running time during the last 9 hours.</small>
                 </div>
             </div>
             '''
@@ -2875,7 +2875,7 @@ class LiveCostCalculator:
                         html += f'''
                         <tr>
                             <td><strong>{account_name}</strong><br><small>{account_id}</small></td>
-                            <td>🖥️ EC2</td>
+                            <td>[DESKTOP] EC2</td>
                             <td><span class="metric-badge">{region}</span></td>
                             <td>{len(ec2_forecast)}</td>
                             <td>{forecast_data.get('start_time', 'N/A')} - {forecast_data.get('end_time', 'N/A')}</td>
@@ -2917,7 +2917,7 @@ class LiveCostCalculator:
         # Cost Optimization Recommendations Table
         html += f'''
         <div class="table-container">
-            <div class="table-header">💡 Cost Optimization Recommendations - Generated: {current_timestamp} by {current_user}</div>
+            <div class="table-header">[TIP] Cost Optimization Recommendations - Generated: {current_timestamp} by {current_user}</div>
             <table>
                 <thead>
                     <tr>
@@ -2932,8 +2932,8 @@ class LiveCostCalculator:
                 </thead>
                 <tbody>
                     <tr>
-                        <td><span class="status-error">🔴 High</span></td>
-                        <td>🖥️ EC2</td>
+                        <td><span class="status-error">[RED] High</span></td>
+                        <td>[DESKTOP] EC2</td>
                         <td>Review underutilized instances (CPU < 20%)</td>
                         <td class="cost-highlight">$50-200/month</td>
                         <td>Low</td>
@@ -2941,7 +2941,7 @@ class LiveCostCalculator:
                         <td>Right-size or terminate unused instances</td>
                     </tr>
                     <tr>
-                        <td><span class="status-warning">🟡 Medium</span></td>
+                        <td><span class="status-warning">[YELLOW] Medium</span></td>
                         <td>🚢 EKS</td>
                         <td>Implement cluster autoscaling</td>
                         <td class="cost-highlight">$30-100/month</td>
@@ -2950,8 +2950,8 @@ class LiveCostCalculator:
                         <td>Configure HPA and VPA</td>
                     </tr>
                     <tr>
-                        <td><span class="status-active">🟢 Low</span></td>
-                        <td>🌍 Multi-Region</td>
+                        <td><span class="status-active">[GREEN] Low</span></td>
+                        <td>[REGION] Multi-Region</td>
                         <td>Consider Reserved Instances for consistent workloads</td>
                         <td class="cost-highlight">$100-500/month</td>
                         <td>Low</td>
@@ -2959,8 +2959,8 @@ class LiveCostCalculator:
                         <td>Purchase 1-year or 3-year RIs</td>
                     </tr>
                     <tr>
-                        <td><span class="status-warning">🟡 Medium</span></td>
-                        <td>💾 Storage</td>
+                        <td><span class="status-warning">[YELLOW] Medium</span></td>
+                        <td>[INSTANCE] Storage</td>
                         <td>Review EBS volumes and snapshots</td>
                         <td class="cost-highlight">$20-80/month</td>
                         <td>Low</td>
@@ -2970,7 +2970,7 @@ class LiveCostCalculator:
                 </tbody>
             </table>
             <div style="padding: 15px; background: #f8f9fa; border-top: 1px solid #e9ecef;">
-                <small>💡 <strong>Optimization Tips:</strong> Regularly review your cost reports and implement cost optimization strategies. Consider using AWS Cost Explorer and Trusted Advisor for additional insights.</small>
+                <small>[TIP] <strong>Optimization Tips:</strong> Regularly review your cost reports and implement cost optimization strategies. Consider using AWS Cost Explorer and Trusted Advisor for additional insights.</small>
             </div>
         </div>
         '''
@@ -3010,10 +3010,10 @@ class LiveCostCalculator:
             with open(html_filename, 'w', encoding='utf-8') as f:
                 f.write(html_content)
             self.logger.info(f"HTML report generated: {html_filename}")
-            print(f"   📊 HTML Report: {html_filename}")
+            print(f"   [STATS] HTML Report: {html_filename}")
         except Exception as e:
             self.logger.error(f"Failed to save HTML report to {html_filename}: {e}")
-            print(f"   ❌ Failed to save HTML report: {e}")
+            print(f"   [ERROR] Failed to save HTML report: {e}")
             return None
 
         return html_filename
@@ -3561,14 +3561,14 @@ class LiveCostCalculator:
         <div class="container" id="reportContent">
             <div class="header">
                 <div class="timestamp">Generated: {current_timestamp} UTC</div>
-                <h1>💰 AWS Cost Analysis Report</h1>
+                <h1>[COST] AWS Cost Analysis Report</h1>
                 <div class="subtitle">Live Cost Calculator & Health Metadata • Historical Analysis & Forecasting</div>
             </div>
 
             <div class="controls">
                 <div>
                     <button class="btn" onclick="window.print()">🖨️ Print Report</button>
-                    <button class="btn btn-pdf" onclick="downloadPDF()">📄 Download PDF</button>
+                    <button class="btn btn-pdf" onclick="downloadPDF()">[FILE] Download PDF</button>
                     <button class="btn" onclick="location.reload()">🔄 Refresh Data</button>
                 </div>
                 <div style="color: #666;">
@@ -3596,12 +3596,12 @@ class LiveCostCalculator:
                     <div class="card-value">${total_forecast:.2f}</div>
                 </div>
                 <div class="card">
-                    <div class="card-icon">🏦</div>
+                    <div class="card-icon">[BANK]</div>
                     <div class="card-title">Accounts</div>
                     <div class="card-value">{accounts_processed}</div>
                 </div>
                 <div class="card">
-                    <div class="card-icon">🖥️</div>
+                    <div class="card-icon">[DESKTOP]</div>
                     <div class="card-title">EC2 Instances</div>
                     <div class="card-value">{ec2_instance_count}</div>
                 </div>
@@ -3613,10 +3613,10 @@ class LiveCostCalculator:
             </div>
 
             <div class="insights-section">
-                <h2 style="text-align: center; margin-bottom: 30px; color: #333;">💡 Cost Insights & Analysis</h2>
+                <h2 style="text-align: center; margin-bottom: 30px; color: #333;">[TIP] Cost Insights & Analysis</h2>
 
                 <div class="insight-card">
-                    <div class="insight-title">📊 Cost Trend Analysis</div>
+                    <div class="insight-title">[STATS] Cost Trend Analysis</div>
                     <div class="insight-text">
                         {'Your costs are trending upward' if forecast_trend > 5 else 'Your costs are trending downward' if forecast_trend < -5 else 'Your costs are relatively stable'} 
                         with a {forecast_trend:.1f}% change projected over the next 9 hours.
@@ -3625,7 +3625,7 @@ class LiveCostCalculator:
                 </div>
 
                 <div class="insight-card">
-                    <div class="insight-title">🎯 Optimization Opportunities</div>
+                    <div class="insight-title">[TARGET] Optimization Opportunities</div>
                     <div class="insight-text">
                         Based on your current usage patterns, consider reviewing instances with low CPU utilization 
                         and evaluating right-sizing opportunities for cost optimization. Monitor your forecasted costs regularly.
@@ -3633,7 +3633,7 @@ class LiveCostCalculator:
                 </div>
 
                 <div class="insight-card">
-                    <div class="insight-title">⚡ Real-time Monitoring</div>
+                    <div class="insight-title">[FAST] Real-time Monitoring</div>
                     <div class="insight-text">
                         This report includes real-time health metrics and utilization data to help you make 
                         informed decisions about your AWS infrastructure spending. Data collected at {current_timestamp} UTC by {current_user}.
@@ -3653,18 +3653,18 @@ class LiveCostCalculator:
                         <canvas id="serviceChart" class="chart-canvas"></canvas>
                     </div>
                     <div class="chart-box">
-                        <div class="chart-title">🏦 Cost Distribution by Account</div>
+                        <div class="chart-title">[BANK] Cost Distribution by Account</div>
                         <canvas id="accountChart" class="chart-canvas"></canvas>
                     </div>
                 </div>
 
                 <div class="chart-row">
                     <div class="chart-box">
-                        <div class="chart-title">🌍 Regional Cost Distribution</div>
+                        <div class="chart-title">[REGION] Regional Cost Distribution</div>
                         <canvas id="regionChart" class="chart-canvas"></canvas>
                     </div>
                     <div class="chart-box">
-                        <div class="chart-title">⚙️ Top Instance Types by Cost</div>
+                        <div class="chart-title">[SETTINGS] Top Instance Types by Cost</div>
                         <canvas id="instanceChart" class="chart-canvas"></canvas>
                     </div>
                 </div>
@@ -3673,10 +3673,10 @@ class LiveCostCalculator:
             {data_tables_html}
 
             <div class="footer">
-                <p>🚀 AWS Cost Report Generated by Live Cost Calculator</p>
-                <p>📅 Report Generated: {current_timestamp} UTC • 🆔 Report ID: {timestamp}</p>
-                <p>👤 Generated by: {current_user} • 🌐 Execution Time: {formatted_timestamp}</p>
-                <p>💻 System: AWS Live Cost Calculator v2.1 • 📊 Data Source: Real-time AWS APIs</p>
+                <p>[START] AWS Cost Report Generated by Live Cost Calculator</p>
+                <p>[DATE] Report Generated: {current_timestamp} UTC • 🆔 Report ID: {timestamp}</p>
+                <p>👤 Generated by: {current_user} • [NETWORK] Execution Time: {formatted_timestamp}</p>
+                <p>[COMPUTE] System: AWS Live Cost Calculator v2.1 • [STATS] Data Source: Real-time AWS APIs</p>
             </div>
         </div>
 
@@ -3989,7 +3989,7 @@ class LiveCostCalculator:
                 // Show loading
                 const button = event.target;
                 const originalText = button.textContent;
-                button.textContent = '📄 Generating PDF...';
+                button.textContent = '[FILE] Generating PDF...';
                 button.disabled = true;
 
                 try {{
@@ -4090,7 +4090,7 @@ class LiveCostCalculator:
         if aggregated_results.get('ec2', {}).get('accounts'):
             html += f'''
             <div class="table-container">
-                <div class="table-header">🖥️ EC2 Instances Summary - Generated: {now_str} by varadharajaan</div>
+                <div class="table-header">[DESKTOP] EC2 Instances Summary - Generated: {now_str} by varadharajaan</div>
                 <table>
                     <thead>
                         <tr>
@@ -4158,7 +4158,7 @@ class LiveCostCalculator:
                     </tbody>
                 </table>
                 <div style="padding: 15px; background: #f8f9fa; border-top: 1px solid #e9ecef;">
-                    <small>💡 <strong>Health Status:</strong> Data collected from CloudWatch metrics. CPU utilization shows average over last hour.</small>
+                    <small>[TIP] <strong>Health Status:</strong> Data collected from CloudWatch metrics. CPU utilization shows average over last hour.</small>
                 </div>
             </div>
             '''
@@ -4226,7 +4226,7 @@ class LiveCostCalculator:
                     </tbody>
                 </table>
                 <div style="padding: 15px; background: #f8f9fa; border-top: 1px solid #e9ecef;">
-                    <small>💡 <strong>Cost Breakdown:</strong> Control Plane = $0.10/hour per cluster. Worker Nodes = EC2 instance costs in nodegroups.</small>
+                    <small>[TIP] <strong>Cost Breakdown:</strong> Control Plane = $0.10/hour per cluster. Worker Nodes = EC2 instance costs in nodegroups.</small>
                 </div>
             </div>
             '''
@@ -4290,7 +4290,7 @@ class LiveCostCalculator:
                         html += f'''
                         <tr>
                             <td><strong>{account_name}</strong><br><small>{account_id}</small></td>
-                            <td>🖥️ EC2</td>
+                            <td>[DESKTOP] EC2</td>
                             <td><span class="metric-badge">{region}</span></td>
                             <td>{len(ec2_instances)}</td>
                             <td>{historical_data.get('start_time', 'N/A')} - {historical_data.get('end_time', 'N/A')}</td>
@@ -4326,7 +4326,7 @@ class LiveCostCalculator:
                     </tbody>
                 </table>
                 <div style="padding: 15px; background: #f8f9fa; border-top: 1px solid #e9ecef;">
-                    <small>📊 <strong>Historical Analysis:</strong> Costs calculated based on actual running time during the last 9 hours.</small>
+                    <small>[STATS] <strong>Historical Analysis:</strong> Costs calculated based on actual running time during the last 9 hours.</small>
                 </div>
             </div>
             '''
@@ -4367,7 +4367,7 @@ class LiveCostCalculator:
                         html += f'''
                         <tr>
                             <td><strong>{account_name}</strong><br><small>{account_id}</small></td>
-                            <td>🖥️ EC2</td>
+                            <td>[DESKTOP] EC2</td>
                             <td><span class="metric-badge">{region}</span></td>
                             <td>{len(ec2_forecast)}</td>
                             <td>{forecast_data.get('start_time', 'N/A')} - {forecast_data.get('end_time', 'N/A')}</td>
@@ -4411,7 +4411,7 @@ class LiveCostCalculator:
         # Cost Optimization Recommendations Table
         html += f'''
         <div class="table-container">
-            <div class="table-header">💡 Cost Optimization Recommendations - Generated: {now_str} by varadharajaan</div>
+            <div class="table-header">[TIP] Cost Optimization Recommendations - Generated: {now_str} by varadharajaan</div>
             <table>
                 <thead>
                     <tr>
@@ -4426,8 +4426,8 @@ class LiveCostCalculator:
                 </thead>
                 <tbody>
                     <tr>
-                        <td><span class="status-error">🔴 High</span></td>
-                        <td>🖥️ EC2</td>
+                        <td><span class="status-error">[RED] High</span></td>
+                        <td>[DESKTOP] EC2</td>
                         <td>Review underutilized instances (CPU < 20%)</td>
                         <td class="cost-highlight">$50-200/month</td>
                         <td>Low</td>
@@ -4435,7 +4435,7 @@ class LiveCostCalculator:
                         <td>Right-size or terminate unused instances</td>
                     </tr>
                     <tr>
-                        <td><span class="status-warning">🟡 Medium</span></td>
+                        <td><span class="status-warning">[YELLOW] Medium</span></td>
                         <td>🚢 EKS</td>
                         <td>Implement cluster autoscaling</td>
                         <td class="cost-highlight">$30-100/month</td>
@@ -4444,8 +4444,8 @@ class LiveCostCalculator:
                         <td>Configure HPA and VPA</td>
                     </tr>
                     <tr>
-                        <td><span class="status-active">🟢 Low</span></td>
-                        <td>🌍 Multi-Region</td>
+                        <td><span class="status-active">[GREEN] Low</span></td>
+                        <td>[REGION] Multi-Region</td>
                         <td>Consider Reserved Instances for consistent workloads</td>
                         <td class="cost-highlight">$100-500/month</td>
                         <td>Low</td>
@@ -4453,8 +4453,8 @@ class LiveCostCalculator:
                         <td>Purchase 1-year or 3-year RIs</td>
                     </tr>
                     <tr>
-                        <td><span class="status-warning">🟡 Medium</span></td>
-                        <td>💾 Storage</td>
+                        <td><span class="status-warning">[YELLOW] Medium</span></td>
+                        <td>[INSTANCE] Storage</td>
                         <td>Review EBS volumes and snapshots</td>
                         <td class="cost-highlight">$20-80/month</td>
                         <td>Low</td>
@@ -4464,7 +4464,7 @@ class LiveCostCalculator:
                 </tbody>
             </table>
             <div style="padding: 15px; background: #f8f9fa; border-top: 1px solid #e9ecef;">
-                <small>💡 <strong>Optimization Tips:</strong> Regularly review your cost reports and implement cost optimization strategies. Consider using AWS Cost Explorer and Trusted Advisor for additional insights.</small>
+                <small>[TIP] <strong>Optimization Tips:</strong> Regularly review your cost reports and implement cost optimization strategies. Consider using AWS Cost Explorer and Trusted Advisor for additional insights.</small>
             </div>
         </div>
         '''
@@ -4481,7 +4481,7 @@ def main():
     except KeyboardInterrupt:
         print("\n\nOperation cancelled by user.")
     except Exception as e:
-        print(f"\n❌ Error: {e}")
+        print(f"\n[ERROR] Error: {e}")
         import traceback
         traceback.print_exc()
 

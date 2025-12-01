@@ -6,7 +6,7 @@ def load_config(path="aws_accounts_config.json"):
         return json.load(f)
 
 def prompt_account_selection(accounts):
-    print("\n📦 Available Accounts:")
+    print("\n[PACKAGE] Available Accounts:")
     indexed_map = {}
     for i, acc in enumerate(accounts.keys(), start=1):
         print(f"  {i}. {acc}")
@@ -42,10 +42,10 @@ def set_aws_profile(profile, access_key, secret_key, region="us-east-1", output_
     subprocess.run(["aws", "configure", "--profile", profile, "set", "aws_secret_access_key", secret_key])
     subprocess.run(["aws", "configure", "--profile", profile, "set", "region", region])
     subprocess.run(["aws", "configure", "--profile", profile, "set", "output", output_format])
-    print(f"✅ Profile configured: {profile}")
+    print(f"[OK] Profile configured: {profile}")
 
 def configure_selected_accounts(accounts_data, selected_accounts, region="us-east-1"):
-    print("\n🔧 Setting AWS CLI Profiles...\n")
+    print("\n[CONFIG] Setting AWS CLI Profiles...\n")
 
     for acc in selected_accounts:
         data = accounts_data[acc]
@@ -67,7 +67,7 @@ def configure_selected_accounts(accounts_data, selected_accounts, region="us-eas
             region=region
         )
 
-    print("\n🎉 All selected profiles are now configured.")
+    print("\n[PARTY] All selected profiles are now configured.")
 
 if __name__ == "__main__":
     config = load_config()
@@ -75,6 +75,6 @@ if __name__ == "__main__":
     selected = prompt_account_selection(all_accounts)
 
     if not selected:
-        print("❌ No valid accounts selected.")
+        print("[ERROR] No valid accounts selected.")
     else:
         configure_selected_accounts(all_accounts, selected)

@@ -29,7 +29,7 @@ sudo systemctl restart sshd
 echo "Disabling requiretty for sudo (just in case)..."
 sudo sed -i 's/^Defaults    requiretty/#Defaults    requiretty/' /etc/sudoers
 
-echo "✅ User 'demouser' is now set up with password authentication."
+echo "[OK] User 'demouser' is now set up with password authentication."
 
 # AWS setup (same as before)
 sudo -u ec2-user mkdir -p /home/ec2-user/.aws
@@ -43,10 +43,10 @@ aws configure set aws_secret_access_key "${AWS_SECRET_ACCESS_KEY}"
 aws configure set default.region "${AWS_DEFAULT_REGION:-us-east-1}"
 aws configure set default.output text
 EOF
-  echo "✅ AWS CLI configured for ec2-user."
-  sudo -u ec2-user aws sts get-caller-identity || echo "⚠️ AWS credentials may be invalid or blocked."
+  echo "[OK] AWS CLI configured for ec2-user."
+  sudo -u ec2-user aws sts get-caller-identity || echo "[WARN] AWS credentials may be invalid or blocked."
 else
-  echo "⚠️ AWS credentials not found in environment variables. Skipping AWS CLI configuration."
+  echo "[WARN] AWS credentials not found in environment variables. Skipping AWS CLI configuration."
 fi
 
 # Install kubectl
@@ -66,8 +66,8 @@ curl -sL "https://github.com/eksctl-io/eksctl/releases/latest/download/eksctl_Li
 sudo mv /tmp/eksctl /usr/local/bin
 
 echo ""
-echo "✅ All tools installed successfully!"
-echo "🔍 Tool Versions:"
+echo "[OK] All tools installed successfully!"
+echo "[INFO] Tool Versions:"
 echo "Docker version:       $(docker --version)"
 echo "kubectl version:      $(kubectl version --client --short)"
 echo "Minikube version:     $(minikube version | grep version)"
@@ -75,5 +75,5 @@ echo "eksctl version:       $(eksctl version)"
 echo "AWS CLI version:      $(aws --version)"
 
 echo ""
-echo "✅ Setup completed at $(date)"
+echo "[OK] Setup completed at $(date)"
 echo "User data script completed successfully at $(date)" > /tmp/userdata-completion.log

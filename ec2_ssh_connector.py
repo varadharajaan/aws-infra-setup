@@ -390,7 +390,7 @@ Examples:
 
         print(f"\nGrouped user mini-instruction files by account:")
         for account, files in instruction_files.items():
-            print(f"  📁 {account}: {len(files)} files")
+            print(f"  [FOLDER] {account}: {len(files)} files")
             for file_info in files:
                 print(
                     f"    - {file_info['username']} @ {file_info['cluster_name']} -> {file_info['extracted_username']}")
@@ -423,7 +423,7 @@ Examples:
         all_instruction_files = self.discover_user_instruction_files()
 
         if self.instance_source == 'asg':
-            print(f"\n📊 ASG Username Analysis:")
+            print(f"\n[STATS] ASG Username Analysis:")
             print(f"{'ASG Name':<30} {'Account':<15} {'Extracted Username':<20} {'Full Username':<25}")
             print("-" * 100)
 
@@ -439,7 +439,7 @@ Examples:
                 print(f"{asg_info['name']:<30} {asg_info['account']:<15} {base_username:<20} {full_username:<25}")
 
         else:  # ec2
-            print(f"\n📊 EC2 Instance Username Analysis:")
+            print(f"\n[STATS] EC2 Instance Username Analysis:")
             print(f"{'Instance ID':<20} {'Account':<15} {'Extracted Username':<20} {'Full Username':<25}")
             print("-" * 90)
 
@@ -454,7 +454,7 @@ Examples:
                 print(
                     f"{instance_info['instance_id']:<20} {instance_info['account']:<15} {base_username:<20} {full_username:<25}")
 
-        print(f"\n📋 Available Instruction Files by Username:")
+        print(f"\n[LIST] Available Instruction Files by Username:")
         print(f"{'Account':<15} {'Username':<25} {'Cluster Name':<40}")
         print("-" * 90)
 
@@ -512,8 +512,8 @@ Examples:
                     print(f"  ✗ {instance_id} -> {full_username} (account not found)")
 
         print(f"\n📈 Mapping Results:")
-        print(f"  ✅ Auto-mapped: {len(auto_mapping)}")
-        print(f"  ❌ Unmapped: {len(unmapped_items)}")
+        print(f"  [OK] Auto-mapped: {len(auto_mapping)}")
+        print(f"  [ERROR] Unmapped: {len(unmapped_items)}")
 
         # Ask user to approve automatic mapping
         if auto_mapping:
@@ -522,28 +522,28 @@ Examples:
 
             if choice == 'y'or choice == 'yes':
                 self.final_mapping = auto_mapping
-                print(f"✅ Using automatic mapping for {len(auto_mapping)} items")
+                print(f"[OK] Using automatic mapping for {len(auto_mapping)} items")
 
                 # Handle unmapped items
                 if unmapped_items:
-                    print(f"\n⚠️  Manual mapping required for {len(unmapped_items)} unmapped items:")
+                    print(f"\n[WARN]  Manual mapping required for {len(unmapped_items)} unmapped items:")
                     self.handle_manual_mapping(unmapped_items, available_instructions)
 
                 return True
             else:
-                print(f"🔧 Proceeding with manual mapping...")
+                print(f"[CONFIG] Proceeding with manual mapping...")
                 return self.handle_full_manual_mapping(available_instructions)
         else:
-            print(f"\n🔧 No automatic mapping possible. Proceeding with manual mapping...")
+            print(f"\n[CONFIG] No automatic mapping possible. Proceeding with manual mapping...")
             return self.handle_full_manual_mapping(available_instructions)
 
     def handle_manual_mapping(self, unmapped_items, available_instructions):
         """Handle manual mapping for unmapped items"""
-        print(f"\n🔧 Manual Mapping for Unmapped Items")
+        print(f"\n[CONFIG] Manual Mapping for Unmapped Items")
         print("=" * 50)
 
         for item_name, username, account in unmapped_items:
-            print(f"\n📌 Mapping for: {item_name} (extracted username: {username}, account: {account})")
+            print(f"\n[PIN] Mapping for: {item_name} (extracted username: {username}, account: {account})")
 
             if account in available_instructions:
                 files = list(available_instructions[account].values())
@@ -557,24 +557,24 @@ Examples:
                             f"Select instruction file for {item_name} (1-{len(files)}, or 's' to skip): ").strip()
 
                         if selection.lower() == 's':
-                            print(f"  ⏭️  Skipped {item_name}")
+                            print(f"  [SKIP]  Skipped {item_name}")
                             break
 
                         idx = int(selection) - 1
                         if 0 <= idx < len(files):
                             self.final_mapping[item_name] = files[idx]
-                            print(f"  ✅ Mapped {item_name} -> {files[idx]['extracted_username']}")
+                            print(f"  [OK] Mapped {item_name} -> {files[idx]['extracted_username']}")
                             break
                         else:
                             print(f"Invalid selection. Please choose 1-{len(files)} or 's' to skip.")
                     except ValueError:
                         print(f"Invalid input. Please enter a number 1-{len(files)} or 's' to skip.")
             else:
-                print(f"  ❌ No instruction files available for account {account}")
+                print(f"  [ERROR] No instruction files available for account {account}")
 
     def handle_full_manual_mapping(self, available_instructions):
         """Handle full manual mapping when automatic mapping is rejected"""
-        print(f"\n🔧 Full Manual Mapping")
+        print(f"\n[CONFIG] Full Manual Mapping")
         print("=" * 50)
 
         items_to_map = []
@@ -591,7 +591,7 @@ Examples:
                 items_to_map.append((instance_id, username, instance_info['account']))
 
         for item_name, username, account in items_to_map:
-            print(f"\n📌 Mapping for: {item_name} (extracted username: {username}, account: {account})")
+            print(f"\n[PIN] Mapping for: {item_name} (extracted username: {username}, account: {account})")
 
             if account in available_instructions:
                 files = list(available_instructions[account].values())
@@ -605,22 +605,22 @@ Examples:
                             f"Select instruction file for {item_name} (1-{len(files)}, or 's' to skip): ").strip()
 
                         if selection.lower() == 's':
-                            print(f"  ⏭️  Skipped {item_name}")
+                            print(f"  [SKIP]  Skipped {item_name}")
                             break
 
                         idx = int(selection) - 1
                         if 0 <= idx < len(files):
                             self.final_mapping[item_name] = files[idx]
-                            print(f"  ✅ Mapped {item_name} -> {files[idx]['extracted_username']}")
+                            print(f"  [OK] Mapped {item_name} -> {files[idx]['extracted_username']}")
                             break
                         else:
                             print(f"Invalid selection. Please choose 1-{len(files)} or 's' to skip.")
                     except ValueError:
                         print(f"Invalid input. Please enter a number 1-{len(files)} or 's' to skip.")
             else:
-                print(f"  ❌ No instruction files available for account {account}")
+                print(f"  [ERROR] No instruction files available for account {account}")
 
-        print(f"\n✅ Manual mapping completed. {len(self.final_mapping)} items mapped.")
+        print(f"\n[OK] Manual mapping completed. {len(self.final_mapping)} items mapped.")
         return len(self.final_mapping) > 0
 
     def display_accounts(self):
@@ -1958,7 +1958,7 @@ Examples:
 
         # Step 5: NEW - Smart mapping between ASG/EC2 and instruction files
         if not self.build_smart_mapping():
-            print("❌ Smart mapping failed. Cannot proceed without instruction file mappings.")
+            print("[ERROR] Smart mapping failed. Cannot proceed without instruction file mappings.")
             return False
 
         # Step 6: Get instances and process them based on source with smart mapping
@@ -1973,7 +1973,7 @@ Examples:
                     instances = self.get_ec2_instances_from_asg(asg_info)
                     all_instances.extend(instances)
                 else:
-                    print(f"⏭️  Skipping ASG {asg_info['name']} (no instruction file mapping)")
+                    print(f"[SKIP]  Skipping ASG {asg_info['name']} (no instruction file mapping)")
         else:  # ec2
             # Get instances from selected EC2 files
             for instance_info in self.selected_ec2_instances:
@@ -1982,7 +1982,7 @@ Examples:
                     if instance_details:
                         all_instances.append(instance_details)
                 else:
-                    print(f"⏭️  Skipping instance {instance_info['instance_id']} (no instruction file mapping)")
+                    print(f"[SKIP]  Skipping instance {instance_info['instance_id']} (no instruction file mapping)")
 
         logger.info(f"Found {len(all_instances)} instances to process with mappings")
 
@@ -2127,7 +2127,7 @@ Examples:
 
         for account in by_account.keys():
             print(f"\n  Account: {account}")
-            #print(f"    📊 Account Summary: {self.reports_path}/{account}/summary_report.json")
+            #print(f"    [STATS] Account Summary: {self.reports_path}/{account}/summary_report.json")
 
             # Instance reports
             account_results = by_account[account]
@@ -2135,9 +2135,9 @@ Examples:
                 cluster_name = result.get('cluster_name', 'unknown-cluster')
                 extracted_username = self.extract_username_from_cluster(cluster_name)
                 # print(
-                #     f"    📋 Instance: {self.reports_path}/{account}/instances/{result['instance_id']}_{extracted_username}_report.json")
+                #     f"    [LIST] Instance: {self.reports_path}/{account}/instances/{result['instance_id']}_{extracted_username}_report.json")
                 print(
-                    f"    📄 Commands: {self.reports_path}/{account}/instances/{result['instance_id']}_{extracted_username}_command_output.txt")
+                    f"    [FILE] Commands: {self.reports_path}/{account}/instances/{result['instance_id']}_{extracted_username}_command_output.txt")
 
             # ASG reports
             if self.instance_source == 'asg':
@@ -2151,7 +2151,7 @@ Examples:
                             # print(
                             #     f"    🏗️  ASG JSON: {self.asg_base_path}/{account}/{asg_name}_{extracted_username}.json")
                             print(
-                                f"    📝 ASG Text: {self.asg_base_path}/{account}/{asg_name}_{extracted_username}_output.txt")
+                                f"    [LOG] ASG Text: {self.asg_base_path}/{account}/{asg_name}_{extracted_username}_output.txt")
                             break
 
         print(f"\nTotal accounts processed: {len(by_account)}")

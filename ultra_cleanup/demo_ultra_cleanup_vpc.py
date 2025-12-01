@@ -56,7 +56,7 @@ def simulate_interactive_demo():
     try:
         from ultra_cleanup_vpc import UltraVPCCleanupManager
         
-        print("🎯 ULTRA VPC CLEANUP MANAGER - DEMO")
+        print("[TARGET] ULTRA VPC CLEANUP MANAGER - DEMO")
         print("=" * 80)
         print("This demo shows the Enhanced Ultra VPC Cleanup Manager interface")
         print("without actually connecting to AWS or making any changes.")
@@ -65,32 +65,32 @@ def simulate_interactive_demo():
         # Initialize the manager
         manager = UltraVPCCleanupManager(config_file)
         
-        print(f"\n✅ Successfully initialized VPC Cleanup Manager")
-        print(f"📁 Loaded configuration with {len(manager.config_data['accounts'])} accounts")
-        print(f"🌍 Will work across {len(manager.regions)} regions")
+        print(f"\n[OK] Successfully initialized VPC Cleanup Manager")
+        print(f"[FOLDER] Loaded configuration with {len(manager.config_data['accounts'])} accounts")
+        print(f"[REGION] Will work across {len(manager.regions)} regions")
         
-        print(f"\n🏢 Available accounts:")
+        print(f"\n[ACCOUNT] Available accounts:")
         for account_name, account_data in manager.config_data['accounts'].items():
             account_id = account_data.get('account_id', 'Unknown')
             email = account_data.get('email', 'Unknown')
             print(f"   • {account_name}: {account_id} ({email})")
         
-        print(f"\n🌍 Available regions: {', '.join(manager.regions)}")
+        print(f"\n[REGION] Available regions: {', '.join(manager.regions)}")
         
-        print(f"\n🗑️ VPC Resource Types that will be handled:")
+        print(f"\n[DELETE] VPC Resource Types that will be handled:")
         for i, resource_type in enumerate(manager.cleanup_order, 1):
             display_name = resource_type.replace('_', ' ').title()
             print(f"   {i:2}. {display_name}")
         
-        print(f"\n🛡️ Safety Features:")
-        print(f"   ✅ Default VPC resources are COMPLETELY PROTECTED")
-        print(f"   ✅ Only custom VPC resources will be processed")
-        print(f"   ✅ Dry-run mode available for safe analysis")
-        print(f"   ✅ Dependency-aware cleanup order")
-        print(f"   ✅ Comprehensive logging and reporting")
-        print(f"   ✅ Interactive account and region selection")
+        print(f"\n[PROTECTED] Safety Features:")
+        print(f"   [OK] Default VPC resources are COMPLETELY PROTECTED")
+        print(f"   [OK] Only custom VPC resources will be processed")
+        print(f"   [OK] Dry-run mode available for safe analysis")
+        print(f"   [OK] Dependency-aware cleanup order")
+        print(f"   [OK] Comprehensive logging and reporting")
+        print(f"   [OK] Interactive account and region selection")
         
-        print(f"\n📊 Resource Protection Examples:")
+        print(f"\n[STATS] Resource Protection Examples:")
         # Test protection logic
         test_cases = [
             ("Default VPC", {'IsDefault': True}, manager.is_default_vpc),
@@ -101,10 +101,10 @@ def simulate_interactive_demo():
         
         for name, test_resource, test_func in test_cases:
             is_protected = test_func(test_resource)
-            status = "🛡️ PROTECTED" if is_protected else "🗑️ Would be deleted"
+            status = "[PROTECTED] PROTECTED" if is_protected else "[DELETE] Would be deleted"
             print(f"   • {name}: {status}")
         
-        print(f"\n🎯 Usage Flow:")
+        print(f"\n[TARGET] Usage Flow:")
         print(f"   1. Select operation mode (Dry Run or Actual Cleanup)")
         print(f"   2. Choose accounts to process")
         print(f"   3. Select regions to process")
@@ -112,18 +112,18 @@ def simulate_interactive_demo():
         print(f"   5. Process resources in dependency order")
         print(f"   6. Generate comprehensive reports")
         
-        print(f"\n📄 Output Files:")
+        print(f"\n[FILE] Output Files:")
         print(f"   • Detailed logs: aws/vpc/logs/ultra_vpc_cleanup_TIMESTAMP.log")
         print(f"   • JSON reports: aws/vpc/logs/vpc_cleanup_report_TIMESTAMP.json")
         
         print(f"\n" + "=" * 80)
-        print(f"🎉 Demo completed successfully!")
+        print(f"[PARTY] Demo completed successfully!")
         print(f"The Ultra VPC Cleanup Manager is ready for use.")
         print(f"Run 'python3 ultra_cleanup_vpc.py' to start the interactive interface.")
         print(f"=" * 80)
         
     except Exception as e:
-        print(f"❌ Demo failed: {e}")
+        print(f"[ERROR] Demo failed: {e}")
         import traceback
         traceback.print_exc()
         return False

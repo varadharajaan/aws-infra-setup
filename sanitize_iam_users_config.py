@@ -16,14 +16,14 @@ def sanitize_credentials(input_file=None, output_dir=None):
     if not input_file:
         iam_dir = "aws/iam"
         if not os.path.exists(iam_dir):
-            print(f"❌ Directory {iam_dir} not found")
+            print(f"[ERROR] Directory {iam_dir} not found")
             return False
 
         pattern = os.path.join(iam_dir, "iam_users_credentials_*.json")
         files = glob.glob(pattern)
 
         if not files:
-            print(f"❌ No credential files found in {iam_dir}")
+            print(f"[ERROR] No credential files found in {iam_dir}")
             return False
 
         # Sort by timestamp (reverse = latest first)
@@ -33,7 +33,7 @@ def sanitize_credentials(input_file=None, output_dir=None):
     if not output_dir:
         output_dir = os.getcwd()
 
-    print(f"🔍 Processing file: {input_file}")
+    print(f"[SCAN] Processing file: {input_file}")
 
     try:
         with open(input_file, 'r') as f:
@@ -59,9 +59,16 @@ def sanitize_credentials(input_file=None, output_dir=None):
         def mask_email(email):
             if not isinstance(email, str) or '@' not in email:
                 return "masked@masked.com"
-            user, _ = email.split('@', 1)
-            masked_user = user[:3] + "*" * 6 if len(user) > 3 else "***"
-            return masked_user + "@masked.com"
+            user, domain = email.split('@', 1)
+            # Keep most of username visible, mask only 2-3 chars in middle
+            if len(user) <= 4:
+                return email  # Keep short emails as-is
+            elif len(user) <= 8:
+                # For medium length: keep first 3, mask 2, keep rest
+                return user[:3] + "**" + user[5:] + "@" + domain
+            else:
+                # For long usernames: keep first 4, mask 3, keep rest
+                return user[:4] + "***" + user[7:] + "@" + domain
 
         def mask_console_url(url):
             return re.sub(r"https://\d{12}", "https://************", url)
@@ -114,12 +121,12 @@ def sanitize_credentials(input_file=None, output_dir=None):
         with open(output_path, 'w') as f:
             json.dump(sanitized_data, f, indent=2)
 
-        print(f"✅ Successfully sanitized credentials")
-        print(f"📄 Sanitized file saved to: {output_path}")
+        print(f"[OK] Successfully sanitized credentials")
+        print(f"[FILE] Sanitized file saved to: {output_path}")
         return True
 
     except Exception as e:
-        print(f"❌ Error during sanitization: {e}")
+        print(f"[ERROR] Error during sanitization: {e}")
         return False
 
 

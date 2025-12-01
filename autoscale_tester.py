@@ -68,11 +68,11 @@ class AutoscalerTester:
     
     def wait_with_countdown(self, seconds: int, message: str):
         """Wait with countdown display"""
-        self.print_colored(self.colors.BLUE, f"⏳ {message}")
+        self.print_colored(self.colors.BLUE, f"[WAIT] {message}")
         for i in range(seconds, 0, -1):
             print(f"\r{self.colors.CYAN}    Waiting {i} seconds...{self.colors.ENDC}", end="", flush=True)
             time.sleep(1)
-        print(f"\r{self.colors.GREEN}    ✅ Wait completed!{self.colors.ENDC}")
+        print(f"\r{self.colors.GREEN}    [OK] Wait completed!{self.colors.ENDC}")
     
     def check_nodes(self) -> int:
         """Check current number of nodes"""
@@ -114,7 +114,7 @@ class AutoscalerTester:
     
     def show_autoscaler_logs(self, lines: int = 10):
         """Show recent autoscaler logs"""
-        self.print_colored(self.colors.BLUE, f"📋 Recent autoscaler logs ({lines} lines):")
+        self.print_colored(self.colors.BLUE, f"[LIST] Recent autoscaler logs ({lines} lines):")
         success, stdout, stderr = self.run_command([
             'kubectl', 'logs', '-n', 'kube-system', '-l', 'app=cluster-autoscaler', f'--tail={lines}'
         ])
@@ -130,7 +130,7 @@ class AutoscalerTester:
     
     def deploy_stress_test_app(self) -> bool:
         """Deploy stress test application"""
-        self.print_header("🧪 DEPLOYING STRESS TEST APPLICATION")
+        self.print_header("[TEST] DEPLOYING STRESS TEST APPLICATION")
         
         # Create stress test deployment YAML
         stress_yaml = """apiVersion: apps/v1
@@ -201,11 +201,11 @@ spec:
             f.write(stress_yaml)
         
         # Apply the deployment
-        self.print_colored(self.colors.BLUE, "🚀 Deploying stress test applications...")
+        self.print_colored(self.colors.BLUE, "[START] Deploying stress test applications...")
         success, stdout, stderr = self.run_command(['kubectl', 'apply', '-f', '/tmp/stress-test.yaml'])
         
         if success:
-            self.print_colored(self.colors.GREEN, "✅ Stress test applications deployed successfully", 1)
+            self.print_colored(self.colors.GREEN, "[OK] Stress test applications deployed successfully", 1)
             
             # Wait for pods to be ready
             self.wait_with_countdown(30, "Waiting for initial pods to start...")
@@ -220,14 +220,14 @@ spec:
             
             return True
         else:
-            self.print_colored(self.colors.RED, f"❌ Failed to deploy: {stderr}", 1)
+            self.print_colored(self.colors.RED, f"[ERROR] Failed to deploy: {stderr}", 1)
             return False
     
     def run_scale_up_scenario(self):
         """Run automatic scale-up scenario"""
         self.print_header("📈 SCALE-UP SCENARIO")
         
-        self.print_colored(self.colors.YELLOW, "🎯 Scale-Up Test: Increasing workload to trigger node addition")
+        self.print_colored(self.colors.YELLOW, "[TARGET] Scale-Up Test: Increasing workload to trigger node addition")
         
         # Check initial state
         initial_nodes = self.check_nodes()
@@ -236,27 +236,27 @@ spec:
         self.print_colored(self.colors.WHITE, f"Initial state: {initial_nodes} nodes, {initial_pods['Running']} running pods", 1)
         
         # Scale up stress-test deployment
-        self.print_colored(self.colors.BLUE, "📊 Step 1: Scaling stress-test to 5 replicas...")
+        self.print_colored(self.colors.BLUE, "[STATS] Step 1: Scaling stress-test to 5 replicas...")
         success, stdout, stderr = self.run_command(['kubectl', 'scale', 'deployment', 'stress-test', '--replicas=5'])
         if success:
-            self.print_colored(self.colors.GREEN, "✅ Stress-test scaled to 5 replicas", 1)
+            self.print_colored(self.colors.GREEN, "[OK] Stress-test scaled to 5 replicas", 1)
         else:
-            self.print_colored(self.colors.RED, f"❌ Failed to scale stress-test: {stderr}", 1)
+            self.print_colored(self.colors.RED, f"[ERROR] Failed to scale stress-test: {stderr}", 1)
         
         # Wait and check
         self.wait_with_countdown(60, "Waiting for pods to be scheduled...")
         
         # Scale up cpu-intensive deployment
-        self.print_colored(self.colors.BLUE, "📊 Step 2: Scaling cpu-intensive to 3 replicas...")
+        self.print_colored(self.colors.BLUE, "[STATS] Step 2: Scaling cpu-intensive to 3 replicas...")
         success, stdout, stderr = self.run_command(['kubectl', 'scale', 'deployment', 'cpu-intensive', '--replicas=3'])
         if success:
-            self.print_colored(self.colors.GREEN, "✅ CPU-intensive scaled to 3 replicas", 1)
+            self.print_colored(self.colors.GREEN, "[OK] CPU-intensive scaled to 3 replicas", 1)
         else:
-            self.print_colored(self.colors.RED, f"❌ Failed to scale cpu-intensive: {stderr}", 1)
+            self.print_colored(self.colors.RED, f"[ERROR] Failed to scale cpu-intensive: {stderr}", 1)
         
         # Monitor scaling progress
         for i in range(5):  # Monitor for 5 minutes
-            self.print_colored(self.colors.CYAN, f"\n🔍 Monitoring progress - Check {i+1}/5")
+            self.print_colored(self.colors.CYAN, f"\n[SCAN] Monitoring progress - Check {i+1}/5")
             
             # Check nodes
             current_nodes = self.check_nodes()
@@ -270,10 +270,10 @@ spec:
             
             # Check if scaling happened
             if current_nodes > initial_nodes:
-                self.print_colored(self.colors.GREEN, f"🎉 SUCCESS: Nodes scaled from {initial_nodes} to {current_nodes}!", 1)
+                self.print_colored(self.colors.GREEN, f"[PARTY] SUCCESS: Nodes scaled from {initial_nodes} to {current_nodes}!", 1)
                 break
             elif current_pods['Pending'] > 0:
-                self.print_colored(self.colors.YELLOW, f"⏳ Pods pending, autoscaler should add nodes soon...", 1)
+                self.print_colored(self.colors.YELLOW, f"[WAIT] Pods pending, autoscaler should add nodes soon...", 1)
             else:
                 self.print_colored(self.colors.BLUE, f"ℹ️  No pending pods, checking if more capacity needed...", 1)
             
@@ -284,7 +284,7 @@ spec:
         final_nodes = self.check_nodes()
         final_pods = self.check_pods('app in (stress-test,cpu-intensive)')
         
-        self.print_colored(self.colors.CYAN, "\n📊 Scale-Up Results:")
+        self.print_colored(self.colors.CYAN, "\n[STATS] Scale-Up Results:")
         self.print_colored(self.colors.WHITE, f"Nodes: {initial_nodes} → {final_nodes} (Change: +{final_nodes - initial_nodes})", 1)
         self.print_colored(self.colors.WHITE, f"Running pods: {initial_pods['Running']} → {final_pods['Running']}", 1)
         self.print_colored(self.colors.WHITE, f"Pending pods: {final_pods['Pending']}", 1)
@@ -293,7 +293,7 @@ spec:
         """Run automatic scale-down scenario"""
         self.print_header("📉 SCALE-DOWN SCENARIO")
         
-        self.print_colored(self.colors.YELLOW, "🎯 Scale-Down Test: Reducing workload to trigger node removal")
+        self.print_colored(self.colors.YELLOW, "[TARGET] Scale-Down Test: Reducing workload to trigger node removal")
         
         # Check initial state
         initial_nodes = self.check_nodes()
@@ -302,27 +302,27 @@ spec:
         self.print_colored(self.colors.WHITE, f"Initial state: {initial_nodes} nodes, {initial_pods['Running']} running pods", 1)
         
         # Scale down deployments
-        self.print_colored(self.colors.BLUE, "📊 Step 1: Scaling stress-test to 1 replica...")
+        self.print_colored(self.colors.BLUE, "[STATS] Step 1: Scaling stress-test to 1 replica...")
         success, stdout, stderr = self.run_command(['kubectl', 'scale', 'deployment', 'stress-test', '--replicas=1'])
         if success:
-            self.print_colored(self.colors.GREEN, "✅ Stress-test scaled down to 1 replica", 1)
+            self.print_colored(self.colors.GREEN, "[OK] Stress-test scaled down to 1 replica", 1)
         else:
-            self.print_colored(self.colors.RED, f"❌ Failed to scale down stress-test: {stderr}", 1)
+            self.print_colored(self.colors.RED, f"[ERROR] Failed to scale down stress-test: {stderr}", 1)
         
         self.wait_with_countdown(30, "Waiting for pods to terminate...")
         
-        self.print_colored(self.colors.BLUE, "📊 Step 2: Scaling cpu-intensive to 0 replicas...")
+        self.print_colored(self.colors.BLUE, "[STATS] Step 2: Scaling cpu-intensive to 0 replicas...")
         success, stdout, stderr = self.run_command(['kubectl', 'scale', 'deployment', 'cpu-intensive', '--replicas=0'])
         if success:
-            self.print_colored(self.colors.GREEN, "✅ CPU-intensive scaled down to 0 replicas", 1)
+            self.print_colored(self.colors.GREEN, "[OK] CPU-intensive scaled down to 0 replicas", 1)
         else:
-            self.print_colored(self.colors.RED, f"❌ Failed to scale down cpu-intensive: {stderr}", 1)
+            self.print_colored(self.colors.RED, f"[ERROR] Failed to scale down cpu-intensive: {stderr}", 1)
         
         # Monitor scale-down (takes longer due to 2m delays)
-        self.print_colored(self.colors.YELLOW, "⏳ Scale-down monitoring (autoscaler waits 2 minutes before removing nodes)", 1)
+        self.print_colored(self.colors.YELLOW, "[WAIT] Scale-down monitoring (autoscaler waits 2 minutes before removing nodes)", 1)
         
         for i in range(4):  # Monitor for 8 minutes (scale-down takes longer)
-            self.print_colored(self.colors.CYAN, f"\n🔍 Scale-down monitoring - Check {i+1}/4")
+            self.print_colored(self.colors.CYAN, f"\n[SCAN] Scale-down monitoring - Check {i+1}/4")
             
             # Check nodes
             current_nodes = self.check_nodes()
@@ -336,7 +336,7 @@ spec:
             
             # Check if scaling happened
             if current_nodes < initial_nodes:
-                self.print_colored(self.colors.GREEN, f"🎉 SUCCESS: Nodes scaled down from {initial_nodes} to {current_nodes}!", 1)
+                self.print_colored(self.colors.GREEN, f"[PARTY] SUCCESS: Nodes scaled down from {initial_nodes} to {current_nodes}!", 1)
                 break
             else:
                 self.print_colored(self.colors.BLUE, f"ℹ️  Nodes unchanged, autoscaler waiting for scale-down delay...", 1)
@@ -348,42 +348,42 @@ spec:
         final_nodes = self.check_nodes()
         final_pods = self.check_pods('app in (stress-test,cpu-intensive)')
         
-        self.print_colored(self.colors.CYAN, "\n📊 Scale-Down Results:")
+        self.print_colored(self.colors.CYAN, "\n[STATS] Scale-Down Results:")
         self.print_colored(self.colors.WHITE, f"Nodes: {initial_nodes} → {final_nodes} (Change: {final_nodes - initial_nodes})", 1)
         self.print_colored(self.colors.WHITE, f"Running test pods: {final_pods['Running']}", 1)
         
         if final_nodes < initial_nodes:
-            self.print_colored(self.colors.GREEN, "✅ Scale-down successful!", 1)
+            self.print_colored(self.colors.GREEN, "[OK] Scale-down successful!", 1)
         else:
-            self.print_colored(self.colors.YELLOW, "⚠️  Scale-down may take more time (can take up to 10+ minutes)", 1)
+            self.print_colored(self.colors.YELLOW, "[WARN]  Scale-down may take more time (can take up to 10+ minutes)", 1)
     
     def cleanup_test_deployments(self):
         """Clean up test deployments"""
-        self.print_header("🗑️ CLEANING UP TEST DEPLOYMENTS")
+        self.print_header("[DELETE] CLEANING UP TEST DEPLOYMENTS")
         
         deployments = ['stress-test', 'cpu-intensive']
         
         for deployment in deployments:
-            self.print_colored(self.colors.BLUE, f"🗑️ Deleting deployment: {deployment}")
+            self.print_colored(self.colors.BLUE, f"[DELETE] Deleting deployment: {deployment}")
             success, stdout, stderr = self.run_command(['kubectl', 'delete', 'deployment', deployment, '--ignore-not-found=true'])
             
             if success:
-                self.print_colored(self.colors.GREEN, f"✅ Deleted {deployment}", 1)
+                self.print_colored(self.colors.GREEN, f"[OK] Deleted {deployment}", 1)
             else:
-                self.print_colored(self.colors.YELLOW, f"⚠️  {deployment} may not exist or already deleted", 1)
+                self.print_colored(self.colors.YELLOW, f"[WARN]  {deployment} may not exist or already deleted", 1)
         
         self.wait_with_countdown(30, "Waiting for pods to terminate...")
         
         # Show final status
         remaining_pods = self.check_pods('app in (stress-test,cpu-intensive)')
         if remaining_pods['Running'] == 0:
-            self.print_colored(self.colors.GREEN, "✅ All test pods cleaned up successfully", 1)
+            self.print_colored(self.colors.GREEN, "[OK] All test pods cleaned up successfully", 1)
         else:
-            self.print_colored(self.colors.YELLOW, f"⚠️  {remaining_pods['Running']} test pods still running", 1)
+            self.print_colored(self.colors.YELLOW, f"[WARN]  {remaining_pods['Running']} test pods still running", 1)
     
     def run_interactive_testing(self):
         """Run interactive autoscaler testing"""
-        self.print_header("🧪 INTERACTIVE AUTOSCALER TESTING")
+        self.print_header("[TEST] INTERACTIVE AUTOSCALER TESTING")
         
         self.print_colored(self.colors.CYAN, "This will test your autoscaler with real workloads!")
         self.print_colored(self.colors.WHITE, "• Deploy stress test applications", 1)
@@ -414,24 +414,24 @@ spec:
                 self.run_scale_down_scenario()
             
             # Ask for cleanup
-            cleanup = self.get_user_input("\n🗑️ Clean up test deployments? (y/n)", "y")
+            cleanup = self.get_user_input("\n[DELETE] Clean up test deployments? (y/n)", "y")
             if cleanup.lower() in ['y', 'yes']:
                 self.cleanup_test_deployments()
             
-            self.print_colored(self.colors.GREEN, "\n🎉 Autoscaler testing completed!")
+            self.print_colored(self.colors.GREEN, "\n[PARTY] Autoscaler testing completed!")
             return True
             
         except KeyboardInterrupt:
-            self.print_colored(self.colors.YELLOW, "\n⚠️  Testing interrupted by user.")
+            self.print_colored(self.colors.YELLOW, "\n[WARN]  Testing interrupted by user.")
             
             # Ask if user wants to clean up
-            cleanup = self.get_user_input("🗑️ Clean up test deployments before exit? (y/n)", "y")
+            cleanup = self.get_user_input("[DELETE] Clean up test deployments before exit? (y/n)", "y")
             if cleanup.lower() in ['y', 'yes']:
                 self.cleanup_test_deployments()
             
             return False
         except Exception as e:
-            self.print_colored(self.colors.RED, f"\n❌ Testing failed with error: {str(e)}")
+            self.print_colored(self.colors.RED, f"\n[ERROR] Testing failed with error: {str(e)}")
             return False
 
 def deploy_my_autoscaler():
@@ -447,7 +447,7 @@ def deploy_my_autoscaler():
     access_key = "your_access_key_here"  # replace placeholder with actual access key
     secret_key = "your_secret_key_here"   # replace placeholder with actual secret key
     from datetime import datetime
-    print(f"\n🚀 Starting autoscaler deployment...")
+    print(f"\n[START] Starting autoscaler deployment...")
     print(f"Current Date and Time (UTC): {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"Current User's Login: varadharajaan")
     print(f"Cluster: {cluster_name}")
@@ -462,10 +462,10 @@ def deploy_my_autoscaler():
     )
     
     if not success:
-        print(f"\n❌ Autoscaler deployment failed!")
+        print(f"\n[ERROR] Autoscaler deployment failed!")
         return False
     
-    print(f"\n✅ Autoscaler deployment completed successfully!")
+    print(f"\n[OK] Autoscaler deployment completed successfully!")
     
     # Ask if user wants to test the autoscaler
     try:
@@ -473,18 +473,18 @@ def deploy_my_autoscaler():
         test_autoscaler = response.lower() in ['y', 'yes', ''] 
         
         if test_autoscaler:
-            print(f"\n🧪 Proceeding with autoscaler testing...")
+            print(f"\n[TEST] Proceeding with autoscaler testing...")
             tester = AutoscalerTester()
             tester.run_interactive_testing()
         else:
-            print(f"\n✅ Autoscaler deployment completed. You can test it manually later.")
+            print(f"\n[OK] Autoscaler deployment completed. You can test it manually later.")
             print(f"\nManual testing commands:")
             print(f"  kubectl create deployment test-scale --image=nginx --replicas=10")
             print(f"  kubectl set resources deployment test-scale --requests=cpu=1000m,memory=1Gi")
             print(f"  kubectl logs -n kube-system -l app=cluster-autoscaler -f")
     
     except KeyboardInterrupt:
-        print(f"\n\n✅ Autoscaler deployment completed successfully!")
+        print(f"\n\n[OK] Autoscaler deployment completed successfully!")
         print(f"Testing was cancelled, but autoscaler is ready to use.")
     
     return success

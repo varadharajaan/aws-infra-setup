@@ -51,10 +51,10 @@ class EC2InstanceManager:
             with open(self.ami_mapping_file, 'r') as f:
                 self.ami_config = json.load(f)
             
-            print(f"✅ AMI configuration loaded from: {self.ami_mapping_file}")
+            print(f"[OK] AMI configuration loaded from: {self.ami_mapping_file}")
             
         except Exception as e:
-            print(f"❌ Error loading AMI configuration: {e}")
+            print(f"[ERROR] Error loading AMI configuration: {e}")
             raise
 
     def prepare_userdata_with_aws_config_enchanced(self, base_userdata, access_key, secret_key, region, account_name=None):
@@ -92,15 +92,15 @@ class EC2InstanceManager:
     aws configure set output "json" --profile {custom_profile}
     EOF
 
-    echo "✅ AWS CLI configured with profiles: default and {custom_profile}"
+    echo "[OK] AWS CLI configured with profiles: default and {custom_profile}"
 
     # Test the credentials
     sudo -u ec2-user bash <<EOF
     echo "Testing AWS credentials for default profile:"
-    aws sts get-caller-identity || echo "⚠️ Default profile credentials may be invalid"
+    aws sts get-caller-identity || echo "[WARN] Default profile credentials may be invalid"
 
     echo "Testing AWS credentials for {custom_profile} profile:"
-    aws sts get-caller-identity --profile {custom_profile} || echo "⚠️ {custom_profile} profile credentials may be invalid"
+    aws sts get-caller-identity --profile {custom_profile} || echo "[WARN] {custom_profile} profile credentials may be invalid"
     EOF
     """
 
@@ -114,8 +114,8 @@ class EC2InstanceManager:
                 after_config = parts[1]
 
                 # Find where the configuration section ends
-                if "echo \"✅ AWS CLI configured" in after_config:
-                    end_marker = "echo \"✅ AWS CLI configured"
+                if "echo \"[OK] AWS CLI configured" in after_config:
+                    end_marker = "echo \"[OK] AWS CLI configured"
                     config_parts = after_config.split(end_marker, 1)
                     if len(config_parts) == 2:
                         # Replace the entire configuration section
@@ -181,7 +181,7 @@ class EC2InstanceManager:
                     with open(self.userdata_file, 'r', encoding=encoding) as f:
                         user_data_content = f.read()
                     encoding_used = encoding
-                    print(f"✅ Successfully read user data script using {encoding} encoding")
+                    print(f"[OK] Successfully read user data script using {encoding} encoding")
                     break
                 except UnicodeDecodeError as e:
                     print(f"Failed to read with {encoding} encoding: {e}")
@@ -195,7 +195,7 @@ class EC2InstanceManager:
             
             print(f"📜 User data script loaded from: {self.userdata_file}")
             print(f"🔤 Encoding used: {encoding_used}")
-            print(f"📏 User data script size: {len(user_data_content)} characters")
+            print(f"[MEASURE] User data script size: {len(user_data_content)} characters")
             
             # Clean up any problematic characters
             user_data_content = user_data_content.replace('\r\n', '\n')  # Normalize line endings
@@ -228,12 +228,12 @@ class EC2InstanceManager:
             if os.path.exists(userdata_file):
                 with open(userdata_file, 'r') as f:
                     self.userdata_script = f.read()
-                print(f"✅ Userdata script loaded from: {userdata_file}")
+                print(f"[OK] Userdata script loaded from: {userdata_file}")
             else:
-                print(f"⚠️ Userdata script not found: {userdata_file}")
+                print(f"[WARN] Userdata script not found: {userdata_file}")
                 self.userdata_script = "#!/bin/bash\necho 'Default userdata script'"
         except Exception as e:
-            print(f"❌ Error loading userdata script: {e}")
+            print(f"[ERROR] Error loading userdata script: {e}")
             self.userdata_script = "#!/bin/bash\necho 'Default userdata script'"
     
     def get_allowed_instance_types(self, region: str = None) -> List[str]:
@@ -322,7 +322,7 @@ class EC2InstanceManager:
                 display_types.append(label)
 
             print("\n" + "="*60)
-            print("💻 SELECT INSTANCE TYPE")
+            print("[COMPUTE] SELECT INSTANCE TYPE")
             print("="*60)
         
             for i, display_text in enumerate(display_types, 1):
@@ -338,12 +338,12 @@ class EC2InstanceManager:
                         selected = sorted_instances[type_index]['instance_type']
                         return selected
                     else:
-                        print(f"❌ Invalid choice. Please enter a number between 1 and {len(display_types)}")
+                        print(f"[ERROR] Invalid choice. Please enter a number between 1 and {len(display_types)}")
                 except ValueError:
-                    print("❌ Please enter a valid number")
+                    print("[ERROR] Please enter a valid number")
     
         except Exception as e:
-            print(f"⚠️ Warning: Could not analyze service quotas: {e}")
+            print(f"[WARN] Warning: Could not analyze service quotas: {e}")
             # Fall back to original method
             display_types = []
             for instance_type in default_types:
@@ -355,7 +355,7 @@ class EC2InstanceManager:
             display_types.extend(allowed_types)
 
             print("\n" + "="*60)
-            print("💻 SELECT INSTANCE TYPE")
+            print("[COMPUTE] SELECT INSTANCE TYPE")
             print("="*60)
         
             for i, instance_type in enumerate(display_types, 1):
@@ -370,9 +370,9 @@ class EC2InstanceManager:
                         selected = display_types[type_index].split(' ')[0]  # Remove "(recommended)"
                         return selected
                     else:
-                        print(f"❌ Invalid choice. Please enter a number between 1 and {len(display_types)}")
+                        print(f"[ERROR] Invalid choice. Please enter a number between 1 and {len(display_types)}")
                 except ValueError:
-                    print("❌ Please enter a valid number")
+                    print("[ERROR] Please enter a valid number")
 
     def create_launch_template(self, ec2_client, cred_info: CredentialInfo, instance_config: InstanceConfig, security_group_id=None) -> str:
         """Create launch template with userdata"""
@@ -387,12 +387,12 @@ class EC2InstanceManager:
         template_name = f"lt-{cred_info.account_name}-{instance_config.region}-{suffix}"
     
         try:
-            print(f"📋 Creating launch template: {template_name}")
+            print(f"[LIST] Creating launch template: {template_name}")
 
             # Ensure user data is not None
             user_data = instance_config.userdata_script
             if not user_data:
-                print("⚠️ Warning: User data script is empty, using default script.")
+                print("[WARN] Warning: User data script is empty, using default script.")
                 user_data = "#!/bin/bash\necho 'Default userdata script'"
 
             import base64
@@ -421,11 +421,11 @@ class EC2InstanceManager:
             )
 
             template_id = response['LaunchTemplate']['LaunchTemplateId']
-            print(f"✅ Launch template created: {template_id}")
+            print(f"[OK] Launch template created: {template_id}")
             return template_id
 
         except Exception as e:
-                print(f"❌ Error creating launch template: {e}")
+                print(f"[ERROR] Error creating launch template: {e}")
                 raise
     
     def get_supported_subnets(self, ec2_client, region: str) -> List[Dict]:
@@ -457,7 +457,7 @@ class EC2InstanceManager:
         sg_name = f"{self.current_user}_sg_{suffix}"
     
         try:
-            print(f"🔒 Creating security group: {sg_name}")
+            print(f"[SECURE] Creating security group: {sg_name}")
         
             # Get default VPC ID
             vpcs_response = ec2_client.describe_vpcs(
@@ -504,11 +504,11 @@ class EC2InstanceManager:
             #     ]
             # )
         
-            print(f"✅ Security group created: {sg_id}")
+            print(f"[OK] Security group created: {sg_id}")
             return sg_id
         
         except Exception as e:
-            print(f"❌ Error creating security group: {e}")
+            print(f"[ERROR] Error creating security group: {e}")
             raise
 
 
@@ -539,12 +539,12 @@ class EC2InstanceManager:
                 # Check if key exists in AWS
                 response = ec2_client.describe_key_pairs(KeyNames=[key_name])
                 self.log_operation('INFO', f"EC2 key pair '{key_name}' already exists in AWS.")
-                print(f"🔑 Key pair '{key_name}' already exists in region {region}")
+                print(f"[KEY] Key pair '{key_name}' already exists in region {region}")
                 return key_name
             except botocore.exceptions.ClientError as e:
                 if "InvalidKeyPair.NotFound" in str(e):
                     self.log_operation('INFO', f"Key pair '{key_name}' not found in AWS, importing from local file...")
-                    print(f"🔑 Key pair '{key_name}' not found in region {region}. Importing public key...")
+                    print(f"[KEY] Key pair '{key_name}' not found in region {region}. Importing public key...")
 
                     # Look for public key file
                     public_key_path = os.path.join(key_dir, f"{key_name}.pub")
@@ -571,20 +571,20 @@ class EC2InstanceManager:
 
                         self.log_operation('INFO',
                                            f"Successfully imported public key '{public_key_path}' as EC2 key pair '{key_name}'")
-                        print(f"✅ Imported public key as EC2 key pair '{key_name}' in region {region}")
+                        print(f"[OK] Imported public key as EC2 key pair '{key_name}' in region {region}")
                         return key_name
 
                     except FileNotFoundError:
                         self.log_operation('ERROR', f"Public key file not found: {public_key_path}")
-                        print(f"❌ Public key file not found: {public_key_path}")
+                        print(f"[ERROR] Public key file not found: {public_key_path}")
                         raise
                     except ValueError as ve:
                         self.log_operation('ERROR', f"Invalid public key format: {str(ve)}")
-                        print(f"❌ Invalid public key format in {public_key_path}")
+                        print(f"[ERROR] Invalid public key format in {public_key_path}")
                         raise
                     except Exception as upload_error:
                         self.log_operation('ERROR', f"Error importing public key: {str(upload_error)}")
-                        print(f"❌ Error importing public key: {str(upload_error)}")
+                        print(f"[ERROR] Error importing public key: {str(upload_error)}")
                         raise
                 else:
                     self.log_operation('ERROR', f"Error checking key pair: {str(e)}")
@@ -594,9 +594,9 @@ class EC2InstanceManager:
             private_key_file = f"{key_name}.pem"
             if not os.path.exists(private_key_file):
                 self.log_operation('WARNING', f"Private key file '{private_key_file}' not found locally.")
-                print(f"⚠️ Warning: Private key file '{private_key_file}' not found locally.")
+                print(f"[WARN] Warning: Private key file '{private_key_file}' not found locally.")
             else:
-                print(f"🔑 Using local private key file: {private_key_file}")
+                print(f"[KEY] Using local private key file: {private_key_file}")
 
             return key_name
 
@@ -655,11 +655,11 @@ class EC2InstanceManager:
             template_id = self.create_launch_template(ec2_client, cred_info, instance_config, security_group_id)
             instance_config.launch_template_id = template_id
 
-            print(f"\n🚀 Launching EC2 instance...")
-            print(f"   📍 Region: {region}")
-            print(f"   💻 Instance Type: {instance_type}")
+            print(f"\n[START] Launching EC2 instance...")
+            print(f"   [ROUNDPIN] Region: {region}")
+            print(f"   [COMPUTE] Instance Type: {instance_type}")
             print(f"   📀 AMI ID: {ami_id}")
-            print(f"   🌐 Subnet: {subnet_id}")
+            print(f"   [NETWORK] Subnet: {subnet_id}")
 
             # Launch instance in supported subnet
             response = ec2_client.run_instances(
@@ -685,7 +685,7 @@ class EC2InstanceManager:
             )
 
             instance_id = response['Instances'][0]['InstanceId']
-            print(f"✅ EC2 instance launched: {instance_id}")
+            print(f"[OK] EC2 instance launched: {instance_id}")
 
             # Save instance details
             self.save_instance_details(cred_info, instance_config, instance_id, template_id)
@@ -700,7 +700,7 @@ class EC2InstanceManager:
             }
 
         except Exception as e:
-            print(f"❌ Error creating EC2 instance: {e}")
+            print(f"[ERROR] Error creating EC2 instance: {e}")
             raise
     
     def save_instance_details(self, cred_info: CredentialInfo, instance_config: InstanceConfig, 
@@ -739,10 +739,10 @@ class EC2InstanceManager:
             with open(filename, 'w') as f:
                 json.dump(details, f, indent=2)
             
-            print(f"📁 Instance details saved to: {filename}")
+            print(f"[FOLDER] Instance details saved to: {filename}")
             
         except Exception as e:
-            print(f"⚠️ Warning: Could not save instance details: {e}")
+            print(f"[WARN] Warning: Could not save instance details: {e}")
 
     def _get_unsupported_azs(self, region: str) -> Set[str]:
         """Load unsupported AZs from ec2-region-ami-mapping.json file"""
@@ -817,9 +817,9 @@ class EC2InstanceManager:
                     return None
                 if choice.isdigit() and 1 <= int(choice) <= len(templates):
                     return templates[int(choice) - 1]['LaunchTemplateId']
-                print("❌ Invalid choice. Please enter a valid number or press Enter to cancel.")
+                print("[ERROR] Invalid choice. Please enter a valid number or press Enter to cancel.")
         except Exception as e:
-            print(f"❌ Error listing launch templates: {e}")
+            print(f"[ERROR] Error listing launch templates: {e}")
             return None
 
     def log_operation(self, level: str, message: str):

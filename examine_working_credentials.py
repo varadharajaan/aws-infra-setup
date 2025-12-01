@@ -6,22 +6,22 @@ import boto3
 def examine_credentials_structure():
     """Examine the structure of the working credentials file"""
     
-    print("🔍 EXAMINING WORKING CREDENTIALS FILE STRUCTURE")
+    print("[SCAN] EXAMINING WORKING CREDENTIALS FILE STRUCTURE")
     print("=" * 60)
     
     try:
         with open('iam_users_credentials_20250605_224146.json', 'r') as f:
             working_creds = json.load(f)
         
-        print("✅ File loaded successfully")
-        print(f"📊 File type: {type(working_creds)}")
+        print("[OK] File loaded successfully")
+        print(f"[STATS] File type: {type(working_creds)}")
         
         if isinstance(working_creds, dict):
-            print(f"📋 Top-level keys: {list(working_creds.keys())}")
+            print(f"[LIST] Top-level keys: {list(working_creds.keys())}")
             
             # Look for any structure that might contain account02 credentials
             for key, value in working_creds.items():
-                print(f"\n🔍 Examining key: '{key}'")
+                print(f"\n[SCAN] Examining key: '{key}'")
                 print(f"   Type: {type(value)}")
                 
                 if isinstance(value, dict):
@@ -30,17 +30,17 @@ def examine_credentials_structure():
                     # Look for account02 or similar
                     for sub_key, sub_value in value.items():
                         if 'account02' in sub_key.lower() or 'account02' in str(sub_value).lower():
-                            print(f"   🎯 Found account02 reference in: {sub_key}")
+                            print(f"   [TARGET] Found account02 reference in: {sub_key}")
                             print(f"      Value: {sub_value}")
                         
                         # Look for access keys
                         if isinstance(sub_value, dict) and 'access_key' in sub_value:
                             access_key = sub_value['access_key']
-                            print(f"   🔑 Found access_key in {sub_key}: {access_key[:10]}...{access_key[-4:]}")
+                            print(f"   [KEY] Found access_key in {sub_key}: {access_key[:10]}...{access_key[-4:]}")
                         
                         # If this sub_value contains access_key directly
                         if isinstance(sub_value, str) and sub_value.startswith('AKIA'):
-                            print(f"   🔑 Found potential access_key: {sub_key} = {sub_value[:10]}...{sub_value[-4:]}")
+                            print(f"   [KEY] Found potential access_key: {sub_key} = {sub_value[:10]}...{sub_value[-4:]}")
                 
                 elif isinstance(value, list):
                     print(f"   List length: {len(value)}")
@@ -50,15 +50,15 @@ def examine_credentials_structure():
                             print(f"   First item keys: {list(value[0].keys())}")
         
         elif isinstance(working_creds, list):
-            print(f"📋 List length: {len(working_creds)}")
+            print(f"[LIST] List length: {len(working_creds)}")
             if working_creds:
-                print(f"📋 First item type: {type(working_creds[0])}")
+                print(f"[LIST] First item type: {type(working_creds[0])}")
                 if isinstance(working_creds[0], dict):
-                    print(f"📋 First item keys: {list(working_creds[0].keys())}")
+                    print(f"[LIST] First item keys: {list(working_creds[0].keys())}")
         
         # Now let's try to find the specific credentials that worked
         print(f"\n" + "="*60)
-        print("🔍 SEARCHING FOR ACCOUNT02 CREDENTIALS")
+        print("[SCAN] SEARCHING FOR ACCOUNT02 CREDENTIALS")
         print("="*60)
         
         def search_for_account02(data, path=""):
@@ -69,14 +69,14 @@ def examine_credentials_structure():
                     
                     # Check if this looks like account02
                     if 'account02' in key.lower():
-                        print(f"🎯 Found account02 match at: {current_path}")
+                        print(f"[TARGET] Found account02 match at: {current_path}")
                         print(f"   Value: {value}")
                     
                     # Check if this contains access_key that matches the pattern we saw in logs
                     if isinstance(value, dict) and 'access_key' in value:
                         access_key = value['access_key']
                         if 'AKIA6P6R7F' in access_key:
-                            print(f"🎯 Found matching access_key at: {current_path}")
+                            print(f"[TARGET] Found matching access_key at: {current_path}")
                             print(f"   Access Key: {access_key[:10]}...{access_key[-4:]}")
                             return current_path, value
                     
@@ -97,18 +97,18 @@ def examine_credentials_structure():
         found = search_for_account02(working_creds)
         if found:
             path, creds = found
-            print(f"\n✅ FOUND WORKING CREDENTIALS!")
-            print(f"📍 Location: {path}")
-            print(f"🔑 Access Key: {creds['access_key'][:10]}...{creds['access_key'][-4:]}")
+            print(f"\n[OK] FOUND WORKING CREDENTIALS!")
+            print(f"[ROUNDPIN] Location: {path}")
+            print(f"[KEY] Access Key: {creds['access_key'][:10]}...{creds['access_key'][-4:]}")
             
             # Test these credentials
-            print(f"\n🧪 TESTING FOUND CREDENTIALS...")
+            print(f"\n[TEST] TESTING FOUND CREDENTIALS...")
             test_credentials(creds['access_key'], creds['secret_key'])
         else:
-            print(f"\n❌ Could not find account02 credentials with matching access key pattern")
+            print(f"\n[ERROR] Could not find account02 credentials with matching access key pattern")
             
     except Exception as e:
-        print(f"❌ Error examining file: {e}")
+        print(f"[ERROR] Error examining file: {e}")
 
 def test_credentials(access_key, secret_key):
     """Test the found credentials"""
@@ -122,17 +122,17 @@ def test_credentials(access_key, secret_key):
         
         # Test describe_regions
         regions_response = ec2_client.describe_regions(RegionNames=['us-east-1'])
-        print(f"✅ describe_regions: SUCCESS")
+        print(f"[OK] describe_regions: SUCCESS")
         
         # Test describe_instances
         instances_response = ec2_client.describe_instances()
         instance_count = sum(len(r['Instances']) for r in instances_response['Reservations'])
-        print(f"✅ describe_instances: Found {instance_count} instances")
+        print(f"[OK] describe_instances: Found {instance_count} instances")
         
         return True
         
     except Exception as e:
-        print(f"❌ Credential test failed: {e}")
+        print(f"[ERROR] Credential test failed: {e}")
         return False
 
 if __name__ == "__main__":

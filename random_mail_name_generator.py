@@ -38,10 +38,10 @@ class DynamicNameGenerator:
                     if owner and len(owner) >= 4 and owner.isalpha():
                         self.brand_names.append(owner)
 
-            print(f"✅ Fetched {len(self.brand_names)} brand names from GitHub API")
+            print(f"[OK] Fetched {len(self.brand_names)} brand names from GitHub API")
 
         except Exception as e:
-            print(f"⚠️ GitHub API failed: {e}")
+            print(f"[WARN] GitHub API failed: {e}")
 
         # Try alternative APIs
         try:
@@ -68,10 +68,10 @@ class DynamicNameGenerator:
                     if name and len(name) >= 4 and name.isalpha():
                         self.brand_names.append(name)
 
-            print(f"✅ Fetched crypto names from CoinGecko API")
+            print(f"[OK] Fetched crypto names from CoinGecko API")
 
         except Exception as e:
-            print(f"⚠️ CoinGecko API failed: {e}")
+            print(f"[WARN] CoinGecko API failed: {e}")
 
     def fetch_tech_keywords_from_api(self):
         """Fetch tech keywords from programming APIs"""
@@ -98,10 +98,10 @@ class DynamicNameGenerator:
 
                 time.sleep(0.5)  # Rate limiting
 
-            print(f"✅ Fetched {len(self.tech_keywords)} tech keywords from GitHub")
+            print(f"[OK] Fetched {len(self.tech_keywords)} tech keywords from GitHub")
 
         except Exception as e:
-            print(f"⚠️ GitHub tech keywords API failed: {e}")
+            print(f"[WARN] GitHub tech keywords API failed: {e}")
 
         # Try Stack Overflow API for popular tags
         try:
@@ -122,10 +122,10 @@ class DynamicNameGenerator:
                     if name and 4 <= len(name) <= 12 and name.isalpha():
                         self.tech_keywords.append(name)
 
-            print(f"✅ Fetched tech tags from Stack Overflow API")
+            print(f"[OK] Fetched tech tags from Stack Overflow API")
 
         except Exception as e:
-            print(f"⚠️ Stack Overflow API failed: {e}")
+            print(f"[WARN] Stack Overflow API failed: {e}")
 
     def load_api_data(self):
         """Load data from all APIs"""
@@ -148,14 +148,14 @@ class DynamicNameGenerator:
         # Use fallbacks if APIs failed
         if not self.brand_names:
             self.brand_names = self.fallback_brands
-            print("⚠️ Using fallback brand names")
+            print("[WARN] Using fallback brand names")
 
         if not self.tech_keywords:
             self.tech_keywords = self.fallback_tech
-            print("⚠️ Using fallback tech keywords")
+            print("[WARN] Using fallback tech keywords")
 
-        print(f"📊 Total brands: {len(self.brand_names)}")
-        print(f"📊 Total tech keywords: {len(self.tech_keywords)}")
+        print(f"[STATS] Total brands: {len(self.brand_names)}")
+        print(f"[STATS] Total tech keywords: {len(self.tech_keywords)}")
 
     def is_valid(self, word):
         return word and word.isalpha() and 4 <= len(word) <= 12
@@ -203,7 +203,7 @@ class DynamicNameGenerator:
 
 
 if __name__ == "__main__":
-    print("🚀 Dynamic API-Powered Email Name Generator\n")
+    print("[START] Dynamic API-Powered Email Name Generator\n")
 
     generator = DynamicNameGenerator()
     generator.load_api_data()

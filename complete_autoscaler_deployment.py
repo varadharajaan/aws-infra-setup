@@ -590,9 +590,9 @@ spec:
         )
         
         if success:
-            self.log_step("VERIFY", "✅ Pod status check passed", "SUCCESS")
+            self.log_step("VERIFY", "[OK] Pod status check passed", "SUCCESS")
         else:
-            self.log_step("VERIFY", "❌ Pod status check failed", "ERROR")
+            self.log_step("VERIFY", "[ERROR] Pod status check failed", "ERROR")
             verification_passed = False
         
         # Check 2: Secret exists
@@ -602,9 +602,9 @@ spec:
         )
         
         if success:
-            self.log_step("VERIFY", "✅ AWS credentials secret exists", "SUCCESS")
+            self.log_step("VERIFY", "[OK] AWS credentials secret exists", "SUCCESS")
         else:
-            self.log_step("VERIFY", "❌ AWS credentials secret missing", "ERROR")
+            self.log_step("VERIFY", "[ERROR] AWS credentials secret missing", "ERROR")
             verification_passed = False
         
         # Check 3: RBAC resources
@@ -623,9 +623,9 @@ spec:
             
             success, stdout, stderr = self.run_command(cmd, env=env)
             if success:
-                self.log_step("VERIFY", f"✅ {resource_type} {name} exists", "SUCCESS")
+                self.log_step("VERIFY", f"[OK] {resource_type} {name} exists", "SUCCESS")
             else:
-                self.log_step("VERIFY", f"❌ {resource_type} {name} missing", "ERROR")
+                self.log_step("VERIFY", f"[ERROR] {resource_type} {name} missing", "ERROR")
                 verification_passed = False
         
         return verification_passed
@@ -640,7 +640,7 @@ spec:
         )
         
         if success:
-            self.print_colored(self.colors.WHITE, "📋 Recent Autoscaler Logs:")
+            self.print_colored(self.colors.WHITE, "[LIST] Recent Autoscaler Logs:")
             self.print_colored(self.colors.CYAN, "-" * 80)
             print(stdout)
             self.print_colored(self.colors.CYAN, "-" * 80)
@@ -649,12 +649,12 @@ spec:
     
     def print_success_summary(self, cluster_name: str, region: str, tagged_asgs: List[str]):
         """Print deployment success summary"""
-        self.print_header("🎉 AUTOSCALER DEPLOYMENT SUCCESSFUL! 🎉")
+        self.print_header("[PARTY] AUTOSCALER DEPLOYMENT SUCCESSFUL! [PARTY]")
         
         elapsed_time = time.time() - self.deployment_start_time
         
-        self.print_colored(self.colors.GREEN, "✅ AUTOSCALER DEPLOYMENT COMPLETED SUCCESSFULLY!")
-        self.print_colored(self.colors.CYAN, f"📊 Autoscaler Deployment Summary:")
+        self.print_colored(self.colors.GREEN, "[OK] AUTOSCALER DEPLOYMENT COMPLETED SUCCESSFULLY!")
+        self.print_colored(self.colors.CYAN, f"[STATS] Autoscaler Deployment Summary:")
         self.print_colored(self.colors.WHITE, f"   • Cluster: {cluster_name}", 1)
         self.print_colored(self.colors.WHITE, f"   • Region: {region}", 1)
         self.print_colored(self.colors.WHITE, f"   • Tagged ASGs: {len(tagged_asgs)}", 1)
@@ -662,7 +662,7 @@ spec:
         self.print_colored(self.colors.WHITE, f"   • Fast Scaling: 4 minute delays configured", 1)
         self.print_colored(self.colors.WHITE, f"   • Protected Nodes: Nodes with label 'no_delete=true' will be skipped", 1)
 
-        self.print_colored(self.colors.YELLOW, "\n🧪 Testing Commands:")
+        self.print_colored(self.colors.YELLOW, "\n[TEST] Testing Commands:")
         self.print_colored(self.colors.WHITE, "   # Scale up test (trigger node addition):", 1)
         self.print_colored(self.colors.CYAN, "   kubectl create deployment test-scale --image=nginx --replicas=10", 1)
         self.print_colored(self.colors.CYAN, "   kubectl set resources deployment test-scale --requests=cpu=1000m,memory=1Gi", 1)
@@ -675,7 +675,7 @@ spec:
         self.print_colored(self.colors.CYAN, "   kubectl delete deployment test-scale", 1)
         
         if tagged_asgs:
-            self.print_colored(self.colors.GREEN, f"\n🏷️  Tagged ASGs:")
+            self.print_colored(self.colors.GREEN, f"\n[TAG]  Tagged ASGs:")
             for asg in tagged_asgs:
                 self.print_colored(self.colors.WHITE, f"   • {asg}", 1)
     
@@ -695,7 +695,7 @@ spec:
         try:
             self.print_header("COMPLETE CLUSTER AUTOSCALER DEPLOYMENT")
             
-            self.print_colored(self.colors.BLUE, "🎯 Deployment Parameters:")
+            self.print_colored(self.colors.BLUE, "[TARGET] Deployment Parameters:")
             self.print_colored(self.colors.WHITE, f"   • Cluster: {cluster_name}", 1)
             self.print_colored(self.colors.WHITE, f"   • Region: {region}", 1)
             self.print_colored(self.colors.WHITE, f"   • Access Key: {access_key[:8]}...", 1)
@@ -750,26 +750,26 @@ spec:
             #     test_autoscaler = response.lower() in ['y', 'yes', ''] 
         
             #     if test_autoscaler:
-            #         print(f"\n🧪 Proceeding with autoscaler testing...")
+            #         print(f"\n[TEST] Proceeding with autoscaler testing...")
             #         from autoscale_tester import AutoscalerTester
             #         tester = AutoscalerTester()
             #         tester.run_interactive_testing()
             #     else:
-            #         print(f"\n✅ Autoscaler deployment completed. You can test it manually later.")
+            #         print(f"\n[OK] Autoscaler deployment completed. You can test it manually later.")
             #         print(f"\nManual testing commands:")
             #         print(f"  kubectl create deployment test-scale --image=nginx --replicas=10")
             #         print(f"  kubectl set resources deployment test-scale --requests=cpu=1000m,memory=1Gi")
             #         print(f"  kubectl logs -n kube-system -l app=cluster-autoscaler -f")
     
             # except KeyboardInterrupt:
-            #     print(f"\n\n✅ Autoscaler deployment completed successfully!")
+            #     print(f"\n\n[OK] Autoscaler deployment completed successfully!")
             #     print(f"Testing was cancelled, but autoscaler is ready to use.")
                 
             return True
             
         except Exception as e:
             self.log_step("DEPLOY", f"Deployment failed with exception: {str(e)}", "ERROR")
-            self.print_colored(self.colors.RED, f"\n❌ DEPLOYMENT FAILED: {str(e)}")
+            self.print_colored(self.colors.RED, f"\n[ERROR] DEPLOYMENT FAILED: {str(e)}")
             return False
 
 def main():
@@ -786,10 +786,10 @@ def main():
     )
     
     if success:
-        print("\n🎉 AUTOSCALER DEPLOYMENT COMPLETED SUCCESSFULLY!")
+        print("\n[PARTY] AUTOSCALER DEPLOYMENT COMPLETED SUCCESSFULLY!")
         return 0
     else:
-        print("\n💥 AUTOSCALER DEPLOYMENT FAILED!")
+        print("\n[BOOM] AUTOSCALER DEPLOYMENT FAILED!")
         return 1
 
 

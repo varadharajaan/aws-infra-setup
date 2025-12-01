@@ -131,9 +131,9 @@ class SpotInstanceAnalyzer:
         for cache_file in cache_files:
             try:
                 os.remove(cache_file)
-                print(f"🗑️ Removed cache file: {cache_file}")
+                print(f"[DELETE] Removed cache file: {cache_file}")
             except Exception as e:
-                print(f"⚠️ Error removing cache file {cache_file}: {e}")
+                print(f"[WARN] Error removing cache file {cache_file}: {e}")
 
     def get_service_quotas(self, instance_types: List[str], created_by="system") -> Dict[str, Dict]:
         instance_types_hash = self._get_instance_types_hash(instance_types)
@@ -333,7 +333,7 @@ class SpotInstanceAnalyzer:
                 
                     # If cache is older than 1 hour, show warning
                     if cache_age_hours > 1:
-                        print(f"\n⚠️ WARNING: Cached spot data is {cache_age_hours:.1f} hours old.")
+                        print(f"\n[WARN] WARNING: Cached spot data is {cache_age_hours:.1f} hours old.")
                         print("Spot prices and availability can change frequently.")
                         use_cache = input("Do you want to use this cached data? (y/n): ").strip().lower()
                         if use_cache == 'y':
@@ -735,7 +735,7 @@ class SpotInstanceAnalyzer:
                     )
                     print(f"Created new session for region: {self.region}")
                 else:
-                    print("⚠️  No credentials or session available. Creating default session.")
+                    print("[WARN]  No credentials or session available. Creating default session.")
                     self.session = boto3.Session(region_name=self.region)
 
             ec2_client = self.session.client('ec2')
@@ -751,7 +751,7 @@ class SpotInstanceAnalyzer:
                     instances.extend(reservation['Instances'])
     
             # Print diagnostic info
-            print(f"\n🔍 Found {len(instances)} running/pending instances")
+            print(f"\n[SCAN] Found {len(instances)} running/pending instances")
             print("=" * 80)
     
             for i, instance in enumerate(instances, 1):
@@ -809,7 +809,7 @@ class SpotInstanceAnalyzer:
             return instances
     
         except Exception as e:
-            print(f"❌ Error in diagnostic function: {str(e)}")
+            print(f"[ERROR] Error in diagnostic function: {str(e)}")
             import traceback
             traceback.print_exc()
             return []

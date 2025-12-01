@@ -4,13 +4,13 @@ import os
 
 def load_accounts_config(config_file="aws_accounts_config.json"):
     if not os.path.exists(config_file):
-        print(f"❌ Config file {config_file} not found.")
+        print(f"[ERROR] Config file {config_file} not found.")
         return None
     with open(config_file, "r") as f:
         return json.load(f)
 
 def select_account(accounts):
-    print("📦 Available Accounts:")
+    print("[PACKAGE] Available Accounts:")
     index_map = {}
     for idx, key in enumerate(accounts.keys(), start=1):
         print(f" {idx}. {key}")
@@ -19,7 +19,7 @@ def select_account(accounts):
     selection = input("\n👉 Enter account number to fetch AMI from: ").strip()
     selected = index_map.get(selection)
     if not selected:
-        print("❌ Invalid selection.")
+        print("[ERROR] Invalid selection.")
         return None
     return selected
 
@@ -29,11 +29,11 @@ def get_boto3_session(account_key):
         try:
             session = boto3.Session(profile_name=profile)
             session.client("sts").get_caller_identity()
-            print(f"✅ Using profile: {profile}")
+            print(f"[OK] Using profile: {profile}")
             return session
         except Exception as e:
-            print(f"⚠️ Failed with profile '{profile}': {e}")
-    print("❌ No working profile found.")
+            print(f"[WARN] Failed with profile '{profile}': {e}")
+    print("[ERROR] No working profile found.")
     return None
 
 def get_latest_amazon_linux_3_ami(region, session):
@@ -60,7 +60,7 @@ def get_latest_amazon_linux_3_ami(region, session):
         images = sorted(images, key=lambda x: x["CreationDate"], reverse=True)
         return images[0]["ImageId"] if images else None
     except Exception as e:
-        print(f"[{region}] ❌ Failed to fetch AL2023 AMI: {e}")
+        print(f"[{region}] [ERROR] Failed to fetch AL2023 AMI: {e}")
         return None
 
 def get_latest_amazon_linux_2_ami(region, session):
@@ -80,7 +80,7 @@ def get_latest_amazon_linux_2_ami(region, session):
         images = sorted(images, key=lambda x: x["CreationDate"], reverse=True)
         return images[0]["ImageId"] if images else None
     except Exception as e:
-        print(f"[{region}] ❌ Failed to fetch AL2 AMI: {e}")
+        print(f"[{region}] [ERROR] Failed to fetch AL2 AMI: {e}")
         return None
 
 def main():
@@ -99,7 +99,7 @@ def main():
 
     regions = config.get("user_settings", {}).get("user_regions", [])
     if not regions:
-        print("❌ No regions found in user_settings.user_regions.")
+        print("[ERROR] No regions found in user_settings.user_regions.")
         return
 
     al2023_ami_mapping = {}
@@ -113,11 +113,11 @@ def main():
         if al2_ami:
             al2_ami_mapping[region] = al2_ami
 
-    print("\n✅ Latest Amazon Linux 2023 AMI Mapping (with EC2 Instance Connect):")
+    print("\n[OK] Latest Amazon Linux 2023 AMI Mapping (with EC2 Instance Connect):")
     for region, ami in al2023_ami_mapping.items():
         print(f'    "{region}": "{ami}",')
 
-    print("\n✅ Latest Amazon Linux 2 AMI Mapping:")
+    print("\n[OK] Latest Amazon Linux 2 AMI Mapping:")
     for region, ami in al2_ami_mapping.items():
         print(f'    "{region}": "{ami}",')
 
