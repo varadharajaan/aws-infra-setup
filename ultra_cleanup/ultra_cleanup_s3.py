@@ -350,10 +350,13 @@ class UltraCleanupS3Manager:
                 })
                 return
             
-            # Step 1: Disable versioning
+            # Step 1: Remove replication configuration FIRST (required before disabling versioning)
+            self.remove_bucket_replication(s3_client, bucket_name, region)
+            
+            # Step 2: Disable versioning (now possible after replication is removed)
             self.disable_versioning(s3_client, bucket_name, region)
             
-            # Step 2: Remove bucket configurations
+            # Step 3: Remove other bucket configurations
             self.remove_bucket_policy(s3_client, bucket_name, region)
             self.remove_bucket_notifications(s3_client, bucket_name, region)
             self.remove_bucket_lifecycle(s3_client, bucket_name, region)
@@ -362,7 +365,6 @@ class UltraCleanupS3Manager:
             self.remove_bucket_encryption(s3_client, bucket_name, region)
             self.remove_bucket_logging(s3_client, bucket_name, region)
             self.remove_bucket_accelerate(s3_client, bucket_name, region)
-            self.remove_bucket_replication(s3_client, bucket_name, region)
             self.remove_bucket_tagging(s3_client, bucket_name, region)
             
             # Step 3: Delete all objects and versions
