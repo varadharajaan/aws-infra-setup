@@ -528,8 +528,8 @@ class UltraCleanupKinesisManager:
             self.print_colored(Colors.RED, "\n[WARN] WARNING: This will DELETE all Kinesis resources!")
             self.print_colored(Colors.YELLOW, f"[INFO] Accounts: {len(selected_accounts)}")
             
-            confirm = input(f"\nType 'DELETE' to confirm: ").strip()
-            if confirm != 'DELETE':
+            confirm = input(f"\nType 'yes' to confirm: ").strip().lower()
+            if confirm != 'yes':
                 self.print_colored(Colors.YELLOW, "[EXIT] Cleanup cancelled!")
                 return
 

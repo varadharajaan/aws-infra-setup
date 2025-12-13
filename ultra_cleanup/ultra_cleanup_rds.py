@@ -1027,8 +1027,8 @@ class UltraCleanupRDSManager:
             self.print_colored(Colors.YELLOW, f"Accounts: {len(accounts)}")
             self.print_colored(Colors.YELLOW, f"Regions: {', '.join(selected_regions)}")
             
-            confirm = input("\nType 'DELETE' to confirm: ").strip()
-            if confirm.upper() != 'DELETE':
+            confirm = input("\nType 'yes' to confirm: ").strip().lower()
+            if confirm != 'yes':
                 self.print_colored(Colors.YELLOW, "Cleanup cancelled.")
                 return
 

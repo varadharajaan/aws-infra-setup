@@ -399,8 +399,8 @@ class UltraCleanupAppSyncManager:
             self.print_colored(Colors.RED, "\n[WARN] WARNING: This will DELETE all AppSync resources!")
             self.print_colored(Colors.YELLOW, "[WARN] Includes: GraphQL APIs, Data Sources, Resolvers, Functions, API Keys, Domain Names")
             self.print_colored(Colors.YELLOW, "[INFO] Deleting API automatically removes all associated data sources, resolvers, and functions")
-            confirm = input(f"\nType 'DELETE' to confirm: ").strip()
-            if confirm != 'DELETE':
+            confirm = input(f"\nType 'yes' to confirm: ").strip().lower()
+            if confirm != 'yes':
                 self.print_colored(Colors.YELLOW, "[EXIT] Cleanup cancelled!")
                 return
 

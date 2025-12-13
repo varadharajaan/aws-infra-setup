@@ -633,8 +633,8 @@ class UltraCleanupS3Manager:
             self.print_colored(Colors.YELLOW, f"[INFO] Accounts: {len(selected_accounts)}")
             self.print_colored(Colors.YELLOW, f"[INFO] Excluded buckets: {len(self.excluded_buckets)}")
             
-            confirm = input(f"\nType 'DELETE' to confirm: ").strip()
-            if confirm != 'DELETE':
+            confirm = input(f"\nType 'yes' to confirm: ").strip().lower()
+            if confirm != 'yes':
                 self.print_colored(Colors.YELLOW, "[EXIT] Cleanup cancelled!")
                 return
 

@@ -606,9 +606,9 @@ class UltraCleanupDynamoDBManager:
         try:
             self.log_operation('INFO', "[ALERT] STARTING ULTRA DYNAMODB CLEANUP SESSION [ALERT]")
             
-            self.print_colored(Colors.CYAN, "\n" + "[ALERT]" * 30)
+            self.print_colored(Colors.CYAN, "\n" + "[ALERT]" * 5)
             self.print_colored(Colors.BLUE, "[START] ULTRA DYNAMODB CLEANUP MANAGER")
-            self.print_colored(Colors.CYAN, "[ALERT]" * 30)
+            self.print_colored(Colors.CYAN, "[ALERT]" * 5)
             self.print_colored(Colors.WHITE, f"[DATE] Execution Date/Time: {self.current_time} UTC")
             self.print_colored(Colors.WHITE, f"[USER] Executed by: {self.current_user}")
             self.print_colored(Colors.WHITE, f"[LIST] Log File: {self.log_filename}")
@@ -761,7 +761,7 @@ class UltraCleanupDynamoDBManager:
             self.print_colored(Colors.GREEN, f"[OK] Session log saved to: {self.log_filename}")
             
             self.print_colored(Colors.GREEN, f"\n[OK] Cleanup completed successfully!")
-            self.print_colored(Colors.CYAN, "[ALERT]" * 30)
+            self.print_colored(Colors.CYAN, "[ALERT]" * 5)
             
         except Exception as e:
             self.log_operation('ERROR', f"FATAL ERROR in cleanup execution: {str(e)}")

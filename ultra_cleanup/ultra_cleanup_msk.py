@@ -397,8 +397,8 @@ class UltraCleanupMSKManager:
             self.print_colored(Colors.YELLOW, "[WARN] Includes: Kafka Clusters, Configurations")
             self.print_colored(Colors.CYAN, "[INFO] Cost: ~$150/month per broker (~$0.21/hour)")
             self.print_colored(Colors.CYAN, "[INFO] Potential for significant cost savings!")
-            confirm = input(f"\nType 'DELETE' to confirm: ").strip()
-            if confirm != 'DELETE':
+            confirm = input(f"\nType 'yes' to confirm: ").strip().lower()
+            if confirm != 'yes':
                 self.print_colored(Colors.YELLOW, "[EXIT] Cleanup cancelled!")
                 return
 

@@ -584,8 +584,8 @@ class UltraCleanupNeptuneManager:
             self.print_colored(Colors.RED, "\n[WARN] WARNING: This will DELETE all Neptune resources!")
             self.print_colored(Colors.YELLOW, "[WARN] Includes: Clusters, Instances, Snapshots, Subnet Groups, Parameter Groups")
             self.print_colored(Colors.YELLOW, "[INFO] Default parameter groups will be skipped")
-            confirm = input(f"\nType 'DELETE' to confirm: ").strip()
-            if confirm != 'DELETE':
+            confirm = input(f"\nType 'yes' to confirm: ").strip().lower()
+            if confirm != 'yes':
                 self.print_colored(Colors.YELLOW, "[EXIT] Cleanup cancelled!")
                 return
 

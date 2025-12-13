@@ -95,7 +95,8 @@ class UltraVPCCleanupManager:
     def setup_detailed_logging(self):
         """Setup detailed logging to file"""
         try:
-            log_dir = "aws/vpc/logs"
+            # Create log directory relative to workspace root or current directory
+            log_dir = os.path.join(os.getcwd(), "aws", "vpc", "logs")
             os.makedirs(log_dir, exist_ok=True)
             
             self.log_filename = f"{log_dir}/ultra_vpc_cleanup_{self.execution_timestamp}.log"
@@ -2005,8 +2006,9 @@ class UltraVPCCleanupManager:
     def generate_cleanup_report(self):
         """Generate comprehensive cleanup report"""
         try:
-            report_file = f"aws/vpc/logs/vpc_cleanup_report_{self.execution_timestamp}.json"
-            os.makedirs(os.path.dirname(report_file), exist_ok=True)
+            report_dir = os.path.join(os.getcwd(), "aws", "vpc", "logs")
+            os.makedirs(report_dir, exist_ok=True)
+            report_file = os.path.join(report_dir, f"vpc_cleanup_report_{self.execution_timestamp}.json")
             
             # Prepare report summary
             report = {

@@ -674,8 +674,8 @@ class UltraCleanupCloudFrontManager:
 
             self.print_colored(Colors.RED, "\n[WARN] WARNING: This will DELETE all CloudFront resources!")
             self.print_colored(Colors.YELLOW, "[WARN] Note: Distributions will be disabled first, then deleted (may take time)")
-            confirm = input(f"\nType 'DELETE' to confirm: ").strip()
-            if confirm != 'DELETE':
+            confirm = input(f"\nType 'yes' to confirm: ").strip().lower()
+            if confirm != 'yes':
                 self.print_colored(Colors.YELLOW, "[EXIT] Cleanup cancelled!")
                 return
 

@@ -855,8 +855,8 @@ class UltraCleanupRoute53Manager:
             self.print_colored(Colors.RED, "[WARN]  VPCs will NOT be deleted (only disassociated from zones)")
             self.print_colored(Colors.YELLOW, f"Accounts: {len(selected_accounts)}")
             
-            confirm = input(f"\nType 'DELETE' to confirm: ").strip()
-            if confirm != 'DELETE':
+            confirm = input(f"\nType 'yes' to confirm: ").strip().lower()
+            if confirm != 'yes':
                 self.print_colored(Colors.YELLOW, "[ERROR] Cleanup cancelled!")
                 return
 

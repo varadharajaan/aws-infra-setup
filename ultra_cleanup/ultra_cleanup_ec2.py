@@ -925,7 +925,7 @@ class UltraCleanupEC2Manager:
 
             if not instances and not security_groups and not elastic_ips:
                 self.log_operation('INFO', f"No EC2 resources found in {account_key} ({region})")
-                print(f"   [OK] No EC2 resources to clean up in {region}")
+                self.print_colored(Colors.GREEN, f"   [OK] No EC2 resources to clean up in {region}")
                 return True
 
             # Step 1: Terminate all instances sequentially

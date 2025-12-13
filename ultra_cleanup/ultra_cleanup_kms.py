@@ -431,8 +431,8 @@ class UltraCleanupKMSManager:
             self.print_colored(Colors.RED, "\n[WARN] WARNING: This will SCHEDULE all Customer Managed KMS Keys for deletion!")
             self.print_colored(Colors.YELLOW, f"[INFO] Keys will be deleted after {self.pending_window_days} days")
             self.print_colored(Colors.YELLOW, "[INFO] AWS Managed Keys will be skipped automatically")
-            confirm = input(f"\nType 'DELETE' to confirm: ").strip()
-            if confirm != 'DELETE':
+            confirm = input(f"\nType 'yes' to confirm: ").strip().lower()
+            if confirm != 'yes':
                 self.print_colored(Colors.YELLOW, "[EXIT] Cleanup cancelled!")
                 return
 

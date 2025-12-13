@@ -369,8 +369,8 @@ class UltraCleanupSecretsManagerManager:
                 self.print_colored(Colors.YELLOW, "\n[INFO] Standard mode: Secrets will have 7-day recovery window")
 
             self.print_colored(Colors.RED, "\n[WARN] WARNING: This will DELETE all Secrets Manager secrets!")
-            confirm = input(f"\nType 'DELETE' to confirm: ").strip()
-            if confirm != 'DELETE':
+            confirm = input(f"\nType 'yes' to confirm: ").strip().lower()
+            if confirm != 'yes':
                 self.print_colored(Colors.YELLOW, "[EXIT] Cleanup cancelled!")
                 return
 

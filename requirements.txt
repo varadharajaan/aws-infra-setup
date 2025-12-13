@@ -27,6 +27,8 @@ random-word
 nltk
 awscli
 prompt-toolkit
+scikit-learn
+joblib
 
 # JSON handling (built-in, but listing for completeness)
 # json - built-in module

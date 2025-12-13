@@ -370,8 +370,8 @@ class UltraCleanupStepFunctionsManager:
                 return
 
             self.print_colored(Colors.RED, "\n[WARN] WARNING: This will DELETE all Step Functions resources!")
-            confirm = input(f"\nType 'DELETE' to confirm: ").strip()
-            if confirm != 'DELETE':
+            confirm = input(f"\nType 'yes' to confirm: ").strip().lower()
+            if confirm != 'yes':
                 self.print_colored(Colors.YELLOW, "[EXIT] Cleanup cancelled!")
                 return
 

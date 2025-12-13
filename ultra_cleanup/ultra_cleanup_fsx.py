@@ -68,7 +68,7 @@ class UltraCleanupFSxManager:
         if selection.lower()=='q':return
         selected_accounts=account_list if selection.lower()=='all' else [account_list[int(x.strip())-1] for x in selection.split(',')]
         self.print_colored(Colors.RED,"\n[WARN] This will DELETE all FSx file systems!")
-        if input("\nType 'DELETE' to confirm: ").strip()!='DELETE':return
+        if input("\nType 'yes' to confirm: ").strip().lower()!='yes':return
         for account_name in selected_accounts:
             self.cleanup_account_fsx(account_name,{'access_key':accounts[account_name]['access_key'],'secret_key':accounts[account_name]['secret_key']})
         report_path=os.path.join(self.reports_dir,f"fsx_cleanup_{self.execution_timestamp}.json")

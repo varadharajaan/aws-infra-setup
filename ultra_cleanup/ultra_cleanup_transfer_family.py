@@ -651,8 +651,8 @@ class UltraCleanupTransferFamilyManager:
             self.print_colored(Colors.RED, "\n[WARN] WARNING: This will DELETE all Transfer Family resources!")
             self.print_colored(Colors.YELLOW, "[WARN] Includes: Servers (SFTP/FTPS/FTP/AS2), Users, Workflows, Connectors, Certificates")
             self.print_colored(Colors.YELLOW, f"[INFO] Cost savings: ~$216/month per server (~$0.30/hour)")
-            confirm = input(f"\nType 'DELETE' to confirm: ").strip()
-            if confirm != 'DELETE':
+            confirm = input(f"\nType 'yes' to confirm: ").strip().lower()
+            if confirm != 'yes':
                 self.print_colored(Colors.YELLOW, "[EXIT] Cleanup cancelled!")
                 return
 

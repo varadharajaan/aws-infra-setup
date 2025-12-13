@@ -73,7 +73,7 @@ class UltraCleanupWAFManager:
         selection=input("Select accounts or 'q': ").strip()
         if selection.lower()=='q':return
         selected=account_list if selection.lower()=='all' else [account_list[int(x.strip())-1] for x in selection.split(',')]
-        if input("\nType 'DELETE' to confirm: ").strip()!='DELETE':return
+        if input("\nType 'yes' to confirm: ").strip().lower()!='yes':return
         for name in selected:
             self.cleanup_account(name,{'access_key':accounts[name]['access_key'],'secret_key':accounts[name]['secret_key']})
         self.print_colored(Colors.GREEN,"\n[OK] WAF cleanup completed!")
