@@ -23,6 +23,7 @@ import time
 from datetime import datetime
 from botocore.exceptions import ClientError
 from root_iam_credential_manager import AWSCredentialManager
+from text_symbols import Symbols
 
 
 class Colors:
@@ -42,9 +43,9 @@ class UltraCleanupTransferFamilyManager:
     def __init__(self):
         """Initialize the Transfer Family cleanup manager"""
         self.cred_manager = AWSCredentialManager()
-        self.current_time = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+        self.current_time = datetime.now(datetime.UTC).strftime('%Y-%m-%d %H:%M:%S')
         self.current_user = os.getenv('USERNAME') or os.getenv('USER') or 'unknown'
-        self.execution_timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+        self.execution_timestamp = datetime.now(datetime.UTC).strftime('%Y%m%d_%H%M%S')
         
         # Create directories for logs and reports
         self.base_dir = os.path.join(os.getcwd(), 'aws', 'transfer_family')
@@ -80,7 +81,7 @@ class UltraCleanupTransferFamilyManager:
 
     def log_action(self, message, level="INFO"):
         """Log action to file"""
-        timestamp = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp = datetime.now(datetime.UTC).strftime('%Y-%m-%d %H:%M:%S')
         log_entry = f"{timestamp} | {level:8} | {message}\n"
         with open(self.log_file, 'a') as f:
             f.write(log_entry)
@@ -95,7 +96,7 @@ class UltraCleanupTransferFamilyManager:
                 UserName=username
             )
             
-            self.print_colored(Colors.GREEN, f"   [OK] Deleted user: {username}")
+            self.print_colored(Colors.GREEN, f"   {Symbols.OK} Deleted user: {username}")
             self.log_action(f"Deleted user {username} from server {server_id} in {region}")
             
             self.cleanup_results['deleted_users'].append({
@@ -119,11 +120,11 @@ class UltraCleanupTransferFamilyManager:
             protocol = server.get('Protocols', ['UNKNOWN'])[0]
             state = server.get('State', 'UNKNOWN')
             
-            self.print_colored(Colors.CYAN, f"[DELETE] Deleting server: {server_id} (Protocol: {protocol}, State: {state})")
+            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting server: {server_id} (Protocol: {protocol}, State: {state})")
             
             # Skip if already offline/stopping
             if state in ['STOPPING', 'OFFLINE']:
-                self.print_colored(Colors.YELLOW, f"[SKIP] Server already {state}: {server_id}")
+                self.print_colored(Colors.YELLOW, f"{Symbols.SKIP} Server already {state}: {server_id}")
                 return True
             
             # Delete all users first
@@ -132,7 +133,7 @@ class UltraCleanupTransferFamilyManager:
                 users = users_response.get('Users', [])
                 
                 if users:
-                    self.print_colored(Colors.YELLOW, f"   [SCAN] Found {len(users)} users")
+                    self.print_colored(Colors.YELLOW, f"   {Symbols.SCAN} Found {len(users)} users")
                     for user in users:
                         self.delete_server_user(
                             transfer_client,
@@ -147,14 +148,14 @@ class UltraCleanupTransferFamilyManager:
             
             # Stop server if online
             if state == 'ONLINE':
-                self.print_colored(Colors.YELLOW, f"   [STOP] Stopping server...")
+                self.print_colored(Colors.YELLOW, f"   {Symbols.STOP} Stopping server...")
                 transfer_client.stop_server(ServerId=server_id)
                 time.sleep(5)
             
             # Delete the server
             transfer_client.delete_server(ServerId=server_id)
             
-            self.print_colored(Colors.GREEN, f"[OK] Deleted server: {server_id}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted server: {server_id}")
             self.log_action(f"Deleted Transfer server: {server_id} in {region}")
             
             self.cleanup_results['deleted_servers'].append({
@@ -167,7 +168,7 @@ class UltraCleanupTransferFamilyManager:
             
         except ClientError as e:
             error_msg = f"Failed to delete server {server_id}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['failed_deletions'].append({
                 'type': 'TransferServer',
@@ -181,11 +182,11 @@ class UltraCleanupTransferFamilyManager:
     def delete_workflow(self, transfer_client, workflow_id, region, account_key):
         """Delete a Transfer workflow"""
         try:
-            self.print_colored(Colors.CYAN, f"[DELETE] Deleting workflow: {workflow_id}")
+            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting workflow: {workflow_id}")
             
             transfer_client.delete_workflow(WorkflowId=workflow_id)
             
-            self.print_colored(Colors.GREEN, f"[OK] Deleted workflow: {workflow_id}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted workflow: {workflow_id}")
             self.log_action(f"Deleted workflow: {workflow_id} in {region}")
             
             self.cleanup_results['deleted_workflows'].append({
@@ -197,7 +198,7 @@ class UltraCleanupTransferFamilyManager:
             
         except ClientError as e:
             error_msg = f"Failed to delete workflow {workflow_id}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['failed_deletions'].append({
                 'type': 'Workflow',
@@ -211,11 +212,11 @@ class UltraCleanupTransferFamilyManager:
     def delete_connector(self, transfer_client, connector_id, region, account_key):
         """Delete an AS2 connector"""
         try:
-            self.print_colored(Colors.CYAN, f"[DELETE] Deleting connector: {connector_id}")
+            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting connector: {connector_id}")
             
             transfer_client.delete_connector(ConnectorId=connector_id)
             
-            self.print_colored(Colors.GREEN, f"[OK] Deleted connector: {connector_id}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted connector: {connector_id}")
             self.log_action(f"Deleted connector: {connector_id} in {region}")
             
             self.cleanup_results['deleted_connectors'].append({
@@ -227,7 +228,7 @@ class UltraCleanupTransferFamilyManager:
             
         except ClientError as e:
             error_msg = f"Failed to delete connector {connector_id}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['failed_deletions'].append({
                 'type': 'Connector',
@@ -241,11 +242,11 @@ class UltraCleanupTransferFamilyManager:
     def delete_certificate(self, transfer_client, certificate_id, region, account_key):
         """Delete a certificate"""
         try:
-            self.print_colored(Colors.CYAN, f"[DELETE] Deleting certificate: {certificate_id}")
+            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting certificate: {certificate_id}")
             
             transfer_client.delete_certificate(CertificateId=certificate_id)
             
-            self.print_colored(Colors.GREEN, f"[OK] Deleted certificate: {certificate_id}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted certificate: {certificate_id}")
             self.log_action(f"Deleted certificate: {certificate_id} in {region}")
             
             self.cleanup_results['deleted_certificates'].append({
@@ -257,7 +258,7 @@ class UltraCleanupTransferFamilyManager:
             
         except ClientError as e:
             error_msg = f"Failed to delete certificate {certificate_id}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['failed_deletions'].append({
                 'type': 'Certificate',
@@ -271,11 +272,11 @@ class UltraCleanupTransferFamilyManager:
     def delete_profile(self, transfer_client, profile_id, region, account_key):
         """Delete an AS2 profile"""
         try:
-            self.print_colored(Colors.CYAN, f"[DELETE] Deleting profile: {profile_id}")
+            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting profile: {profile_id}")
             
             transfer_client.delete_profile(ProfileId=profile_id)
             
-            self.print_colored(Colors.GREEN, f"[OK] Deleted profile: {profile_id}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted profile: {profile_id}")
             self.log_action(f"Deleted profile: {profile_id} in {region}")
             
             self.cleanup_results['deleted_profiles'].append({
@@ -287,7 +288,7 @@ class UltraCleanupTransferFamilyManager:
             
         except ClientError as e:
             error_msg = f"Failed to delete profile {profile_id}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['failed_deletions'].append({
                 'type': 'Profile',
@@ -301,14 +302,14 @@ class UltraCleanupTransferFamilyManager:
     def delete_agreement(self, transfer_client, agreement_id, server_id, region, account_key):
         """Delete an AS2 agreement"""
         try:
-            self.print_colored(Colors.CYAN, f"[DELETE] Deleting agreement: {agreement_id}")
+            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting agreement: {agreement_id}")
             
             transfer_client.delete_agreement(
                 AgreementId=agreement_id,
                 ServerId=server_id
             )
             
-            self.print_colored(Colors.GREEN, f"[OK] Deleted agreement: {agreement_id}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted agreement: {agreement_id}")
             self.log_action(f"Deleted agreement: {agreement_id} in {region}")
             
             self.cleanup_results['deleted_agreements'].append({
@@ -321,14 +322,14 @@ class UltraCleanupTransferFamilyManager:
             
         except ClientError as e:
             error_msg = f"Failed to delete agreement {agreement_id}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             return False
 
     def cleanup_region_transfer(self, account_name, credentials, region):
         """Cleanup all Transfer Family resources in a specific region"""
         try:
-            self.print_colored(Colors.YELLOW, f"\n[SCAN] Scanning region: {region}")
+            self.print_colored(Colors.YELLOW, f"\n{Symbols.SCAN} Scanning region: {region}")
             
             transfer_client = boto3.client(
                 'transfer',
@@ -456,7 +457,7 @@ class UltraCleanupTransferFamilyManager:
             
         except Exception as e:
             error_msg = f"Error processing region {region}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['errors'].append(error_msg)
 
@@ -464,7 +465,7 @@ class UltraCleanupTransferFamilyManager:
         """Cleanup all Transfer Family resources in an account across all regions"""
         try:
             self.print_colored(Colors.BLUE, f"\n{'='*100}")
-            self.print_colored(Colors.BLUE, f"[START] Processing Account: {account_name}")
+            self.print_colored(Colors.BLUE, f"{Symbols.START} Processing Account: {account_name}")
             self.print_colored(Colors.BLUE, f"{'='*100}")
             
             self.cleanup_results['accounts_processed'].append(account_name)
@@ -480,17 +481,17 @@ class UltraCleanupTransferFamilyManager:
             regions_response = ec2_client.describe_regions()
             regions = [region['RegionName'] for region in regions_response['Regions']]
             
-            self.print_colored(Colors.CYAN, f"[SCAN] Processing {len(regions)} regions")
+            self.print_colored(Colors.CYAN, f"{Symbols.SCAN} Processing {len(regions)} regions")
             
             # Process each region
             for region in regions:
                 self.cleanup_region_transfer(account_name, credentials, region)
             
-            self.print_colored(Colors.GREEN, f"\n[OK] Account {account_name} cleanup completed!")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.OK} Account {account_name} cleanup completed!")
             
         except Exception as e:
             error_msg = f"Error processing account {account_name}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['errors'].append(error_msg)
 
@@ -522,25 +523,25 @@ class UltraCleanupTransferFamilyManager:
             with open(report_path, 'w') as f:
                 json.dump(summary, f, indent=2)
 
-            self.print_colored(Colors.GREEN, f"\n[STATS] Summary report saved: {report_path}")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.STATS} Summary report saved: {report_path}")
 
             # Print summary to console
             self.print_colored(Colors.BLUE, f"\n{'='*100}")
             self.print_colored(Colors.BLUE, "[STATS] CLEANUP SUMMARY")
             self.print_colored(Colors.BLUE, f"{'='*100}")
-            self.print_colored(Colors.GREEN, f"[OK] Servers Deleted: {summary['summary']['total_servers_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Users Deleted: {summary['summary']['total_users_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Workflows Deleted: {summary['summary']['total_workflows_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Connectors Deleted: {summary['summary']['total_connectors_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Certificates Deleted: {summary['summary']['total_certificates_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Profiles Deleted: {summary['summary']['total_profiles_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Agreements Deleted: {summary['summary']['total_agreements_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Servers Deleted: {summary['summary']['total_servers_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Users Deleted: {summary['summary']['total_users_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Workflows Deleted: {summary['summary']['total_workflows_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Connectors Deleted: {summary['summary']['total_connectors_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Certificates Deleted: {summary['summary']['total_certificates_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Profiles Deleted: {summary['summary']['total_profiles_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Agreements Deleted: {summary['summary']['total_agreements_deleted']}")
 
             if summary['summary']['total_failed_deletions'] > 0:
-                self.print_colored(Colors.YELLOW, f"[WARN] Failed Deletions: {summary['summary']['total_failed_deletions']}")
+                self.print_colored(Colors.YELLOW, f"{Symbols.WARN} Failed Deletions: {summary['summary']['total_failed_deletions']}")
 
             if summary['summary']['total_errors'] > 0:
-                self.print_colored(Colors.RED, f"[ERROR] Errors: {summary['summary']['total_errors']}")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Errors: {summary['summary']['total_errors']}")
 
             # Display Account Summary
             self.print_colored(Colors.BLUE, f"\n{'='*100}")
@@ -575,19 +576,19 @@ class UltraCleanupTransferFamilyManager:
                     account_summary[account]['regions'].add(item.get('region', 'unknown'))
 
             for account, stats in account_summary.items():
-                self.print_colored(Colors.CYAN, f"\n[LIST] Account: {account}")
-                self.print_colored(Colors.GREEN, f"  [OK] Servers: {stats['servers']}")
-                self.print_colored(Colors.GREEN, f"  [OK] Users: {stats['users']}")
-                self.print_colored(Colors.GREEN, f"  [OK] Workflows: {stats['workflows']}")
-                self.print_colored(Colors.GREEN, f"  [OK] Connectors: {stats['connectors']}")
-                self.print_colored(Colors.GREEN, f"  [OK] Certificates: {stats['certificates']}")
-                self.print_colored(Colors.GREEN, f"  [OK] Profiles: {stats['profiles']}")
-                self.print_colored(Colors.GREEN, f"  [OK] Agreements: {stats['agreements']}")
+                self.print_colored(Colors.CYAN, f"\n{Symbols.LIST} Account: {account}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Servers: {stats['servers']}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Users: {stats['users']}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Workflows: {stats['workflows']}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Connectors: {stats['connectors']}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Certificates: {stats['certificates']}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Profiles: {stats['profiles']}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Agreements: {stats['agreements']}")
                 regions_str = ', '.join(sorted(stats['regions'])) if stats['regions'] else 'N/A'
-                self.print_colored(Colors.YELLOW, f"  [SCAN] Regions: {regions_str}")
+                self.print_colored(Colors.YELLOW, f"  {Symbols.SCAN} Regions: {regions_str}")
 
         except Exception as e:
-            self.print_colored(Colors.RED, f"[ERROR] Failed to generate summary report: {e}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to generate summary report: {e}")
 
     def interactive_cleanup(self):
         """Interactive mode for Transfer Family cleanup"""
@@ -598,15 +599,15 @@ class UltraCleanupTransferFamilyManager:
 
             config = self.cred_manager.load_root_accounts_config()
             if not config or 'accounts' not in config:
-                self.print_colored(Colors.RED, "[ERROR] No accounts configuration found!")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} No accounts configuration found!")
                 return
 
             accounts = config['accounts']
             account_list = list(accounts.keys())
 
-            self.print_colored(Colors.CYAN, "[KEY] Select Root AWS Accounts for Transfer Family Cleanup:")
+            self.print_colored(Colors.CYAN, f"{Symbols.KEY} Select Root AWS Accounts for Transfer Family Cleanup:")
             print(f"{Colors.CYAN}[BOOK] Loading root accounts config...{Colors.END}")
-            self.print_colored(Colors.GREEN, f"[OK] Loaded {len(accounts)} root accounts")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Loaded {len(accounts)} root accounts")
             
             self.print_colored(Colors.YELLOW, "\n[KEY] Available Root AWS Accounts:")
             print("=" * 100)
@@ -641,16 +642,16 @@ class UltraCleanupTransferFamilyManager:
                     indices = [int(x.strip()) for x in selection.split(',')]
                     selected_accounts = [account_list[i-1] for i in indices if 0 < i <= len(account_list)]
                 except (ValueError, IndexError):
-                    self.print_colored(Colors.RED, "[ERROR] Invalid selection!")
+                    self.print_colored(Colors.RED, f"{Symbols.ERROR} Invalid selection!")
                     return
 
             if not selected_accounts:
-                self.print_colored(Colors.RED, "[ERROR] No accounts selected!")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} No accounts selected!")
                 return
 
-            self.print_colored(Colors.RED, "\n[WARN] WARNING: This will DELETE all Transfer Family resources!")
-            self.print_colored(Colors.YELLOW, "[WARN] Includes: Servers (SFTP/FTPS/FTP/AS2), Users, Workflows, Connectors, Certificates")
-            self.print_colored(Colors.YELLOW, f"[INFO] Cost savings: ~$216/month per server (~$0.30/hour)")
+            self.print_colored(Colors.RED, f"\n{Symbols.WARN} WARNING: This will DELETE all Transfer Family resources!")
+            self.print_colored(Colors.YELLOW, f"{Symbols.WARN} Includes: Servers (SFTP/FTPS/FTP/AS2), Users, Workflows, Connectors, Certificates")
+            self.print_colored(Colors.YELLOW, f"{Symbols.INFO} Cost savings: ~$216/month per server (~$0.30/hour)")
             confirm = input(f"\nType 'yes' to confirm: ").strip().lower()
             if confirm != 'yes':
                 self.print_colored(Colors.YELLOW, "[EXIT] Cleanup cancelled!")
@@ -668,13 +669,13 @@ class UltraCleanupTransferFamilyManager:
 
             self.generate_summary_report()
 
-            self.print_colored(Colors.GREEN, f"\n[OK] Transfer Family cleanup completed!")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.OK} Transfer Family cleanup completed!")
             self.print_colored(Colors.CYAN, f"[FILE] Log file: {self.log_file}")
 
         except KeyboardInterrupt:
             self.print_colored(Colors.YELLOW, "\n[WARN] Cleanup interrupted by user!")
         except Exception as e:
-            self.print_colored(Colors.RED, f"\n[ERROR] Error during cleanup: {e}")
+            self.print_colored(Colors.RED, f"\n{Symbols.ERROR} Error during cleanup: {e}")
 
 
 def main():
@@ -685,7 +686,7 @@ def main():
     except KeyboardInterrupt:
         print("\n\n[WARN] Operation cancelled by user!")
     except Exception as e:
-        print(f"\n[ERROR] Fatal error: {e}")
+        print(f"\n{Symbols.ERROR} Fatal error: {e}")
 
 
 if __name__ == "__main__":

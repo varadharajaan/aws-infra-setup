@@ -21,6 +21,7 @@ from botocore.exceptions import ClientError, NoCredentialsError
 # Configure logging
 import os
 from datetime import datetime
+from text_symbols import Symbols
 
 # Create timestamp for filename
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -471,7 +472,7 @@ class EKSClusterManager:
         """Clean up Lambda functions associated with node scheduling"""
         try:
             logger.info(f"Cleaning up Lambda functions for cluster: {cluster_name}")
-            print(f"   [SCAN] Searching for Lambda functions related to cluster {cluster_name}...")
+            print(f"   {Symbols.SCAN} Searching for Lambda functions related to cluster {cluster_name}...")
 
             # Extract cluster suffix for matching
             cluster_parts = cluster_name.split('-')
@@ -540,10 +541,10 @@ class EKSClusterManager:
 
             if deleted_functions:
                 logger.info(f"Successfully deleted {len(deleted_functions)} Lambda functions: {deleted_functions}")
-                print(f"   [OK] Deleted {len(deleted_functions)} Lambda functions related to cluster {cluster_name}")
+                print(f"   {Symbols.OK} Deleted {len(deleted_functions)} Lambda functions related to cluster {cluster_name}")
             else:
                 logger.info(f"No Lambda functions found for deletion related to cluster {cluster_name}")
-                print(f"   ℹ️ No Lambda functions found related to cluster {cluster_name}")
+                print(f"   {Symbols.INFO} No Lambda functions found related to cluster {cluster_name}")
 
             # Clean up CloudWatch Events/EventBridge rules with the same pattern
             events_client = session.client('events', region_name=region)
@@ -585,7 +586,7 @@ class EKSClusterManager:
 
                 if deleted_rules:
                     logger.info(f"Successfully deleted {len(deleted_rules)} EventBridge rules")
-                    print(f"   [OK] Deleted {len(deleted_rules)} EventBridge rules related to cluster {cluster_name}")
+                    print(f"   {Symbols.OK} Deleted {len(deleted_rules)} EventBridge rules related to cluster {cluster_name}")
                 else:
                     logger.info("No relevant EventBridge rules found for deletion")
 
@@ -596,7 +597,7 @@ class EKSClusterManager:
 
         except Exception as e:
             logger.error(f"Error cleaning up Lambda functions: {e}")
-            print(f"   [ERROR] Failed to clean up Lambda functions: {e}")
+            print(f"   {Symbols.ERROR} Failed to clean up Lambda functions: {e}")
             return False
 
 
@@ -613,7 +614,7 @@ class EKSClusterManager:
             cluster_suffix = cluster_name.split('-')[-1]
 
             logger.info(f"Searching for EventBridge rules related to cluster {cluster_name} in region {region}")
-            print(f"   [SCAN] Searching for EventBridge rules with suffix '{cluster_suffix}'...")
+            print(f"   {Symbols.SCAN} Searching for EventBridge rules with suffix '{cluster_suffix}'...")
 
             # List all EventBridge rules
             paginator = events_client.get_paginator('list_rules')
@@ -701,17 +702,17 @@ class EKSClusterManager:
                 logger.info(
                     f"Deleted {len(deleted_rules)} EventBridge rules for cluster {cluster_name}")
                 print(
-                    f"   [OK] Deleted {len(deleted_rules)} EventBridge rules for cluster {cluster_name}")
+                    f"   {Symbols.OK} Deleted {len(deleted_rules)} EventBridge rules for cluster {cluster_name}")
             else:
                 logger.info(
                     f"No EventBridge rules found related to cluster {cluster_name}.")
-                print(f"   ℹ️ No EventBridge rules found related to cluster {cluster_name}")
+                print(f"   {Symbols.INFO} No EventBridge rules found related to cluster {cluster_name}")
 
             return True
 
         except Exception as e:
             logger.error(f"Failed to delete EventBridge rules for cluster {cluster_name}: {e}")
-            print(f"   [ERROR] Failed to delete EventBridge rules: {e}")
+            print(f"   {Symbols.ERROR} Failed to delete EventBridge rules: {e}")
             return False
 
 
@@ -873,7 +874,7 @@ class EKSClusterManager:
         """Clean up Lambda functions and EventBridge rules associated with node protection monitoring"""
         try:
             logger.info(f"Cleaning up node protection Lambda functions for cluster: {cluster_name}")
-            print(f"   [SCAN] Searching for node protection Lambda functions related to cluster {cluster_name}...")
+            print(f"   {Symbols.SCAN} Searching for node protection Lambda functions related to cluster {cluster_name}...")
 
             # Extract cluster suffix for matching
             cluster_parts = cluster_name.split('-')
@@ -947,10 +948,10 @@ class EKSClusterManager:
                 logger.info(
                     f"Successfully deleted {len(deleted_functions)} node protection Lambda functions: {deleted_functions}")
                 print(
-                    f"   [OK] Deleted {len(deleted_functions)} node protection Lambda functions related to cluster {cluster_name}")
+                    f"   {Symbols.OK} Deleted {len(deleted_functions)} node protection Lambda functions related to cluster {cluster_name}")
             else:
                 logger.info(f"No node protection Lambda functions found for deletion related to cluster {cluster_name}")
-                print(f"   ℹ️ No node protection Lambda functions found related to cluster {cluster_name}")
+                print(f"   {Symbols.INFO} No node protection Lambda functions found related to cluster {cluster_name}")
 
             # Clean up CloudWatch Events/EventBridge rules for node protection
             events_client = session.client('events', region_name=region)
@@ -1021,7 +1022,7 @@ class EKSClusterManager:
                 if deleted_rules:
                     logger.info(f"Successfully deleted {len(deleted_rules)} node protection EventBridge rules")
                     print(
-                        f"   [OK] Deleted {len(deleted_rules)} node protection EventBridge rules related to cluster {cluster_name}")
+                        f"   {Symbols.OK} Deleted {len(deleted_rules)} node protection EventBridge rules related to cluster {cluster_name}")
                 else:
                     logger.info("No relevant node protection EventBridge rules found for deletion")
 
@@ -1032,7 +1033,7 @@ class EKSClusterManager:
 
         except Exception as e:
             logger.error(f"Error cleaning up node protection Lambda functions: {e}")
-            print(f"   [ERROR] Failed to clean up node protection Lambda functions: {e}")
+            print(f"   {Symbols.ERROR} Failed to clean up node protection Lambda functions: {e}")
             return False
 
     

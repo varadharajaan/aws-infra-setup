@@ -20,6 +20,7 @@ import time
 from datetime import datetime
 from botocore.exceptions import ClientError
 from root_iam_credential_manager import AWSCredentialManager
+from text_symbols import Symbols
 
 
 class Colors:
@@ -39,9 +40,9 @@ class UltraCleanupKMSManager:
     def __init__(self):
         """Initialize the KMS cleanup manager"""
         self.cred_manager = AWSCredentialManager()
-        self.current_time = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+        self.current_time = datetime.now(datetime.UTC).strftime('%Y-%m-%d %H:%M:%S')
         self.current_user = os.getenv('USERNAME') or os.getenv('USER') or 'unknown'
-        self.execution_timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+        self.execution_timestamp = datetime.now(datetime.UTC).strftime('%Y%m%d_%H%M%S')
         
         # Create directories for logs and reports
         self.base_dir = os.path.join(os.getcwd(), 'aws', 'kms')
@@ -76,7 +77,7 @@ class UltraCleanupKMSManager:
 
     def log_action(self, message, level="INFO"):
         """Log action to file"""
-        timestamp = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp = datetime.now(datetime.UTC).strftime('%Y-%m-%d %H:%M:%S')
         log_entry = f"{timestamp} | {level:8} | {message}\n"
         with open(self.log_file, 'a') as f:
             f.write(log_entry)
@@ -84,11 +85,11 @@ class UltraCleanupKMSManager:
     def delete_key_alias(self, kms_client, alias_name, region, account_key):
         """Delete a KMS key alias"""
         try:
-            self.print_colored(Colors.CYAN, f"   [DELETE] Deleting alias: {alias_name}")
+            self.print_colored(Colors.CYAN, f"   {Symbols.DELETE} Deleting alias: {alias_name}")
             
             kms_client.delete_alias(AliasName=alias_name)
             
-            self.print_colored(Colors.GREEN, f"   [OK] Deleted alias: {alias_name}")
+            self.print_colored(Colors.GREEN, f"   {Symbols.OK} Deleted alias: {alias_name}")
             self.log_action(f"Deleted alias: {alias_name} in {region}")
             
             self.cleanup_results['deleted_aliases'].append({
@@ -100,7 +101,7 @@ class UltraCleanupKMSManager:
             
         except ClientError as e:
             error_msg = f"Failed to delete alias {alias_name}: {e}"
-            self.print_colored(Colors.RED, f"   [ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"   {Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             return False
 
@@ -112,7 +113,7 @@ class UltraCleanupKMSManager:
             
             # Skip AWS managed keys
             if key_manager == 'AWS':
-                self.print_colored(Colors.YELLOW, f"[SKIP] AWS managed key: {key_id}")
+                self.print_colored(Colors.YELLOW, f"{Symbols.SKIP} AWS managed key: {key_id}")
                 self.cleanup_results['skipped_aws_managed'].append({
                     'key_id': key_id,
                     'region': region,
@@ -122,15 +123,15 @@ class UltraCleanupKMSManager:
             
             # Skip keys already pending deletion
             if key_state == 'PendingDeletion':
-                self.print_colored(Colors.YELLOW, f"[SKIP] Key already pending deletion: {key_id}")
+                self.print_colored(Colors.YELLOW, f"{Symbols.SKIP} Key already pending deletion: {key_id}")
                 return True
             
             # Skip keys that are not enabled or disabled
             if key_state not in ['Enabled', 'Disabled']:
-                self.print_colored(Colors.YELLOW, f"[SKIP] Key in state {key_state}: {key_id}")
+                self.print_colored(Colors.YELLOW, f"{Symbols.SKIP} Key in state {key_state}: {key_id}")
                 return True
             
-            self.print_colored(Colors.CYAN, f"[DELETE] Scheduling key for deletion: {key_id}")
+            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Scheduling key for deletion: {key_id}")
             
             # Delete all aliases for this key first
             try:
@@ -161,8 +162,8 @@ class UltraCleanupKMSManager:
             
             deletion_date = response.get('DeletionDate', 'Unknown')
             
-            self.print_colored(Colors.GREEN, f"[OK] Scheduled for deletion ({self.pending_window_days} days): {key_id}")
-            self.print_colored(Colors.YELLOW, f"   [DATE] Deletion date: {deletion_date}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Scheduled for deletion ({self.pending_window_days} days): {key_id}")
+            self.print_colored(Colors.YELLOW, f"   {Symbols.DATE} Deletion date: {deletion_date}")
             self.log_action(f"Scheduled key deletion: {key_id} in {region}, deletion date: {deletion_date}")
             
             self.cleanup_results['scheduled_for_deletion'].append({
@@ -176,7 +177,7 @@ class UltraCleanupKMSManager:
             
         except ClientError as e:
             error_msg = f"Failed to schedule key deletion {key_id}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['failed_deletions'].append({
                 'type': 'Key',
@@ -190,7 +191,7 @@ class UltraCleanupKMSManager:
     def cleanup_region_kms(self, account_name, credentials, region):
         """Cleanup all KMS resources in a specific region"""
         try:
-            self.print_colored(Colors.YELLOW, f"\n[SCAN] Scanning region: {region}")
+            self.print_colored(Colors.YELLOW, f"\n{Symbols.SCAN} Scanning region: {region}")
             
             kms_client = boto3.client(
                 'kms',
@@ -235,13 +236,13 @@ class UltraCleanupKMSManager:
                             )
                             time.sleep(0.5)
                     else:
-                        self.print_colored(Colors.YELLOW, f"[SKIP] No customer managed keys found")
+                        self.print_colored(Colors.YELLOW, f"{Symbols.SKIP} No customer managed keys found")
             except ClientError as e:
                 self.log_action(f"Error listing keys in {region}: {e}", "ERROR")
             
         except Exception as e:
             error_msg = f"Error processing region {region}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['errors'].append(error_msg)
 
@@ -249,7 +250,7 @@ class UltraCleanupKMSManager:
         """Cleanup all KMS resources in an account across all regions"""
         try:
             self.print_colored(Colors.BLUE, f"\n{'='*100}")
-            self.print_colored(Colors.BLUE, f"[START] Processing Account: {account_name}")
+            self.print_colored(Colors.BLUE, f"{Symbols.START} Processing Account: {account_name}")
             self.print_colored(Colors.BLUE, f"{'='*100}")
             
             self.cleanup_results['accounts_processed'].append(account_name)
@@ -265,17 +266,17 @@ class UltraCleanupKMSManager:
             regions_response = ec2_client.describe_regions()
             regions = [region['RegionName'] for region in regions_response['Regions']]
             
-            self.print_colored(Colors.CYAN, f"[SCAN] Processing {len(regions)} regions")
+            self.print_colored(Colors.CYAN, f"{Symbols.SCAN} Processing {len(regions)} regions")
             
             # Process each region
             for region in regions:
                 self.cleanup_region_kms(account_name, credentials, region)
             
-            self.print_colored(Colors.GREEN, f"\n[OK] Account {account_name} cleanup completed!")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.OK} Account {account_name} cleanup completed!")
             
         except Exception as e:
             error_msg = f"Error processing account {account_name}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['errors'].append(error_msg)
 
@@ -304,22 +305,22 @@ class UltraCleanupKMSManager:
             with open(report_path, 'w') as f:
                 json.dump(summary, f, indent=2)
 
-            self.print_colored(Colors.GREEN, f"\n[STATS] Summary report saved: {report_path}")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.STATS} Summary report saved: {report_path}")
 
             # Print summary to console
             self.print_colored(Colors.BLUE, f"\n{'='*100}")
             self.print_colored(Colors.BLUE, "[STATS] CLEANUP SUMMARY")
             self.print_colored(Colors.BLUE, f"{'='*100}")
-            self.print_colored(Colors.GREEN, f"[OK] Keys Scheduled for Deletion: {summary['summary']['total_keys_scheduled_for_deletion']}")
-            self.print_colored(Colors.GREEN, f"[OK] Key Aliases Deleted: {summary['summary']['total_aliases_deleted']}")
-            self.print_colored(Colors.YELLOW, f"[SKIP] AWS Managed Keys Skipped: {summary['summary']['total_aws_managed_keys_skipped']}")
-            self.print_colored(Colors.CYAN, f"[INFO] Pending Window: {self.pending_window_days} days")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Keys Scheduled for Deletion: {summary['summary']['total_keys_scheduled_for_deletion']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Key Aliases Deleted: {summary['summary']['total_aliases_deleted']}")
+            self.print_colored(Colors.YELLOW, f"{Symbols.SKIP} AWS Managed Keys Skipped: {summary['summary']['total_aws_managed_keys_skipped']}")
+            self.print_colored(Colors.CYAN, f"{Symbols.INFO} Pending Window: {self.pending_window_days} days")
 
             if summary['summary']['total_failed_deletions'] > 0:
-                self.print_colored(Colors.YELLOW, f"[WARN] Failed Deletions: {summary['summary']['total_failed_deletions']}")
+                self.print_colored(Colors.YELLOW, f"{Symbols.WARN} Failed Deletions: {summary['summary']['total_failed_deletions']}")
 
             if summary['summary']['total_errors'] > 0:
-                self.print_colored(Colors.RED, f"[ERROR] Errors: {summary['summary']['total_errors']}")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Errors: {summary['summary']['total_errors']}")
 
             # Display Account Summary
             self.print_colored(Colors.BLUE, f"\n{'='*100}")
@@ -344,14 +345,14 @@ class UltraCleanupKMSManager:
                     account_summary[account]['regions'].add(item.get('region', 'unknown'))
 
             for account, stats in account_summary.items():
-                self.print_colored(Colors.CYAN, f"\n[LIST] Account: {account}")
-                self.print_colored(Colors.GREEN, f"  [OK] Keys Scheduled for Deletion: {stats['keys_scheduled']}")
-                self.print_colored(Colors.GREEN, f"  [OK] Aliases Deleted: {stats['aliases_deleted']}")
+                self.print_colored(Colors.CYAN, f"\n{Symbols.LIST} Account: {account}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Keys Scheduled for Deletion: {stats['keys_scheduled']}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Aliases Deleted: {stats['aliases_deleted']}")
                 regions_str = ', '.join(sorted(stats['regions'])) if stats['regions'] else 'N/A'
-                self.print_colored(Colors.YELLOW, f"  [SCAN] Regions: {regions_str}")
+                self.print_colored(Colors.YELLOW, f"  {Symbols.SCAN} Regions: {regions_str}")
 
         except Exception as e:
-            self.print_colored(Colors.RED, f"[ERROR] Failed to generate summary report: {e}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to generate summary report: {e}")
 
     def interactive_cleanup(self):
         """Interactive mode for KMS cleanup"""
@@ -362,15 +363,15 @@ class UltraCleanupKMSManager:
 
             config = self.cred_manager.load_root_accounts_config()
             if not config or 'accounts' not in config:
-                self.print_colored(Colors.RED, "[ERROR] No accounts configuration found!")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} No accounts configuration found!")
                 return
 
             accounts = config['accounts']
             account_list = list(accounts.keys())
 
-            self.print_colored(Colors.CYAN, "[KEY] Select Root AWS Accounts for KMS Cleanup:")
+            self.print_colored(Colors.CYAN, f"{Symbols.KEY} Select Root AWS Accounts for KMS Cleanup:")
             print(f"{Colors.CYAN}[BOOK] Loading root accounts config...{Colors.END}")
-            self.print_colored(Colors.GREEN, f"[OK] Loaded {len(accounts)} root accounts")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Loaded {len(accounts)} root accounts")
             
             self.print_colored(Colors.YELLOW, "\n[KEY] Available Root AWS Accounts:")
             print("=" * 100)
@@ -405,11 +406,11 @@ class UltraCleanupKMSManager:
                     indices = [int(x.strip()) for x in selection.split(',')]
                     selected_accounts = [account_list[i-1] for i in indices if 0 < i <= len(account_list)]
                 except (ValueError, IndexError):
-                    self.print_colored(Colors.RED, "[ERROR] Invalid selection!")
+                    self.print_colored(Colors.RED, f"{Symbols.ERROR} Invalid selection!")
                     return
 
             if not selected_accounts:
-                self.print_colored(Colors.RED, "[ERROR] No accounts selected!")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} No accounts selected!")
                 return
 
             # Ask for pending window
@@ -429,7 +430,7 @@ class UltraCleanupKMSManager:
                     self.print_colored(Colors.YELLOW, "[WARN] Invalid input, using default: 30 days")
 
             self.print_colored(Colors.RED, "\n[WARN] WARNING: This will SCHEDULE all Customer Managed KMS Keys for deletion!")
-            self.print_colored(Colors.YELLOW, f"[INFO] Keys will be deleted after {self.pending_window_days} days")
+            self.print_colored(Colors.YELLOW, f"{Symbols.INFO} Keys will be deleted after {self.pending_window_days} days")
             self.print_colored(Colors.YELLOW, "[INFO] AWS Managed Keys will be skipped automatically")
             confirm = input(f"\nType 'yes' to confirm: ").strip().lower()
             if confirm != 'yes':
@@ -448,13 +449,13 @@ class UltraCleanupKMSManager:
 
             self.generate_summary_report()
 
-            self.print_colored(Colors.GREEN, f"\n[OK] KMS cleanup completed!")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.OK} KMS cleanup completed!")
             self.print_colored(Colors.CYAN, f"[FILE] Log file: {self.log_file}")
 
         except KeyboardInterrupt:
             self.print_colored(Colors.YELLOW, "\n[WARN] Cleanup interrupted by user!")
         except Exception as e:
-            self.print_colored(Colors.RED, f"\n[ERROR] Error during cleanup: {e}")
+            self.print_colored(Colors.RED, f"\n{Symbols.ERROR} Error during cleanup: {e}")
 
 
 def main():
@@ -465,7 +466,7 @@ def main():
     except KeyboardInterrupt:
         print("\n\n[WARN] Operation cancelled by user!")
     except Exception as e:
-        print(f"\n[ERROR] Fatal error: {e}")
+        print(f"\n{Symbols.ERROR} Fatal error: {e}")
 
 
 if __name__ == "__main__":

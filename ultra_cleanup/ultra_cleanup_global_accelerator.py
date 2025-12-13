@@ -8,19 +8,20 @@ import boto3,json,time
 from datetime import datetime
 from botocore.exceptions import ClientError
 from root_iam_credential_manager import AWSCredentialManager
+from text_symbols import Symbols
 
 class Colors:
     RED='\033[91m';GREEN='\033[92m';YELLOW='\033[93m';BLUE='\033[94m';CYAN='\033[96m';END='\033[0m'
 
 class UltraCleanupGlobalAcceleratorManager:
     def __init__(self):
-        self.cred_manager=AWSCredentialManager();self.execution_timestamp=datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+        self.cred_manager=AWSCredentialManager();self.execution_timestamp=datetime.now(datetime.UTC).strftime('%Y%m%d_%H%M%S')
         self.base_dir=os.path.join(os.getcwd(),'aws','global_accelerator');os.makedirs(os.path.join(self.base_dir,'logs'),exist_ok=True);os.makedirs(os.path.join(self.base_dir,'reports'),exist_ok=True)
         self.cleanup_results={'accounts_processed':[],'deleted_accelerators':[],'errors':[]}
     def print_colored(self,color,msg):print(f"{color}{msg}{Colors.END}")
     def cleanup_global_accelerator(self,account_name,credentials):
         try:
-            self.print_colored(Colors.YELLOW,f"\n[SCAN] Global Accelerator (us-west-2 only)")
+            self.print_colored(Colors.YELLOW,f"\n{Symbols.SCAN} Global Accelerator (us-west-2 only)")
             ga=boto3.client('globalaccelerator',region_name='us-west-2',aws_access_key_id=credentials['access_key'],aws_secret_access_key=credentials['secret_key'])
             try:
                 accelerators=ga.list_accelerators();acc_list=accelerators.get('Accelerators',[])
@@ -32,7 +33,7 @@ class UltraCleanupGlobalAcceleratorManager:
                                 self.print_colored(Colors.YELLOW,f"[DISABLE] Disabling: {acc['Name']}")
                                 ga.update_accelerator(AcceleratorArn=acc['AcceleratorArn'],Enabled=False)
                                 time.sleep(30)
-                            self.print_colored(Colors.CYAN,f"[DELETE] Deleting: {acc['Name']}")
+                            self.print_colored(Colors.CYAN,f"{Symbols.DELETE} Deleting: {acc['Name']}")
                             ga.delete_accelerator(AcceleratorArn=acc['AcceleratorArn'])
                             self.cleanup_results['deleted_accelerators'].append({'name':acc['Name'],'arn':acc['AcceleratorArn'],'account_key':account_name})
                             time.sleep(2)
@@ -40,11 +41,11 @@ class UltraCleanupGlobalAcceleratorManager:
             except ClientError as e:pass
         except Exception as e:self.cleanup_results['errors'].append(str(e))
     def cleanup_account(self,account_name,credentials):
-        self.print_colored(Colors.BLUE,f"\n{'='*100}\n[START] Account: {account_name}\n{'='*100}")
+        self.print_colored(Colors.BLUE,f"\n{'='*100}\n{Symbols.START} Account: {account_name}\n{'='*100}")
         self.cleanup_results['accounts_processed'].append(account_name)
         self.cleanup_global_accelerator(account_name,credentials)
     def interactive_cleanup(self):
-        self.print_colored(Colors.BLUE,"\n"+"="*100+"\n[START] ULTRA AWS GLOBAL ACCELERATOR CLEANUP\n"+"="*100)
+        self.print_colored(Colors.BLUE,"\n"+"="*100+f"\n{Symbols.START} ULTRA AWS GLOBAL ACCELERATOR CLEANUP\n"+"="*100)
         config=self.cred_manager.load_root_accounts_config()
         if not config:return
         accounts=config['accounts'];account_list=list(accounts.keys())
@@ -55,9 +56,9 @@ class UltraCleanupGlobalAcceleratorManager:
         if input("\nType 'yes' to confirm: ").strip().lower()!='yes':return
         for name in selected:
             self.cleanup_account(name,{'access_key':accounts[name]['access_key'],'secret_key':accounts[name]['secret_key']})
-        self.print_colored(Colors.GREEN,"\n[OK] Global Accelerator cleanup completed!")
+        self.print_colored(Colors.GREEN,f"\n{Symbols.OK} Global Accelerator cleanup completed!")
 
 def main():
     try:UltraCleanupGlobalAcceleratorManager().interactive_cleanup()
-    except KeyboardInterrupt:print("\n[WARN] Cancelled!")
+    except KeyboardInterrupt:print(f"\n{Symbols.WARN} Cancelled!")
 if __name__=="__main__":main()

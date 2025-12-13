@@ -12,6 +12,8 @@ from botocore.exceptions import ClientError
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Dict, Any, Set, Optional
 from collections import defaultdict
+from text_symbols import Symbols
+
 
 
 class ASGLogFileCleanupManager:
@@ -63,7 +65,6 @@ class ASGLogFileCleanupManager:
             self.log_filename = f"{log_dir}/asg_log_cleanup_{self.execution_timestamp}.log"
             
             # Create a file handler for detailed logging
-            import logging
             
             # Create logger
             self.logger = logging.getLogger('asg_log_cleanup')
@@ -95,7 +96,7 @@ class ASGLogFileCleanupManager:
             
             # Log initial information
             self.logger.info("=" * 100)
-            self.logger.info(f"[CLEANUP] ASG LOG FILE CLEANUP SESSION STARTED (Pattern: {self.target_pattern})")
+            self.logger.info(f"{Symbols.CLEANUP} ASG LOG FILE CLEANUP SESSION STARTED (Pattern: {self.target_pattern})")
             self.logger.info("=" * 100)
             self.logger.info(f"Execution Time: {self.current_time_str}")
             self.logger.info(f"Executed By: {self.current_user}")
@@ -132,7 +133,7 @@ class ASGLogFileCleanupManager:
             with open(self.config_file, 'r', encoding='utf-8') as f:
                 self.aws_config = json.load(f)
             
-            self.log_operation('INFO', f"[OK] AWS accounts configuration loaded from: {self.config_file}")
+            self.log_operation('INFO', f"{Symbols.OK} AWS accounts configuration loaded from: {self.config_file}")
             
             # Validate accounts
             if 'accounts' not in self.aws_config:
@@ -150,7 +151,7 @@ class ASGLogFileCleanupManager:
             
             self.aws_config['accounts'] = valid_accounts
             
-            self.log_operation('INFO', f"[STATS] Valid accounts loaded: {len(valid_accounts)}")
+            self.log_operation('INFO', f"{Symbols.STATS} Valid accounts loaded: {len(valid_accounts)}")
             
             # Map account IDs to account names for easier lookup
             self.account_id_to_name = {}
@@ -194,7 +195,7 @@ class ASGLogFileCleanupManager:
     def find_asg_log_files(self):
         """Find and parse all ASG log files in the AWS directory with target pattern"""
         self.log_operation('INFO',
-                           f"[SCAN] Scanning for ASG log files matching '{self.target_pattern}' in {self.aws_base_dir}")
+                           f"{Symbols.SCAN} Scanning for ASG log files matching '{self.target_pattern}' in {self.aws_base_dir}")
 
         if not os.path.exists(self.aws_base_dir):
             self.log_operation('ERROR', f"AWS base directory does not exist: {self.aws_base_dir}")
@@ -302,7 +303,7 @@ class ASGLogFileCleanupManager:
 
 
         self.log_operation('INFO',
-                           f"[STATS] Found {matching_pattern_files} ASG files matching pattern '{self.target_pattern}' out of {valid_files} valid files")
+                           f"{Symbols.STATS} Found {matching_pattern_files} ASG files matching pattern '{self.target_pattern}' out of {valid_files} valid files")
 
         # Sort ASG files by date (newest first)
         asg_files.sort(key=lambda x: x['file_date'], reverse=True)
@@ -469,7 +470,7 @@ class ASGLogFileCleanupManager:
             account_name = asg_info['account_name']
             region = asg_info['region']
             
-            self.log_operation('INFO', f"[DELETE] Deleting ASG: {asg_name} in {account_name} ({region})")
+            self.log_operation('INFO', f"{Symbols.DELETE} Deleting ASG: {asg_name} in {account_name} ({region})")
             
             # Verify we have the minimum required information
             if not all([asg_name, account_name, region]):
@@ -544,7 +545,7 @@ class ASGLogFileCleanupManager:
                 ForceDelete=True
             )
             
-            self.log_operation('INFO', f"[OK] Successfully deleted ASG: {asg_name}")
+            self.log_operation('INFO', f"{Symbols.OK} Successfully deleted ASG: {asg_name}")
             
             # Record successful deletion
             self.cleanup_results['asgs_deleted'].append({
@@ -600,7 +601,7 @@ class ASGLogFileCleanupManager:
             # Move the file
             os.rename(file_path, new_file_path)
 
-            self.log_operation('INFO', f"[FOLDER] Moved file: {filename} -> {new_filename}")
+            self.log_operation('INFO', f"{Symbols.FOLDER} Moved file: {filename} -> {new_filename}")
 
             return new_file_path
 
@@ -684,7 +685,7 @@ class ASGLogFileCleanupManager:
             with open(report_path, 'w', encoding='utf-8') as f:
                 json.dump(report_data, f, indent=2, default=str)
 
-            self.log_operation('INFO', f"[OK] Cleanup report saved to: {report_path}")
+            self.log_operation('INFO', f"{Symbols.OK} Cleanup report saved to: {report_path}")
             return report_path
 
         except Exception as e:
@@ -696,7 +697,7 @@ class ASGLogFileCleanupManager:
         """Main execution method with day-based selection"""
         try:
             print("\n" + "=" * 80)
-            print(f"[CLEANUP] AUTO SCALING GROUP CLEANUP UTILITY - PATTERN: {self.target_pattern}")
+            print(f"{Symbols.CLEANUP} AUTO SCALING GROUP CLEANUP UTILITY - PATTERN: {self.target_pattern}")
             print("=" * 80)
             print(f"Execution Date/Time: {self.current_time_str}")
             print(f"Searching for ASG logs in: {self.aws_base_dir}")
@@ -706,10 +707,10 @@ class ASGLogFileCleanupManager:
             asg_files = self.find_asg_log_files()
             
             if not asg_files:
-                print(f"\n[ERROR] No ASG log files found matching pattern '{self.target_pattern}'. Nothing to clean up.")
+                print(f"\n{Symbols.ERROR} No ASG log files found matching pattern '{self.target_pattern}'. Nothing to clean up.")
                 return
 
-            print(f"\n[STATS] Found {len(asg_files)} ASG files matching pattern '{self.target_pattern}'")
+            print(f"\n{Symbols.STATS} Found {len(asg_files)} ASG files matching pattern '{self.target_pattern}'")
 
             # Step 2: NEW - Select ASG files by day (like eks_connector.py)
             selected_asg_files = self.select_asg_files_by_day(asg_files)
@@ -723,15 +724,15 @@ class ASGLogFileCleanupManager:
             self.asgs_list = unique_asgs
 
             if not unique_asgs:
-                print(f"\n[ERROR] No unique ASGs found in selected files. Nothing to clean up.")
+                print(f"\n{Symbols.ERROR} No unique ASGs found in selected files. Nothing to clean up.")
                 return
 
             # Step 4: Display ASGs and ask which to delete
             print("\n" + "=" * 80)
-            print(f"[SCAN] ASG SELECTION FROM SELECTED FILES - PATTERN: {self.target_pattern}")
+            print(f"{Symbols.SCAN} ASG SELECTION FROM SELECTED FILES - PATTERN: {self.target_pattern}")
             print("=" * 80)
 
-            print(f"\n[LIST] Available ASGs from selected files:")
+            print(f"\n{Symbols.LIST} Available ASGs from selected files:")
             print(f"{'#':<4} {'ASG Name':<40} {'Account':<15} {'Age':<8} {'Region':<12} {'Date':<12}")
             print("-" * 100)
 
@@ -752,23 +753,23 @@ class ASGLogFileCleanupManager:
             print("  • All ASGs: 'all' or press Enter")
             print("  • Cancel: 'cancel'")
             
-            selection = input("\n🔢 Select ASGs to delete: ").strip().lower()
+            selection = input("\n[#] Select ASGs to delete: ").strip().lower()
             
             if selection == 'cancel':
-                print("[ERROR] Operation cancelled.")
+                print(f"{Symbols.ERROR} Operation cancelled.")
                 return
 
             asgs_to_delete = []
             if not selection or selection == 'all':
                 asgs_to_delete = unique_asgs
-                print(f"[OK] Selected all {len(unique_asgs)} ASGs")
+                print(f"{Symbols.OK} Selected all {len(unique_asgs)} ASGs")
             else:
                 try:
                     indices = self.parse_selection(selection, len(unique_asgs))
                     asgs_to_delete = [unique_asgs[i - 1] for i in indices]
-                    print(f"[OK] Selected {len(asgs_to_delete)} ASGs")
+                    print(f"{Symbols.OK} Selected {len(asgs_to_delete)} ASGs")
                 except ValueError as e:
-                    print(f"[ERROR] Invalid selection: {e}")
+                    print(f"{Symbols.ERROR} Invalid selection: {e}")
                     return
             
             # Show summary and confirm deletion
@@ -777,7 +778,7 @@ class ASGLogFileCleanupManager:
                 return
 
             print("\n" + "=" * 80)
-            print(f"[LIST] SELECTED {len(asgs_to_delete)} ASGs FOR DELETION:")
+            print(f"{Symbols.LIST} SELECTED {len(asgs_to_delete)} ASGs FOR DELETION:")
             print("=" * 80)
             print(f"{'#':<4} {'ASG Name':<40} {'Account':<15} {'Age':<8} {'Region':<12} {'Date':<12}")
             print("-" * 100)
@@ -799,11 +800,11 @@ class ASGLogFileCleanupManager:
             confirm = input("\nType 'yes' to confirm deletion: ").strip().lower()
             
             if confirm != 'yes':
-                print("[ERROR] Deletion cancelled.")
+                print(f"{Symbols.ERROR} Deletion cancelled.")
                 return
             
             # Execute deletion
-            print(f"\n[DELETE]  Deleting {len(asgs_to_delete)} Auto Scaling Groups...")
+            print(f"\n{Symbols.DELETE}  Deleting {len(asgs_to_delete)} Auto Scaling Groups...")
             
             start_time = time.time()
             
@@ -814,14 +815,14 @@ class ASGLogFileCleanupManager:
                 try:
                     if self.delete_asg(asg):
                         successful += 1
-                        print(f"[OK] Deleted ASG: {asg['asg_name']}")
+                        print(f"{Symbols.OK} Deleted ASG: {asg['asg_name']}")
                     else:
                         failed += 1
-                        print(f"[ERROR] Failed to delete ASG: {asg['asg_name']}")
+                        print(f"{Symbols.ERROR} Failed to delete ASG: {asg['asg_name']}")
                 except Exception as e:
                     self.log_operation('ERROR', f"Error deleting ASG {asg['asg_name']}: {e}")
                     failed += 1
-                    print(f"[ERROR] Error deleting ASG {asg['asg_name']}: {e}")
+                    print(f"{Symbols.ERROR} Error deleting ASG {asg['asg_name']}: {e}")
             
             end_time = time.time()
             total_time = int(end_time - start_time)
@@ -830,9 +831,9 @@ class ASGLogFileCleanupManager:
             print("\n" + "=" * 80)
             print("[OK] CLEANUP COMPLETE")
             print("=" * 80)
-            print(f"[TIMER]  Total execution time: {total_time} seconds")
-            print(f"[OK] Successfully deleted: {successful} ASGs")
-            print(f"[ERROR] Failed to delete: {failed} ASGs")
+            print(f"{Symbols.TIMER}  Total execution time: {total_time} seconds")
+            print(f"{Symbols.OK} Successfully deleted: {successful} ASGs")
+            print(f"{Symbols.ERROR} Failed to delete: {failed} ASGs")
             
             # Save report
             report_file = self.save_cleanup_report()
@@ -840,15 +841,14 @@ class ASGLogFileCleanupManager:
             if report_file:
                 print(f"\n[FILE] Cleanup report saved to: {report_file}")
             
-            print(f"[LIST] Log file: {self.log_filename}")
+            print(f"{Symbols.LIST} Log file: {self.log_filename}")
             
         except KeyboardInterrupt:
             print("\n\n[ERROR] Cleanup interrupted by user")
         except Exception as e:
             self.log_operation('ERROR', f"Error in ASG cleanup: {e}")
-            import traceback
             traceback.print_exc()
-            print(f"\n[ERROR] Error: {e}")
+            print(f"\n{Symbols.ERROR} Error: {e}")
 
 
 def main():
@@ -885,7 +885,7 @@ def main():
         )
         cleanup_manager.run()
     except Exception as e:
-        print(f"\n[ERROR] Fatal error: {e}")
+        print(f"\n{Symbols.ERROR} Fatal error: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)

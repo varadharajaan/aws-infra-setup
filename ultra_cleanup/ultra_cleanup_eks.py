@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 
 import os
 import json
@@ -12,6 +12,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from root_iam_credential_manager import AWSCredentialManager, Colors
+from text_symbols import Symbols
 
 
 class UltraCleanupEKSManager:
@@ -77,7 +78,7 @@ class UltraCleanupEKSManager:
                     'us-east-1', 'us-east-2', 'us-west-1', 'us-west-2', 'ap-south-1'
                 ])
         except Exception as e:
-            self.print_colored(Colors.YELLOW, f"[WARN]  Warning: Could not load user regions: {e}")
+            self.print_colored(Colors.YELLOW, f"{Symbols.WARN}  Warning: Could not load user regions: {e}")
 
         return ['us-east-1', 'us-east-2', 'us-west-1', 'us-west-2', 'ap-south-1']
 
@@ -90,7 +91,6 @@ class UltraCleanupEKSManager:
             self.log_filename = f"{self.eks_dir}/ultra_eks_cleanup_log_{self.execution_timestamp}.log"
 
             # Create a file handler for detailed logging
-            import logging
 
             # Create logger for detailed operations
             self.operation_logger = logging.getLogger('ultra_eks_cleanup')
@@ -122,7 +122,7 @@ class UltraCleanupEKSManager:
 
             # Log initial information
             self.operation_logger.info("=" * 100)
-            self.operation_logger.info("[ALERT] ULTRA EKS CLEANUP SESSION STARTED [ALERT]")
+            self.operation_logger.info(f"{Symbols.ALERT} ULTRA EKS CLEANUP SESSION STARTED {Symbols.ALERT}")
             self.operation_logger.info("=" * 100)
             self.operation_logger.info(f"Execution Time: {self.current_time} UTC")
             self.operation_logger.info(f"Executed By: {self.current_user}")
@@ -174,7 +174,7 @@ class UltraCleanupEKSManager:
                         'common-', 'shared-', 'global-', 'admin-', 'all-', 'multi-',
                         'bastion', 'jumpbox', 'cicd', 'pipeline'
                     ]):
-                        self.log_operation('INFO', f"[WARN] Skipping shared Lambda function: {function_name}")
+                        self.log_operation('INFO', f"{Symbols.WARN} Skipping shared Lambda function: {function_name}")
                         skipped_functions.append(function_name)
                         self.cleanup_results['skipped_resources'].append({
                             'resource_type': 'Lambda function',
@@ -277,10 +277,10 @@ class UltraCleanupEKSManager:
                                                                     access_key, secret_key, region)
 
                             self.log_operation('INFO',
-                                               f"[DELETE]  Deleting Lambda function {function_name} related to cluster {cluster_name}")
+                                               f"{Symbols.DELETE}  Deleting Lambda function {function_name} related to cluster {cluster_name}")
                             lambda_client.delete_function(FunctionName=function_name)
                             deleted_functions.append(function_name)
-                            self.log_operation('INFO', f"[OK] Deleted Lambda function {function_name}")
+                            self.log_operation('INFO', f"{Symbols.OK} Deleted Lambda function {function_name}")
 
                         except Exception as delete_error:
                             self.log_operation('ERROR',
@@ -290,7 +290,7 @@ class UltraCleanupEKSManager:
                 self.log_operation('INFO',
                                    f"Deleted {len(deleted_functions)} Lambda functions and skipped {len(skipped_functions)} for cluster {cluster_name}")
                 if skipped_functions:
-                    print(f"   [WARN] Skipped {len(skipped_functions)} Lambda functions that appear to be shared")
+                    print(f"   {Symbols.WARN} Skipped {len(skipped_functions)} Lambda functions that appear to be shared")
 
             if not deleted_functions and not skipped_functions:
                 self.log_operation('INFO', f"No Lambda functions found related to cluster {cluster_name}")
@@ -399,7 +399,7 @@ class UltraCleanupEKSManager:
                     'common-', 'shared-', 'global-', 'admin-', 'all-', 'multi-',
                     'aws-', 'default'
                 ]):
-                    self.log_operation('INFO', f"[WARN] Skipping shared EventBridge rule: {rule_name}")
+                    self.log_operation('INFO', f"{Symbols.WARN} Skipping shared EventBridge rule: {rule_name}")
                     skipped_rules.append(rule_name)
                     self.cleanup_results['skipped_resources'].append({
                         'resource_type': 'EventBridge rule',
@@ -473,10 +473,10 @@ class UltraCleanupEKSManager:
 
                         # Delete the rule
                         self.log_operation('INFO',
-                                           f"[DELETE]  Deleting EventBridge rule {rule_name} related to cluster {cluster_name}")
+                                           f"{Symbols.DELETE}  Deleting EventBridge rule {rule_name} related to cluster {cluster_name}")
                         events_client.delete_rule(Name=rule_name)
                         deleted_rules.append(rule_name)
-                        self.log_operation('INFO', f"[OK] Deleted EventBridge rule {rule_name}")
+                        self.log_operation('INFO', f"{Symbols.OK} Deleted EventBridge rule {rule_name}")
 
                     except Exception as delete_error:
                         self.log_operation('ERROR', f"Failed to delete EventBridge rule {rule_name}: {delete_error}")
@@ -485,7 +485,7 @@ class UltraCleanupEKSManager:
                 self.log_operation('INFO',
                                    f"Deleted {len(deleted_rules)} EventBridge rules and skipped {len(skipped_rules)} for cluster {cluster_name}")
                 if skipped_rules:
-                    print(f"   [WARN] Skipped {len(skipped_rules)} EventBridge rules that appear to be shared")
+                    print(f"   {Symbols.WARN} Skipped {len(skipped_rules)} EventBridge rules that appear to be shared")
 
             if not deleted_rules and not skipped_rules:
                 self.log_operation('INFO', f"No EventBridge rules found related to cluster {cluster_name}")
@@ -555,7 +555,7 @@ class UltraCleanupEKSManager:
 
                     # Skip critical EKS roles
                     if any(pattern.lower() in role_name.lower() for pattern in critical_role_patterns):
-                        self.log_operation('INFO', f"[WARN] Skipping critical or shared role {role_name}")
+                        self.log_operation('INFO', f"{Symbols.WARN} Skipping critical or shared role {role_name}")
                         skipped_roles.append(role_name)
                         self.cleanup_results['skipped_resources'].append({
                             'resource_type': 'IAM role',
@@ -609,7 +609,7 @@ class UltraCleanupEKSManager:
                                 pass
 
                             if might_be_shared:
-                                self.log_operation('INFO', f"[WARN] Skipping potentially shared role {role_name}")
+                                self.log_operation('INFO', f"{Symbols.WARN} Skipping potentially shared role {role_name}")
                                 skipped_roles.append(role_name)
                                 self.cleanup_results['skipped_resources'].append({
                                     'resource_type': 'IAM role',
@@ -630,10 +630,10 @@ class UltraCleanupEKSManager:
 
                             # Delete the role
                             self.log_operation('INFO',
-                                               f"[DELETE]  Deleting IAM role {role_name} related to cluster {cluster_name}")
+                                               f"{Symbols.DELETE}  Deleting IAM role {role_name} related to cluster {cluster_name}")
                             iam_client.delete_role(RoleName=role_name)
                             deleted_roles.append(role_name)
-                            self.log_operation('INFO', f"[OK] Deleted IAM role {role_name}")
+                            self.log_operation('INFO', f"{Symbols.OK} Deleted IAM role {role_name}")
 
                         except Exception as delete_error:
                             self.log_operation('ERROR', f"Failed to delete IAM role {role_name}: {delete_error}")
@@ -650,7 +650,7 @@ class UltraCleanupEKSManager:
                     if any(pattern in policy_name.lower() for pattern in [
                         'common-', 'shared-', 'global-', 'admin-', 'all-', 'multi-'
                     ]):
-                        self.log_operation('INFO', f"[WARN] Skipping shared policy: {policy_name}")
+                        self.log_operation('INFO', f"{Symbols.WARN} Skipping shared policy: {policy_name}")
                         skipped_policies.append(policy_name)
                         self.cleanup_results['skipped_resources'].append({
                             'resource_type': 'IAM policy',
@@ -674,10 +674,10 @@ class UltraCleanupEKSManager:
 
                             # Delete the policy
                             self.log_operation('INFO',
-                                               f"[DELETE]  Deleting IAM policy {policy_name} related to cluster {cluster_name}")
+                                               f"{Symbols.DELETE}  Deleting IAM policy {policy_name} related to cluster {cluster_name}")
                             iam_client.delete_policy(PolicyArn=policy_arn)
                             deleted_policies.append(policy_name)
-                            self.log_operation('INFO', f"[OK] Deleted IAM policy {policy_name}")
+                            self.log_operation('INFO', f"{Symbols.OK} Deleted IAM policy {policy_name}")
 
                         except Exception as delete_error:
                             self.log_operation('ERROR', f"Failed to delete IAM policy {policy_name}: {delete_error}")
@@ -690,7 +690,7 @@ class UltraCleanupEKSManager:
                 self.log_operation('INFO',
                                    f"Skipped {len(skipped_roles)} IAM roles and {len(skipped_policies)} policies")
                 print(
-                    f"   [WARN] Skipped {len(skipped_roles)} IAM roles and {len(skipped_policies)} policies that appear to be shared")
+                    f"   {Symbols.WARN} Skipped {len(skipped_roles)} IAM roles and {len(skipped_policies)} policies that appear to be shared")
 
             if not deleted_roles and not deleted_policies and not skipped_roles and not skipped_policies:
                 self.log_operation('INFO', f"No IAM roles/policies found related to cluster {cluster_name}")
@@ -741,7 +741,7 @@ class UltraCleanupEKSManager:
                     'monitoring', 'prometheus', 'grafana', 'elasticsearch',
                     'database', 'redis', 'memcached', 'mq-'
                 ]):
-                    self.log_operation('INFO', f"[WARN] Skipping potentially shared security group: {sg_name}")
+                    self.log_operation('INFO', f"{Symbols.WARN} Skipping potentially shared security group: {sg_name}")
                     skipped_sgs.append(sg_name)
                     self.cleanup_results['skipped_resources'].append({
                         'resource_type': 'Security group',
@@ -792,7 +792,7 @@ class UltraCleanupEKSManager:
                         if len(references[
                                    'NetworkInterfaces']) > 5:  # Heuristic - if used by many resources, might be shared
                             self.log_operation('INFO',
-                                               f"[WARN] Skipping security group {sg_name} ({sg_id}) - used by {len(references['NetworkInterfaces'])} resources")
+                                               f"{Symbols.WARN} Skipping security group {sg_name} ({sg_id}) - used by {len(references['NetworkInterfaces'])} resources")
                             skipped_sgs.append(sg_name)
                             self.cleanup_results['skipped_resources'].append({
                                 'resource_type': 'Security group',
@@ -805,10 +805,10 @@ class UltraCleanupEKSManager:
 
                     try:
                         self.log_operation('INFO',
-                                           f"[DELETE]  Deleting security group {sg_id} ({sg_name}) related to cluster {cluster_name}")
+                                           f"{Symbols.DELETE}  Deleting security group {sg_id} ({sg_name}) related to cluster {cluster_name}")
                         ec2_client.delete_security_group(GroupId=sg_id)
                         deleted_sgs.append(sg_name)
-                        self.log_operation('INFO', f"[OK] Deleted security group {sg_id} ({sg_name})")
+                        self.log_operation('INFO', f"{Symbols.OK} Deleted security group {sg_id} ({sg_name})")
 
                     except Exception as delete_error:
                         self.log_operation('ERROR', f"Failed to delete security group {sg_id}: {delete_error}")
@@ -818,7 +818,7 @@ class UltraCleanupEKSManager:
 
             if skipped_sgs:
                 self.log_operation('INFO', f"Skipped {len(skipped_sgs)} security groups that appear to be shared")
-                print(f"   [WARN] Skipped {len(skipped_sgs)} security groups that may be shared resources")
+                print(f"   {Symbols.WARN} Skipped {len(skipped_sgs)} security groups that may be shared resources")
 
             if not deleted_sgs and not skipped_sgs:
                 self.log_operation('INFO', f"No security groups found related to cluster {cluster_name}")
@@ -840,8 +840,8 @@ class UltraCleanupEKSManager:
         """
         try:
             self.log_operation('INFO',
-                               f"[ALERT] Starting COMPLETE deletion of ALL CloudWatch alarms for cluster {cluster_name}")
-            print(f"[DELETE]  Deleting ALL CloudWatch alarms for cluster {cluster_name}...")
+                               f"{Symbols.ALERT} Starting COMPLETE deletion of ALL CloudWatch alarms for cluster {cluster_name}")
+            print(f"{Symbols.DELETE}  Deleting ALL CloudWatch alarms for cluster {cluster_name}...")
 
             # Create CloudWatch client
             session = boto3.Session(
@@ -858,7 +858,7 @@ class UltraCleanupEKSManager:
             max_retries = 3
 
             # STEP 1: Find and delete composite alarms FIRST (they depend on metric alarms)
-            print(f"   [SCAN] Step 1: Finding and deleting composite alarms for cluster {cluster_name}...")
+            print(f"   {Symbols.SCAN} Step 1: Finding and deleting composite alarms for cluster {cluster_name}...")
             composite_deleted = self.delete_composite_alarms_for_cluster_fixed(cloudwatch_client, cluster_name)
             total_deleted += composite_deleted
 
@@ -870,7 +870,7 @@ class UltraCleanupEKSManager:
             # STEP 3: Find and delete basic metric alarms with retry logic
             for retry in range(max_retries):
                 print(
-                    f"   [SCAN] Step 2: Finding and deleting metric alarms for cluster {cluster_name} (attempt {retry + 1})...")
+                    f"   {Symbols.SCAN} Step 2: Finding and deleting metric alarms for cluster {cluster_name} (attempt {retry + 1})...")
                 basic_deleted = self.delete_basic_alarms_for_cluster_fixed(cloudwatch_client, cluster_name)
                 total_deleted += basic_deleted
 
@@ -882,12 +882,12 @@ class UltraCleanupEKSManager:
                     time.sleep(3)
 
             # STEP 4: Find and delete cost alarms
-            print(f"   [SCAN] Step 3: Finding and deleting cost monitoring alarms for cluster {cluster_name}...")
+            print(f"   {Symbols.SCAN} Step 3: Finding and deleting cost monitoring alarms for cluster {cluster_name}...")
             cost_deleted = self.delete_cost_alarms_for_cluster_fixed(cloudwatch_client, cluster_name)
             total_deleted += cost_deleted
 
             # STEP 5: Final cleanup - delete any remaining alarms with cluster tags
-            print(f"   [SCAN] Step 4: Final cleanup - finding tagged alarms for cluster {cluster_name}...")
+            print(f"   {Symbols.SCAN} Step 4: Final cleanup - finding tagged alarms for cluster {cluster_name}...")
             tagged_deleted = self.delete_tagged_alarms_for_cluster_fixed(cloudwatch_client, cluster_name)
             total_deleted += tagged_deleted
 
@@ -895,22 +895,22 @@ class UltraCleanupEKSManager:
             remaining_alarms = self.count_remaining_cluster_alarms(cloudwatch_client, cluster_name)
             if remaining_alarms > 0:
                 self.print_colored(Colors.YELLOW,
-                                   f"   [WARN]  {remaining_alarms} alarms still remain - attempting final cleanup...")
+                                   f"   {Symbols.WARN}  {remaining_alarms} alarms still remain - attempting final cleanup...")
                 final_deleted = self.force_delete_remaining_cluster_alarms(cloudwatch_client, cluster_name)
                 total_deleted += final_deleted
 
             # Summary
             if total_deleted > 0:
                 self.print_colored(Colors.GREEN,
-                                   f"   [OK] Successfully deleted {total_deleted} CloudWatch alarms for {cluster_name}")
+                                   f"   {Symbols.OK} Successfully deleted {total_deleted} CloudWatch alarms for {cluster_name}")
                 self.log_operation('INFO',
                                    f"Successfully deleted {total_deleted} CloudWatch alarms for cluster {cluster_name}")
             else:
-                self.print_colored(Colors.YELLOW, f"   [WARN]  No CloudWatch alarms found for cluster {cluster_name}")
+                self.print_colored(Colors.YELLOW, f"   {Symbols.WARN}  No CloudWatch alarms found for cluster {cluster_name}")
                 self.log_operation('INFO', f"No CloudWatch alarms found for cluster {cluster_name}")
 
             if failed_deletions > 0:
-                self.print_colored(Colors.YELLOW, f"   [WARN]  {failed_deletions} alarms failed to delete")
+                self.print_colored(Colors.YELLOW, f"   {Symbols.WARN}  {failed_deletions} alarms failed to delete")
                 self.log_operation('WARNING', f"{failed_deletions} alarms failed to delete for cluster {cluster_name}")
 
             return failed_deletions == 0
@@ -918,7 +918,7 @@ class UltraCleanupEKSManager:
         except Exception as e:
             error_msg = str(e)
             self.log_operation('ERROR', f"Failed to delete CloudWatch alarms for {cluster_name}: {error_msg}")
-            self.print_colored(Colors.RED, f"   [ERROR] Failed to delete CloudWatch alarms: {error_msg}")
+            self.print_colored(Colors.RED, f"   {Symbols.ERROR} Failed to delete CloudWatch alarms: {error_msg}")
             return False
 
     def delete_composite_alarms_for_cluster_fixed(self, cloudwatch_client, cluster_name: str) -> int:
@@ -957,25 +957,25 @@ class UltraCleanupEKSManager:
 
                 # Delete found composite alarms
                 if cluster_composite_alarms:
-                    print(f"      [DELETE]  Deleting {len(cluster_composite_alarms)} composite alarms...")
+                    print(f"      {Symbols.DELETE}  Deleting {len(cluster_composite_alarms)} composite alarms...")
 
                     for alarm_name in cluster_composite_alarms:
                         try:
-                            self.log_operation('INFO', f"[DELETE]  Deleting composite alarm: {alarm_name}")
-                            print(f"         [DELETE]  Deleting composite alarm: {alarm_name}")
+                            self.log_operation('INFO', f"{Symbols.DELETE}  Deleting composite alarm: {alarm_name}")
+                            print(f"         {Symbols.DELETE}  Deleting composite alarm: {alarm_name}")
 
                             cloudwatch_client.delete_alarms(AlarmNames=[alarm_name])
                             deleted_count += 1
 
-                            self.log_operation('INFO', f"[OK] Deleted composite alarm: {alarm_name}")
-                            print(f"         [OK] Deleted composite alarm: {alarm_name}")
+                            self.log_operation('INFO', f"{Symbols.OK} Deleted composite alarm: {alarm_name}")
+                            print(f"         {Symbols.OK} Deleted composite alarm: {alarm_name}")
 
                             # Small delay to avoid throttling
                             time.sleep(0.2)
 
                         except Exception as e:
                             error_msg = str(e)
-                            print(f"         [ERROR] Failed to delete composite alarm {alarm_name}: {error_msg}")
+                            print(f"         {Symbols.ERROR} Failed to delete composite alarm {alarm_name}: {error_msg}")
                             self.log_operation('ERROR', f"Failed to delete composite alarm {alarm_name}: {error_msg}")
 
             if deleted_count > 0:
@@ -1039,7 +1039,7 @@ class UltraCleanupEKSManager:
 
                 # Delete found metric alarms in batches (CloudWatch allows up to 100 per call)
                 if cluster_metric_alarms:
-                    print(f"      [DELETE]  Deleting {len(cluster_metric_alarms)} metric alarms...")
+                    print(f"      {Symbols.DELETE}  Deleting {len(cluster_metric_alarms)} metric alarms...")
 
                     # Delete in batches of 10 to avoid issues
                     for i in range(0, len(cluster_metric_alarms), 10):
@@ -1050,7 +1050,7 @@ class UltraCleanupEKSManager:
                             cloudwatch_client.delete_alarms(AlarmNames=batch)
 
                             for alarm_name in batch:
-                                print(f"         [OK] Deleted metric alarm: {alarm_name}")
+                                print(f"         {Symbols.OK} Deleted metric alarm: {alarm_name}")
                                 self.log_operation('INFO', f"Deleted metric alarm: {alarm_name}")
                                 deleted_count += 1
 
@@ -1059,13 +1059,13 @@ class UltraCleanupEKSManager:
 
                         except Exception as batch_error:
                             # If batch fails, try individual deletion
-                            print(f"         [WARN]  Batch deletion failed, trying individual deletion...")
+                            print(f"         {Symbols.WARN}  Batch deletion failed, trying individual deletion...")
                             self.log_operation('WARNING', f"Batch deletion failed: {str(batch_error)}")
 
                             for alarm_name in batch:
                                 try:
                                     cloudwatch_client.delete_alarms(AlarmNames=[alarm_name])
-                                    print(f"         [OK] Deleted metric alarm (individual): {alarm_name}")
+                                    print(f"         {Symbols.OK} Deleted metric alarm (individual): {alarm_name}")
                                     self.log_operation('INFO', f"Deleted metric alarm (individual): {alarm_name}")
                                     deleted_count += 1
                                     time.sleep(0.2)
@@ -1073,11 +1073,11 @@ class UltraCleanupEKSManager:
                                     error_msg = str(individual_error)
                                     if "CompositeAlarm" in error_msg:
                                         print(
-                                            f"         [WARN]  Metric alarm {alarm_name} is still referenced by composite alarm - will retry")
+                                            f"         {Symbols.WARN}  Metric alarm {alarm_name} is still referenced by composite alarm - will retry")
                                         self.log_operation('WARNING',
                                                            f"Metric alarm {alarm_name} still referenced by composite alarm")
                                     else:
-                                        print(f"         [ERROR] Failed to delete metric alarm {alarm_name}: {error_msg}")
+                                        print(f"         {Symbols.ERROR} Failed to delete metric alarm {alarm_name}: {error_msg}")
                                         self.log_operation('ERROR',
                                                            f"Failed to delete metric alarm {alarm_name}: {error_msg}")
 
@@ -1123,12 +1123,12 @@ class UltraCleanupEKSManager:
 
                 # Delete found cost alarms
                 if cost_alarms:
-                    print(f"      [DELETE]  Deleting {len(cost_alarms)} cost monitoring alarms...")
+                    print(f"      {Symbols.DELETE}  Deleting {len(cost_alarms)} cost monitoring alarms...")
 
                     for alarm_name in cost_alarms:
                         try:
                             cloudwatch_client.delete_alarms(AlarmNames=[alarm_name])
-                            print(f"         [OK] Deleted cost alarm: {alarm_name}")
+                            print(f"         {Symbols.OK} Deleted cost alarm: {alarm_name}")
                             self.log_operation('INFO', f"Deleted cost alarm: {alarm_name}")
                             deleted_count += 1
 
@@ -1136,7 +1136,7 @@ class UltraCleanupEKSManager:
                             time.sleep(0.2)
 
                         except Exception as e:
-                            print(f"         [ERROR] Failed to delete cost alarm {alarm_name}: {str(e)}")
+                            print(f"         {Symbols.ERROR} Failed to delete cost alarm {alarm_name}: {str(e)}")
                             self.log_operation('ERROR', f"Failed to delete cost alarm {alarm_name}: {str(e)}")
 
             return deleted_count
@@ -1203,12 +1203,12 @@ class UltraCleanupEKSManager:
 
             # Delete tagged alarms
             if tagged_alarms:
-                print(f"      [DELETE]  Deleting {len(tagged_alarms)} tagged alarms...")
+                print(f"      {Symbols.DELETE}  Deleting {len(tagged_alarms)} tagged alarms...")
 
                 for alarm_name in tagged_alarms:
                     try:
                         cloudwatch_client.delete_alarms(AlarmNames=[alarm_name])
-                        print(f"         [OK] Deleted tagged alarm: {alarm_name}")
+                        print(f"         {Symbols.OK} Deleted tagged alarm: {alarm_name}")
                         self.log_operation('INFO', f"Deleted tagged alarm: {alarm_name}")
                         deleted_count += 1
 
@@ -1216,7 +1216,7 @@ class UltraCleanupEKSManager:
                         time.sleep(0.2)
 
                     except Exception as e:
-                        print(f"         [ERROR] Failed to delete tagged alarm {alarm_name}: {str(e)}")
+                        print(f"         {Symbols.ERROR} Failed to delete tagged alarm {alarm_name}: {str(e)}")
                         self.log_operation('ERROR', f"Failed to delete tagged alarm {alarm_name}: {str(e)}")
 
             return deleted_count
@@ -1280,7 +1280,7 @@ class UltraCleanupEKSManager:
                     self.log_operation('INFO', f"FORCE deleted {alarm_type} alarm: {alarm_name}")
                     time.sleep(0.3)  # Longer delay for force deletion
                 except Exception as e:
-                    print(f"      [ERROR] Failed to force delete {alarm_type} alarm {alarm_name}: {str(e)}")
+                    print(f"      {Symbols.ERROR} Failed to force delete {alarm_type} alarm {alarm_name}: {str(e)}")
                     self.log_operation('ERROR', f"Failed to force delete {alarm_type} alarm {alarm_name}: {str(e)}")
 
             return deleted_count
@@ -1388,7 +1388,7 @@ class UltraCleanupEKSManager:
         """
         try:
             self.log_operation('INFO', f"Starting deletion of all CloudWatch alarms for cluster {cluster_name}")
-            print(f"[DELETE]  Deleting all CloudWatch alarms for cluster {cluster_name}...")
+            print(f"{Symbols.DELETE}  Deleting all CloudWatch alarms for cluster {cluster_name}...")
 
             # Create CloudWatch client
             session = boto3.Session(
@@ -1404,37 +1404,37 @@ class UltraCleanupEKSManager:
             failed_deletions = 0
 
             # Step 1: Find and delete composite alarms first (they depend on basic alarms)
-            print(f"   [SCAN] Finding composite alarms for cluster {cluster_name}...")
+            print(f"   {Symbols.SCAN} Finding composite alarms for cluster {cluster_name}...")
             composite_deleted = self.delete_composite_alarms_for_cluster(cloudwatch_client, cluster_name)
             total_deleted += composite_deleted
 
             # Step 2: Find and delete basic metric alarms
-            print(f"   [SCAN] Finding basic metric alarms for cluster {cluster_name}...")
+            print(f"   {Symbols.SCAN} Finding basic metric alarms for cluster {cluster_name}...")
             basic_deleted = self.delete_basic_alarms_for_cluster(cloudwatch_client, cluster_name)
             total_deleted += basic_deleted
 
             # Step 3: Find and delete cost alarms
-            print(f"   [SCAN] Finding cost monitoring alarms for cluster {cluster_name}...")
+            print(f"   {Symbols.SCAN} Finding cost monitoring alarms for cluster {cluster_name}...")
             cost_deleted = self.delete_cost_alarms_for_cluster(cloudwatch_client, cluster_name)
             total_deleted += cost_deleted
 
             # Step 4: Find and delete any remaining alarms with cluster tags
-            print(f"   [SCAN] Finding tagged alarms for cluster {cluster_name}...")
+            print(f"   {Symbols.SCAN} Finding tagged alarms for cluster {cluster_name}...")
             tagged_deleted = self.delete_tagged_alarms_for_cluster(cloudwatch_client, cluster_name)
             total_deleted += tagged_deleted
 
             # Summary
             if total_deleted > 0:
                 self.print_colored(Colors.GREEN,
-                                   f"   [OK] Successfully deleted {total_deleted} CloudWatch alarms for {cluster_name}")
+                                   f"   {Symbols.OK} Successfully deleted {total_deleted} CloudWatch alarms for {cluster_name}")
                 self.log_operation('INFO',
                                    f"Successfully deleted {total_deleted} CloudWatch alarms for cluster {cluster_name}")
             else:
-                self.print_colored(Colors.YELLOW, f"   [WARN]  No CloudWatch alarms found for cluster {cluster_name}")
+                self.print_colored(Colors.YELLOW, f"   {Symbols.WARN}  No CloudWatch alarms found for cluster {cluster_name}")
                 self.log_operation('INFO', f"No CloudWatch alarms found for cluster {cluster_name}")
 
             if failed_deletions > 0:
-                self.print_colored(Colors.YELLOW, f"   [WARN]  {failed_deletions} alarms failed to delete")
+                self.print_colored(Colors.YELLOW, f"   {Symbols.WARN}  {failed_deletions} alarms failed to delete")
                 self.log_operation('WARNING', f"{failed_deletions} alarms failed to delete for cluster {cluster_name}")
 
             return failed_deletions == 0
@@ -1442,7 +1442,7 @@ class UltraCleanupEKSManager:
         except Exception as e:
             error_msg = str(e)
             self.log_operation('ERROR', f"Failed to delete CloudWatch alarms for {cluster_name}: {error_msg}")
-            self.print_colored(Colors.RED, f"   [ERROR] Failed to delete CloudWatch alarms: {error_msg}")
+            self.print_colored(Colors.RED, f"   {Symbols.ERROR} Failed to delete CloudWatch alarms: {error_msg}")
             return False
 
     def delete_composite_alarms_for_cluster(self, cloudwatch_client, cluster_name: str) -> int:
@@ -1475,12 +1475,12 @@ class UltraCleanupEKSManager:
 
                 # Delete found composite alarms
                 if cluster_composite_alarms:
-                    print(f"      [DELETE]  Deleting {len(cluster_composite_alarms)} composite alarms...")
+                    print(f"      {Symbols.DELETE}  Deleting {len(cluster_composite_alarms)} composite alarms...")
 
                     for alarm_name in cluster_composite_alarms:
                         try:
                             cloudwatch_client.delete_alarms(AlarmNames=[alarm_name])
-                            print(f"         [OK] Deleted composite alarm: {alarm_name}")
+                            print(f"         {Symbols.OK} Deleted composite alarm: {alarm_name}")
                             self.log_operation('INFO', f"Deleted composite alarm: {alarm_name}")
                             deleted_count += 1
 
@@ -1488,7 +1488,7 @@ class UltraCleanupEKSManager:
                             time.sleep(0.1)
 
                         except Exception as e:
-                            print(f"         [ERROR] Failed to delete composite alarm {alarm_name}: {str(e)}")
+                            print(f"         {Symbols.ERROR} Failed to delete composite alarm {alarm_name}: {str(e)}")
                             self.log_operation('ERROR', f"Failed to delete composite alarm {alarm_name}: {str(e)}")
 
             return deleted_count
@@ -1537,7 +1537,7 @@ class UltraCleanupEKSManager:
 
                 # Delete found metric alarms in batches (CloudWatch allows up to 100 per call)
                 if cluster_metric_alarms:
-                    print(f"      [DELETE]  Deleting {len(cluster_metric_alarms)} metric alarms...")
+                    print(f"      {Symbols.DELETE}  Deleting {len(cluster_metric_alarms)} metric alarms...")
 
                     # Delete in batches of 100
                     for i in range(0, len(cluster_metric_alarms), 100):
@@ -1547,7 +1547,7 @@ class UltraCleanupEKSManager:
                             cloudwatch_client.delete_alarms(AlarmNames=batch)
 
                             for alarm_name in batch:
-                                print(f"         [OK] Deleted metric alarm: {alarm_name}")
+                                print(f"         {Symbols.OK} Deleted metric alarm: {alarm_name}")
                                 self.log_operation('INFO', f"Deleted metric alarm: {alarm_name}")
                                 deleted_count += 1
 
@@ -1555,19 +1555,19 @@ class UltraCleanupEKSManager:
                             time.sleep(0.5)
 
                         except Exception as e:
-                            print(f"         [ERROR] Failed to delete batch of metric alarms: {str(e)}")
+                            print(f"         {Symbols.ERROR} Failed to delete batch of metric alarms: {str(e)}")
                             self.log_operation('ERROR', f"Failed to delete batch of metric alarms: {str(e)}")
 
                             # Try individual deletion for this batch
                             for alarm_name in batch:
                                 try:
                                     cloudwatch_client.delete_alarms(AlarmNames=[alarm_name])
-                                    print(f"         [OK] Deleted metric alarm (individual): {alarm_name}")
+                                    print(f"         {Symbols.OK} Deleted metric alarm (individual): {alarm_name}")
                                     self.log_operation('INFO', f"Deleted metric alarm (individual): {alarm_name}")
                                     deleted_count += 1
                                 except Exception as individual_error:
                                     print(
-                                        f"         [ERROR] Failed to delete metric alarm {alarm_name}: {str(individual_error)}")
+                                        f"         {Symbols.ERROR} Failed to delete metric alarm {alarm_name}: {str(individual_error)}")
                                     self.log_operation('ERROR',
                                                        f"Failed to delete metric alarm {alarm_name}: {str(individual_error)}")
 
@@ -1610,12 +1610,12 @@ class UltraCleanupEKSManager:
 
                 # Delete found cost alarms
                 if cost_alarms:
-                    print(f"      [DELETE]  Deleting {len(cost_alarms)} cost monitoring alarms...")
+                    print(f"      {Symbols.DELETE}  Deleting {len(cost_alarms)} cost monitoring alarms...")
 
                     for alarm_name in cost_alarms:
                         try:
                             cloudwatch_client.delete_alarms(AlarmNames=[alarm_name])
-                            print(f"         [OK] Deleted cost alarm: {alarm_name}")
+                            print(f"         {Symbols.OK} Deleted cost alarm: {alarm_name}")
                             self.log_operation('INFO', f"Deleted cost alarm: {alarm_name}")
                             deleted_count += 1
 
@@ -1623,7 +1623,7 @@ class UltraCleanupEKSManager:
                             time.sleep(0.1)
 
                         except Exception as e:
-                            print(f"         [ERROR] Failed to delete cost alarm {alarm_name}: {str(e)}")
+                            print(f"         {Symbols.ERROR} Failed to delete cost alarm {alarm_name}: {str(e)}")
                             self.log_operation('ERROR', f"Failed to delete cost alarm {alarm_name}: {str(e)}")
 
             return deleted_count
@@ -1755,12 +1755,12 @@ class UltraCleanupEKSManager:
 
             # Delete tagged alarms
             if tagged_alarms:
-                print(f"      [DELETE]  Deleting {len(tagged_alarms)} tagged alarms...")
+                print(f"      {Symbols.DELETE}  Deleting {len(tagged_alarms)} tagged alarms...")
 
                 for alarm_name in tagged_alarms:
                     try:
                         cloudwatch_client.delete_alarms(AlarmNames=[alarm_name])
-                        print(f"         [OK] Deleted tagged alarm: {alarm_name}")
+                        print(f"         {Symbols.OK} Deleted tagged alarm: {alarm_name}")
                         self.log_operation('INFO', f"Deleted tagged alarm: {alarm_name}")
                         deleted_count += 1
 
@@ -1768,7 +1768,7 @@ class UltraCleanupEKSManager:
                         time.sleep(0.1)
 
                     except Exception as e:
-                        print(f"         [ERROR] Failed to delete tagged alarm {alarm_name}: {str(e)}")
+                        print(f"         {Symbols.ERROR} Failed to delete tagged alarm {alarm_name}: {str(e)}")
                         self.log_operation('ERROR', f"Failed to delete tagged alarm {alarm_name}: {str(e)}")
 
             return deleted_count
@@ -1785,8 +1785,8 @@ class UltraCleanupEKSManager:
         This includes Prometheus scrapers, CloudWatch agents, and custom monitoring solutions
         """
         try:
-            self.log_operation('INFO', f"[SCAN] Identifying monitoring scrapers for cluster {cluster_name}")
-            print(f"   [SCAN] Identifying monitoring scrapers for cluster {cluster_name}...")
+            self.log_operation('INFO', f"{Symbols.SCAN} Identifying monitoring scrapers for cluster {cluster_name}")
+            print(f"   {Symbols.SCAN} Identifying monitoring scrapers for cluster {cluster_name}...")
 
             # Create session with the provided credentials
             session = boto3.Session(
@@ -1808,12 +1808,12 @@ class UltraCleanupEKSManager:
 
             if deleted_count > 0:
                 self.print_colored(Colors.GREEN,
-                                   f"   [OK] Successfully removed {deleted_count} monitoring scrapers for {cluster_name}")
+                                   f"   {Symbols.OK} Successfully removed {deleted_count} monitoring scrapers for {cluster_name}")
                 self.log_operation('INFO',
                                    f"Successfully removed {deleted_count} monitoring scrapers for cluster {cluster_name}")
             else:
                 self.print_colored(Colors.YELLOW,
-                                   f"   ℹ️ No active monitoring scrapers found for cluster {cluster_name}")
+                                   f"   {Symbols.INFO} No active monitoring scrapers found for cluster {cluster_name}")
                 self.log_operation('INFO', f"No active monitoring scrapers found for cluster {cluster_name}")
 
             return True
@@ -1821,7 +1821,7 @@ class UltraCleanupEKSManager:
         except Exception as e:
             error_msg = str(e)
             self.log_operation('ERROR', f"Failed to remove monitoring scrapers for {cluster_name}: {error_msg}")
-            self.print_colored(Colors.RED, f"   [ERROR] Failed to remove monitoring scrapers: {error_msg}")
+            self.print_colored(Colors.RED, f"   {Symbols.ERROR} Failed to remove monitoring scrapers: {error_msg}")
             return False
 
     def delete_cloudwatch_container_insights(self, session, cluster_name, region):
@@ -1850,11 +1850,11 @@ class UltraCleanupEKSManager:
                         log_group_name = log_group.get('logGroupName')
                         try:
                             logs_client.delete_log_group(logGroupName=log_group_name)
-                            print(f"      [OK] Deleted Container Insights log group: {log_group_name}")
+                            print(f"      {Symbols.OK} Deleted Container Insights log group: {log_group_name}")
                             self.log_operation('INFO', f"Deleted Container Insights log group: {log_group_name}")
                             deleted_count += 1
                         except Exception as e:
-                            print(f"      [ERROR] Failed to delete log group {log_group_name}: {str(e)}")
+                            print(f"      {Symbols.ERROR} Failed to delete log group {log_group_name}: {str(e)}")
                             self.log_operation('ERROR', f"Failed to delete log group {log_group_name}: {str(e)}")
                 except Exception as e:
                     self.log_operation('WARNING', f"Error checking log groups with prefix {prefix}: {str(e)}")
@@ -1889,11 +1889,11 @@ class UltraCleanupEKSManager:
                             # This workspace is likely monitoring our cluster
                             try:
                                 amp_client.delete_workspace(workspaceId=workspace_id)
-                                print(f"      [OK] Deleted Prometheus workspace: {workspace_id}")
+                                print(f"      {Symbols.OK} Deleted Prometheus workspace: {workspace_id}")
                                 self.log_operation('INFO', f"Deleted Prometheus workspace: {workspace_id}")
                                 deleted_count += 1
                             except Exception as del_err:
-                                print(f"      [ERROR] Failed to delete Prometheus workspace {workspace_id}: {str(del_err)}")
+                                print(f"      {Symbols.ERROR} Failed to delete Prometheus workspace {workspace_id}: {str(del_err)}")
                                 self.log_operation('ERROR',
                                                    f"Failed to delete Prometheus workspace {workspace_id}: {str(del_err)}")
                     except Exception as tag_err:
@@ -1936,11 +1936,11 @@ class UltraCleanupEKSManager:
 
                             # Then delete the rule
                             events_client.delete_rule(Name=rule_name)
-                            print(f"      [OK] Deleted EventBridge rule: {rule_name}")
+                            print(f"      {Symbols.OK} Deleted EventBridge rule: {rule_name}")
                             self.log_operation('INFO', f"Deleted EventBridge rule: {rule_name}")
                             deleted_count += 1
                         except Exception as rule_err:
-                            print(f"      [ERROR] Failed to delete EventBridge rule {rule_name}: {str(rule_err)}")
+                            print(f"      {Symbols.ERROR} Failed to delete EventBridge rule {rule_name}: {str(rule_err)}")
                             self.log_operation('ERROR',
                                                f"Failed to delete EventBridge rule {rule_name}: {str(rule_err)}")
             except Exception as events_err:
@@ -2002,8 +2002,8 @@ class UltraCleanupEKSManager:
             clusters = []
             account_name = account_info.get('account_key', 'Unknown')
 
-            self.log_operation('INFO', f"[SCAN] Scanning for EKS clusters in {region} ({account_name})")
-            print(f"   [SCAN] Scanning for EKS clusters in {region} ({account_name})...")
+            self.log_operation('INFO', f"{Symbols.SCAN} Scanning for EKS clusters in {region} ({account_name})")
+            print(f"   {Symbols.SCAN} Scanning for EKS clusters in {region} ({account_name})...")
 
             cluster_names = eks_client.list_clusters()['clusters']
 
@@ -2076,7 +2076,7 @@ class UltraCleanupEKSManager:
         except Exception as e:
             account_name = account_info.get('account_key', 'Unknown')
             self.log_operation('ERROR', f"Error getting EKS clusters in {region} ({account_name}): {e}")
-            print(f"   [ERROR] Error getting clusters in {region}: {e}")
+            print(f"   {Symbols.ERROR} Error getting clusters in {region}: {e}")
             return []
 
     def delete_nodegroup(self, eks_client, cluster_name, nodegroup_name, region, account_info):
@@ -2084,8 +2084,8 @@ class UltraCleanupEKSManager:
         try:
             account_name = account_info.get('account_key', 'Unknown')
             self.log_operation('INFO',
-                               f"[DELETE]  Deleting nodegroup {nodegroup_name} in cluster {cluster_name} ({region}, {account_name})")
-            print(f"      [DELETE]  Deleting nodegroup {nodegroup_name} in cluster {cluster_name}...")
+                               f"{Symbols.DELETE}  Deleting nodegroup {nodegroup_name} in cluster {cluster_name} ({region}, {account_name})")
+            print(f"      {Symbols.DELETE}  Deleting nodegroup {nodegroup_name} in cluster {cluster_name}...")
 
             # Delete the nodegroup
             eks_client.delete_nodegroup(
@@ -2118,8 +2118,8 @@ class UltraCleanupEKSManager:
                         break
                 except ClientError as e:
                     if 'ResourceNotFoundException' in str(e):
-                        self.log_operation('INFO', f"[OK] Nodegroup {nodegroup_name} deleted successfully")
-                        print(f"      [OK] Nodegroup {nodegroup_name} deleted successfully")
+                        self.log_operation('INFO', f"{Symbols.OK} Nodegroup {nodegroup_name} deleted successfully")
+                        print(f"      {Symbols.OK} Nodegroup {nodegroup_name} deleted successfully")
                         waiter = False
                     else:
                         self.log_operation('ERROR', f"Error checking nodegroup status: {e}")
@@ -2127,7 +2127,7 @@ class UltraCleanupEKSManager:
 
             if retry_count >= max_retries:
                 self.log_operation('WARNING', f"Timed out waiting for nodegroup {nodegroup_name} deletion")
-                print(f"      [WARN] Timed out waiting for nodegroup {nodegroup_name} deletion")
+                print(f"      {Symbols.WARN} Timed out waiting for nodegroup {nodegroup_name} deletion")
 
             self.cleanup_results['deleted_nodegroups'].append({
                 'nodegroup_name': nodegroup_name,
@@ -2142,7 +2142,7 @@ class UltraCleanupEKSManager:
         except Exception as e:
             account_name = account_info.get('account_key', 'Unknown')
             self.log_operation('ERROR', f"Failed to delete nodegroup {nodegroup_name}: {e}")
-            print(f"      [ERROR] Failed to delete nodegroup {nodegroup_name}: {e}")
+            print(f"      {Symbols.ERROR} Failed to delete nodegroup {nodegroup_name}: {e}")
 
             self.cleanup_results['failed_deletions'].append({
                 'resource_type': 'nodegroup',
@@ -2162,8 +2162,8 @@ class UltraCleanupEKSManager:
             account_name = cluster_info['account_info'].get('account_key', 'Unknown')
             nodegroups = cluster_info.get('nodegroups', [])
 
-            self.log_operation('INFO', f"[DELETE]  Deleting EKS cluster {cluster_name} in {region} ({account_name})")
-            print(f"   [DELETE]  Deleting EKS cluster {cluster_name} in {region} ({account_name})...")
+            self.log_operation('INFO', f"{Symbols.DELETE}  Deleting EKS cluster {cluster_name} in {region} ({account_name})")
+            print(f"   {Symbols.DELETE}  Deleting EKS cluster {cluster_name} in {region} ({account_name})...")
 
             # Step 1: Delete all nodegroups first
             if nodegroups:
@@ -2232,7 +2232,7 @@ class UltraCleanupEKSManager:
 
             # Step 9: Delete the cluster itself
             self.log_operation('INFO', f"Deleting the cluster {cluster_name}...")
-            print(f"   [DELETE]  Deleting the cluster {cluster_name}...")
+            print(f"   {Symbols.DELETE}  Deleting the cluster {cluster_name}...")
 
             eks_client.delete_cluster(name=cluster_name)
 
@@ -2260,8 +2260,8 @@ class UltraCleanupEKSManager:
                         break
                 except ClientError as e:
                     if 'ResourceNotFoundException' in str(e) or 'ResourceNotFound' in str(e):
-                        self.log_operation('INFO', f"[OK] Cluster {cluster_name} deleted successfully")
-                        print(f"   [OK] Cluster {cluster_name} deleted successfully")
+                        self.log_operation('INFO', f"{Symbols.OK} Cluster {cluster_name} deleted successfully")
+                        print(f"   {Symbols.OK} Cluster {cluster_name} deleted successfully")
                         waiter = False
                     else:
                         self.log_operation('ERROR', f"Error checking cluster status: {e}")
@@ -2269,7 +2269,7 @@ class UltraCleanupEKSManager:
 
             if retry_count >= max_retries:
                 self.log_operation('WARNING', f"Timed out waiting for cluster {cluster_name} deletion")
-                print(f"   [WARN] Timed out waiting for cluster {cluster_name} deletion")
+                print(f"   {Symbols.WARN} Timed out waiting for cluster {cluster_name} deletion")
 
             self.cleanup_results['deleted_clusters'].append({
                 'cluster_name': cluster_name,
@@ -2285,7 +2285,7 @@ class UltraCleanupEKSManager:
         except Exception as e:
             account_name = cluster_info['account_info'].get('account_key', 'Unknown')
             self.log_operation('ERROR', f"Failed to delete cluster {cluster_info['cluster_name']}: {e}")
-            print(f"   [ERROR] Failed to delete cluster {cluster_info['cluster_name']}: {e}")
+            print(f"   {Symbols.ERROR} Failed to delete cluster {cluster_info['cluster_name']}: {e}")
 
             self.cleanup_results['failed_deletions'].append({
                 'resource_type': 'cluster',
@@ -2304,15 +2304,15 @@ class UltraCleanupEKSManager:
             account_id = account_info['account_id']
             account_key = account_info['account_key']
 
-            self.log_operation('INFO', f"[CLEANUP] Starting EKS cleanup for {account_key} ({account_id}) in {region}")
-            print(f"\n[CLEANUP] Starting EKS cleanup for {account_key} ({account_id}) in {region}")
+            self.log_operation('INFO', f"{Symbols.CLEANUP} Starting EKS cleanup for {account_key} ({account_id}) in {region}")
+            print(f"\n{Symbols.CLEANUP} Starting EKS cleanup for {account_key} ({account_id}) in {region}")
 
             # Create EKS client
             try:
                 eks_client = self.create_eks_client(access_key, secret_key, region)
             except Exception as client_error:
                 self.log_operation('ERROR', f"Could not create EKS client for {region}: {client_error}")
-                print(f"   [ERROR] Could not create EKS client for {region}: {client_error}")
+                print(f"   {Symbols.ERROR} Could not create EKS client for {region}: {client_error}")
                 return False
 
             # Get all EKS clusters
@@ -2333,12 +2333,12 @@ class UltraCleanupEKSManager:
             }
             self.cleanup_results['regions_processed'].append(region_summary)
 
-            self.log_operation('INFO', f"[STATS] {account_key} ({region}) EKS resources summary:")
-            self.log_operation('INFO', f"   🧠 Clusters: {len(clusters)}")
-            self.log_operation('INFO', f"   🔄 Nodegroups: {region_summary['nodegroups_found']}")
+            self.log_operation('INFO', f"{Symbols.STATS} {account_key} ({region}) EKS resources summary:")
+            self.log_operation('INFO', f"   [BRAIN] Clusters: {len(clusters)}")
+            self.log_operation('INFO', f"   {Symbols.SCAN} Nodegroups: {region_summary['nodegroups_found']}")
 
             print(
-                f"   [STATS] EKS resources found: {len(clusters)} clusters, {region_summary['nodegroups_found']} nodegroups")
+                f"   {Symbols.STATS} EKS resources found: {len(clusters)} clusters, {region_summary['nodegroups_found']} nodegroups")
 
             # Delete each cluster
             deleted_count = 0
@@ -2356,65 +2356,24 @@ class UltraCleanupEKSManager:
                 except Exception as e:
                     failed_count += 1
                     self.log_operation('ERROR', f"Error deleting cluster {cluster_name}: {e}")
-                    print(f"   [ERROR] Error deleting cluster {cluster_name}: {e}")
+                    print(f"   {Symbols.ERROR} Error deleting cluster {cluster_name}: {e}")
 
-            print(f"   [OK] Deleted {deleted_count} clusters, [ERROR] Failed: {failed_count}")
+            print(f"   {Symbols.OK} Deleted {deleted_count} clusters, {Symbols.ERROR} Failed: {failed_count}")
 
-            self.log_operation('INFO', f"[OK] EKS cleanup completed for {account_key} ({region})")
-            print(f"\n   [OK] EKS cleanup completed for {account_key} ({region})")
+            self.log_operation('INFO', f"{Symbols.OK} EKS cleanup completed for {account_key} ({region})")
+            print(f"\n   {Symbols.OK} EKS cleanup completed for {account_key} ({region})")
             return True
 
         except Exception as e:
             account_key = account_info.get('account_key', 'Unknown')
             self.log_operation('ERROR', f"Error cleaning up EKS resources in {account_key} ({region}): {e}")
-            print(f"   [ERROR] Error cleaning up EKS resources in {account_key} ({region}): {e}")
+            print(f"   {Symbols.ERROR} Error cleaning up EKS resources in {account_key} ({region}): {e}")
             self.cleanup_results['errors'].append({
                 'account_info': account_info,
                 'region': region,
                 'error': str(e)
             })
             return False
-
-    def select_regions_interactive(self) -> Optional[List[str]]:
-        """Interactive region selection."""
-        self.print_colored(Colors.YELLOW, "\n[REGION] Available AWS Regions:")
-        self.print_colored(Colors.YELLOW, "=" * 80)
-
-        for i, region in enumerate(self.user_regions, 1):
-            self.print_colored(Colors.CYAN, f"   {i}. {region}")
-
-        self.print_colored(Colors.YELLOW, "=" * 80)
-        self.print_colored(Colors.YELLOW, "[TIP] Selection options:")
-        self.print_colored(Colors.WHITE, "   • Single: 1")
-        self.print_colored(Colors.WHITE, "   • Multiple: 1,3,5")
-        self.print_colored(Colors.WHITE, "   • Range: 1-5")
-        self.print_colored(Colors.WHITE, "   • All: all")
-        self.print_colored(Colors.YELLOW, "=" * 80)
-
-        while True:
-            try:
-                choice = input(
-                    f"Select regions (1-{len(self.user_regions)}, comma-separated, range, or 'all') or 'q' to quit: ").strip()
-
-                if choice.lower() == 'q':
-                    return None
-
-                if choice.lower() == "all" or not choice:
-                    self.print_colored(Colors.GREEN, f"[OK] Selected all {len(self.user_regions)} regions")
-                    return self.user_regions
-
-                selected_indices = self.cred_manager._parse_selection(choice, len(self.user_regions))
-                if not selected_indices:
-                    self.print_colored(Colors.RED, "[ERROR] Invalid selection format")
-                    continue
-
-                selected_regions = [self.user_regions[i - 1] for i in selected_indices]
-                self.print_colored(Colors.GREEN,
-                                   f"[OK] Selected {len(selected_regions)} regions: {', '.join(selected_regions)}")
-                return selected_regions
-
-            except Exception as e:
-                self.print_colored(Colors.RED, f"[ERROR] Error processing selection: {str(e)}")
 
     def save_cleanup_report(self):
         """Save comprehensive cleanup results to JSON report"""
@@ -2494,24 +2453,24 @@ class UltraCleanupEKSManager:
             with open(report_filename, 'w', encoding='utf-8') as f:
                 json.dump(report_data, f, indent=2, default=str)
 
-            self.log_operation('INFO', f"[OK] Ultra EKS cleanup report saved to: {report_filename}")
+            self.log_operation('INFO', f"{Symbols.OK} Ultra EKS cleanup report saved to: {report_filename}")
             return report_filename
 
         except Exception as e:
-            self.log_operation('ERROR', f"[ERROR] Failed to save ultra EKS cleanup report: {e}")
+            self.log_operation('ERROR', f"{Symbols.ERROR} Failed to save ultra EKS cleanup report: {e}")
             return None
 
     def run(self):
         """Main execution method - sequential (no threading)"""
         try:
-            self.log_operation('INFO', "[ALERT] STARTING ULTRA EKS CLEANUP SESSION [ALERT]")
+            self.log_operation('INFO', f"{Symbols.ALERT} STARTING ULTRA EKS CLEANUP SESSION {Symbols.ALERT}")
 
-            self.print_colored(Colors.YELLOW, "[ALERT]" * 30)
-            self.print_colored(Colors.BLUE, "[START] ULTRA EKS CLEANUP MANAGER")
-            self.print_colored(Colors.YELLOW, "[ALERT]" * 30)
-            self.print_colored(Colors.WHITE, f"[DATE] Execution Date/Time: {self.current_time} UTC")
+            self.print_colored(Colors.YELLOW, f"{Symbols.ALERT}" * 30)
+            self.print_colored(Colors.BLUE, f"{Symbols.START} ULTRA EKS CLEANUP MANAGER")
+            self.print_colored(Colors.YELLOW, f"{Symbols.ALERT}" * 30)
+            self.print_colored(Colors.WHITE, f"{Symbols.DATE} Execution Date/Time: {self.current_time} UTC")
             self.print_colored(Colors.WHITE, f"[USER] Executed by: {self.current_user}")
-            self.print_colored(Colors.WHITE, f"[LIST] Log File: {self.log_filename}")
+            self.print_colored(Colors.WHITE, f"{Symbols.LIST} Log File: {self.log_filename}")
 
             # STEP 1: Select root accounts
             self.print_colored(Colors.YELLOW, "\n[KEY] Select Root AWS Accounts for EKS Cleanup:")
@@ -2523,7 +2482,7 @@ class UltraCleanupEKSManager:
             selected_accounts = root_accounts
 
             # STEP 2: Select regions
-            selected_regions = self.select_regions_interactive()
+            selected_regions = self.cred_manager.select_regions_interactive()
             if not selected_regions:
                 self.print_colored(Colors.RED, "[ERROR] No regions selected, exiting...")
                 return
@@ -2531,16 +2490,16 @@ class UltraCleanupEKSManager:
             # STEP 3: Calculate total operations and confirm
             total_operations = len(selected_accounts) * len(selected_regions)
 
-            self.print_colored(Colors.YELLOW, f"\n[TARGET] EKS CLEANUP CONFIGURATION")
+            self.print_colored(Colors.YELLOW, f"\n{Symbols.TARGET} EKS CLEANUP CONFIGURATION")
             self.print_colored(Colors.YELLOW, "=" * 80)
-            self.print_colored(Colors.WHITE, f"[KEY] Credential source: ROOT ACCOUNTS")
-            self.print_colored(Colors.WHITE, f"[BANK] Selected accounts: {len(selected_accounts)}")
-            self.print_colored(Colors.WHITE, f"[REGION] Regions per account: {len(selected_regions)}")
-            self.print_colored(Colors.WHITE, f"[LIST] Total operations: {total_operations}")
+            self.print_colored(Colors.WHITE, f"{Symbols.KEY} Credential source: ROOT ACCOUNTS")
+            self.print_colored(Colors.WHITE, f"{Symbols.ACCOUNT} Selected accounts: {len(selected_accounts)}")
+            self.print_colored(Colors.WHITE, f"{Symbols.REGION} Regions per account: {len(selected_regions)}")
+            self.print_colored(Colors.WHITE, f"{Symbols.LIST} Total operations: {total_operations}")
             self.print_colored(Colors.YELLOW, "=" * 80)
 
             # Show what will be cleaned up
-            self.print_colored(Colors.RED, f"\n[WARN]  WARNING: This will delete ALL of the following EKS resources:")
+            self.print_colored(Colors.RED, f"\n{Symbols.WARN}  WARNING: This will delete ALL of the following EKS resources:")
             self.print_colored(Colors.WHITE, f"    • EKS Clusters")
             self.print_colored(Colors.WHITE, f"    • EKS Node Groups")
             self.print_colored(Colors.WHITE, f"    • EKS Add-ons")
@@ -2560,7 +2519,7 @@ class UltraCleanupEKSManager:
 
             if confirm1 not in ['y', 'yes']:
                 self.log_operation('INFO', "Ultra EKS cleanup cancelled by user")
-                self.print_colored(Colors.RED, "[ERROR] Cleanup cancelled")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Cleanup cancelled")
                 return
 
             # Second confirmation - final check
@@ -2569,13 +2528,13 @@ class UltraCleanupEKSManager:
 
             if confirm2 != 'yes':
                 self.log_operation('INFO', "Ultra EKS cleanup cancelled at final confirmation")
-                self.print_colored(Colors.RED, "[ERROR] Cleanup cancelled")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Cleanup cancelled")
                 return
 
             # STEP 4: Start the cleanup sequentially
-            self.print_colored(Colors.CYAN, f"\n[START] Starting EKS cleanup...")
+            self.print_colored(Colors.CYAN, f"\n{Symbols.START} Starting EKS cleanup...")
             self.log_operation('INFO',
-                               f"[ALERT] EKS CLEANUP INITIATED - {len(selected_accounts)} accounts, {len(selected_regions)} regions")
+                               f"{Symbols.ALERT} EKS CLEANUP INITIATED - {len(selected_accounts)} accounts, {len(selected_regions)} regions")
 
             start_time = time.time()
 
@@ -2602,7 +2561,7 @@ class UltraCleanupEKSManager:
                 except Exception as e:
                     failed_tasks += 1
                     self.log_operation('ERROR', f"Task failed for {account_key} ({region}): {e}")
-                    self.print_colored(Colors.RED, f"[ERROR] Task failed for {account_key} ({region}): {e}")
+                    self.print_colored(Colors.RED, f"{Symbols.ERROR} Task failed for {account_key} ({region}): {e}")
 
             end_time = time.time()
             total_time = int(end_time - start_time)
@@ -2611,15 +2570,15 @@ class UltraCleanupEKSManager:
             self.print_colored(Colors.GREEN, f"\n" + "=" * 100)
             self.print_colored(Colors.GREEN, "[OK] EKS CLEANUP COMPLETE")
             self.print_colored(Colors.GREEN, "=" * 100)
-            self.print_colored(Colors.WHITE, f"[TIMER]  Total execution time: {total_time} seconds")
-            self.print_colored(Colors.GREEN, f"[OK] Successful operations: {successful_tasks}")
-            self.print_colored(Colors.RED, f"[ERROR] Failed operations: {failed_tasks}")
-            self.print_colored(Colors.WHITE, f"🧠 Clusters deleted: {len(self.cleanup_results['deleted_clusters'])}")
+            self.print_colored(Colors.WHITE, f"{Symbols.TIMER}  Total execution time: {total_time} seconds")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Successful operations: {successful_tasks}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed operations: {failed_tasks}")
+            self.print_colored(Colors.WHITE, f"[BRAIN] Clusters deleted: {len(self.cleanup_results['deleted_clusters'])}")
             self.print_colored(Colors.WHITE,
-                               f"🔄 Nodegroups deleted: {len(self.cleanup_results['deleted_nodegroups'])}")
+                               f"{Symbols.SCAN} Nodegroups deleted: {len(self.cleanup_results['deleted_nodegroups'])}")
             self.print_colored(Colors.WHITE,
-                               f"[SKIP]  Resources skipped: {len(self.cleanup_results['skipped_resources'])}")
-            self.print_colored(Colors.RED, f"[ERROR] Failed deletions: {len(self.cleanup_results['failed_deletions'])}")
+                               f"{Symbols.SKIP}  Resources skipped: {len(self.cleanup_results['skipped_resources'])}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed deletions: {len(self.cleanup_results['failed_deletions'])}")
 
             self.log_operation('INFO', f"EKS CLEANUP COMPLETED")
             self.log_operation('INFO', f"Execution time: {total_time} seconds")
@@ -2628,7 +2587,7 @@ class UltraCleanupEKSManager:
 
             # STEP 6: Show account summary
             if self.cleanup_results['deleted_clusters'] or self.cleanup_results['deleted_nodegroups']:
-                self.print_colored(Colors.YELLOW, f"\n[STATS] Deletion Summary by Account:")
+                self.print_colored(Colors.YELLOW, f"\n{Symbols.STATS} Deletion Summary by Account:")
 
                 # Group by account
                 account_summary = {}
@@ -2648,14 +2607,14 @@ class UltraCleanupEKSManager:
 
                 for account, summary in account_summary.items():
                     regions_list = ', '.join(sorted(summary['regions']))
-                    self.print_colored(Colors.PURPLE, f"   [BANK] {account}:")
-                    self.print_colored(Colors.WHITE, f"      🧠 Clusters: {summary['clusters']}")
-                    self.print_colored(Colors.WHITE, f"      🔄 Nodegroups: {summary['nodegroups']}")
-                    self.print_colored(Colors.WHITE, f"      [REGION] Regions: {regions_list}")
+                    self.print_colored(Colors.PURPLE, f"   {Symbols.ACCOUNT} {account}:")
+                    self.print_colored(Colors.WHITE, f"      [BRAIN] Clusters: {summary['clusters']}")
+                    self.print_colored(Colors.WHITE, f"      {Symbols.SCAN} Nodegroups: {summary['nodegroups']}")
+                    self.print_colored(Colors.WHITE, f"      {Symbols.REGION} Regions: {regions_list}")
 
             # STEP 7: Show failures if any
             if self.cleanup_results['failed_deletions']:
-                self.print_colored(Colors.RED, f"\n[ERROR] Failed Deletions:")
+                self.print_colored(Colors.RED, f"\n{Symbols.ERROR} Failed Deletions:")
                 for failure in self.cleanup_results['failed_deletions'][:10]:  # Show first 10
                     account_key = failure['account_info'].get('account_key', 'Unknown')
                     self.print_colored(Colors.WHITE,
@@ -2670,17 +2629,16 @@ class UltraCleanupEKSManager:
             self.print_colored(Colors.CYAN, f"\n[FILE] Saving EKS cleanup report...")
             report_file = self.save_cleanup_report()
             if report_file:
-                self.print_colored(Colors.GREEN, f"[OK] EKS cleanup report saved to: {report_file}")
+                self.print_colored(Colors.GREEN, f"{Symbols.OK} EKS cleanup report saved to: {report_file}")
 
-            self.print_colored(Colors.GREEN, f"[OK] Session log saved to: {self.log_filename}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Session log saved to: {self.log_filename}")
 
-            self.print_colored(Colors.GREEN, f"\n[OK] EKS cleanup completed successfully!")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.OK} EKS cleanup completed successfully!")
             self.print_colored(Colors.YELLOW, "[ALERT]" * 30)
 
         except Exception as e:
             self.log_operation('ERROR', f"FATAL ERROR in EKS cleanup execution: {str(e)}")
-            self.print_colored(Colors.RED, f"\n[ERROR] FATAL ERROR: {e}")
-            import traceback
+            self.print_colored(Colors.RED, f"\n{Symbols.ERROR} FATAL ERROR: {e}")
             traceback.print_exc()
             raise
 
@@ -2694,7 +2652,7 @@ def main():
         print("\n\n[ERROR] EKS cleanup interrupted by user")
         exit(1)
     except Exception as e:
-        print(f"[ERROR] Unexpected error: {e}")
+        print(f"{Symbols.ERROR} Unexpected error: {e}")
         exit(1)
 
 

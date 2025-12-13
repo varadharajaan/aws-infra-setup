@@ -12,6 +12,7 @@ import logging
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from root_iam_credential_manager import AWSCredentialManager
 from root_iam_credential_manager import Colors
+from text_symbols import Symbols
 
 class UltraVPCCleanupManager:
     """
@@ -131,7 +132,7 @@ class UltraVPCCleanupManager:
             
             # Log initial information
             self.logger.info("=" * 100)
-            self.logger.info("[ALERT] ENHANCED ULTRA VPC CLEANUP SESSION STARTED [ALERT]")
+            self.logger.info(f"{Symbols.ALERT} ENHANCED ULTRA VPC CLEANUP SESSION STARTED {Symbols.ALERT}")
             self.logger.info("=" * 100)
             self.logger.info(f"Execution Time: {self.current_time_str}")
             self.logger.info(f"Executed By: {self.current_user}")
@@ -152,7 +153,7 @@ class UltraVPCCleanupManager:
                     'us-east-1', 'us-east-2', 'us-west-1', 'us-west-2', 'ap-south-1'
                 ])
         except Exception as e:
-            self.print_colored(Colors.YELLOW, f"[WARN]  Warning: Could not load user regions: {e}")
+            self.print_colored(Colors.YELLOW, f"{Symbols.WARN}  Warning: Could not load user regions: {e}")
 
         return ['us-east-1', 'us-east-2', 'us-west-1', 'us-west-2', 'ap-south-1']
 
@@ -179,7 +180,7 @@ class UltraVPCCleanupManager:
             with open(self.config_file, 'r', encoding='utf-8') as f:
                 self.config_data = json.load(f)
             
-            self.log_operation('INFO', f"[OK] Configuration loaded from: {self.config_file}")
+            self.log_operation('INFO', f"{Symbols.OK} Configuration loaded from: {self.config_file}")
             
             # Validate accounts
             if 'accounts' not in self.config_data:
@@ -198,7 +199,7 @@ class UltraVPCCleanupManager:
             
             self.config_data['accounts'] = valid_accounts
             
-            self.log_operation('INFO', f"[STATS] Valid accounts loaded: {len(valid_accounts)}")
+            self.log_operation('INFO', f"{Symbols.STATS} Valid accounts loaded: {len(valid_accounts)}")
             for account_name, account_data in valid_accounts.items():
                 account_id = account_data.get('account_id', 'Unknown')
                 email = account_data.get('email', 'Unknown')
@@ -207,7 +208,7 @@ class UltraVPCCleanupManager:
             # Get user regions
             user_settings = self.config_data.get('user_settings', {})
             self.regions = user_settings.get('user_regions', ['us-east-1', 'us-east-2', 'us-west-1', 'us-west-2'])
-            self.log_operation('INFO', f"[REGION] Regions to process: {self.regions}")
+            self.log_operation('INFO', f"{Symbols.REGION} Regions to process: {self.regions}")
             
         except FileNotFoundError as e:
             self.log_operation('ERROR', f"Configuration file error: {e}")
@@ -266,7 +267,7 @@ class UltraVPCCleanupManager:
     def get_all_vpcs_in_region(self, ec2_client, region: str, account_name: str) -> List[Dict]:
         """Get all VPCs in the specified region"""
         try:
-            self.log_operation('INFO', f"[SCAN] Scanning VPCs in {region} ({account_name})")
+            self.log_operation('INFO', f"{Symbols.SCAN} Scanning VPCs in {region} ({account_name})")
             
             response = ec2_client.describe_vpcs()
             vpcs = response.get('Vpcs', [])
@@ -287,7 +288,7 @@ class UltraVPCCleanupManager:
                 else:
                     custom_vpcs.append(vpc)
             
-            self.log_operation('INFO', f"[STATS] Found {len(custom_vpcs)} custom VPCs and {len(default_vpcs)} default VPCs in {region}")
+            self.log_operation('INFO', f"{Symbols.STATS} Found {len(custom_vpcs)} custom VPCs and {len(default_vpcs)} default VPCs in {region}")
             
             return custom_vpcs
             
@@ -298,7 +299,7 @@ class UltraVPCCleanupManager:
     def get_vpc_flow_logs(self, ec2_client, vpc_ids: List[str], region: str, account_name: str) -> List[Dict]:
         """Get VPC Flow Logs for custom VPCs"""
         try:
-            self.log_operation('INFO', f"[SCAN] Scanning VPC Flow Logs in {region} ({account_name})")
+            self.log_operation('INFO', f"{Symbols.SCAN} Scanning VPC Flow Logs in {region} ({account_name})")
             
             if not vpc_ids:
                 return []
@@ -310,7 +311,7 @@ class UltraVPCCleanupManager:
             )
             
             flow_logs = response.get('FlowLogs', [])
-            self.log_operation('INFO', f"[STATS] Found {len(flow_logs)} VPC Flow Logs in {region}")
+            self.log_operation('INFO', f"{Symbols.STATS} Found {len(flow_logs)} VPC Flow Logs in {region}")
             
             return flow_logs
             
@@ -321,7 +322,7 @@ class UltraVPCCleanupManager:
     def get_vpc_endpoints(self, ec2_client, vpc_ids: List[str], region: str, account_name: str) -> List[Dict]:
         """Get VPC Endpoints for custom VPCs"""
         try:
-            self.log_operation('INFO', f"[SCAN] Scanning VPC Endpoints in {region} ({account_name})")
+            self.log_operation('INFO', f"{Symbols.SCAN} Scanning VPC Endpoints in {region} ({account_name})")
             
             if not vpc_ids:
                 return []
@@ -333,7 +334,7 @@ class UltraVPCCleanupManager:
             )
             
             endpoints = response.get('VpcEndpoints', [])
-            self.log_operation('INFO', f"[STATS] Found {len(endpoints)} VPC Endpoints in {region}")
+            self.log_operation('INFO', f"{Symbols.STATS} Found {len(endpoints)} VPC Endpoints in {region}")
             
             return endpoints
             
@@ -344,7 +345,7 @@ class UltraVPCCleanupManager:
     def get_nat_gateways(self, ec2_client, vpc_ids: List[str], region: str, account_name: str) -> List[Dict]:
         """Get NAT Gateways for custom VPCs"""
         try:
-            self.log_operation('INFO', f"[SCAN] Scanning NAT Gateways in {region} ({account_name})")
+            self.log_operation('INFO', f"{Symbols.SCAN} Scanning NAT Gateways in {region} ({account_name})")
             
             if not vpc_ids:
                 return []
@@ -359,7 +360,7 @@ class UltraVPCCleanupManager:
             # Only include available or pending NAT gateways
             active_nat_gateways = [ng for ng in nat_gateways if ng.get('State') in ['available', 'pending']]
             
-            self.log_operation('INFO', f"[STATS] Found {len(active_nat_gateways)} active NAT Gateways in {region}")
+            self.log_operation('INFO', f"{Symbols.STATS} Found {len(active_nat_gateways)} active NAT Gateways in {region}")
             
             return active_nat_gateways
             
@@ -370,7 +371,7 @@ class UltraVPCCleanupManager:
     def get_internet_gateways(self, ec2_client, vpc_ids: List[str], region: str, account_name: str) -> List[Dict]:
         """Get Internet Gateways for custom VPCs"""
         try:
-            self.log_operation('INFO', f"[SCAN] Scanning Internet Gateways in {region} ({account_name})")
+            self.log_operation('INFO', f"{Symbols.SCAN} Scanning Internet Gateways in {region} ({account_name})")
             
             if not vpc_ids:
                 return []
@@ -387,7 +388,7 @@ class UltraVPCCleanupManager:
                         custom_igws.append(igw)
                         break
             
-            self.log_operation('INFO', f"[STATS] Found {len(custom_igws)} Internet Gateways in {region}")
+            self.log_operation('INFO', f"{Symbols.STATS} Found {len(custom_igws)} Internet Gateways in {region}")
             
             return custom_igws
             
@@ -398,7 +399,7 @@ class UltraVPCCleanupManager:
     def get_security_groups(self, ec2_client, vpc_ids: List[str], region: str, account_name: str) -> List[Dict]:
         """Get Security Groups for custom VPCs (excluding default)"""
         try:
-            self.log_operation('INFO', f"[SCAN] Scanning Security Groups in {region} ({account_name})")
+            self.log_operation('INFO', f"{Symbols.SCAN} Scanning Security Groups in {region} ({account_name})")
             
             if not vpc_ids:
                 return []
@@ -427,7 +428,7 @@ class UltraVPCCleanupManager:
                 else:
                     custom_sgs.append(sg)
             
-            self.log_operation('INFO', f"[STATS] Found {len(custom_sgs)} custom Security Groups and {len(default_sgs)} default SGs in {region}")
+            self.log_operation('INFO', f"{Symbols.STATS} Found {len(custom_sgs)} custom Security Groups and {len(default_sgs)} default SGs in {region}")
             
             return custom_sgs
             
@@ -442,16 +443,16 @@ class UltraVPCCleanupManager:
                 return True
                 
             action_text = "Would delete" if self.dry_run else "Deleting"
-            self.log_operation('INFO', f"[DELETE] {action_text} {len(flow_logs)} VPC Flow Logs in {region} ({account_name})")
+            self.log_operation('INFO', f"{Symbols.DELETE} {action_text} {len(flow_logs)} VPC Flow Logs in {region} ({account_name})")
             
             for flow_log in flow_logs:
                 flow_log_id = flow_log['FlowLogId']
                 try:
                     if self.dry_run:
-                        self.log_operation('INFO', f"[SCAN] [DRY RUN] Would delete VPC Flow Log: {flow_log_id}")
+                        self.log_operation('INFO', f"{Symbols.SCAN} [DRY RUN] Would delete VPC Flow Log: {flow_log_id}")
                     else:
                         ec2_client.delete_flow_logs(FlowLogIds=[flow_log_id])
-                        self.log_operation('INFO', f"[OK] Deleted VPC Flow Log: {flow_log_id}")
+                        self.log_operation('INFO', f"{Symbols.OK} Deleted VPC Flow Log: {flow_log_id}")
                     
                     self.cleanup_results['resources_deleted']['vpc_flow_logs'].append({
                         'id': flow_log_id,
@@ -461,9 +462,9 @@ class UltraVPCCleanupManager:
                     })
                 except ClientError as e:
                     if 'InvalidFlowLogId.NotFound' in str(e):
-                        self.log_operation('WARNING', f"[WARN] VPC Flow Log {flow_log_id} already deleted")
+                        self.log_operation('WARNING', f"{Symbols.WARN} VPC Flow Log {flow_log_id} already deleted")
                     else:
-                        self.log_operation('ERROR', f"[ERROR] Failed to delete VPC Flow Log {flow_log_id}: {e}")
+                        self.log_operation('ERROR', f"{Symbols.ERROR} Failed to delete VPC Flow Log {flow_log_id}: {e}")
                         self.cleanup_results['failed_deletions'].append({
                             'type': 'VPC Flow Log',
                             'id': flow_log_id,
@@ -487,7 +488,7 @@ class UltraVPCCleanupManager:
                 return True
                 
             action_text = "Would delete" if self.dry_run else "Deleting"
-            self.log_operation('INFO', f"[DELETE] {action_text} {len(endpoints)} VPC Endpoints in {region} ({account_name})")
+            self.log_operation('INFO', f"{Symbols.DELETE} {action_text} {len(endpoints)} VPC Endpoints in {region} ({account_name})")
             
             for endpoint in endpoints:
                 endpoint_id = endpoint['VpcEndpointId']
@@ -495,10 +496,10 @@ class UltraVPCCleanupManager:
                 
                 try:
                     if self.dry_run:
-                        self.log_operation('INFO', f"[SCAN] [DRY RUN] Would delete VPC Endpoint ({endpoint_type}): {endpoint_id}")
+                        self.log_operation('INFO', f"{Symbols.SCAN} [DRY RUN] Would delete VPC Endpoint ({endpoint_type}): {endpoint_id}")
                     else:
                         ec2_client.delete_vpc_endpoints(VpcEndpointIds=[endpoint_id])
-                        self.log_operation('INFO', f"[OK] Deleted VPC Endpoint ({endpoint_type}): {endpoint_id}")
+                        self.log_operation('INFO', f"{Symbols.OK} Deleted VPC Endpoint ({endpoint_type}): {endpoint_id}")
                     
                     self.cleanup_results['resources_deleted']['vpc_endpoints'].append({
                         'id': endpoint_id,
@@ -509,9 +510,9 @@ class UltraVPCCleanupManager:
                     })
                 except ClientError as e:
                     if 'InvalidVpcEndpointId.NotFound' in str(e):
-                        self.log_operation('WARNING', f"[WARN] VPC Endpoint {endpoint_id} already deleted")
+                        self.log_operation('WARNING', f"{Symbols.WARN} VPC Endpoint {endpoint_id} already deleted")
                     else:
-                        self.log_operation('ERROR', f"[ERROR] Failed to delete VPC Endpoint {endpoint_id}: {e}")
+                        self.log_operation('ERROR', f"{Symbols.ERROR} Failed to delete VPC Endpoint {endpoint_id}: {e}")
                         self.cleanup_results['failed_deletions'].append({
                             'type': 'VPC Endpoint',
                             'id': endpoint_id,
@@ -535,7 +536,7 @@ class UltraVPCCleanupManager:
                 return True
                 
             action_text = "Would delete" if self.dry_run else "Deleting"
-            self.log_operation('INFO', f"[DELETE] {action_text} {len(nat_gateways)} NAT Gateways in {region} ({account_name})")
+            self.log_operation('INFO', f"{Symbols.DELETE} {action_text} {len(nat_gateways)} NAT Gateways in {region} ({account_name})")
             
             # Start deletion
             nat_gateway_ids = []
@@ -543,17 +544,17 @@ class UltraVPCCleanupManager:
                 nat_gw_id = nat_gw['NatGatewayId']
                 try:
                     if self.dry_run:
-                        self.log_operation('INFO', f"[SCAN] [DRY RUN] Would delete NAT Gateway: {nat_gw_id}")
+                        self.log_operation('INFO', f"{Symbols.SCAN} [DRY RUN] Would delete NAT Gateway: {nat_gw_id}")
                         nat_gateway_ids.append(nat_gw_id)
                     else:
                         ec2_client.delete_nat_gateway(NatGatewayId=nat_gw_id)
                         nat_gateway_ids.append(nat_gw_id)
-                        self.log_operation('INFO', f"[DELETE] Started deletion of NAT Gateway: {nat_gw_id}")
+                        self.log_operation('INFO', f"{Symbols.DELETE} Started deletion of NAT Gateway: {nat_gw_id}")
                 except ClientError as e:
                     if 'InvalidNatGatewayID.NotFound' in str(e):
-                        self.log_operation('WARNING', f"[WARN] NAT Gateway {nat_gw_id} already deleted")
+                        self.log_operation('WARNING', f"{Symbols.WARN} NAT Gateway {nat_gw_id} already deleted")
                     else:
-                        self.log_operation('ERROR', f"[ERROR] Failed to delete NAT Gateway {nat_gw_id}: {e}")
+                        self.log_operation('ERROR', f"{Symbols.ERROR} Failed to delete NAT Gateway {nat_gw_id}: {e}")
                         self.cleanup_results['failed_deletions'].append({
                             'type': 'NAT Gateway',
                             'id': nat_gw_id,
@@ -581,7 +582,7 @@ class UltraVPCCleanupManager:
                                 remaining_gateways.append(nat_gw['NatGatewayId'])
                         
                         if not remaining_gateways:
-                            self.log_operation('INFO', f"[OK] All NAT Gateways deleted successfully")
+                            self.log_operation('INFO', f"{Symbols.OK} All NAT Gateways deleted successfully")
                             break
                         
                         self.log_operation('INFO', f"[WAIT] Still waiting for {len(remaining_gateways)} NAT Gateways to delete...")
@@ -591,14 +592,14 @@ class UltraVPCCleanupManager:
                     except ClientError as e:
                         if 'InvalidNatGatewayID.NotFound' in str(e):
                             # All deleted
-                            self.log_operation('INFO', f"[OK] All NAT Gateways deleted successfully")
+                            self.log_operation('INFO', f"{Symbols.OK} All NAT Gateways deleted successfully")
                             break
                         else:
                             self.log_operation('ERROR', f"Error checking NAT Gateway status: {e}")
                             return False
                 
                 if wait_time >= max_wait_time:
-                    self.log_operation('WARNING', f"[WARN] NAT Gateway deletion timed out after {max_wait_time} seconds")
+                    self.log_operation('WARNING', f"{Symbols.WARN} NAT Gateway deletion timed out after {max_wait_time} seconds")
             
             # Record the deletions/analysis
             for nat_gw_id in nat_gateway_ids:
@@ -618,7 +619,7 @@ class UltraVPCCleanupManager:
     def get_route_tables(self, ec2_client, vpc_ids: List[str], region: str, account_name: str) -> List[Dict]:
         """Get Route Tables for custom VPCs (excluding main route tables)"""
         try:
-            self.log_operation('INFO', f"[SCAN] Scanning Route Tables in {region} ({account_name})")
+            self.log_operation('INFO', f"{Symbols.SCAN} Scanning Route Tables in {region} ({account_name})")
             
             if not vpc_ids:
                 return []
@@ -646,7 +647,7 @@ class UltraVPCCleanupManager:
                 else:
                     custom_rts.append(rt)
             
-            self.log_operation('INFO', f"[STATS] Found {len(custom_rts)} custom Route Tables and {len(main_rts)} main RTs in {region}")
+            self.log_operation('INFO', f"{Symbols.STATS} Found {len(custom_rts)} custom Route Tables and {len(main_rts)} main RTs in {region}")
             
             return custom_rts
             
@@ -657,7 +658,7 @@ class UltraVPCCleanupManager:
     def get_network_acls(self, ec2_client, vpc_ids: List[str], region: str, account_name: str) -> List[Dict]:
         """Get Network ACLs for custom VPCs (excluding default)"""
         try:
-            self.log_operation('INFO', f"[SCAN] Scanning Network ACLs in {region} ({account_name})")
+            self.log_operation('INFO', f"{Symbols.SCAN} Scanning Network ACLs in {region} ({account_name})")
             
             if not vpc_ids:
                 return []
@@ -685,7 +686,7 @@ class UltraVPCCleanupManager:
                 else:
                     custom_acls.append(acl)
             
-            self.log_operation('INFO', f"[STATS] Found {len(custom_acls)} custom Network ACLs and {len(default_acls)} default ACLs in {region}")
+            self.log_operation('INFO', f"{Symbols.STATS} Found {len(custom_acls)} custom Network ACLs and {len(default_acls)} default ACLs in {region}")
             
             return custom_acls
             
@@ -696,7 +697,7 @@ class UltraVPCCleanupManager:
     def get_elastic_ips(self, ec2_client, region: str, account_name: str) -> List[Dict]:
         """Get VPC-associated Elastic IPs"""
         try:
-            self.log_operation('INFO', f"[SCAN] Scanning VPC Elastic IPs in {region} ({account_name})")
+            self.log_operation('INFO', f"{Symbols.SCAN} Scanning VPC Elastic IPs in {region} ({account_name})")
             
             response = ec2_client.describe_addresses(
                 Filters=[
@@ -708,7 +709,7 @@ class UltraVPCCleanupManager:
             # Only include unassociated EIPs to avoid disrupting running instances
             unassociated_eips = [addr for addr in addresses if 'AssociationId' not in addr]
             
-            self.log_operation('INFO', f"[STATS] Found {len(unassociated_eips)} unassociated VPC Elastic IPs in {region}")
+            self.log_operation('INFO', f"{Symbols.STATS} Found {len(unassociated_eips)} unassociated VPC Elastic IPs in {region}")
             
             return unassociated_eips
             
@@ -719,7 +720,7 @@ class UltraVPCCleanupManager:
     def get_vpn_gateways(self, ec2_client, vpc_ids: List[str], region: str, account_name: str) -> List[Dict]:
         """Get VPN Gateways attached to custom VPCs"""
         try:
-            self.log_operation('INFO', f"[SCAN] Scanning VPN Gateways in {region} ({account_name})")
+            self.log_operation('INFO', f"{Symbols.SCAN} Scanning VPN Gateways in {region} ({account_name})")
             
             response = ec2_client.describe_vpn_gateways()
             all_vgws = response.get('VpnGateways', [])
@@ -735,7 +736,7 @@ class UltraVPCCleanupManager:
                         vpc_vgws.append(vgw)
                         break
             
-            self.log_operation('INFO', f"[STATS] Found {len(vpc_vgws)} VPN Gateways in {region}")
+            self.log_operation('INFO', f"{Symbols.STATS} Found {len(vpc_vgws)} VPN Gateways in {region}")
             
             return vpc_vgws
             
@@ -746,7 +747,7 @@ class UltraVPCCleanupManager:
     def get_transit_gateway_attachments(self, ec2_client, vpc_ids: List[str], region: str, account_name: str) -> List[Dict]:
         """Get Transit Gateway Attachments for custom VPCs"""
         try:
-            self.log_operation('INFO', f"[SCAN] Scanning Transit Gateway Attachments in {region} ({account_name})")
+            self.log_operation('INFO', f"{Symbols.SCAN} Scanning Transit Gateway Attachments in {region} ({account_name})")
             
             if not vpc_ids:
                 return []
@@ -762,7 +763,7 @@ class UltraVPCCleanupManager:
             # Only include available attachments
             active_attachments = [att for att in attachments if att.get('State') in ['available', 'pending']]
             
-            self.log_operation('INFO', f"[STATS] Found {len(active_attachments)} Transit Gateway Attachments in {region}")
+            self.log_operation('INFO', f"{Symbols.STATS} Found {len(active_attachments)} Transit Gateway Attachments in {region}")
             
             return active_attachments
             
@@ -773,7 +774,7 @@ class UltraVPCCleanupManager:
     def get_network_interfaces(self, ec2_client, vpc_ids: List[str], region: str, account_name: str) -> List[Dict]:
         """Get unattached Network Interfaces in custom VPCs"""
         try:
-            self.log_operation('INFO', f"[SCAN] Scanning Network Interfaces in {region} ({account_name})")
+            self.log_operation('INFO', f"{Symbols.SCAN} Scanning Network Interfaces in {region} ({account_name})")
             
             if not vpc_ids:
                 return []
@@ -786,7 +787,7 @@ class UltraVPCCleanupManager:
             )
             
             interfaces = response.get('NetworkInterfaces', [])
-            self.log_operation('INFO', f"[STATS] Found {len(interfaces)} unattached Network Interfaces in {region}")
+            self.log_operation('INFO', f"{Symbols.STATS} Found {len(interfaces)} unattached Network Interfaces in {region}")
             
             return interfaces
             
@@ -797,7 +798,7 @@ class UltraVPCCleanupManager:
     def get_subnets(self, ec2_client, vpc_ids: List[str], region: str, account_name: str) -> List[Dict]:
         """Get all custom subnets in VPCs"""
         try:
-            self.log_operation('INFO', f"[SCAN] Scanning Subnets in {region} ({account_name})")
+            self.log_operation('INFO', f"{Symbols.SCAN} Scanning Subnets in {region} ({account_name})")
             
             if not vpc_ids:
                 return []
@@ -809,7 +810,7 @@ class UltraVPCCleanupManager:
             )
             
             subnets = response.get('Subnets', [])
-            self.log_operation('INFO', f"[STATS] Found {len(subnets)} Subnets in {region}")
+            self.log_operation('INFO', f"{Symbols.STATS} Found {len(subnets)} Subnets in {region}")
             
             return subnets
             
@@ -820,7 +821,7 @@ class UltraVPCCleanupManager:
     def get_dhcp_options_sets(self, ec2_client, custom_vpcs: List[Dict], region: str, account_name: str) -> List[Dict]:
         """Get custom DHCP Options Sets"""
         try:
-            self.log_operation('INFO', f"[SCAN] Scanning DHCP Options Sets in {region} ({account_name})")
+            self.log_operation('INFO', f"{Symbols.SCAN} Scanning DHCP Options Sets in {region} ({account_name})")
             
             if not custom_vpcs:
                 return []
@@ -847,7 +848,7 @@ class UltraVPCCleanupManager:
                             'account': account_name
                         })
             
-            self.log_operation('INFO', f"[STATS] Found {len(custom_dhcp)} custom DHCP Options Sets in {region}")
+            self.log_operation('INFO', f"{Symbols.STATS} Found {len(custom_dhcp)} custom DHCP Options Sets in {region}")
             
             return custom_dhcp
             
@@ -858,7 +859,7 @@ class UltraVPCCleanupManager:
     def get_customer_gateways(self, ec2_client, region: str, account_name: str) -> List[Dict]:
         """Get Customer Gateways (these are typically VPC-independent but included for completeness)"""
         try:
-            self.log_operation('INFO', f"[SCAN] Scanning Customer Gateways in {region} ({account_name})")
+            self.log_operation('INFO', f"{Symbols.SCAN} Scanning Customer Gateways in {region} ({account_name})")
             
             response = ec2_client.describe_customer_gateways()
             customer_gateways = response.get('CustomerGateways', [])
@@ -866,7 +867,7 @@ class UltraVPCCleanupManager:
             # Only include available customer gateways
             available_cgws = [cgw for cgw in customer_gateways if cgw.get('State') == 'available']
             
-            self.log_operation('INFO', f"[STATS] Found {len(available_cgws)} Customer Gateways in {region}")
+            self.log_operation('INFO', f"{Symbols.STATS} Found {len(available_cgws)} Customer Gateways in {region}")
             
             return available_cgws
             
@@ -877,7 +878,7 @@ class UltraVPCCleanupManager:
     def get_vpc_peering_connections(self, ec2_client, vpc_ids: List[str], region: str, account_name: str) -> List[Dict]:
         """Get VPC Peering Connections for custom VPCs"""
         try:
-            self.log_operation('INFO', f"[SCAN] Scanning VPC Peering Connections in {region} ({account_name})")
+            self.log_operation('INFO', f"{Symbols.SCAN} Scanning VPC Peering Connections in {region} ({account_name})")
             
             if not vpc_ids:
                 return []
@@ -897,7 +898,7 @@ class UltraVPCCleanupManager:
                 if requester_vpc in vpc_ids or accepter_vpc in vpc_ids:
                     vpc_peering.append(peering)
             
-            self.log_operation('INFO', f"[STATS] Found {len(vpc_peering)} VPC Peering Connections in {region}")
+            self.log_operation('INFO', f"{Symbols.STATS} Found {len(vpc_peering)} VPC Peering Connections in {region}")
             
             return vpc_peering
             
@@ -912,13 +913,13 @@ class UltraVPCCleanupManager:
                 return True
                 
             action_text = "Would delete" if self.dry_run else "Deleting"
-            self.log_operation('INFO', f"[DELETE] {action_text} {len(internet_gateways)} Internet Gateways in {region} ({account_name})")
+            self.log_operation('INFO', f"{Symbols.DELETE} {action_text} {len(internet_gateways)} Internet Gateways in {region} ({account_name})")
             
             for igw in internet_gateways:
                 igw_id = igw['InternetGatewayId']
                 try:
                     if self.dry_run:
-                        self.log_operation('INFO', f"[SCAN] [DRY RUN] Would detach and delete Internet Gateway: {igw_id}")
+                        self.log_operation('INFO', f"{Symbols.SCAN} [DRY RUN] Would detach and delete Internet Gateway: {igw_id}")
                     else:
                         # First detach from VPCs
                         attachments = igw.get('Attachments', [])
@@ -930,7 +931,7 @@ class UltraVPCCleanupManager:
                         
                         # Then delete the IGW
                         ec2_client.delete_internet_gateway(InternetGatewayId=igw_id)
-                        self.log_operation('INFO', f"[OK] Deleted Internet Gateway: {igw_id}")
+                        self.log_operation('INFO', f"{Symbols.OK} Deleted Internet Gateway: {igw_id}")
                     
                     self.cleanup_results['resources_deleted']['internet_gateways'].append({
                         'id': igw_id,
@@ -940,9 +941,9 @@ class UltraVPCCleanupManager:
                     })
                 except ClientError as e:
                     if 'InvalidInternetGatewayID.NotFound' in str(e):
-                        self.log_operation('WARNING', f"[WARN] Internet Gateway {igw_id} already deleted")
+                        self.log_operation('WARNING', f"{Symbols.WARN} Internet Gateway {igw_id} already deleted")
                     elif 'DependencyViolation' in str(e):
-                        self.log_operation('WARNING', f"[WARN] Cannot delete IGW {igw_id}: dependency violation")
+                        self.log_operation('WARNING', f"{Symbols.WARN} Cannot delete IGW {igw_id}: dependency violation")
                         self.cleanup_results['dependency_violations'].append({
                             'type': 'Internet Gateway',
                             'id': igw_id,
@@ -951,7 +952,7 @@ class UltraVPCCleanupManager:
                             'account': account_name
                         })
                     else:
-                        self.log_operation('ERROR', f"[ERROR] Failed to delete Internet Gateway {igw_id}: {e}")
+                        self.log_operation('ERROR', f"{Symbols.ERROR} Failed to delete Internet Gateway {igw_id}: {e}")
                         self.cleanup_results['failed_deletions'].append({
                             'type': 'Internet Gateway',
                             'id': igw_id,
@@ -974,7 +975,7 @@ class UltraVPCCleanupManager:
             if not security_groups:
                 return True
                 
-            self.log_operation('INFO', f"[DELETE] Deleting {len(security_groups)} Security Groups in {region} ({account_name})")
+            self.log_operation('INFO', f"{Symbols.DELETE} Deleting {len(security_groups)} Security Groups in {region} ({account_name})")
             
             # First pass: Clear all rules from security groups
             for sg in security_groups:
@@ -986,7 +987,7 @@ class UltraVPCCleanupManager:
                             GroupId=sg_id,
                             IpPermissions=sg['IpPermissions']
                         )
-                        self.log_operation('INFO', f"[CLEANUP] Cleared ingress rules for SG {sg_id}")
+                        self.log_operation('INFO', f"{Symbols.CLEANUP} Cleared ingress rules for SG {sg_id}")
                     
                     # Clear egress rules
                     if sg.get('IpPermissionsEgress'):
@@ -999,13 +1000,13 @@ class UltraVPCCleanupManager:
                                 GroupId=sg_id,
                                 IpPermissions=custom_egress
                             )
-                            self.log_operation('INFO', f"[CLEANUP] Cleared custom egress rules for SG {sg_id}")
+                            self.log_operation('INFO', f"{Symbols.CLEANUP} Cleared custom egress rules for SG {sg_id}")
                 
                 except ClientError as e:
                     if 'InvalidGroupId.NotFound' in str(e):
-                        self.log_operation('WARNING', f"[WARN] Security Group {sg_id} already deleted")
+                        self.log_operation('WARNING', f"{Symbols.WARN} Security Group {sg_id} already deleted")
                     else:
-                        self.log_operation('WARNING', f"[WARN] Failed to clear rules for SG {sg_id}: {e}")
+                        self.log_operation('WARNING', f"{Symbols.WARN} Failed to clear rules for SG {sg_id}: {e}")
             
             # Second pass: Delete security groups
             for sg in security_groups:
@@ -1013,7 +1014,7 @@ class UltraVPCCleanupManager:
                 sg_name = sg['GroupName']
                 try:
                     ec2_client.delete_security_group(GroupId=sg_id)
-                    self.log_operation('INFO', f"[OK] Deleted Security Group: {sg_id} ({sg_name})")
+                    self.log_operation('INFO', f"{Symbols.OK} Deleted Security Group: {sg_id} ({sg_name})")
                     self.cleanup_results['resources_deleted']['security_groups'].append({
                         'id': sg_id,
                         'name': sg_name,
@@ -1022,9 +1023,9 @@ class UltraVPCCleanupManager:
                     })
                 except ClientError as e:
                     if 'InvalidGroupId.NotFound' in str(e):
-                        self.log_operation('WARNING', f"[WARN] Security Group {sg_id} already deleted")
+                        self.log_operation('WARNING', f"{Symbols.WARN} Security Group {sg_id} already deleted")
                     elif 'DependencyViolation' in str(e):
-                        self.log_operation('WARNING', f"[WARN] Cannot delete SG {sg_id}: dependency violation")
+                        self.log_operation('WARNING', f"{Symbols.WARN} Cannot delete SG {sg_id}: dependency violation")
                         self.cleanup_results['dependency_violations'].append({
                             'type': 'Security Group',
                             'id': sg_id,
@@ -1033,7 +1034,7 @@ class UltraVPCCleanupManager:
                             'account': account_name
                         })
                     else:
-                        self.log_operation('ERROR', f"[ERROR] Failed to delete Security Group {sg_id}: {e}")
+                        self.log_operation('ERROR', f"{Symbols.ERROR} Failed to delete Security Group {sg_id}: {e}")
                         self.cleanup_results['failed_deletions'].append({
                             'type': 'Security Group',
                             'id': sg_id,
@@ -1055,7 +1056,7 @@ class UltraVPCCleanupManager:
             if not route_tables:
                 return True
                 
-            self.log_operation('INFO', f"[DELETE] Deleting {len(route_tables)} Route Tables in {region} ({account_name})")
+            self.log_operation('INFO', f"{Symbols.DELETE} Deleting {len(route_tables)} Route Tables in {region} ({account_name})")
             
             for rt in route_tables:
                 rt_id = rt['RouteTableId']
@@ -1070,7 +1071,7 @@ class UltraVPCCleanupManager:
                     
                     # Delete the route table
                     ec2_client.delete_route_table(RouteTableId=rt_id)
-                    self.log_operation('INFO', f"[OK] Deleted Route Table: {rt_id}")
+                    self.log_operation('INFO', f"{Symbols.OK} Deleted Route Table: {rt_id}")
                     self.cleanup_results['resources_deleted']['route_tables'].append({
                         'id': rt_id,
                         'region': region,
@@ -1078,9 +1079,9 @@ class UltraVPCCleanupManager:
                     })
                 except ClientError as e:
                     if 'InvalidRouteTableID.NotFound' in str(e):
-                        self.log_operation('WARNING', f"[WARN] Route Table {rt_id} already deleted")
+                        self.log_operation('WARNING', f"{Symbols.WARN} Route Table {rt_id} already deleted")
                     elif 'DependencyViolation' in str(e):
-                        self.log_operation('WARNING', f"[WARN] Cannot delete RT {rt_id}: dependency violation")
+                        self.log_operation('WARNING', f"{Symbols.WARN} Cannot delete RT {rt_id}: dependency violation")
                         self.cleanup_results['dependency_violations'].append({
                             'type': 'Route Table',
                             'id': rt_id,
@@ -1089,7 +1090,7 @@ class UltraVPCCleanupManager:
                             'account': account_name
                         })
                     else:
-                        self.log_operation('ERROR', f"[ERROR] Failed to delete Route Table {rt_id}: {e}")
+                        self.log_operation('ERROR', f"{Symbols.ERROR} Failed to delete Route Table {rt_id}: {e}")
                         self.cleanup_results['failed_deletions'].append({
                             'type': 'Route Table',
                             'id': rt_id,
@@ -1111,13 +1112,13 @@ class UltraVPCCleanupManager:
             if not network_acls:
                 return True
                 
-            self.log_operation('INFO', f"[DELETE] Deleting {len(network_acls)} Network ACLs in {region} ({account_name})")
+            self.log_operation('INFO', f"{Symbols.DELETE} Deleting {len(network_acls)} Network ACLs in {region} ({account_name})")
             
             for acl in network_acls:
                 acl_id = acl['NetworkAclId']
                 try:
                     ec2_client.delete_network_acl(NetworkAclId=acl_id)
-                    self.log_operation('INFO', f"[OK] Deleted Network ACL: {acl_id}")
+                    self.log_operation('INFO', f"{Symbols.OK} Deleted Network ACL: {acl_id}")
                     self.cleanup_results['resources_deleted']['network_acls'].append({
                         'id': acl_id,
                         'region': region,
@@ -1125,9 +1126,9 @@ class UltraVPCCleanupManager:
                     })
                 except ClientError as e:
                     if 'InvalidNetworkAclID.NotFound' in str(e):
-                        self.log_operation('WARNING', f"[WARN] Network ACL {acl_id} already deleted")
+                        self.log_operation('WARNING', f"{Symbols.WARN} Network ACL {acl_id} already deleted")
                     elif 'DependencyViolation' in str(e):
-                        self.log_operation('WARNING', f"[WARN] Cannot delete ACL {acl_id}: dependency violation")
+                        self.log_operation('WARNING', f"{Symbols.WARN} Cannot delete ACL {acl_id}: dependency violation")
                         self.cleanup_results['dependency_violations'].append({
                             'type': 'Network ACL',
                             'id': acl_id,
@@ -1136,7 +1137,7 @@ class UltraVPCCleanupManager:
                             'account': account_name
                         })
                     else:
-                        self.log_operation('ERROR', f"[ERROR] Failed to delete Network ACL {acl_id}: {e}")
+                        self.log_operation('ERROR', f"{Symbols.ERROR} Failed to delete Network ACL {acl_id}: {e}")
                         self.cleanup_results['failed_deletions'].append({
                             'type': 'Network ACL',
                             'id': acl_id,
@@ -1158,7 +1159,7 @@ class UltraVPCCleanupManager:
             if not elastic_ips:
                 return True
                 
-            self.log_operation('INFO', f"[DELETE] Releasing {len(elastic_ips)} Elastic IPs in {region} ({account_name})")
+            self.log_operation('INFO', f"{Symbols.DELETE} Releasing {len(elastic_ips)} Elastic IPs in {region} ({account_name})")
             
             for eip in elastic_ips:
                 allocation_id = eip.get('AllocationId')
@@ -1171,7 +1172,7 @@ class UltraVPCCleanupManager:
                         # Classic EIP
                         ec2_client.release_address(PublicIp=public_ip)
                     
-                    self.log_operation('INFO', f"[OK] Released Elastic IP: {public_ip} ({allocation_id})")
+                    self.log_operation('INFO', f"{Symbols.OK} Released Elastic IP: {public_ip} ({allocation_id})")
                     self.cleanup_results['resources_deleted']['elastic_ips'].append({
                         'allocation_id': allocation_id,
                         'public_ip': public_ip,
@@ -1180,9 +1181,9 @@ class UltraVPCCleanupManager:
                     })
                 except ClientError as e:
                     if 'InvalidAllocationID.NotFound' in str(e) or 'InvalidAddress.NotFound' in str(e):
-                        self.log_operation('WARNING', f"[WARN] Elastic IP {public_ip} already released")
+                        self.log_operation('WARNING', f"{Symbols.WARN} Elastic IP {public_ip} already released")
                     else:
-                        self.log_operation('ERROR', f"[ERROR] Failed to release Elastic IP {public_ip}: {e}")
+                        self.log_operation('ERROR', f"{Symbols.ERROR} Failed to release Elastic IP {public_ip}: {e}")
                         self.cleanup_results['failed_deletions'].append({
                             'type': 'Elastic IP',
                             'id': allocation_id or public_ip,
@@ -1204,7 +1205,7 @@ class UltraVPCCleanupManager:
             if not vpn_gateways:
                 return True
                 
-            self.log_operation('INFO', f"[DELETE] Deleting {len(vpn_gateways)} VPN Gateways in {region} ({account_name})")
+            self.log_operation('INFO', f"{Symbols.DELETE} Deleting {len(vpn_gateways)} VPN Gateways in {region} ({account_name})")
             
             for vgw in vpn_gateways:
                 vgw_id = vgw['VpnGatewayId']
@@ -1222,7 +1223,7 @@ class UltraVPCCleanupManager:
                     
                     # Delete the VPN Gateway
                     ec2_client.delete_vpn_gateway(VpnGatewayId=vgw_id)
-                    self.log_operation('INFO', f"[OK] Deleted VPN Gateway: {vgw_id}")
+                    self.log_operation('INFO', f"{Symbols.OK} Deleted VPN Gateway: {vgw_id}")
                     self.cleanup_results['resources_deleted']['vpn_gateways'].append({
                         'id': vgw_id,
                         'region': region,
@@ -1230,9 +1231,9 @@ class UltraVPCCleanupManager:
                     })
                 except ClientError as e:
                     if 'InvalidVpnGatewayID.NotFound' in str(e):
-                        self.log_operation('WARNING', f"[WARN] VPN Gateway {vgw_id} already deleted")
+                        self.log_operation('WARNING', f"{Symbols.WARN} VPN Gateway {vgw_id} already deleted")
                     elif 'DependencyViolation' in str(e):
-                        self.log_operation('WARNING', f"[WARN] Cannot delete VPN Gateway {vgw_id}: dependency violation")
+                        self.log_operation('WARNING', f"{Symbols.WARN} Cannot delete VPN Gateway {vgw_id}: dependency violation")
                         self.cleanup_results['dependency_violations'].append({
                             'type': 'VPN Gateway',
                             'id': vgw_id,
@@ -1241,7 +1242,7 @@ class UltraVPCCleanupManager:
                             'account': account_name
                         })
                     else:
-                        self.log_operation('ERROR', f"[ERROR] Failed to delete VPN Gateway {vgw_id}: {e}")
+                        self.log_operation('ERROR', f"{Symbols.ERROR} Failed to delete VPN Gateway {vgw_id}: {e}")
                         self.cleanup_results['failed_deletions'].append({
                             'type': 'VPN Gateway',
                             'id': vgw_id,
@@ -1263,13 +1264,13 @@ class UltraVPCCleanupManager:
             if not tgw_attachments:
                 return True
                 
-            self.log_operation('INFO', f"[DELETE] Deleting {len(tgw_attachments)} Transit Gateway Attachments in {region} ({account_name})")
+            self.log_operation('INFO', f"{Symbols.DELETE} Deleting {len(tgw_attachments)} Transit Gateway Attachments in {region} ({account_name})")
             
             for attachment in tgw_attachments:
                 attachment_id = attachment['TransitGatewayAttachmentId']
                 try:
                     ec2_client.delete_transit_gateway_vpc_attachment(TransitGatewayAttachmentId=attachment_id)
-                    self.log_operation('INFO', f"[OK] Deleted TGW Attachment: {attachment_id}")
+                    self.log_operation('INFO', f"{Symbols.OK} Deleted TGW Attachment: {attachment_id}")
                     self.cleanup_results['resources_deleted']['transit_gateway_attachments'].append({
                         'id': attachment_id,
                         'region': region,
@@ -1277,9 +1278,9 @@ class UltraVPCCleanupManager:
                     })
                 except ClientError as e:
                     if 'InvalidTransitGatewayAttachmentID.NotFound' in str(e):
-                        self.log_operation('WARNING', f"[WARN] TGW Attachment {attachment_id} already deleted")
+                        self.log_operation('WARNING', f"{Symbols.WARN} TGW Attachment {attachment_id} already deleted")
                     else:
-                        self.log_operation('ERROR', f"[ERROR] Failed to delete TGW Attachment {attachment_id}: {e}")
+                        self.log_operation('ERROR', f"{Symbols.ERROR} Failed to delete TGW Attachment {attachment_id}: {e}")
                         self.cleanup_results['failed_deletions'].append({
                             'type': 'Transit Gateway Attachment',
                             'id': attachment_id,
@@ -1301,13 +1302,13 @@ class UltraVPCCleanupManager:
             if not network_interfaces:
                 return True
                 
-            self.log_operation('INFO', f"[DELETE] Deleting {len(network_interfaces)} Network Interfaces in {region} ({account_name})")
+            self.log_operation('INFO', f"{Symbols.DELETE} Deleting {len(network_interfaces)} Network Interfaces in {region} ({account_name})")
             
             for eni in network_interfaces:
                 eni_id = eni['NetworkInterfaceId']
                 try:
                     ec2_client.delete_network_interface(NetworkInterfaceId=eni_id)
-                    self.log_operation('INFO', f"[OK] Deleted Network Interface: {eni_id}")
+                    self.log_operation('INFO', f"{Symbols.OK} Deleted Network Interface: {eni_id}")
                     self.cleanup_results['resources_deleted']['network_interfaces'].append({
                         'id': eni_id,
                         'region': region,
@@ -1315,9 +1316,9 @@ class UltraVPCCleanupManager:
                     })
                 except ClientError as e:
                     if 'InvalidNetworkInterfaceID.NotFound' in str(e):
-                        self.log_operation('WARNING', f"[WARN] Network Interface {eni_id} already deleted")
+                        self.log_operation('WARNING', f"{Symbols.WARN} Network Interface {eni_id} already deleted")
                     elif 'DependencyViolation' in str(e):
-                        self.log_operation('WARNING', f"[WARN] Cannot delete ENI {eni_id}: dependency violation")
+                        self.log_operation('WARNING', f"{Symbols.WARN} Cannot delete ENI {eni_id}: dependency violation")
                         self.cleanup_results['dependency_violations'].append({
                             'type': 'Network Interface',
                             'id': eni_id,
@@ -1326,7 +1327,7 @@ class UltraVPCCleanupManager:
                             'account': account_name
                         })
                     else:
-                        self.log_operation('ERROR', f"[ERROR] Failed to delete Network Interface {eni_id}: {e}")
+                        self.log_operation('ERROR', f"{Symbols.ERROR} Failed to delete Network Interface {eni_id}: {e}")
                         self.cleanup_results['failed_deletions'].append({
                             'type': 'Network Interface',
                             'id': eni_id,
@@ -1352,13 +1353,13 @@ class UltraVPCCleanupManager:
             if not subnets:
                 return True
                 
-            self.log_operation('INFO', f"[DELETE] Deleting {len(subnets)} Subnets in {region} ({account_name})")
+            self.log_operation('INFO', f"{Symbols.DELETE} Deleting {len(subnets)} Subnets in {region} ({account_name})")
             
             for subnet in subnets:
                 subnet_id = subnet['SubnetId']
                 try:
                     ec2_client.delete_subnet(SubnetId=subnet_id)
-                    self.log_operation('INFO', f"[OK] Deleted Subnet: {subnet_id}")
+                    self.log_operation('INFO', f"{Symbols.OK} Deleted Subnet: {subnet_id}")
                     self.cleanup_results['resources_deleted']['subnets'].append({
                         'id': subnet_id,
                         'cidr': subnet.get('CidrBlock'),
@@ -1368,9 +1369,9 @@ class UltraVPCCleanupManager:
                     })
                 except ClientError as e:
                     if 'InvalidSubnetID.NotFound' in str(e):
-                        self.log_operation('WARNING', f"[WARN] Subnet {subnet_id} already deleted")
+                        self.log_operation('WARNING', f"{Symbols.WARN} Subnet {subnet_id} already deleted")
                     elif 'DependencyViolation' in str(e):
-                        self.log_operation('WARNING', f"[WARN] Cannot delete Subnet {subnet_id}: dependency violation")
+                        self.log_operation('WARNING', f"{Symbols.WARN} Cannot delete Subnet {subnet_id}: dependency violation")
                         self.cleanup_results['dependency_violations'].append({
                             'type': 'Subnet',
                             'id': subnet_id,
@@ -1379,7 +1380,7 @@ class UltraVPCCleanupManager:
                             'account': account_name
                         })
                     else:
-                        self.log_operation('ERROR', f"[ERROR] Failed to delete Subnet {subnet_id}: {e}")
+                        self.log_operation('ERROR', f"{Symbols.ERROR} Failed to delete Subnet {subnet_id}: {e}")
                         self.cleanup_results['failed_deletions'].append({
                             'type': 'Subnet',
                             'id': subnet_id,
@@ -1401,13 +1402,13 @@ class UltraVPCCleanupManager:
             if not dhcp_options:
                 return True
                 
-            self.log_operation('INFO', f"[DELETE] Deleting {len(dhcp_options)} DHCP Options Sets in {region} ({account_name})")
+            self.log_operation('INFO', f"{Symbols.DELETE} Deleting {len(dhcp_options)} DHCP Options Sets in {region} ({account_name})")
             
             for dhcp in dhcp_options:
                 dhcp_id = dhcp['DhcpOptionsId']
                 try:
                     ec2_client.delete_dhcp_options(DhcpOptionsId=dhcp_id)
-                    self.log_operation('INFO', f"[OK] Deleted DHCP Options Set: {dhcp_id}")
+                    self.log_operation('INFO', f"{Symbols.OK} Deleted DHCP Options Set: {dhcp_id}")
                     self.cleanup_results['resources_deleted']['dhcp_options_sets'].append({
                         'id': dhcp_id,
                         'region': region,
@@ -1415,9 +1416,9 @@ class UltraVPCCleanupManager:
                     })
                 except ClientError as e:
                     if 'InvalidDhcpOptionID.NotFound' in str(e):
-                        self.log_operation('WARNING', f"[WARN] DHCP Options Set {dhcp_id} already deleted")
+                        self.log_operation('WARNING', f"{Symbols.WARN} DHCP Options Set {dhcp_id} already deleted")
                     elif 'DependencyViolation' in str(e):
-                        self.log_operation('WARNING', f"[WARN] Cannot delete DHCP Options {dhcp_id}: dependency violation")
+                        self.log_operation('WARNING', f"{Symbols.WARN} Cannot delete DHCP Options {dhcp_id}: dependency violation")
                         self.cleanup_results['dependency_violations'].append({
                             'type': 'DHCP Options Set',
                             'id': dhcp_id,
@@ -1426,7 +1427,7 @@ class UltraVPCCleanupManager:
                             'account': account_name
                         })
                     else:
-                        self.log_operation('ERROR', f"[ERROR] Failed to delete DHCP Options Set {dhcp_id}: {e}")
+                        self.log_operation('ERROR', f"{Symbols.ERROR} Failed to delete DHCP Options Set {dhcp_id}: {e}")
                         self.cleanup_results['failed_deletions'].append({
                             'type': 'DHCP Options Set',
                             'id': dhcp_id,
@@ -1448,13 +1449,13 @@ class UltraVPCCleanupManager:
             if not customer_gateways:
                 return True
                 
-            self.log_operation('INFO', f"[DELETE] Deleting {len(customer_gateways)} Customer Gateways in {region} ({account_name})")
+            self.log_operation('INFO', f"{Symbols.DELETE} Deleting {len(customer_gateways)} Customer Gateways in {region} ({account_name})")
             
             for cgw in customer_gateways:
                 cgw_id = cgw['CustomerGatewayId']
                 try:
                     ec2_client.delete_customer_gateway(CustomerGatewayId=cgw_id)
-                    self.log_operation('INFO', f"[OK] Deleted Customer Gateway: {cgw_id}")
+                    self.log_operation('INFO', f"{Symbols.OK} Deleted Customer Gateway: {cgw_id}")
                     self.cleanup_results['resources_deleted']['customer_gateways'].append({
                         'id': cgw_id,
                         'region': region,
@@ -1462,9 +1463,9 @@ class UltraVPCCleanupManager:
                     })
                 except ClientError as e:
                     if 'InvalidCustomerGatewayID.NotFound' in str(e):
-                        self.log_operation('WARNING', f"[WARN] Customer Gateway {cgw_id} already deleted")
+                        self.log_operation('WARNING', f"{Symbols.WARN} Customer Gateway {cgw_id} already deleted")
                     elif 'DependencyViolation' in str(e):
-                        self.log_operation('WARNING', f"[WARN] Cannot delete Customer Gateway {cgw_id}: dependency violation")
+                        self.log_operation('WARNING', f"{Symbols.WARN} Cannot delete Customer Gateway {cgw_id}: dependency violation")
                         self.cleanup_results['dependency_violations'].append({
                             'type': 'Customer Gateway',
                             'id': cgw_id,
@@ -1473,7 +1474,7 @@ class UltraVPCCleanupManager:
                             'account': account_name
                         })
                     else:
-                        self.log_operation('ERROR', f"[ERROR] Failed to delete Customer Gateway {cgw_id}: {e}")
+                        self.log_operation('ERROR', f"{Symbols.ERROR} Failed to delete Customer Gateway {cgw_id}: {e}")
                         self.cleanup_results['failed_deletions'].append({
                             'type': 'Customer Gateway',
                             'id': cgw_id,
@@ -1495,13 +1496,13 @@ class UltraVPCCleanupManager:
             if not peering_connections:
                 return True
                 
-            self.log_operation('INFO', f"[DELETE] Deleting {len(peering_connections)} VPC Peering Connections in {region} ({account_name})")
+            self.log_operation('INFO', f"{Symbols.DELETE} Deleting {len(peering_connections)} VPC Peering Connections in {region} ({account_name})")
             
             for peering in peering_connections:
                 peering_id = peering['VpcPeeringConnectionId']
                 try:
                     ec2_client.delete_vpc_peering_connection(VpcPeeringConnectionId=peering_id)
-                    self.log_operation('INFO', f"[OK] Deleted VPC Peering Connection: {peering_id}")
+                    self.log_operation('INFO', f"{Symbols.OK} Deleted VPC Peering Connection: {peering_id}")
                     self.cleanup_results['resources_deleted']['vpc_peering_connections'].append({
                         'id': peering_id,
                         'region': region,
@@ -1509,9 +1510,9 @@ class UltraVPCCleanupManager:
                     })
                 except ClientError as e:
                     if 'InvalidVpcPeeringConnectionID.NotFound' in str(e):
-                        self.log_operation('WARNING', f"[WARN] VPC Peering Connection {peering_id} already deleted")
+                        self.log_operation('WARNING', f"{Symbols.WARN} VPC Peering Connection {peering_id} already deleted")
                     else:
-                        self.log_operation('ERROR', f"[ERROR] Failed to delete VPC Peering Connection {peering_id}: {e}")
+                        self.log_operation('ERROR', f"{Symbols.ERROR} Failed to delete VPC Peering Connection {peering_id}: {e}")
                         self.cleanup_results['failed_deletions'].append({
                             'type': 'VPC Peering Connection',
                             'id': peering_id,
@@ -1536,7 +1537,7 @@ class UltraVPCCleanupManager:
                     'us-east-1', 'us-east-2', 'us-west-1', 'us-west-2', 'ap-south-1'
                 ])
         except Exception as e:
-            self.print_colored(Colors.YELLOW, f"[WARN]  Warning: Could not load user regions: {e}")
+            self.print_colored(Colors.YELLOW, f"{Symbols.WARN}  Warning: Could not load user regions: {e}")
 
         return ['us-east-1', 'us-east-2', 'us-west-1', 'us-west-2', 'ap-south-1']
 
@@ -1558,17 +1559,17 @@ class UltraVPCCleanupManager:
                 
                 if choice == '1':
                     self.dry_run = True
-                    print("[OK] Dry Run mode selected - NO actual deletions will occur")
+                    print(f"{Symbols.OK} Dry Run mode selected - NO actual deletions will occur")
                     return True
                 elif choice == '2':
                     self.dry_run = False
-                    print("[WARN] Actual Cleanup mode selected - REAL deletions will occur")
+                    print(f"{Symbols.WARN} Actual Cleanup mode selected - REAL deletions will occur")
                     return True
                 else:
-                    print("[ERROR] Invalid choice. Please enter 1 or 2")
+                    print(f"{Symbols.ERROR} Invalid choice. Please enter 1 or 2")
                 
             except Exception as e:
-                print(f"[ERROR] Error in selection: {e}")
+                print(f"{Symbols.ERROR} Error in selection: {e}")
 
     def select_accounts_interactive(self) -> List[str]:
         """Interactive account selection"""
@@ -1608,56 +1609,17 @@ class UltraVPCCleanupManager:
                     if 1 <= idx <= len(accounts):
                         selected_accounts.append(accounts[idx - 1])
                     else:
-                        print(f"[ERROR] Invalid choice: {idx}. Please select numbers between 1 and {len(accounts)}")
+                        print(f"{Symbols.ERROR} Invalid choice: {idx}. Please select numbers between 1 and {len(accounts)}")
                         break
                 else:
                     if selected_accounts:
-                        print(f"\n[OK] Selected accounts: {', '.join(selected_accounts)}")
+                        print(f"\n{Symbols.OK} Selected accounts: {', '.join(selected_accounts)}")
                         return selected_accounts
                 
             except ValueError:
                 print("[ERROR] Please enter valid numbers separated by commas")
             except Exception as e:
-                print(f"[ERROR] Error in selection: {e}")
-
-    def select_regions_interactive(self) -> Optional[List[str]]:
-        """Interactive region selection."""
-        self.print_colored(Colors.YELLOW, "\n[REGION] Available AWS Regions:")
-        self.print_colored(Colors.YELLOW, "=" * 80)
-
-        for i, region in enumerate(self.user_regions, 1):
-            self.print_colored(Colors.CYAN, f"   {i}. {region}")
-
-        self.print_colored(Colors.YELLOW, "=" * 80)
-        self.print_colored(Colors.YELLOW, "[TIP] Selection options:")
-        self.print_colored(Colors.WHITE, "   • Single: 1")
-        self.print_colored(Colors.WHITE, "   • Multiple: 1,3,5")
-        self.print_colored(Colors.WHITE, "   • Range: 1-5")
-        self.print_colored(Colors.WHITE, "   • All: all")
-        self.print_colored(Colors.YELLOW, "=" * 80)
-
-        while True:
-            try:
-                choice = input(f"Select regions (1-{len(self.user_regions)}, comma-separated, range, or 'all') or 'q' to quit: ").strip()
-
-                if choice.lower() == 'q':
-                    return None
-
-                if choice.lower() == "all" or not choice:
-                    self.print_colored(Colors.GREEN, f"[OK] Selected all {len(self.user_regions)} regions")
-                    return self.user_regions
-
-                selected_indices = self.cred_manager._parse_selection(choice, len(self.user_regions))
-                if not selected_indices:
-                    self.print_colored(Colors.RED, "[ERROR] Invalid selection format")
-                    continue
-
-                selected_regions = [self.user_regions[i - 1] for i in selected_indices]
-                self.print_colored(Colors.GREEN, f"[OK] Selected {len(selected_regions)} regions: {', '.join(selected_regions)}")
-                return selected_regions
-
-            except Exception as e:
-                self.print_colored(Colors.RED, f"[ERROR] Error processing selection: {str(e)}")
+                print(f"{Symbols.ERROR} Error in selection: {e}")
 
     # Replace the run_interactive_cleanup method with this version:
     def run_interactive_cleanup(self):
@@ -1681,12 +1643,12 @@ class UltraVPCCleanupManager:
             # STEP 2: Select regions
             selected_regions = self.select_regions_interactive()
             if not selected_regions:
-                self.print_colored(Colors.RED, "[ERROR] No regions selected, exiting...")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} No regions selected, exiting...")
                 return
 
             # STEP 3: Calculate total operations and confirm
             total_operations = len(selected_accounts) * len(selected_regions)
-            print(f"\n[STATS] Total operations: {total_operations} (Accounts: {len(selected_accounts)}, Regions: {len(selected_regions)})")
+            print(f"\n{Symbols.STATS} Total operations: {total_operations} (Accounts: {len(selected_accounts)}, Regions: {len(selected_regions)})")
 
 
 
@@ -1694,13 +1656,13 @@ class UltraVPCCleanupManager:
             confirm = input(
                 f"\nProceed to DELETE all custom VPC resources in selected accounts/regions? (y/n): ").strip().lower()
             if confirm != 'y' and confirm != 'yes':
-                print("[ERROR] Operation cancelled")
+                print(f"{Symbols.ERROR} Operation cancelled")
                 return
 
             self.dry_run = False  # Always actual cleanup in this flow
 
             self.log_operation('INFO',
-                               f"[START] Starting VPC cleanup for {len(selected_accounts)} accounts and {len(selected_regions)} regions")
+                               f"{Symbols.START} Starting VPC cleanup for {len(selected_accounts)} accounts and {len(selected_regions)} regions")
             total_operations = len(selected_accounts) * len(selected_regions)
             current_operation = 0
 
@@ -1726,17 +1688,17 @@ class UltraVPCCleanupManager:
 
                     # Delete unused EBS volumes
                     ebs_deleted = self.delete_unused_ebs_volumes(ec2_client, region, account_name)
-                    print(f"   [DELETE] Deleted {ebs_deleted} unused EBS volumes in {region}")
+                    print(f"   {Symbols.DELETE} Deleted {ebs_deleted} unused EBS volumes in {region}")
 
                     # Delete unused EFS file systems
                     efs_deleted = self.delete_unused_efs_filesystems(access_key, secret_key, region, account_name)
-                    print(f"   [DELETE] Deleted {efs_deleted} unused EFS file systems in {region}")
+                    print(f"   {Symbols.DELETE} Deleted {efs_deleted} unused EFS file systems in {region}")
 
 
                     if success:
-                        print(f"   [OK] Completed cleanup for {account_name} - {region}")
+                        print(f"   {Symbols.OK} Completed cleanup for {account_name} - {region}")
                     else:
-                        print(f"   [WARN] Cleanup completed with some issues for {account_name} - {region}")
+                        print(f"   {Symbols.WARN} Cleanup completed with some issues for {account_name} - {region}")
 
             self.generate_cleanup_report()
 
@@ -1745,7 +1707,7 @@ class UltraVPCCleanupManager:
             print("\n🛑 Cleanup interrupted by user")
         except Exception as e:
             self.log_operation('ERROR', f"Error in cleanup: {e}")
-            print(f"[ERROR] Error in cleanup: {e}")
+            print(f"{Symbols.ERROR} Error in cleanup: {e}")
 
     def run_interactive_cleanup_bk(self):
         """Main interactive cleanup flow"""
@@ -1766,44 +1728,44 @@ class UltraVPCCleanupManager:
             if not self.dry_run:
                 confirm = input("\nDo you want to proceed with ACTUAL VPC cleanup? (type 'YES' to continue): ").strip()
                 if confirm != 'YES':
-                    print("[ERROR] Operation cancelled")
+                    print(f"{Symbols.ERROR} Operation cancelled")
                     return
             
             # Select accounts
             selected_accounts = self.select_accounts_interactive()
             if not selected_accounts:
-                print("[ERROR] No accounts selected. Exiting...")
+                print(f"{Symbols.ERROR} No accounts selected. Exiting...")
                 return
             
             # Select regions
-            selected_regions = self.select_regions_interactive()
+            selected_regions = self.cred_manager.select_regions_interactive()
             if not selected_regions:
-                print("[ERROR] No regions selected. Exiting...")
+                print(f"{Symbols.ERROR} No regions selected. Exiting...")
                 return
             
             # Final confirmation
             mode_text = "DRY RUN ANALYSIS" if self.dry_run else "ACTUAL CLEANUP"
-            print(f"\n[WARN]  FINAL CONFIRMATION - {mode_text}")
-            print(f"[STATS] Accounts to process: {len(selected_accounts)}")
-            print(f"[REGION] Regions to process: {len(selected_regions)}")
+            print(f"\n{Symbols.WARN}  FINAL CONFIRMATION - {mode_text}")
+            print(f"{Symbols.STATS} Accounts to process: {len(selected_accounts)}")
+            print(f"{Symbols.REGION} Regions to process: {len(selected_regions)}")
             
             if self.dry_run:
-                print(f"[SCAN] This will ANALYZE VPC resources (no deletions)")
+                print(f"{Symbols.SCAN} This will ANALYZE VPC resources (no deletions)")
                 final_confirm = input("\nType 'ANALYZE VPC RESOURCES' to proceed: ").strip()
                 if final_confirm != 'ANALYZE VPC RESOURCES':
-                    print("[ERROR] Operation cancelled")
+                    print(f"{Symbols.ERROR} Operation cancelled")
                     return
             else:
-                print(f"[DELETE] This will DELETE ALL CUSTOM VPC resources in selected accounts/regions")
-                print(f"[OK] Default VPC resources will be PROTECTED")
+                print(f"{Symbols.DELETE} This will DELETE ALL CUSTOM VPC resources in selected accounts/regions")
+                print(f"{Symbols.OK} Default VPC resources will be PROTECTED")
                 final_confirm = input("\nType 'DELETE CUSTOM VPC RESOURCES' to proceed: ").strip()
                 if final_confirm != 'DELETE CUSTOM VPC RESOURCES':
-                    print("[ERROR] Operation cancelled")
+                    print(f"{Symbols.ERROR} Operation cancelled")
                     return
             
             # Start cleanup
             operation_text = "analysis" if self.dry_run else "cleanup"
-            self.log_operation('INFO', f"[START] Starting VPC {operation_text} for {len(selected_accounts)} accounts and {len(selected_regions)} regions")
+            self.log_operation('INFO', f"{Symbols.START} Starting VPC {operation_text} for {len(selected_accounts)} accounts and {len(selected_regions)} regions")
             
             total_operations = len(selected_accounts) * len(selected_regions)
             current_operation = 0
@@ -1831,17 +1793,17 @@ class UltraVPCCleanupManager:
                     success = self.cleanup_vpc_resources_in_region(ec2_client, region, account_name)
                     
                     if success:
-                        print(f"   [OK] Completed {operation_text} for {account_name} - {region}")
+                        print(f"   {Symbols.OK} Completed {operation_text} for {account_name} - {region}")
                     else:
-                        print(f"   [WARN] {operation_text.title()} completed with some issues for {account_name} - {region}")
+                        print(f"   {Symbols.WARN} {operation_text.title()} completed with some issues for {account_name} - {region}")
 
                     # Delete unused EBS volumes
                     ebs_deleted = self.delete_unused_ebs_volumes(ec2_client, region, account_name)
-                    print(f"   [DELETE] Deleted {ebs_deleted} unused EBS volumes in {region}")
+                    print(f"   {Symbols.DELETE} Deleted {ebs_deleted} unused EBS volumes in {region}")
 
                     # Delete unused EFS file systems
                     efs_deleted = self.delete_unused_efs_filesystems(access_key, secret_key, region, account_name)
-                    print(f"   [DELETE] Deleted {efs_deleted} unused EFS file systems in {region}")
+                    print(f"   {Symbols.DELETE} Deleted {efs_deleted} unused EFS file systems in {region}")
             
             # Generate final report
             self.generate_cleanup_report()
@@ -1851,7 +1813,7 @@ class UltraVPCCleanupManager:
             print(f"\n🛑 {operation_text.title()} interrupted by user")
         except Exception as e:
             self.log_operation('ERROR', f"Error in interactive {operation_text}: {e}")
-            print(f"[ERROR] Error in {operation_text}: {e}")
+            print(f"{Symbols.ERROR} Error in {operation_text}: {e}")
 
     def delete_unused_ebs_volumes(self, ec2_client, region: str, account_name: str) -> int:
         """Delete all unattached (available) EBS volumes in the region."""
@@ -1863,10 +1825,10 @@ class UltraVPCCleanupManager:
                 vol_id = vol['VolumeId']
                 try:
                     ec2_client.delete_volume(VolumeId=vol_id)
-                    self.log_operation('INFO', f"[OK] Deleted unused EBS volume: {vol_id}")
+                    self.log_operation('INFO', f"{Symbols.OK} Deleted unused EBS volume: {vol_id}")
                     count += 1
                 except Exception as e:
-                    self.log_operation('ERROR', f"[ERROR] Failed to delete EBS volume {vol_id}: {e}")
+                    self.log_operation('ERROR', f"{Symbols.ERROR} Failed to delete EBS volume {vol_id}: {e}")
             return count
         except Exception as e:
             self.log_operation('ERROR', f"Error deleting unused EBS volumes in {region} ({account_name}): {e}")
@@ -1890,10 +1852,10 @@ class UltraVPCCleanupManager:
                 if not mt_resp.get('MountTargets'):
                     try:
                         efs_client.delete_file_system(FileSystemId=fs_id)
-                        self.log_operation('INFO', f"[OK] Deleted unused EFS file system: {fs_id}")
+                        self.log_operation('INFO', f"{Symbols.OK} Deleted unused EFS file system: {fs_id}")
                         count += 1
                     except Exception as e:
-                        self.log_operation('ERROR', f"[ERROR] Failed to delete EFS file system {fs_id}: {e}")
+                        self.log_operation('ERROR', f"{Symbols.ERROR} Failed to delete EFS file system {fs_id}: {e}")
             return count
         except Exception as e:
             self.log_operation('ERROR', f"Error deleting unused EFS file systems in {region} ({account_name}): {e}")
@@ -2038,25 +2000,25 @@ class UltraVPCCleanupManager:
             # Print summary
             print("\n" + "="*100)
             mode_text = "DRY RUN ANALYSIS" if self.dry_run else "VPC CLEANUP"
-            print(f"[STATS] {mode_text} SUMMARY REPORT")
+            print(f"{Symbols.STATS} {mode_text} SUMMARY REPORT")
             print("="*100)
-            print(f"[OK] Accounts processed: {report['execution_summary']['accounts_processed']}")
-            print(f"[REGION] Regions processed: {report['execution_summary']['regions_processed']}")
-            print(f"🏗️ VPCs analyzed: {report['execution_summary']['vpcs_analyzed']}")
-            print(f"[PROTECTED] Default resources protected: {report['protection_summary']['default_resources_protected']}")
+            print(f"{Symbols.OK} Accounts processed: {report['execution_summary']['accounts_processed']}")
+            print(f"{Symbols.REGION} Regions processed: {report['execution_summary']['regions_processed']}")
+            print(f"[BUILD] VPCs analyzed: {report['execution_summary']['vpcs_analyzed']}")
+            print(f"{Symbols.PROTECTED} Default resources protected: {report['protection_summary']['default_resources_protected']}")
             
             action_text = "Resources that would be deleted:" if self.dry_run else "Resources deleted:"
-            print(f"\n[DELETE] {action_text.upper()}")
+            print(f"\n{Symbols.DELETE} {action_text.upper()}")
             total_resources = 0
             for resource_type, count in report['resources_deleted_summary'].items():
                 if count > 0:
                     print(f"   • {resource_type.replace('_', ' ').title()}: {count}")
                     total_resources += count
             
-            print(f"\n📈 Total resources {'identified for deletion' if self.dry_run else 'deleted'}: {total_resources}")
+            print(f"\n[UP] Total resources {'identified for deletion' if self.dry_run else 'deleted'}: {total_resources}")
             
             if self.cleanup_results['failed_deletions']:
-                print(f"[WARN] Failed {'analyses' if self.dry_run else 'deletions'}: {len(self.cleanup_results['failed_deletions'])}")
+                print(f"{Symbols.WARN} Failed {'analyses' if self.dry_run else 'deletions'}: {len(self.cleanup_results['failed_deletions'])}")
             
             if self.cleanup_results['dependency_violations']:
                 print(f"[LINK] Dependency violations detected: {len(self.cleanup_results['dependency_violations'])}")
@@ -2076,10 +2038,10 @@ def main():
         manager = UltraVPCCleanupManager()
         manager.run_interactive_cleanup()
     except KeyboardInterrupt:
-        print(f"\n\n[ERROR] VPC Cleanup interrupted by user")
+        print(f"\n\n{Symbols.ERROR} VPC Cleanup interrupted by user")
         sys.exit(1)
     except Exception as e:
-        print(f"[ERROR] Unexpected error: {e}")
+        print(f"{Symbols.ERROR} Unexpected error: {e}")
         sys.exit(1)
 
 

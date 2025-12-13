@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 Enhanced Interactive Cluster Management Tool
 Handles batch operations on EKS clusters with smart credential detection and selection
@@ -18,6 +18,8 @@ from datetime import datetime
 from typing import Dict, List, Tuple, Optional, Set
 import tempfile
 import logging
+from text_symbols import Symbols
+
 
 
 class Colors:
@@ -151,7 +153,7 @@ class EnhancedInteractiveClusterManager:
                 return False
 
         except Exception as e:
-            self.print_colored(Colors.RED, f"[ERROR] Enhanced interactive cluster management failed: {str(e)}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Enhanced interactive cluster management failed: {str(e)}")
             self.log_operation('ERROR', f"Enhanced interactive cluster management failed: {str(e)}")
             return False
 
@@ -180,11 +182,11 @@ class EnhancedInteractiveClusterManager:
                 else:
                     iam_clusters.append(cluster)
 
-            self.print_colored(Colors.CYAN, f"   [STATS] Root user clusters: {len(root_clusters)}")
-            self.print_colored(Colors.CYAN, f"   [STATS] IAM user clusters: {len(iam_clusters)}")
+            self.print_colored(Colors.CYAN, f"   {Symbols.STATS} Root user clusters: {len(root_clusters)}")
+            self.print_colored(Colors.CYAN, f"   {Symbols.STATS} IAM user clusters: {len(iam_clusters)}")
 
             if root_clusters:
-                self.print_colored(Colors.YELLOW, f"   👑 Root clusters found:")
+                self.print_colored(Colors.YELLOW, f"   [CROWN] Root clusters found:")
                 for cluster in root_clusters:
                     self.print_colored(Colors.WHITE, f"      - {cluster['cluster_name']}")
 
@@ -201,7 +203,7 @@ class EnhancedInteractiveClusterManager:
             }
 
         except Exception as e:
-            self.print_colored(Colors.RED, f"[ERROR] Error analyzing credential requirements: {str(e)}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Error analyzing credential requirements: {str(e)}")
             return {'root_clusters': [], 'iam_clusters': [], 'needs_root_creds': False, 'needs_iam_creds': False}
 
     def is_root_created_cluster(self, cluster_name: str) -> bool:
@@ -324,16 +326,16 @@ class EnhancedInteractiveClusterManager:
                         })
 
                 except Exception as e:
-                    self.print_colored(Colors.YELLOW, f"   [WARN]  Error parsing {file_path}: {str(e)}")
+                    self.print_colored(Colors.YELLOW, f"   {Symbols.WARN}  Error parsing {file_path}: {str(e)}")
 
             # Sort by timestamp (newest first)
             credentials_files.sort(key=lambda x: f"{x['date_str']}{x['time_str']}", reverse=True)
 
-            self.print_colored(Colors.GREEN, f"[OK] Found {len(credentials_files)} IAM credentials files")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Found {len(credentials_files)} IAM credentials files")
             return credentials_files
 
         except Exception as e:
-            self.print_colored(Colors.RED, f"[ERROR] Error scanning IAM credentials files: {str(e)}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Error scanning IAM credentials files: {str(e)}")
             return []
 
     def select_credentials_interactive(self, credential_requirements: Dict) -> Dict:
@@ -351,17 +353,17 @@ class EnhancedInteractiveClusterManager:
 
             # Handle root credentials if needed
             if credential_requirements['needs_root_creds']:
-                self.print_colored(Colors.YELLOW, f"\n👑 Root user credentials required for root-created clusters")
+                self.print_colored(Colors.YELLOW, f"\n[CROWN] Root user credentials required for root-created clusters")
 
                 try:
                     with open('aws_accounts_config.json', 'r') as f:
                         aws_config = json.load(f)
 
                     credentials['root_accounts'] = aws_config.get('accounts', {})
-                    self.print_colored(Colors.GREEN, "[OK] Loaded root account credentials from aws_accounts_config.json")
+                    self.print_colored(Colors.GREEN, f"{Symbols.OK} Loaded root account credentials from aws_accounts_config.json")
 
                 except Exception as e:
-                    self.print_colored(Colors.RED, f"[ERROR] Failed to load root credentials: {str(e)}")
+                    self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to load root credentials: {str(e)}")
                     return None
 
             # Handle IAM credentials if needed
@@ -385,7 +387,7 @@ class EnhancedInteractiveClusterManager:
             return credentials
 
         except Exception as e:
-            self.print_colored(Colors.RED, f"[ERROR] Error in credential selection: {str(e)}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Error in credential selection: {str(e)}")
             return None
 
     def select_iam_credentials_file_interactive(self, iam_files: List[Dict]) -> Dict:
@@ -423,7 +425,7 @@ class EnhancedInteractiveClusterManager:
                         f"Select IAM credentials file (1-{len(iam_files)}) [default: 1 (latest)] or 'q' to quit: ").strip()
 
                     if choice.lower() == 'q':
-                        self.print_colored(Colors.YELLOW, "[ERROR] Operation cancelled by user")
+                        self.print_colored(Colors.YELLOW, f"{Symbols.ERROR} Operation cancelled by user")
                         return None
 
                     if not choice:
@@ -433,16 +435,16 @@ class EnhancedInteractiveClusterManager:
                     if 1 <= choice_num <= len(iam_files):
                         selected_file = iam_files[choice_num - 1]
                         self.print_colored(Colors.GREEN,
-                                           f"[OK] Selected: {selected_file['filename']} ({selected_file['timestamp']})")
+                                           f"{Symbols.OK} Selected: {selected_file['filename']} ({selected_file['timestamp']})")
                         return selected_file
                     else:
-                        self.print_colored(Colors.RED, f"[ERROR] Invalid choice. Please enter 1-{len(iam_files)}")
+                        self.print_colored(Colors.RED, f"{Symbols.ERROR} Invalid choice. Please enter 1-{len(iam_files)}")
 
                 except ValueError:
                     self.print_colored(Colors.RED, "[ERROR] Invalid input. Please enter a number")
 
         except Exception as e:
-            self.print_colored(Colors.RED, f"[ERROR] Error in IAM file selection: {str(e)}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Error in IAM file selection: {str(e)}")
             return None
 
     def get_credentials_for_cluster(self, cluster_info: Dict, credentials: Dict) -> Tuple[str, str, str]:
@@ -461,18 +463,18 @@ class EnhancedInteractiveClusterManager:
             account_name = self.extract_account_from_cluster_name(cluster_name)
 
             if not account_name:
-                self.print_colored(Colors.RED, f"   [ERROR] Could not extract account from cluster name: {cluster_name}")
+                self.print_colored(Colors.RED, f"   {Symbols.ERROR} Could not extract account from cluster name: {cluster_name}")
                 return None, None, None
 
             if self.is_root_created_cluster(cluster_name):
                 # Use root credentials
                 if 'root_accounts' not in credentials:
-                    self.print_colored(Colors.RED, f"   [ERROR] Root credentials not available for {cluster_name}")
+                    self.print_colored(Colors.RED, f"   {Symbols.ERROR} Root credentials not available for {cluster_name}")
                     return None, None, None
 
                 account_config = credentials['root_accounts'].get(account_name)
                 if not account_config:
-                    self.print_colored(Colors.RED, f"   [ERROR] Root account {account_name} not found")
+                    self.print_colored(Colors.RED, f"   {Symbols.ERROR} Root account {account_name} not found")
                     return None, None, None
 
                 return (
@@ -484,13 +486,13 @@ class EnhancedInteractiveClusterManager:
             else:
                 # Use IAM user credentials
                 if 'iam_users' not in credentials:
-                    self.print_colored(Colors.RED, f"   [ERROR] IAM credentials not available for {cluster_name}")
+                    self.print_colored(Colors.RED, f"   {Symbols.ERROR} IAM credentials not available for {cluster_name}")
                     return None, None, None
 
                 # Extract IAM username from cluster name
                 iam_username = self.extract_iam_user_from_cluster_name(cluster_name)
                 if not iam_username:
-                    self.print_colored(Colors.RED, f"   [ERROR] Could not extract IAM username from: {cluster_name}")
+                    self.print_colored(Colors.RED, f"   {Symbols.ERROR} Could not extract IAM username from: {cluster_name}")
                     return None, None, None
 
                 # Find user in IAM credentials
@@ -507,11 +509,11 @@ class EnhancedInteractiveClusterManager:
                                 account_info.get('account_id')
                             )
 
-                self.print_colored(Colors.RED, f"   [ERROR] IAM user {iam_username} not found in credentials")
+                self.print_colored(Colors.RED, f"   {Symbols.ERROR} IAM user {iam_username} not found in credentials")
                 return None, None, None
 
         except Exception as e:
-            self.print_colored(Colors.RED, f"   [ERROR] Error getting credentials for cluster: {str(e)}")
+            self.print_colored(Colors.RED, f"   {Symbols.ERROR} Error getting credentials for cluster: {str(e)}")
             return None, None, None
 
     def delete_autoscalers_with_smart_credentials(self, selected_clusters: List[Dict], credentials: Dict) -> bool:
@@ -527,13 +529,13 @@ class EnhancedInteractiveClusterManager:
         """
         try:
             self.print_colored(Colors.YELLOW,
-                               f"\n[DELETE]  Starting smart autoscaler deletion for {len(selected_clusters)} clusters")
+                               f"\n{Symbols.DELETE}  Starting smart autoscaler deletion for {len(selected_clusters)} clusters")
 
             # Final confirmation
             confirm = input(
                 f"\nConfirm deletion of autoscaler from {len(selected_clusters)} clusters? (y/N): ").strip().lower()
             if confirm not in ['y', 'yes']:
-                self.print_colored(Colors.YELLOW, "[ERROR] Operation cancelled by user")
+                self.print_colored(Colors.YELLOW, f"{Symbols.ERROR} Operation cancelled by user")
                 return False
 
             # Process each selected cluster
@@ -556,7 +558,7 @@ class EnhancedInteractiveClusterManager:
                     access_key, secret_key, account_id = self.get_credentials_for_cluster(cluster_info, credentials)
 
                     if not access_key or not secret_key:
-                        self.print_colored(Colors.RED, f"   [ERROR] Missing credentials for {cluster_name}")
+                        self.print_colored(Colors.RED, f"   {Symbols.ERROR} Missing credentials for {cluster_name}")
                         failed_deletions.append(cluster_name)
                         continue
 
@@ -565,13 +567,13 @@ class EnhancedInteractiveClusterManager:
 
                     if success:
                         successful_deletions.append(cluster_name)
-                        self.print_colored(Colors.GREEN, f"   [OK] Successfully deleted autoscaler from {cluster_name}")
+                        self.print_colored(Colors.GREEN, f"   {Symbols.OK} Successfully deleted autoscaler from {cluster_name}")
                     else:
                         failed_deletions.append(cluster_name)
-                        self.print_colored(Colors.RED, f"   [ERROR] Failed to delete autoscaler from {cluster_name}")
+                        self.print_colored(Colors.RED, f"   {Symbols.ERROR} Failed to delete autoscaler from {cluster_name}")
 
                 except Exception as e:
-                    self.print_colored(Colors.RED, f"   [ERROR] Error processing {cluster_name}: {str(e)}")
+                    self.print_colored(Colors.RED, f"   {Symbols.ERROR} Error processing {cluster_name}: {str(e)}")
                     failed_deletions.append(cluster_name)
 
             # Print final summary
@@ -581,7 +583,7 @@ class EnhancedInteractiveClusterManager:
             return len(successful_deletions) > 0
 
         except Exception as e:
-            self.print_colored(Colors.RED, f"[ERROR] Error during smart autoscaler deletion: {str(e)}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Error during smart autoscaler deletion: {str(e)}")
             return False
 
     def configure_auth_with_smart_credentials(self, selected_clusters: List[Dict], credentials: Dict) -> bool:
@@ -590,14 +592,14 @@ class EnhancedInteractiveClusterManager:
         """
         try:
             self.print_colored(Colors.YELLOW,
-                               f"\n[KEY] Starting ConfigMap-only authentication configuration for {len(selected_clusters)} clusters")
+                               f"\n{Symbols.KEY} Starting ConfigMap-only authentication configuration for {len(selected_clusters)} clusters")
             self.print_colored(Colors.YELLOW, f"Mode: ConfigMap updates only (no access entries)")
 
             # Final confirmation
             confirm = input(
                 f"\nConfirm user authentication configuration for {len(selected_clusters)} clusters? (y/N): ").strip().lower()
             if confirm not in ['y', 'yes']:
-                self.print_colored(Colors.YELLOW, "[ERROR] Operation cancelled by user")
+                self.print_colored(Colors.YELLOW, f"{Symbols.ERROR} Operation cancelled by user")
                 return False
 
             # Process each selected cluster
@@ -621,7 +623,7 @@ class EnhancedInteractiveClusterManager:
                     access_key, secret_key, account_id = self.get_credentials_for_cluster(cluster_info, credentials)
 
                     if not access_key or not secret_key or not account_id:
-                        self.print_colored(Colors.RED, f"   [ERROR] Missing credentials for {cluster_name}")
+                        self.print_colored(Colors.RED, f"   {Symbols.ERROR} Missing credentials for {cluster_name}")
                         failed_configs.append(cluster_name)
                         continue
 
@@ -635,13 +637,13 @@ class EnhancedInteractiveClusterManager:
 
                     if success:
                         successful_configs.append(cluster_name)
-                        self.print_colored(Colors.GREEN, f"   [OK] Successfully configured auth for {cluster_name}")
+                        self.print_colored(Colors.GREEN, f"   {Symbols.OK} Successfully configured auth for {cluster_name}")
                     else:
                         failed_configs.append(cluster_name)
-                        self.print_colored(Colors.RED, f"   [ERROR] Failed to configure auth for {cluster_name}")
+                        self.print_colored(Colors.RED, f"   {Symbols.ERROR} Failed to configure auth for {cluster_name}")
 
                 except Exception as e:
-                    self.print_colored(Colors.RED, f"   [ERROR] Error processing {cluster_name}: {str(e)}")
+                    self.print_colored(Colors.RED, f"   {Symbols.ERROR} Error processing {cluster_name}: {str(e)}")
                     failed_configs.append(cluster_name)
 
             # Print final summary
@@ -651,7 +653,7 @@ class EnhancedInteractiveClusterManager:
             return len(successful_configs) > 0
 
         except Exception as e:
-            self.print_colored(Colors.RED, f"[ERROR] Error during ConfigMap-only auth configuration: {str(e)}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Error during ConfigMap-only auth configuration: {str(e)}")
             return False
 
     def extract_user_data_from_cluster(self, cluster_data: Dict, cluster_name: str) -> Dict:
@@ -715,7 +717,7 @@ class EnhancedInteractiveClusterManager:
                     'groups': ['system:masters']
                 })
 
-                self.print_colored(Colors.CYAN, f"   👑 Root-created cluster - configuring root access only")
+                self.print_colored(Colors.CYAN, f"   [CROWN] Root-created cluster - configuring root access only")
 
             else:
                 # If created by IAM user, add both IAM user and root user access
@@ -746,7 +748,7 @@ class EnhancedInteractiveClusterManager:
         except Exception as e:
             error_msg = str(e)
             self.log_operation('ERROR', f"Failed to configure aws-auth ConfigMap for {cluster_name}: {error_msg}")
-            self.print_colored(Colors.RED, f"   [ERROR] ConfigMap configuration failed: {error_msg}")
+            self.print_colored(Colors.RED, f"   {Symbols.ERROR} ConfigMap configuration failed: {error_msg}")
             return False
 
     def apply_configmap_only(self, cluster_name: str, region: str, account_id: str, users_to_add: List[Dict],
@@ -762,7 +764,7 @@ class EnhancedInteractiveClusterManager:
             kubectl_available = shutil.which('kubectl') is not None
 
             if not kubectl_available:
-                self.print_colored(Colors.RED, f"   [ERROR] kubectl not found. ConfigMap setup failed.")
+                self.print_colored(Colors.RED, f"   {Symbols.ERROR} kubectl not found. ConfigMap setup failed.")
                 return False
 
             # Create aws-auth ConfigMap YAML
@@ -794,7 +796,7 @@ class EnhancedInteractiveClusterManager:
                     yaml.dump(aws_auth_config, f)
                 self.log_operation('INFO', f"Created ConfigMap file: {configmap_file}")
             except Exception as e:
-                self.print_colored(Colors.RED, f"   [ERROR] Failed to create ConfigMap file: {str(e)}")
+                self.print_colored(Colors.RED, f"   {Symbols.ERROR} Failed to create ConfigMap file: {str(e)}")
                 return False
 
             # Apply ConfigMap with kubectl
@@ -811,46 +813,46 @@ class EnhancedInteractiveClusterManager:
                     '--name', cluster_name
                 ]
 
-                self.print_colored(Colors.CYAN, f"   🔄 Updating kubeconfig...")
+                self.print_colored(Colors.CYAN, f"   {Symbols.SCAN} Updating kubeconfig...")
                 update_result = subprocess.run(update_cmd, env=env, capture_output=True, text=True, timeout=120)
 
                 if update_result.returncode != 0:
-                    self.print_colored(Colors.RED, f"   [ERROR] Failed to update kubeconfig: {update_result.stderr}")
+                    self.print_colored(Colors.RED, f"   {Symbols.ERROR} Failed to update kubeconfig: {update_result.stderr}")
                     return False
 
-                self.print_colored(Colors.GREEN, f"   [OK] Kubeconfig updated successfully")
+                self.print_colored(Colors.GREEN, f"   {Symbols.OK} Kubeconfig updated successfully")
 
                 # Apply ConfigMap with multiple strategies
                 success = False
                 applied_method = ""
 
                 # Strategy 1: Standard apply
-                self.print_colored(Colors.CYAN, f"   [LIST] Applying ConfigMap (standard apply)...")
+                self.print_colored(Colors.CYAN, f"   {Symbols.LIST} Applying ConfigMap (standard apply)...")
                 apply_cmd = ['kubectl', 'apply', '-f', configmap_file, '--validate=false']
                 apply_result = subprocess.run(apply_cmd, env=env, capture_output=True, text=True, timeout=300)
 
                 if apply_result.returncode == 0:
-                    self.print_colored(Colors.GREEN, f"   [OK] ConfigMap applied successfully")
+                    self.print_colored(Colors.GREEN, f"   {Symbols.OK} ConfigMap applied successfully")
                     success = True
                     applied_method = "standard apply"
                 else:
-                    self.print_colored(Colors.YELLOW, f"   [WARN]  Standard apply failed: {apply_result.stderr.strip()}")
+                    self.print_colored(Colors.YELLOW, f"   {Symbols.WARN}  Standard apply failed: {apply_result.stderr.strip()}")
 
                     # Strategy 2: Force replace
-                    self.print_colored(Colors.CYAN, f"   [LIST] Trying force replace...")
+                    self.print_colored(Colors.CYAN, f"   {Symbols.LIST} Trying force replace...")
                     replace_cmd = ['kubectl', 'replace', '-f', configmap_file, '--validate=false', '--force']
                     replace_result = subprocess.run(replace_cmd, env=env, capture_output=True, text=True, timeout=300)
 
                     if replace_result.returncode == 0:
-                        self.print_colored(Colors.GREEN, f"   [OK] ConfigMap replaced successfully")
+                        self.print_colored(Colors.GREEN, f"   {Symbols.OK} ConfigMap replaced successfully")
                         success = True
                         applied_method = "force replace"
                     else:
                         self.print_colored(Colors.YELLOW,
-                                           f"   [WARN]  Force replace failed: {replace_result.stderr.strip()}")
+                                           f"   {Symbols.WARN}  Force replace failed: {replace_result.stderr.strip()}")
 
                         # Strategy 3: Delete and recreate
-                        self.print_colored(Colors.CYAN, f"   [LIST] Trying delete and recreate...")
+                        self.print_colored(Colors.CYAN, f"   {Symbols.LIST} Trying delete and recreate...")
 
                         # Delete existing ConfigMap
                         delete_cmd = ['kubectl', 'delete', 'configmap', 'aws-auth', '-n', 'kube-system',
@@ -858,7 +860,7 @@ class EnhancedInteractiveClusterManager:
                         delete_result = subprocess.run(delete_cmd, env=env, capture_output=True, text=True, timeout=90)
 
                         if delete_result.returncode == 0:
-                            self.print_colored(Colors.CYAN, f"   [DELETE]  Existing ConfigMap deleted")
+                            self.print_colored(Colors.CYAN, f"   {Symbols.DELETE}  Existing ConfigMap deleted")
 
                         # Wait for deletion to complete
                         time.sleep(3)
@@ -868,16 +870,16 @@ class EnhancedInteractiveClusterManager:
                         create_result = subprocess.run(create_cmd, env=env, capture_output=True, text=True, timeout=300)
 
                         if create_result.returncode == 0:
-                            self.print_colored(Colors.GREEN, f"   [OK] ConfigMap recreated successfully")
+                            self.print_colored(Colors.GREEN, f"   {Symbols.OK} ConfigMap recreated successfully")
                             success = True
                             applied_method = "delete and recreate"
                         else:
                             self.print_colored(Colors.RED,
-                                               f"   [ERROR] All ConfigMap strategies failed: {create_result.stderr}")
+                                               f"   {Symbols.ERROR} All ConfigMap strategies failed: {create_result.stderr}")
 
                 # IMPROVED VERIFICATION with multiple methods
                 if success:
-                    self.print_colored(Colors.CYAN, f"   [SCAN] Verifying ConfigMap (applied via {applied_method})...")
+                    self.print_colored(Colors.CYAN, f"   {Symbols.SCAN} Verifying ConfigMap (applied via {applied_method})...")
                     verification_passed = False
 
                     # Method 1: Simple existence check
@@ -887,7 +889,7 @@ class EnhancedInteractiveClusterManager:
                                                         timeout=30)
 
                         if verify_result1.returncode == 0:
-                            self.print_colored(Colors.GREEN, f"   [OK] ConfigMap exists and is accessible")
+                            self.print_colored(Colors.GREEN, f"   {Symbols.OK} ConfigMap exists and is accessible")
                             verification_passed = True
                         else:
                             self.log_operation('DEBUG', f"Method 1 verification failed: {verify_result1.stderr}")
@@ -902,7 +904,7 @@ class EnhancedInteractiveClusterManager:
                                                             timeout=30)
 
                             if verify_result2.returncode == 0 and 'aws-auth' in verify_result2.stdout:
-                                self.print_colored(Colors.GREEN, f"   [OK] ConfigMap found in namespace listing")
+                                self.print_colored(Colors.GREEN, f"   {Symbols.OK} ConfigMap found in namespace listing")
                                 verification_passed = True
                             else:
                                 self.log_operation('DEBUG', f"Method 2 verification failed or aws-auth not found")
@@ -923,10 +925,10 @@ class EnhancedInteractiveClusterManager:
                                     users_list = yaml.safe_load(users_yaml)
                                     user_count = len(users_list) if isinstance(users_list, list) else 0
                                     self.print_colored(Colors.GREEN,
-                                                       f"   [OK] ConfigMap contains {user_count} user mappings")
+                                                       f"   {Symbols.OK} ConfigMap contains {user_count} user mappings")
 
                                     # Show the users for confirmation
-                                    self.print_colored(Colors.CYAN, f"   [LIST] Configured user mappings:")
+                                    self.print_colored(Colors.CYAN, f"   {Symbols.LIST} Configured user mappings:")
                                     for user in users_list[:3]:  # Show first 3 users
                                         username = user.get('username', 'unknown')
                                         userarn = user.get('userarn', 'unknown')
@@ -940,49 +942,49 @@ class EnhancedInteractiveClusterManager:
                                                            f"      ... and {len(users_list) - 3} more users")
 
                                 except Exception as parse_e:
-                                    self.print_colored(Colors.GREEN, f"   [OK] ConfigMap contains user mappings")
+                                    self.print_colored(Colors.GREEN, f"   {Symbols.OK} ConfigMap contains user mappings")
                                     self.log_operation('DEBUG', f"User mapping parse error: {str(parse_e)}")
                             else:
                                 self.print_colored(Colors.YELLOW,
-                                                   f"   [WARN]  ConfigMap exists but content verification failed")
+                                                   f"   {Symbols.WARN}  ConfigMap exists but content verification failed")
 
                         except Exception as content_e:
                             self.print_colored(Colors.YELLOW,
-                                               f"   [WARN]  Could not verify ConfigMap content: {str(content_e)}")
+                                               f"   {Symbols.WARN}  Could not verify ConfigMap content: {str(content_e)}")
 
                     # Final verification status
                     if verification_passed:
-                        self.print_colored(Colors.GREEN, f"   [OK] ConfigMap verification completed successfully")
+                        self.print_colored(Colors.GREEN, f"   {Symbols.OK} ConfigMap verification completed successfully")
                     else:
                         self.print_colored(Colors.YELLOW,
-                                           f"   [WARN]  ConfigMap was applied but verification had issues (this is often normal)")
+                                           f"   {Symbols.WARN}  ConfigMap was applied but verification had issues (this is often normal)")
                         self.print_colored(Colors.CYAN,
-                                           f"   [TIP] You can manually verify with: kubectl get configmap aws-auth -n kube-system")
+                                           f"   {Symbols.TIP} You can manually verify with: kubectl get configmap aws-auth -n kube-system")
 
                     # Success message
                     if is_root_cluster:
                         self.print_colored(Colors.GREEN,
-                                           f"   [OK] Root user configured for cluster access (ConfigMap only)")
+                                           f"   {Symbols.OK} Root user configured for cluster access (ConfigMap only)")
                     else:
                         username = user_data.get('username', 'unknown')
                         self.print_colored(Colors.GREEN,
-                                           f"   [OK] User [{username}] and root user configured for cluster access (ConfigMap only)")
+                                           f"   {Symbols.OK} User [{username}] and root user configured for cluster access (ConfigMap only)")
 
                     # Show useful commands
-                    self.print_colored(Colors.CYAN, f"   [TIP] Test access with:")
+                    self.print_colored(Colors.CYAN, f"   {Symbols.TIP} Test access with:")
                     self.print_colored(Colors.WHITE, f"      kubectl get nodes")
                     self.print_colored(Colors.WHITE, f"      kubectl get pods --all-namespaces")
 
                     return True
                 else:
-                    self.print_colored(Colors.RED, f"   [ERROR] All ConfigMap application strategies failed")
+                    self.print_colored(Colors.RED, f"   {Symbols.ERROR} All ConfigMap application strategies failed")
                     return False
 
             except subprocess.TimeoutExpired:
-                self.print_colored(Colors.RED, f"   [ERROR] kubectl/aws command timed out")
+                self.print_colored(Colors.RED, f"   {Symbols.ERROR} kubectl/aws command timed out")
                 return False
             except Exception as e:
-                self.print_colored(Colors.RED, f"   [ERROR] Command execution failed: {str(e)}")
+                self.print_colored(Colors.RED, f"   {Symbols.ERROR} Command execution failed: {str(e)}")
                 return False
 
             finally:
@@ -995,7 +997,7 @@ class EnhancedInteractiveClusterManager:
                     self.log_operation('WARNING', f"Failed to clean up ConfigMap file: {str(e)}")
 
         except Exception as e:
-            self.print_colored(Colors.RED, f"   [ERROR] ConfigMap application failed: {str(e)}")
+            self.print_colored(Colors.RED, f"   {Symbols.ERROR} ConfigMap application failed: {str(e)}")
             return False
 
     def configure_aws_auth_configmap_enhanced(self, cluster_name: str, region: str, account_id: str, user_data: Dict,
@@ -1034,7 +1036,7 @@ class EnhancedInteractiveClusterManager:
                 })
                 principals_to_add.append(root_arn)
 
-                self.print_colored(Colors.CYAN, f"   👑 Root-created cluster - configuring root access only")
+                self.print_colored(Colors.CYAN, f"   [CROWN] Root-created cluster - configuring root access only")
 
             else:
                 # If created by IAM user, add both IAM user and root user access
@@ -1063,11 +1065,11 @@ class EnhancedInteractiveClusterManager:
             access_config = cluster_info['cluster'].get('accessConfig', {})
             auth_mode = access_config.get('authenticationMode', 'CONFIG_MAP')
 
-            self.print_colored(Colors.CYAN, f"   [LIST] Cluster authentication mode: {auth_mode}")
+            self.print_colored(Colors.CYAN, f"   {Symbols.LIST} Cluster authentication mode: {auth_mode}")
 
             # If cluster supports API mode, create access entries
             if auth_mode in ['API', 'API_AND_CONFIG_MAP']:
-                self.print_colored(Colors.CYAN, "   [KEY] Creating access entries for API-based authentication...")
+                self.print_colored(Colors.CYAN, f"   {Symbols.KEY} Creating access entries for API-based authentication...")
 
                 success_count = 0
                 for principal_arn in principals_to_add:
@@ -1090,25 +1092,25 @@ class EnhancedInteractiveClusterManager:
                             accessScope={'type': 'cluster'}
                         )
 
-                        self.print_colored(Colors.GREEN, f"   [OK] Created access entry for {principal_type}")
+                        self.print_colored(Colors.GREEN, f"   {Symbols.OK} Created access entry for {principal_type}")
                         success_count += 1
 
                     except Exception as e:
                         if "already exists" in str(e).lower():
-                            self.print_colored(Colors.CYAN, f"   ℹ️  Access entry already exists for {principal_type}")
+                            self.print_colored(Colors.CYAN, f"   {Symbols.INFO}  Access entry already exists for {principal_type}")
                             success_count += 1
                         else:
                             self.print_colored(Colors.YELLOW,
-                                               f"   [WARN]  Failed to create access entry for {principal_type}: {str(e)}")
+                                               f"   {Symbols.WARN}  Failed to create access entry for {principal_type}: {str(e)}")
 
                 # If API mode worked, we don't need ConfigMap
                 if success_count > 0:
                     if is_root_cluster:
-                        self.print_colored(Colors.GREEN, f"   [OK] Root user configured for cluster access via API")
+                        self.print_colored(Colors.GREEN, f"   {Symbols.OK} Root user configured for cluster access via API")
                     else:
                         username = user_data.get('username', 'unknown')
                         self.print_colored(Colors.GREEN,
-                                           f"   [OK] User [{username}] and root user configured for cluster access via API")
+                                           f"   {Symbols.OK} User [{username}] and root user configured for cluster access via API")
 
                     return True
 
@@ -1122,7 +1124,7 @@ class EnhancedInteractiveClusterManager:
         except Exception as e:
             error_msg = str(e)
             self.log_operation('ERROR', f"Failed to configure aws-auth ConfigMap for {cluster_name}: {error_msg}")
-            self.print_colored(Colors.RED, f"   [ERROR] ConfigMap configuration failed: {error_msg}")
+            self.print_colored(Colors.RED, f"   {Symbols.ERROR} ConfigMap configuration failed: {error_msg}")
             return False
 
     def apply_configmap_with_kubectl(self, cluster_name: str, region: str, account_id: str, users_to_add: List[Dict],
@@ -1138,7 +1140,7 @@ class EnhancedInteractiveClusterManager:
             kubectl_available = shutil.which('kubectl') is not None
 
             if not kubectl_available:
-                self.print_colored(Colors.YELLOW, f"   [WARN]  kubectl not found. ConfigMap setup skipped.")
+                self.print_colored(Colors.YELLOW, f"   {Symbols.WARN}  kubectl not found. ConfigMap setup skipped.")
                 return True
 
             # Create aws-auth ConfigMap YAML
@@ -1170,7 +1172,7 @@ class EnhancedInteractiveClusterManager:
                     yaml.dump(aws_auth_config, f)
                 self.log_operation('INFO', f"Created ConfigMap file: {configmap_file}")
             except Exception as e:
-                self.print_colored(Colors.RED, f"   [ERROR] Failed to create ConfigMap file: {str(e)}")
+                self.print_colored(Colors.RED, f"   {Symbols.ERROR} Failed to create ConfigMap file: {str(e)}")
                 return False
 
             # Apply ConfigMap with enhanced error handling
@@ -1187,23 +1189,23 @@ class EnhancedInteractiveClusterManager:
                     '--name', cluster_name
                 ]
 
-                self.print_colored(Colors.CYAN, f"   🔄 Updating kubeconfig...")
+                self.print_colored(Colors.CYAN, f"   {Symbols.SCAN} Updating kubeconfig...")
                 update_result = subprocess.run(update_cmd, env=env, capture_output=True, text=True, timeout=120)
 
                 if update_result.returncode != 0:
-                    self.print_colored(Colors.RED, f"   [ERROR] Failed to update kubeconfig: {update_result.stderr}")
+                    self.print_colored(Colors.RED, f"   {Symbols.ERROR} Failed to update kubeconfig: {update_result.stderr}")
                     return False
 
-                self.print_colored(Colors.GREEN, f"   [OK] Kubeconfig updated successfully")
+                self.print_colored(Colors.GREEN, f"   {Symbols.OK} Kubeconfig updated successfully")
 
                 # Test cluster connectivity before applying ConfigMap
-                self.print_colored(Colors.CYAN, f"   [SCAN] Testing cluster connectivity...")
+                self.print_colored(Colors.CYAN, f"   {Symbols.SCAN} Testing cluster connectivity...")
                 test_cmd = ['kubectl', 'get', 'namespaces', '--timeout=30s']
                 test_result = subprocess.run(test_cmd, env=env, capture_output=True, text=True, timeout=60)
 
                 if test_result.returncode != 0:
-                    self.print_colored(Colors.YELLOW, f"   [WARN]  Cluster connectivity test failed: {test_result.stderr}")
-                    self.print_colored(Colors.CYAN, f"   🔄 Attempting to authenticate with current credentials...")
+                    self.print_colored(Colors.YELLOW, f"   {Symbols.WARN}  Cluster connectivity test failed: {test_result.stderr}")
+                    self.print_colored(Colors.CYAN, f"   {Symbols.SCAN} Attempting to authenticate with current credentials...")
 
                     # Try to create a temporary access entry for the current admin user
                     try:
@@ -1239,7 +1241,7 @@ class EnhancedInteractiveClusterManager:
                                     accessScope={'type': 'cluster'}
                                 )
 
-                                self.print_colored(Colors.GREEN, f"   [OK] Temporary admin access entry created")
+                                self.print_colored(Colors.GREEN, f"   {Symbols.OK} Temporary admin access entry created")
 
                                 # Wait for access to propagate
                                 time.sleep(10)
@@ -1248,22 +1250,22 @@ class EnhancedInteractiveClusterManager:
                                 test_result2 = subprocess.run(test_cmd, env=env, capture_output=True, text=True,
                                                               timeout=60)
                                 if test_result2.returncode == 0:
-                                    self.print_colored(Colors.GREEN, f"   [OK] Cluster connectivity established")
+                                    self.print_colored(Colors.GREEN, f"   {Symbols.OK} Cluster connectivity established")
                                 else:
                                     self.print_colored(Colors.YELLOW,
-                                                       f"   [WARN]  Still having connectivity issues, proceeding anyway...")
+                                                       f"   {Symbols.WARN}  Still having connectivity issues, proceeding anyway...")
 
                             except Exception as access_e:
                                 if "already exists" in str(access_e).lower():
-                                    self.print_colored(Colors.CYAN, f"   ℹ️  Admin access entry already exists")
+                                    self.print_colored(Colors.CYAN, f"   {Symbols.INFO}  Admin access entry already exists")
                                 else:
                                     self.print_colored(Colors.YELLOW,
-                                                       f"   [WARN]  Could not create admin access entry: {str(access_e)}")
+                                                       f"   {Symbols.WARN}  Could not create admin access entry: {str(access_e)}")
 
                     except Exception as auth_e:
-                        self.print_colored(Colors.YELLOW, f"   [WARN]  Authentication setup failed: {str(auth_e)}")
+                        self.print_colored(Colors.YELLOW, f"   {Symbols.WARN}  Authentication setup failed: {str(auth_e)}")
                 else:
-                    self.print_colored(Colors.GREEN, f"   [OK] Cluster connectivity confirmed")
+                    self.print_colored(Colors.GREEN, f"   {Symbols.OK} Cluster connectivity confirmed")
 
                 # Apply ConfigMap with multiple fallback strategies
                 apply_strategies = [
@@ -1284,22 +1286,22 @@ class EnhancedInteractiveClusterManager:
                 success = False
                 for i, strategy in enumerate(apply_strategies, 1):
                     self.print_colored(Colors.CYAN,
-                                       f"   [LIST] Applying ConfigMap using strategy {i}: {strategy['name']}...")
+                                       f"   {Symbols.LIST} Applying ConfigMap using strategy {i}: {strategy['name']}...")
 
                     result = subprocess.run(strategy['cmd'], env=env, capture_output=True, text=True, timeout=300)
 
                     if result.returncode == 0:
                         self.print_colored(Colors.GREEN,
-                                           f"   [OK] ConfigMap applied successfully using {strategy['name']}")
+                                           f"   {Symbols.OK} ConfigMap applied successfully using {strategy['name']}")
                         success = True
                         break
                     else:
-                        self.print_colored(Colors.YELLOW, f"   [WARN]  {strategy['name']} failed: {result.stderr.strip()}")
+                        self.print_colored(Colors.YELLOW, f"   {Symbols.WARN}  {strategy['name']} failed: {result.stderr.strip()}")
                         # Continue to next strategy
 
                 # If all standard strategies failed, try delete and recreate
                 if not success:
-                    self.print_colored(Colors.CYAN, f"   🔄 Trying delete and recreate strategy...")
+                    self.print_colored(Colors.CYAN, f"   {Symbols.SCAN} Trying delete and recreate strategy...")
 
                     try:
                         # Delete existing ConfigMap (ignore errors)
@@ -1308,9 +1310,9 @@ class EnhancedInteractiveClusterManager:
                         delete_result = subprocess.run(delete_cmd, env=env, capture_output=True, text=True, timeout=90)
 
                         if delete_result.returncode == 0:
-                            self.print_colored(Colors.CYAN, f"   [DELETE]  Existing ConfigMap deleted")
+                            self.print_colored(Colors.CYAN, f"   {Symbols.DELETE}  Existing ConfigMap deleted")
                         else:
-                            self.print_colored(Colors.YELLOW, f"   [WARN]  Delete result: {delete_result.stderr}")
+                            self.print_colored(Colors.YELLOW, f"   {Symbols.WARN}  Delete result: {delete_result.stderr}")
 
                         # Wait a moment for deletion to complete
                         time.sleep(5)
@@ -1320,13 +1322,13 @@ class EnhancedInteractiveClusterManager:
                         create_result = subprocess.run(create_cmd, env=env, capture_output=True, text=True, timeout=300)
 
                         if create_result.returncode == 0:
-                            self.print_colored(Colors.GREEN, f"   [OK] ConfigMap recreated successfully")
+                            self.print_colored(Colors.GREEN, f"   {Symbols.OK} ConfigMap recreated successfully")
                             success = True
                         else:
-                            self.print_colored(Colors.RED, f"   [ERROR] ConfigMap recreation failed: {create_result.stderr}")
+                            self.print_colored(Colors.RED, f"   {Symbols.ERROR} ConfigMap recreation failed: {create_result.stderr}")
 
                             # Last resort: try server-side apply (kubectl 1.18+)
-                            self.print_colored(Colors.CYAN, f"   🔄 Trying server-side apply as last resort...")
+                            self.print_colored(Colors.CYAN, f"   {Symbols.SCAN} Trying server-side apply as last resort...")
 
                             server_side_cmd = ['kubectl', 'apply', '-f', configmap_file, '--server-side',
                                                '--validate=false', '--force-conflicts']
@@ -1334,25 +1336,25 @@ class EnhancedInteractiveClusterManager:
                                                                 text=True, timeout=300)
 
                             if server_side_result.returncode == 0:
-                                self.print_colored(Colors.GREEN, f"   [OK] ConfigMap applied using server-side apply")
+                                self.print_colored(Colors.GREEN, f"   {Symbols.OK} ConfigMap applied using server-side apply")
                                 success = True
                             else:
                                 self.print_colored(Colors.RED,
-                                                   f"   [ERROR] Server-side apply also failed: {server_side_result.stderr}")
+                                                   f"   {Symbols.ERROR} Server-side apply also failed: {server_side_result.stderr}")
 
                     except Exception as recreate_e:
-                        self.print_colored(Colors.RED, f"   [ERROR] Error during recreate strategy: {str(recreate_e)}")
+                        self.print_colored(Colors.RED, f"   {Symbols.ERROR} Error during recreate strategy: {str(recreate_e)}")
 
                 # Verify ConfigMap was applied (but don't fail if verification fails)
                 if success:
                     try:
-                        self.print_colored(Colors.CYAN, f"   [SCAN] Verifying ConfigMap...")
+                        self.print_colored(Colors.CYAN, f"   {Symbols.SCAN} Verifying ConfigMap...")
                         verify_cmd = ['kubectl', 'get', 'configmap', 'aws-auth', '-n', 'kube-system', '-o', 'name',
                                       '--timeout=30s']
                         verify_result = subprocess.run(verify_cmd, env=env, capture_output=True, text=True, timeout=60)
 
                         if verify_result.returncode == 0 and 'aws-auth' in verify_result.stdout:
-                            self.print_colored(Colors.GREEN, f"   [OK] ConfigMap verification successful")
+                            self.print_colored(Colors.GREEN, f"   {Symbols.OK} ConfigMap verification successful")
 
                             # Show ConfigMap content summary
                             content_cmd = ['kubectl', 'get', 'configmap', 'aws-auth', '-n', 'kube-system', '-o', 'yaml']
@@ -1369,36 +1371,36 @@ class EnhancedInteractiveClusterManager:
                                         users_list = yaml_parser.safe_load(map_users)
                                         user_count = len(users_list) if isinstance(users_list, list) else 0
                                         self.print_colored(Colors.GREEN,
-                                                           f"   [OK] ConfigMap contains {user_count} user mappings")
+                                                           f"   {Symbols.OK} ConfigMap contains {user_count} user mappings")
                                     else:
                                         self.print_colored(Colors.YELLOW,
-                                                           f"   [WARN]  ConfigMap exists but no user mappings found")
+                                                           f"   {Symbols.WARN}  ConfigMap exists but no user mappings found")
                                 except Exception as parse_e:
                                     self.print_colored(Colors.YELLOW,
-                                                       f"   [WARN]  Could not parse ConfigMap content: {str(parse_e)}")
+                                                       f"   {Symbols.WARN}  Could not parse ConfigMap content: {str(parse_e)}")
 
                         else:
                             self.print_colored(Colors.YELLOW,
-                                               f"   [WARN]  ConfigMap verification failed, but apply reported success")
+                                               f"   {Symbols.WARN}  ConfigMap verification failed, but apply reported success")
 
                     except Exception as verify_e:
-                        self.print_colored(Colors.YELLOW, f"   [WARN]  ConfigMap verification error: {str(verify_e)}")
+                        self.print_colored(Colors.YELLOW, f"   {Symbols.WARN}  ConfigMap verification error: {str(verify_e)}")
 
                 if success:
                     if is_root_cluster:
-                        self.print_colored(Colors.GREEN, f"   [OK] Root user configured for cluster access")
+                        self.print_colored(Colors.GREEN, f"   {Symbols.OK} Root user configured for cluster access")
                     else:
                         username = user_data.get('username', 'unknown')
                         self.print_colored(Colors.GREEN,
-                                           f"   [OK] User [{username}] and root user configured for cluster access")
+                                           f"   {Symbols.OK} User [{username}] and root user configured for cluster access")
 
                 return success
 
             except subprocess.TimeoutExpired:
-                self.print_colored(Colors.RED, f"   [ERROR] kubectl/aws command timed out")
+                self.print_colored(Colors.RED, f"   {Symbols.ERROR} kubectl/aws command timed out")
                 return False
             except Exception as e:
-                self.print_colored(Colors.RED, f"   [ERROR] Command execution failed: {str(e)}")
+                self.print_colored(Colors.RED, f"   {Symbols.ERROR} Command execution failed: {str(e)}")
                 return False
 
             finally:
@@ -1411,7 +1413,7 @@ class EnhancedInteractiveClusterManager:
                     self.log_operation('WARNING', f"Failed to clean up ConfigMap file: {str(e)}")
 
         except Exception as e:
-            self.print_colored(Colors.RED, f"   [ERROR] ConfigMap application failed: {str(e)}")
+            self.print_colored(Colors.RED, f"   {Symbols.ERROR} ConfigMap application failed: {str(e)}")
             return False
 
     # Include all the other methods from the previous class (scan_cluster_files, group_clusters_by_date, etc.)
@@ -1434,7 +1436,7 @@ class EnhancedInteractiveClusterManager:
                 pattern = os.path.join(base_dir, "eks_cluster_eks-cluster-*.json")
                 files = glob.glob(pattern)
 
-                self.print_colored(Colors.CYAN, f"   [FOLDER] {account_id}: Found {len(files)} cluster files")
+                self.print_colored(Colors.CYAN, f"   {Symbols.FOLDER} {account_id}: Found {len(files)} cluster files")
 
                 for file_path in files:
                     try:
@@ -1442,13 +1444,13 @@ class EnhancedInteractiveClusterManager:
                         if file_info:
                             cluster_files.append(file_info)
                     except Exception as e:
-                        self.print_colored(Colors.YELLOW, f"   [WARN]  Error parsing {file_path}: {str(e)}")
+                        self.print_colored(Colors.YELLOW, f"   {Symbols.WARN}  Error parsing {file_path}: {str(e)}")
 
-            self.print_colored(Colors.GREEN, f"[OK] Total cluster files found: {len(cluster_files)}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Total cluster files found: {len(cluster_files)}")
             return cluster_files
 
         except Exception as e:
-            self.print_colored(Colors.RED, f"[ERROR] Error scanning cluster files: {str(e)}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Error scanning cluster files: {str(e)}")
             return []
 
     def parse_cluster_file_info(self, file_path: str, account_id: str) -> Dict:
@@ -1506,13 +1508,13 @@ class EnhancedInteractiveClusterManager:
             return sorted_clusters
 
         except Exception as e:
-            self.print_colored(Colors.RED, f"[ERROR] Error grouping clusters by date: {str(e)}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Error grouping clusters by date: {str(e)}")
             return {}
 
     def select_date_interactive(self, clusters_by_date: Dict) -> str:
         """Interactive date selection"""
         try:
-            self.print_colored(Colors.YELLOW, f"\n[DATE] Available dates with clusters:")
+            self.print_colored(Colors.YELLOW, f"\n{Symbols.DATE} Available dates with clusters:")
             self.print_colored(Colors.YELLOW, f"=" * 50)
 
             dates = list(clusters_by_date.keys())
@@ -1531,28 +1533,28 @@ class EnhancedInteractiveClusterManager:
                     choice = input(f"Select date (1-{len(dates)}) or 'q' to quit: ").strip()
 
                     if choice.lower() == 'q':
-                        self.print_colored(Colors.YELLOW, "[ERROR] Operation cancelled by user")
+                        self.print_colored(Colors.YELLOW, f"{Symbols.ERROR} Operation cancelled by user")
                         return None
 
                     choice_num = int(choice)
                     if 1 <= choice_num <= len(dates):
                         selected_date = dates[choice_num - 1]
-                        self.print_colored(Colors.GREEN, f"[OK] Selected date: {selected_date}")
+                        self.print_colored(Colors.GREEN, f"{Symbols.OK} Selected date: {selected_date}")
                         return selected_date
                     else:
-                        self.print_colored(Colors.RED, f"[ERROR] Invalid choice. Please enter 1-{len(dates)}")
+                        self.print_colored(Colors.RED, f"{Symbols.ERROR} Invalid choice. Please enter 1-{len(dates)}")
 
                 except ValueError:
                     self.print_colored(Colors.RED, "[ERROR] Invalid input. Please enter a number")
 
         except Exception as e:
-            self.print_colored(Colors.RED, f"[ERROR] Error in date selection: {str(e)}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Error in date selection: {str(e)}")
             return None
 
     def select_clusters_interactive(self, date_clusters: List[Dict], selected_date: str) -> List[Dict]:
         """Interactive cluster selection for a specific date"""
         try:
-            self.print_colored(Colors.YELLOW, f"\n[TARGET] Clusters available for {selected_date}:")
+            self.print_colored(Colors.YELLOW, f"\n{Symbols.TARGET} Clusters available for {selected_date}:")
             self.print_colored(Colors.YELLOW, f"=" * 80)
 
             for i, cluster in enumerate(date_clusters, 1):
@@ -1562,7 +1564,7 @@ class EnhancedInteractiveClusterManager:
                 created_by = cluster['created_by']
 
                 # Detect cluster type
-                cluster_type = "👑 Root" if self.is_root_created_cluster(cluster_name) else "👤 IAM"
+                cluster_type = "[CROWN] Root" if self.is_root_created_cluster(cluster_name) else "👤 IAM"
 
                 self.print_colored(Colors.CYAN, f"   {i:2d}. {cluster_name} {cluster_type}")
                 self.print_colored(Colors.WHITE,
@@ -1581,12 +1583,12 @@ class EnhancedInteractiveClusterManager:
                     selection = input(f"\nSelect clusters: ").strip()
 
                     if selection.lower() == 'q':
-                        self.print_colored(Colors.YELLOW, "[ERROR] Operation cancelled by user")
+                        self.print_colored(Colors.YELLOW, f"{Symbols.ERROR} Operation cancelled by user")
                         return None
 
                     if selection.lower() == 'all':
                         selected_clusters = date_clusters.copy()
-                        self.print_colored(Colors.GREEN, f"[OK] Selected all {len(selected_clusters)} clusters")
+                        self.print_colored(Colors.GREEN, f"{Symbols.OK} Selected all {len(selected_clusters)} clusters")
                         return selected_clusters
 
                     selected_indices = self.parse_cluster_selection(selection, len(date_clusters))
@@ -1597,20 +1599,20 @@ class EnhancedInteractiveClusterManager:
 
                     selected_clusters = [date_clusters[i - 1] for i in selected_indices]
 
-                    self.print_colored(Colors.GREEN, f"[OK] Selected {len(selected_clusters)} clusters:")
+                    self.print_colored(Colors.GREEN, f"{Symbols.OK} Selected {len(selected_clusters)} clusters:")
                     for cluster in selected_clusters:
-                        cluster_type = "👑 Root" if self.is_root_created_cluster(cluster['cluster_name']) else "👤 IAM"
+                        cluster_type = "[CROWN] Root" if self.is_root_created_cluster(cluster['cluster_name']) else "👤 IAM"
                         self.print_colored(Colors.GREEN,
                                            f"   - {cluster['cluster_name']} {cluster_type} ({cluster['account_id']})")
 
                     return selected_clusters
 
                 except Exception as e:
-                    self.print_colored(Colors.RED, f"[ERROR] Error processing selection: {str(e)}")
+                    self.print_colored(Colors.RED, f"{Symbols.ERROR} Error processing selection: {str(e)}")
                     continue
 
         except Exception as e:
-            self.print_colored(Colors.RED, f"[ERROR] Error in cluster selection: {str(e)}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Error in cluster selection: {str(e)}")
             return None
 
     def parse_cluster_selection(self, selection: str, max_count: int) -> List[int]:
@@ -1663,23 +1665,23 @@ class EnhancedInteractiveClusterManager:
                     choice = input(f"Select operation (1-2) or 'q' to quit: ").strip()
 
                     if choice.lower() == 'q':
-                        self.print_colored(Colors.YELLOW, "[ERROR] Operation cancelled by user")
+                        self.print_colored(Colors.YELLOW, f"{Symbols.ERROR} Operation cancelled by user")
                         return None
 
                     if choice == "1":
-                        self.print_colored(Colors.GREEN, f"[OK] Selected: Delete Cluster Autoscaler")
+                        self.print_colored(Colors.GREEN, f"{Symbols.OK} Selected: Delete Cluster Autoscaler")
                         return "delete_autoscaler"
                     elif choice == "2":
-                        self.print_colored(Colors.GREEN, f"[OK] Selected: Configure User Authentication")
+                        self.print_colored(Colors.GREEN, f"{Symbols.OK} Selected: Configure User Authentication")
                         return "configure_auth"
                     else:
-                        self.print_colored(Colors.RED, f"[ERROR] Invalid choice. Please enter 1 or 2")
+                        self.print_colored(Colors.RED, f"{Symbols.ERROR} Invalid choice. Please enter 1 or 2")
 
                 except ValueError:
                     self.print_colored(Colors.RED, "[ERROR] Invalid input. Please enter a number")
 
         except Exception as e:
-            self.print_colored(Colors.RED, f"[ERROR] Error in operation selection: {str(e)}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Error in operation selection: {str(e)}")
             return None
 
     def delete_cluster_autoscaler(self, cluster_name: str, region: str, access_key: str, secret_key: str) -> bool:
@@ -1690,7 +1692,7 @@ class EnhancedInteractiveClusterManager:
             kubectl_available = shutil.which('kubectl') is not None
 
             if not kubectl_available:
-                self.print_colored(Colors.RED, f"   [ERROR] kubectl not found. Cannot delete autoscaler")
+                self.print_colored(Colors.RED, f"   {Symbols.ERROR} kubectl not found. Cannot delete autoscaler")
                 return False
 
             env = os.environ.copy()
@@ -1698,7 +1700,7 @@ class EnhancedInteractiveClusterManager:
             env['AWS_SECRET_ACCESS_KEY'] = secret_key
             env['AWS_DEFAULT_REGION'] = region
 
-            self.print_colored(Colors.CYAN, f"   🔄 Updating kubeconfig for {cluster_name}...")
+            self.print_colored(Colors.CYAN, f"   {Symbols.SCAN} Updating kubeconfig for {cluster_name}...")
             update_cmd = [
                 'aws', 'eks', 'update-kubeconfig',
                 '--region', region,
@@ -1708,10 +1710,10 @@ class EnhancedInteractiveClusterManager:
             update_result = subprocess.run(update_cmd, env=env, capture_output=True, text=True, timeout=120)
 
             if update_result.returncode != 0:
-                self.print_colored(Colors.RED, f"   [ERROR] Failed to update kubeconfig: {update_result.stderr}")
+                self.print_colored(Colors.RED, f"   {Symbols.ERROR} Failed to update kubeconfig: {update_result.stderr}")
                 return False
 
-            self.print_colored(Colors.CYAN, f"   [DELETE]  Deleting cluster autoscaler components...")
+            self.print_colored(Colors.CYAN, f"   {Symbols.DELETE}  Deleting cluster autoscaler components...")
 
             delete_commands = [
                 ['kubectl', 'delete', 'deployment', 'cluster-autoscaler', '-n', 'kube-system', '--ignore-not-found'],
@@ -1734,26 +1736,26 @@ class EnhancedInteractiveClusterManager:
 
                     if result.returncode == 0:
                         if "deleted" in result.stdout or "not found" in result.stdout:
-                            deletion_results.append(f"   [OK] {component}")
+                            deletion_results.append(f"   {Symbols.OK} {component}")
                         else:
-                            deletion_results.append(f"   [OK] {component} (already deleted)")
+                            deletion_results.append(f"   {Symbols.OK} {component} (already deleted)")
                     else:
-                        deletion_results.append(f"   [WARN]  {component}: {result.stderr.strip()}")
+                        deletion_results.append(f"   {Symbols.WARN}  {component}: {result.stderr.strip()}")
 
                 except subprocess.TimeoutExpired:
-                    deletion_results.append(f"   [ERROR] {component}: Timeout")
+                    deletion_results.append(f"   {Symbols.ERROR} {component}: Timeout")
                 except Exception as e:
-                    deletion_results.append(f"   [ERROR] {component}: {str(e)}")
+                    deletion_results.append(f"   {Symbols.ERROR} {component}: {str(e)}")
 
             success_count = len([r for r in deletion_results if "[OK]" in r])
             total_count = len(deletion_results)
 
             if success_count == total_count:
-                self.print_colored(Colors.GREEN, f"   [OK] All {total_count} components deleted successfully")
+                self.print_colored(Colors.GREEN, f"   {Symbols.OK} All {total_count} components deleted successfully")
             else:
-                self.print_colored(Colors.YELLOW, f"   [WARN]  {success_count}/{total_count} components deleted")
+                self.print_colored(Colors.YELLOW, f"   {Symbols.WARN}  {success_count}/{total_count} components deleted")
 
-            self.print_colored(Colors.CYAN, f"   [SCAN] Verifying autoscaler deletion...")
+            self.print_colored(Colors.CYAN, f"   {Symbols.SCAN} Verifying autoscaler deletion...")
 
             verify_cmd = ['kubectl', 'get', 'pods', '-n', 'kube-system', '-l', 'app=cluster-autoscaler', '--no-headers']
             verify_result = subprocess.run(verify_cmd, env=env, capture_output=True, text=True, timeout=60)
@@ -1762,34 +1764,34 @@ class EnhancedInteractiveClusterManager:
                 remaining_pods = [line.strip() for line in verify_result.stdout.strip().split('\n') if line.strip()]
 
                 if not remaining_pods:
-                    self.print_colored(Colors.GREEN, f"   [OK] No autoscaler pods found - deletion successful")
+                    self.print_colored(Colors.GREEN, f"   {Symbols.OK} No autoscaler pods found - deletion successful")
                     return True
                 else:
-                    self.print_colored(Colors.YELLOW, f"   [WARN]  {len(remaining_pods)} autoscaler pods still found")
+                    self.print_colored(Colors.YELLOW, f"   {Symbols.WARN}  {len(remaining_pods)} autoscaler pods still found")
                     return False
             else:
-                self.print_colored(Colors.GREEN, f"   [OK] Deletion commands completed (verification skipped)")
+                self.print_colored(Colors.GREEN, f"   {Symbols.OK} Deletion commands completed (verification skipped)")
                 return True
 
         except Exception as e:
-            self.print_colored(Colors.RED, f"   [ERROR] Error deleting autoscaler: {str(e)}")
+            self.print_colored(Colors.RED, f"   {Symbols.ERROR} Error deleting autoscaler: {str(e)}")
             self.log_operation('ERROR', f"Failed to delete cluster autoscaler from {cluster_name}: {str(e)}")
             return False
 
     def print_summary(self, operation_name: str, successful: List[str], failed: List[str], total: int):
         """Print operation summary"""
-        self.print_colored(Colors.YELLOW, f"\n[STATS] {operation_name} SUMMARY")
+        self.print_colored(Colors.YELLOW, f"\n{Symbols.STATS} {operation_name} SUMMARY")
         self.print_colored(Colors.YELLOW, f"=" * 60)
-        self.print_colored(Colors.GREEN, f"[OK] Successful: {len(successful)}/{total}")
-        self.print_colored(Colors.RED, f"[ERROR] Failed: {len(failed)}/{total}")
+        self.print_colored(Colors.GREEN, f"{Symbols.OK} Successful: {len(successful)}/{total}")
+        self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed: {len(failed)}/{total}")
 
         if successful:
-            self.print_colored(Colors.GREEN, f"\n[OK] Successfully processed clusters:")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.OK} Successfully processed clusters:")
             for cluster in successful:
                 self.print_colored(Colors.GREEN, f"   - {cluster}")
 
         if failed:
-            self.print_colored(Colors.RED, f"\n[ERROR] Failed clusters:")
+            self.print_colored(Colors.RED, f"\n{Symbols.ERROR} Failed clusters:")
             for cluster in failed:
                 self.print_colored(Colors.RED, f"   - {cluster}")
 

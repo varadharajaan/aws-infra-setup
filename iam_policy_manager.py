@@ -1,10 +1,11 @@
-import boto3
+﻿import boto3
 import logging
 from botocore.exceptions import ClientError, NoCredentialsError
 from typing import List, Optional, Dict, Any
 import time
 from datetime import datetime
 from root_iam_credential_manager import Colors
+from text_symbols import Symbols
 
 
 class IAMPolicyManager:
@@ -82,7 +83,7 @@ class IAMPolicyManager:
 
         results = {
             'operation': 'delete_custom_policies_from_role',
-            'timestamp': datetime.utcnow().isoformat(),
+            'timestamp': datetime.now(datetime.UTC).isoformat(),
             'role_name': role_name,
             'account_id': self.account_id,
             'custom_policies_found': [],
@@ -142,7 +143,7 @@ class IAMPolicyManager:
 
         results = {
             'operation': 'delete_all_custom_policies_in_account',
-            'timestamp': datetime.utcnow().isoformat(),
+            'timestamp': datetime.now(datetime.UTC).isoformat(),
             'account_id': self.account_id,
             'total_custom_policies_found': 0,
             'policies_to_process': [],
@@ -201,7 +202,7 @@ class IAMPolicyManager:
 
         results = {
             'operation': 'delete_custom_roles',
-            'timestamp': datetime.utcnow().isoformat(),
+            'timestamp': datetime.now(datetime.UTC).isoformat(),
             'account_id': self.account_id,
             'roles_found': [],
             'roles_to_delete': [],
@@ -267,7 +268,7 @@ class IAMPolicyManager:
         summary = {
             'role_name': role_name,
             'account_id': self.account_id,
-            'timestamp': datetime.utcnow().isoformat(),
+            'timestamp': datetime.now(datetime.UTC).isoformat(),
             'custom_policies': [],
             'aws_managed_policies': [],
             'inline_policies': [],

@@ -8,6 +8,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from root_iam_credential_manager import AWSCredentialManager, Colors
+from text_symbols import Symbols
 
 class UltraCleanupECSManager:
     def __init__(self, config_dir: str = None):
@@ -57,7 +58,7 @@ class UltraCleanupECSManager:
                     })
         
         if deleted > 0:
-            self.print_colored(Colors.GREEN, f"      [OK] Deleted {deleted} services")
+            self.print_colored(Colors.GREEN, f"      {Symbols.OK} Deleted {deleted} services")
         
         # Wait for services to be deleted
         time.sleep(5)
@@ -84,7 +85,7 @@ class UltraCleanupECSManager:
                     })
         
         if deleted > 0:
-            self.print_colored(Colors.GREEN, f"   [OK] Deleted {deleted} clusters")
+            self.print_colored(Colors.GREEN, f"   {Symbols.OK} Deleted {deleted} clusters")
 
     def delete_task_definitions(self, client, region, account):
         deleted = 0
@@ -104,12 +105,12 @@ class UltraCleanupECSManager:
                     })
         
         if deleted > 0:
-            self.print_colored(Colors.GREEN, f"   [OK] Deregistered {deleted} task definitions")
+            self.print_colored(Colors.GREEN, f"   {Symbols.OK} Deregistered {deleted} task definitions")
 
     def cleanup_account_region(self, account_info: dict, region: str):
         try:
             account_name = account_info.get('name')
-            self.print_colored(Colors.CYAN, f"\n[CLEANUP] {account_name} - {region}")
+            self.print_colored(Colors.CYAN, f"\n{Symbols.CLEANUP} {account_name} - {region}")
             
             client = boto3.client('ecs',
                 aws_access_key_id=account_info.get('access_key'),
@@ -124,7 +125,7 @@ class UltraCleanupECSManager:
             
             return True
         except Exception as e:
-            self.print_colored(Colors.RED, f"   [ERROR] {e}")
+            self.print_colored(Colors.RED, f"   {Symbols.ERROR} {e}")
             return False
 
     def save_report(self):
@@ -138,24 +139,27 @@ class UltraCleanupECSManager:
         return report_file
 
     def run(self):
-        self.print_colored(Colors.BLUE, "\n[START] ULTRA ECS CLEANUP MANAGER")
+        self.print_colored(Colors.BLUE, f"\n{Symbols.START} ULTRA ECS CLEANUP MANAGER")
         
         accounts = self.cred_manager.select_root_accounts_interactive()
         if not accounts:
             return
         
-        regions = self._get_regions()
+        regions = self.cred_manager.select_regions_interactive()
+        if not regions:
+            self.print_colored(Colors.YELLOW, f"{Symbols.ERROR} No regions selected. Exiting.")
+            return
         
-        if input("\nType 'DELETE': ").strip().upper() != 'DELETE':
+        if input("\nType 'yes': ").strip().lower() != 'yes':
             return
         
         for acc in accounts:
             for reg in regions:
                 self.cleanup_account_region(acc, reg)
         
-        self.print_colored(Colors.WHITE, f"\n[STATS] Clusters: {len(self.cleanup_results['deleted_clusters'])}")
-        self.print_colored(Colors.WHITE, f"[STATS] Services: {len(self.cleanup_results['deleted_services'])}")
-        self.print_colored(Colors.GREEN, f"[OK] Report: {self.save_report()}")
+        self.print_colored(Colors.WHITE, f"\n{Symbols.STATS} Clusters: {len(self.cleanup_results['deleted_clusters'])}")
+        self.print_colored(Colors.WHITE, f"{Symbols.STATS} Services: {len(self.cleanup_results['deleted_services'])}")
+        self.print_colored(Colors.GREEN, f"{Symbols.OK} Report: {self.save_report()}")
 
 def main():
     try:

@@ -1,7 +1,8 @@
-import os
+﻿import os
 import re
 import shutil
 import logging
+from text_symbols import Symbols
 
 # Files to ignore (add any more if needed)
 ignore_files = {"ec2_cleanup_script.py"}

@@ -1,3 +1,4 @@
+﻿from text_symbols import Symbols
 #!/usr/bin/env python3
 
 """
@@ -62,14 +63,14 @@ def test_basic_functionality():
         assert len(manager.config_data['accounts']) == 2
         assert 'test-account-1' in manager.config_data['accounts']
         assert 'test-account-2' in manager.config_data['accounts']
-        print("[OK] Configuration loading works")
+        print(f"{Symbols.OK} Configuration loading works")
         
         # Test dry run mode
         manager.dry_run = True
-        print("[OK] Dry run mode can be set")
+        print(f"{Symbols.OK} Dry run mode can be set")
         
         # Test default VPC detection methods
-        print("[OK] Testing default resource detection...")
+        print(f"{Symbols.OK} Testing default resource detection...")
         
         # Test default VPC detection
         default_vpc = {'IsDefault': True, 'VpcId': 'vpc-default123'}
@@ -77,7 +78,7 @@ def test_basic_functionality():
         
         assert manager.is_default_vpc(default_vpc) == True
         assert manager.is_default_vpc(custom_vpc) == False
-        print("[OK] Default VPC detection works")
+        print(f"{Symbols.OK} Default VPC detection works")
         
         # Test default security group detection
         default_sg = {'GroupName': 'default', 'GroupId': 'sg-default123'}
@@ -85,7 +86,7 @@ def test_basic_functionality():
         
         assert manager.is_default_security_group(default_sg) == True
         assert manager.is_default_security_group(custom_sg) == False
-        print("[OK] Default security group detection works")
+        print(f"{Symbols.OK} Default security group detection works")
         
         # Test main route table detection
         main_rt = {
@@ -99,7 +100,7 @@ def test_basic_functionality():
         
         assert manager.is_main_route_table(main_rt) == True
         assert manager.is_main_route_table(custom_rt) == False
-        print("[OK] Main route table detection works")
+        print(f"{Symbols.OK} Main route table detection works")
         
         # Test default network ACL detection
         default_acl = {'IsDefault': True, 'NetworkAclId': 'acl-default123'}
@@ -107,14 +108,14 @@ def test_basic_functionality():
         
         assert manager.is_default_network_acl(default_acl) == True
         assert manager.is_default_network_acl(custom_acl) == False
-        print("[OK] Default network ACL detection works")
+        print(f"{Symbols.OK} Default network ACL detection works")
         
         # Test cleanup order
         assert len(manager.cleanup_order) == 17
         assert 'vpc_flow_logs' in manager.cleanup_order
         assert 'vpc_endpoints' in manager.cleanup_order
         assert 'nat_gateways' in manager.cleanup_order
-        print("[OK] Cleanup order is properly defined")
+        print(f"{Symbols.OK} Cleanup order is properly defined")
         
         # Test EC2 client creation (mocked)
         with patch('boto3.client') as mock_boto3:
@@ -123,12 +124,12 @@ def test_basic_functionality():
             
             client = manager.create_ec2_client('test-key', 'test-secret', 'us-east-1')
             assert client == mock_client
-            print("[OK] EC2 client creation works")
+            print(f"{Symbols.OK} EC2 client creation works")
         
         print("\n[PARTY] All basic tests passed!")
         
     except Exception as e:
-        print(f"[ERROR] Test failed: {e}")
+        print(f"{Symbols.ERROR} Test failed: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -168,7 +169,7 @@ def test_vpc_resource_methods():
         custom_vpcs = manager.get_all_vpcs_in_region(mock_ec2_client, 'us-east-1', 'test-account')
         assert len(custom_vpcs) == 2
         assert all(not vpc.get('IsDefault') for vpc in custom_vpcs)
-        print("[OK] VPC discovery correctly filters default VPCs")
+        print(f"{Symbols.OK} VPC discovery correctly filters default VPCs")
         
         # Test VPC endpoints discovery
         mock_ec2_client.describe_vpc_endpoints.return_value = {
@@ -180,7 +181,7 @@ def test_vpc_resource_methods():
         
         endpoints = manager.get_vpc_endpoints(mock_ec2_client, ['vpc-custom123'], 'us-east-1', 'test-account')
         assert len(endpoints) == 2
-        print("[OK] VPC endpoints discovery works")
+        print(f"{Symbols.OK} VPC endpoints discovery works")
         
         # Test security groups discovery
         mock_ec2_client.describe_security_groups.return_value = {
@@ -194,12 +195,12 @@ def test_vpc_resource_methods():
         sgs = manager.get_security_groups(mock_ec2_client, ['vpc-custom123'], 'us-east-1', 'test-account')
         assert len(sgs) == 2  # Should exclude default security group
         assert all(sg['GroupName'] != 'default' for sg in sgs)
-        print("[OK] Security groups discovery correctly filters default SGs")
+        print(f"{Symbols.OK} Security groups discovery correctly filters default SGs")
         
         print("\n[PARTY] All VPC resource discovery tests passed!")
         
     except Exception as e:
-        print(f"[ERROR] Test failed: {e}")
+        print(f"{Symbols.ERROR} Test failed: {e}")
         import traceback
         traceback.print_exc()
         return False

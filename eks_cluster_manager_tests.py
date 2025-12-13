@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 Test suite for EKS Cluster Manager
 Tests critical paths in cluster creation flow
@@ -16,6 +16,7 @@ from datetime import datetime
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from eks_cluster_manager import EKSClusterManager, Colors
 from aws_credential_manager import CredentialInfo
+from text_symbols import Symbols
 
 class TestEKSClusterManager(unittest.TestCase):
     """Test cases for EKS Cluster Manager"""

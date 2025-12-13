@@ -1,4 +1,4 @@
-# Databricks notebook source
+﻿# Databricks notebook source
 import boto3
 import pandas as pd
 import requests
@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 import logging
 import pytz
+from text_symbols import Symbols
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')

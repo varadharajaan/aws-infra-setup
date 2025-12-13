@@ -8,6 +8,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from root_iam_credential_manager import AWSCredentialManager, Colors
+from text_symbols import Symbols
 
 class UltraCleanupAPIGatewayManager:
     def __init__(self, config_dir: str = None):
@@ -49,7 +50,7 @@ class UltraCleanupAPIGatewayManager:
                 self.cleanup_results['failed_deletions'].append({'api_id': api['id'], 'error': str(e)})
         
         if deleted > 0:
-            self.print_colored(Colors.GREEN, f"   [OK] Deleted {deleted} REST APIs")
+            self.print_colored(Colors.GREEN, f"   {Symbols.OK} Deleted {deleted} REST APIs")
 
     def delete_http_apis(self, client, region, account):
         deleted = 0
@@ -64,12 +65,12 @@ class UltraCleanupAPIGatewayManager:
                 self.cleanup_results['failed_deletions'].append({'api_id': api['ApiId'], 'error': str(e)})
         
         if deleted > 0:
-            self.print_colored(Colors.GREEN, f"   [OK] Deleted {deleted} HTTP APIs")
+            self.print_colored(Colors.GREEN, f"   {Symbols.OK} Deleted {deleted} HTTP APIs")
 
     def cleanup_account_region(self, account_info: dict, region: str):
         try:
             account_name = account_info.get('name')
-            self.print_colored(Colors.CYAN, f"\n[CLEANUP] {account_name} - {region}")
+            self.print_colored(Colors.CYAN, f"\n{Symbols.CLEANUP} {account_name} - {region}")
             
             # REST APIs
             rest_client = boto3.client('apigateway', 
@@ -90,7 +91,7 @@ class UltraCleanupAPIGatewayManager:
             
             return True
         except Exception as e:
-            self.print_colored(Colors.RED, f"   [ERROR] {e}")
+            self.print_colored(Colors.RED, f"   {Symbols.ERROR} {e}")
             return False
 
     def save_report(self):
@@ -103,15 +104,18 @@ class UltraCleanupAPIGatewayManager:
         return report_file
 
     def run(self):
-        self.print_colored(Colors.BLUE, "\n[START] ULTRA API GATEWAY CLEANUP MANAGER")
+        self.print_colored(Colors.BLUE, f"\n{Symbols.START} ULTRA API GATEWAY CLEANUP MANAGER")
         
         accounts = self.cred_manager.select_root_accounts_interactive()
         if not accounts:
             return
         
-        regions = self._get_regions()
+        regions = self.cred_manager.select_regions_interactive()
+        if not regions:
+            self.print_colored(Colors.YELLOW, f"{Symbols.ERROR} No regions selected. Exiting.")
+            return
         
-        if input("\nType 'DELETE': ").strip().upper() != 'DELETE':
+        if input("\nType 'yes': ").strip().lower() != 'yes':
             return
         
         for acc in accounts:
@@ -119,8 +123,8 @@ class UltraCleanupAPIGatewayManager:
                 self.cleanup_account_region(acc, reg)
         
         total = len(self.cleanup_results['deleted_rest_apis']) + len(self.cleanup_results['deleted_http_apis'])
-        self.print_colored(Colors.WHITE, f"\n[STATS] APIs deleted: {total}")
-        self.print_colored(Colors.GREEN, f"[OK] Report: {self.save_report()}")
+        self.print_colored(Colors.WHITE, f"\n{Symbols.STATS} APIs deleted: {total}")
+        self.print_colored(Colors.GREEN, f"{Symbols.OK} Report: {self.save_report()}")
 
 def main():
     try:

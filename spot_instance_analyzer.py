@@ -16,6 +16,8 @@ import boto3
 import statistics
 import requests
 import re
+from text_symbols import Symbols
+
 
 from aws_credential_manager import CredentialInfo
 
@@ -131,9 +133,9 @@ class SpotInstanceAnalyzer:
         for cache_file in cache_files:
             try:
                 os.remove(cache_file)
-                print(f"[DELETE] Removed cache file: {cache_file}")
+                print(f"{Symbols.DELETE} Removed cache file: {cache_file}")
             except Exception as e:
-                print(f"[WARN] Error removing cache file {cache_file}: {e}")
+                print(f"{Symbols.WARN} Error removing cache file {cache_file}: {e}")
 
     def get_service_quotas(self, instance_types: List[str], created_by="system") -> Dict[str, Dict]:
         instance_types_hash = self._get_instance_types_hash(instance_types)
@@ -271,7 +273,7 @@ class SpotInstanceAnalyzer:
 
     def get_price_history_average(self, ec2_client, instance_type: str, availability_zone: str, days: int = 7) -> float:
         try:
-            end_time = datetime.utcnow()
+            end_time = datetime.now(datetime.UTC)
             start_time = end_time - timedelta(days=days)
             response = ec2_client.describe_spot_price_history(
                 InstanceTypes=[instance_type],
@@ -333,7 +335,7 @@ class SpotInstanceAnalyzer:
                 
                     # If cache is older than 1 hour, show warning
                     if cache_age_hours > 1:
-                        print(f"\n[WARN] WARNING: Cached spot data is {cache_age_hours:.1f} hours old.")
+                        print(f"\n{Symbols.WARN} WARNING: Cached spot data is {cache_age_hours:.1f} hours old.")
                         print("Spot prices and availability can change frequently.")
                         use_cache = input("Do you want to use this cached data? (y/n): ").strip().lower()
                         if use_cache == 'y':
@@ -545,7 +547,7 @@ class SpotInstanceAnalyzer:
     def get_spot_price_history_with_interruption(self, ec2_client, instance_type: str, availability_zone: str, days: int = 7) -> Dict:
         """Get spot price history and calculate interruption statistics"""
         try:
-            end_time = datetime.utcnow()
+            end_time = datetime.now(datetime.UTC)
             start_time = end_time - timedelta(days=days)
     
             response = ec2_client.describe_spot_price_history(
@@ -751,7 +753,7 @@ class SpotInstanceAnalyzer:
                     instances.extend(reservation['Instances'])
     
             # Print diagnostic info
-            print(f"\n[SCAN] Found {len(instances)} running/pending instances")
+            print(f"\n{Symbols.SCAN} Found {len(instances)} running/pending instances")
             print("=" * 80)
     
             for i, instance in enumerate(instances, 1):
@@ -809,8 +811,8 @@ class SpotInstanceAnalyzer:
             return instances
     
         except Exception as e:
-            print(f"[ERROR] Error in diagnostic function: {str(e)}")
             import traceback
+            print(f"[ERROR] Failed to diagnose running instances: {e}")
             traceback.print_exc()
             return []
 

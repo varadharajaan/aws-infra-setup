@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 EKS Cluster Deletion Manager
 Author: varadharajaan
@@ -101,7 +101,7 @@ class EKSClusterDeleteManager:
             
             total_admin_accounts = len(self.admin_config_data.get('accounts', {}))
             logger.info(f"Successfully loaded admin configuration with {total_admin_accounts} admin accounts")
-            self.print_colored(Colors.GREEN, f"✅ Loaded admin configuration with {total_admin_accounts} admin accounts from {self.admin_config_file}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Loaded admin configuration with {total_admin_accounts} admin accounts from {self.admin_config_file}")
         
         except Exception as e:
             logger.error(f"Failed to load admin configuration: {str(e)}")
@@ -113,7 +113,6 @@ class EKSClusterDeleteManager:
             self.log_filename = f"eks_deletion_log_{self.execution_timestamp}.log"
             
             # Create a file handler for detailed logging
-            import logging
             
             # Create logger for detailed operations
             self.operation_logger = logging.getLogger('eks_delete_operations')
@@ -300,7 +299,7 @@ class EKSClusterDeleteManager:
     
     def scan_all_accounts_and_regions(self, selected_accounts: List[str]) -> None:
         """Scan all selected accounts across all regions"""
-        self.print_colored(Colors.BLUE, f"\n🔍 Scanning {len(selected_accounts)} accounts across {len(self.scan_regions)} regions...")
+        self.print_colored(Colors.BLUE, f"\n{Symbols.SCAN} Scanning {len(selected_accounts)} accounts across {len(self.scan_regions)} regions...")
         
         total_scans = len(selected_accounts) * len(self.scan_regions)
         current_scan = 0
@@ -311,28 +310,28 @@ class EKSClusterDeleteManager:
             
             self.discovered_clusters[account_key] = {}
             
-            print(f"\n🏦 Scanning Account: {account_key} ({account_id})")
+            print(f"\n{Symbols.ACCOUNT} Scanning Account: {account_key} ({account_id})")
             
             for region in self.scan_regions:
                 current_scan += 1
-                print(f"   🌍 [{current_scan}/{total_scans}] Scanning region: {region}...", end=" ")
+                print(f"   {Symbols.REGION} [{current_scan}/{total_scans}] Scanning region: {region}...", end=" ")
                 
                 try:
                     clusters = self.scan_eks_clusters_in_region(account_key, region)
                     self.discovered_clusters[account_key][region] = clusters
                     
                     if clusters:
-                        print(f"✅ Found {len(clusters)} cluster(s)")
+                        print(f"{Symbols.OK} Found {len(clusters)} cluster(s)")
                         for cluster in clusters:
                             if 'error' not in cluster:
-                                print(f"      📋 {cluster['name']} ({cluster['status']}) - {cluster['nodegroup_count']} nodegroups, {cluster['total_nodes']} nodes")
+                                print(f"      {Symbols.LIST} {cluster['name']} ({cluster['status']}) - {cluster['nodegroup_count']} nodegroups, {cluster['total_nodes']} nodes")
                             else:
-                                print(f"      ❌ {cluster['name']} (ERROR)")
+                                print(f"      {Symbols.ERROR} {cluster['name']} (ERROR)")
                     else:
-                        print("🔍 No clusters found")
+                        print("[SCAN] No clusters found")
                         
                 except Exception as e:
-                    print(f"❌ Error: {str(e)}")
+                    print(f"{Symbols.ERROR} Error: {str(e)}")
                     self.discovered_clusters[account_key][region] = []
                     
                 time.sleep(0.5)  # Brief pause between API calls
@@ -353,13 +352,13 @@ class EKSClusterDeleteManager:
                         total_nodes += cluster.get('total_nodes', 0)
         
         if total_clusters == 0:
-            self.print_colored(Colors.YELLOW, "\n🎉 No EKS clusters found in any of the scanned accounts and regions!")
+            self.print_colored(Colors.YELLOW, "\n[PARTY] No EKS clusters found in any of the scanned accounts and regions!")
             return False
         
-        print(f"\n📊 EKS Cluster Discovery Summary")
+        print(f"\n{Symbols.STATS} EKS Cluster Discovery Summary")
         print("=" * 100)
-        print(f"🎯 Total Clusters Found: {total_clusters}")
-        print(f"📦 Total Nodegroups: {total_nodegroups}")
+        print(f"{Symbols.TARGET} Total Clusters Found: {total_clusters}")
+        print(f"[PACKAGE] Total Nodegroups: {total_nodegroups}")
         print(f"💻 Total Nodes: {total_nodes}")
         print("=" * 100)
         
@@ -373,12 +372,12 @@ class EKSClusterDeleteManager:
             account_has_clusters = any(len(clusters) > 0 for clusters in regions.values())
             
             if account_has_clusters:
-                print(f"\n🏦 Account: {account_key} ({account_id})")
+                print(f"\n{Symbols.ACCOUNT} Account: {account_key} ({account_id})")
                 print("-" * 80)
                 
                 for region, clusters in regions.items():
                     if clusters:
-                        print(f"\n   🌍 Region: {region}")
+                        print(f"\n   {Symbols.REGION} Region: {region}")
                         
                         for cluster in clusters:
                             if 'error' not in cluster:
@@ -389,10 +388,10 @@ class EKSClusterDeleteManager:
                                     created_str = str(created_time)
                                 
                                 print(f"      {cluster_index:3}. {cluster['name']}")
-                                print(f"           📊 Status: {cluster['status']}")
-                                print(f"           🔢 Version: {cluster['version']}")
-                                print(f"           📅 Created: {created_str}")
-                                print(f"           📦 Nodegroups: {cluster['nodegroup_count']}")
+                                print(f"           {Symbols.STATS} Status: {cluster['status']}")
+                                print(f"           [#] Version: {cluster['version']}")
+                                print(f"           {Symbols.DATE} Created: {created_str}")
+                                print(f"           [PACKAGE] Nodegroups: {cluster['nodegroup_count']}")
                                 print(f"           💻 Total Nodes: {cluster['total_nodes']}")
                                 
                                 # Show nodegroup details
@@ -411,7 +410,7 @@ class EKSClusterDeleteManager:
                                 }
                                 cluster_index += 1
                             else:
-                                print(f"      ❌ {cluster['name']} - ERROR: {cluster.get('error', 'Unknown error')}")
+                                print(f"      {Symbols.ERROR} {cluster['name']} - ERROR: {cluster.get('error', 'Unknown error')}")
                             print()
         
         self.cluster_mapping = cluster_mapping
@@ -424,9 +423,9 @@ class EKSClusterDeleteManager:
         
         total_clusters = len(self.cluster_mapping)
         
-        print(f"\n🗑️  Cluster Deletion Selection")
+        print(f"\n{Symbols.DELETE}  Cluster Deletion Selection")
         print("=" * 60)
-        print(f"📝 Selection Options:")
+        print(f"{Symbols.LOG} Selection Options:")
         print(f"   • Single clusters: 1,3,5")
         print(f"   • Ranges: 1-{total_clusters}")
         print(f"   • Mixed: 1-3,5,7-9")
@@ -434,7 +433,7 @@ class EKSClusterDeleteManager:
         print(f"   • Cancel: 'cancel' or 'quit'")
         
         while True:
-            selection = input(f"\n🔢 Select clusters to DELETE (1-{total_clusters}): ").strip()
+            selection = input(f"\n[#] Select clusters to DELETE (1-{total_clusters}): ").strip()
             
             self.log_operation('INFO', f"User input for cluster deletion selection: '{selection}'")
             
@@ -452,18 +451,18 @@ class EKSClusterDeleteManager:
                     selected_clusters = [self.cluster_mapping[idx] for idx in selected_indices]
                     
                     # Show confirmation
-                    print(f"\n⚠️  DELETION CONFIRMATION")
+                    print(f"\n{Symbols.WARN}  DELETION CONFIRMATION")
                     print("🚨 The following clusters will be PERMANENTLY DELETED:")
                     print("-" * 60)
                     
                     for i, cluster_info in enumerate(selected_clusters, 1):
                         cluster = cluster_info['cluster']
                         print(f"   {i}. {cluster['name']} ({cluster_info['account_key']} - {cluster_info['region']})")
-                        print(f"      📦 {cluster['nodegroup_count']} nodegroups, {cluster['total_nodes']} nodes")
+                        print(f"      [PACKAGE] {cluster['nodegroup_count']} nodegroups, {cluster['total_nodes']} nodes")
                     
                     print("-" * 60)
-                    print(f"🔥 Total: {len(selected_clusters)} clusters will be deleted")
-                    print("⚠️  This action CANNOT be undone!")
+                    print(f"[FIRE] Total: {len(selected_clusters)} clusters will be deleted")
+                    print("[WARN]  This action CANNOT be undone!")
                     
                     confirm1 = input(f"\n❓ Are you sure you want to delete these {len(selected_clusters)} clusters? (yes/no): ").lower().strip()
                     
@@ -473,16 +472,16 @@ class EKSClusterDeleteManager:
                             self.log_operation('INFO', f"User confirmed deletion of {len(selected_clusters)} clusters")
                             return selected_clusters
                         else:
-                            print("❌ Deletion cancelled - incorrect confirmation")
+                            print("[ERROR] Deletion cancelled - incorrect confirmation")
                     else:
-                        print("❌ Deletion cancelled")
+                        print("[ERROR] Deletion cancelled")
                     continue
                 else:
-                    print("❌ No valid clusters selected. Please try again.")
+                    print("[ERROR] No valid clusters selected. Please try again.")
                     continue
                     
             except ValueError as e:
-                print(f"❌ Invalid selection: {e}")
+                print(f"{Symbols.ERROR} Invalid selection: {e}")
                 print("   Please use format like: 1,3,5 or 1-5 or 1-3,5,7-9")
                 continue
     
@@ -612,7 +611,7 @@ class EKSClusterDeleteManager:
             cluster_name = cluster['name']
             
             self.log_operation('INFO', f"Starting deletion of cluster {cluster_name} in {account_key} - {region}")
-            self.print_colored(Colors.YELLOW, f"🗑️  Deleting cluster: {cluster_name} ({account_key} - {region})")
+            self.print_colored(Colors.YELLOW, f"{Symbols.DELETE}  Deleting cluster: {cluster_name} ({account_key} - {region})")
             
             # Get admin credentials
             admin_access_key, admin_secret_key = self.get_admin_credentials_for_account(account_key)
@@ -627,28 +626,28 @@ class EKSClusterDeleteManager:
             eks_client = admin_session.client('eks')
 
             # Step 1: Delete all scrappers first
-            print(f"   🔍 Step 1: Deleting scrappers...")
+            print(f"   {Symbols.SCAN} Step 1: Deleting scrappers...")
             scrappers_deleted = self.delete_cluster_scrappers(cluster_info)
             
             if not scrappers_deleted:
                 self.log_operation('WARNING', f"Some scrappers may not have been deleted for cluster {cluster_name}")
-                self.print_colored(Colors.YELLOW, f"   ⚠️  Some scrappers may still exist (check logs)")
+                self.print_colored(Colors.YELLOW, f"   {Symbols.WARN}  Some scrappers may still exist (check logs)")
             else:
-                print(f"   ✅ All scrappers processed successfully")
+                print(f"   {Symbols.OK} All scrappers processed successfully")
             
             # Step 2: Delete all nodegroups first
-            print(f"   📦 Step 2: Deleting nodegroups...")
+            print(f"   [PACKAGE] Step 2: Deleting nodegroups...")
             nodegroups_deleted = self.delete_cluster_nodegroups(cluster_info)
             
             if not nodegroups_deleted:
                 self.log_operation('ERROR', f"Failed to delete nodegroups for cluster {cluster_name}")
-                self.print_colored(Colors.RED, f"   ❌ Failed to delete nodegroups")
+                self.print_colored(Colors.RED, f"   {Symbols.ERROR} Failed to delete nodegroups")
                 return False
             
-            print(f"   ✅ All nodegroups deleted successfully")
+            print(f"   {Symbols.OK} All nodegroups deleted successfully")
             
             # Step 3: Delete the EKS cluster
-            print(f"   🎯 Step 3: Deleting EKS cluster...")
+            print(f"   {Symbols.TARGET} Step 3: Deleting EKS cluster...")
             self.log_operation('INFO', f"Deleting EKS cluster {cluster_name}")
             
             eks_client.delete_cluster(name=cluster_name)
@@ -665,14 +664,14 @@ class EKSClusterDeleteManager:
             )
             
             self.log_operation('INFO', f"Cluster {cluster_name} successfully deleted")
-            self.print_colored(Colors.GREEN, f"   ✅ Cluster {cluster_name} deleted successfully")
+            self.print_colored(Colors.GREEN, f"   {Symbols.OK} Cluster {cluster_name} deleted successfully")
             
             return True
             
         except Exception as e:
             error_msg = str(e)
             self.log_operation('ERROR', f"Failed to delete cluster {cluster_name}: {error_msg}")
-            self.print_colored(Colors.RED, f"   ❌ Failed to delete cluster {cluster_name}: {error_msg}")
+            self.print_colored(Colors.RED, f"   {Symbols.ERROR} Failed to delete cluster {cluster_name}: {error_msg}")
             return False
     
     def delete_selected_clusters(self, selected_clusters: List[Dict]) -> None:
@@ -692,8 +691,8 @@ class EKSClusterDeleteManager:
             account_key = cluster_info['account_key']
             region = cluster_info['region']
             
-            self.print_colored(Colors.BLUE, f"\n📋 Progress: {i}/{len(selected_clusters)}")
-            print(f"🎯 Target: {cluster_name} ({account_key} - {region})")
+            self.print_colored(Colors.BLUE, f"\n{Symbols.LIST} Progress: {i}/{len(selected_clusters)}")
+            print(f"{Symbols.TARGET} Target: {cluster_name} ({account_key} - {region})")
             
             start_time = time.time()
             
@@ -731,10 +730,10 @@ class EKSClusterDeleteManager:
         # Final summary
         self.log_operation('INFO', f"Cluster deletion completed - Deleted: {len(successful_deletions)}, Failed: {len(failed_deletions)}")
         
-        self.print_colored(Colors.GREEN, f"\n🎉 Cluster Deletion Summary:")
-        self.print_colored(Colors.GREEN, f"✅ Successfully Deleted: {len(successful_deletions)}")
+        self.print_colored(Colors.GREEN, f"\n[PARTY] Cluster Deletion Summary:")
+        self.print_colored(Colors.GREEN, f"{Symbols.OK} Successfully Deleted: {len(successful_deletions)}")
         if failed_deletions:
-            self.print_colored(Colors.RED, f"❌ Failed: {len(failed_deletions)}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed: {len(failed_deletions)}")
         
         # Generate deletion report
         self.generate_deletion_report()
@@ -888,7 +887,7 @@ class EKSClusterDeleteManager:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         report_file = f"eks_deletion_report_{timestamp}.txt"
         
-        self.print_colored(Colors.CYAN, f"\n💾 Deletion report saved to: {report_file}")
+        self.print_colored(Colors.CYAN, f"\n{Symbols.INSTANCE} Deletion report saved to: {report_file}")
         
         with open(report_file, 'w') as f:
             f.write(f"# EKS Cluster Deletion Report\n")
@@ -900,8 +899,8 @@ class EKSClusterDeleteManager:
             failed = [r for r in self.deletion_summary if r['status'] == 'FAILED']
             
             f.write(f"## Summary\n")
-            f.write(f"✅ Successfully deleted: {len(successful)}\n")
-            f.write(f"❌ Failed deletions: {len(failed)}\n\n")
+            f.write(f"{Symbols.OK} Successfully deleted: {len(successful)}\n")
+            f.write(f"{Symbols.ERROR} Failed deletions: {len(failed)}\n\n")
             
             if successful:
                 f.write(f"## Successful Deletions\n")
@@ -937,7 +936,7 @@ class EKSClusterDeleteManager:
         """Display available admin accounts and return selection"""
         accounts = list(self.admin_config_data['accounts'].keys())
         
-        print(f"\n🏦 Available Admin Accounts ({len(accounts)} total):")
+        print(f"\n{Symbols.ACCOUNT} Available Admin Accounts ({len(accounts)} total):")
         print("=" * 60)
         
         for i, account_key in enumerate(accounts, 1):
@@ -951,17 +950,17 @@ class EKSClusterDeleteManager:
             print()
         
         print("=" * 60)
-        print(f"🌍 Scan Regions: {', '.join(self.scan_regions)}")
-        print(f"📊 Total scan operations: {len(accounts)} accounts × {len(self.scan_regions)} regions = {len(accounts) * len(self.scan_regions)} scans")
+        print(f"{Symbols.REGION} Scan Regions: {', '.join(self.scan_regions)}")
+        print(f"{Symbols.STATS} Total scan operations: {len(accounts)} accounts × {len(self.scan_regions)} regions = {len(accounts) * len(self.scan_regions)} scans")
         
-        print(f"\n📝 Selection Options:")
+        print(f"\n{Symbols.LOG} Selection Options:")
         print(f"   • Single accounts: 1,3,5")
         print(f"   • Ranges: 1-{len(accounts)}")
         print(f"   • All accounts: 'all' or press Enter")
         print(f"   • Cancel: 'cancel' or 'quit'")
         
         while True:
-            selection = input(f"\n🔢 Select accounts to scan: ").strip()
+            selection = input(f"\n[#] Select accounts to scan: ").strip()
             
             if not selection or selection.lower() == 'all':
                 return accounts
@@ -974,49 +973,49 @@ class EKSClusterDeleteManager:
                 if selected_indices:
                     selected_accounts = [accounts[idx - 1] for idx in selected_indices]
                     
-                    print(f"\n✅ Selected {len(selected_accounts)} accounts:")
+                    print(f"\n{Symbols.OK} Selected {len(selected_accounts)} accounts:")
                     for account_key in selected_accounts:
                         account_data = self.admin_config_data['accounts'][account_key]
                         print(f"   • {account_key} ({account_data.get('account_id', 'Unknown')})")
                     
                     total_scans = len(selected_accounts) * len(self.scan_regions)
-                    print(f"\n📊 Total scan operations: {total_scans}")
+                    print(f"\n{Symbols.STATS} Total scan operations: {total_scans}")
                     
-                    confirm = input(f"\n🚀 Proceed with scanning these {len(selected_accounts)} accounts? (y/N): ").lower().strip()
+                    confirm = input(f"\n{Symbols.START} Proceed with scanning these {len(selected_accounts)} accounts? (y/N): ").lower().strip()
                     
                     if confirm == 'y':
                         return selected_accounts
                     else:
                         continue
                 else:
-                    print("❌ No valid accounts selected. Please try again.")
+                    print(f"{Symbols.ERROR} No valid accounts selected. Please try again.")
                     continue
                     
             except ValueError as e:
-                print(f"❌ Invalid selection: {e}")
+                print(f"{Symbols.ERROR} Invalid selection: {e}")
                 continue
     
     def run(self) -> None:
         """Main execution flow"""
         try:
-            self.print_colored(Colors.RED, "🗑️  Welcome to EKS Cluster Deletion Manager")
+            self.print_colored(Colors.RED, "[DELETE]  Welcome to EKS Cluster Deletion Manager")
             
-            print("🗑️  EKS Cluster Deletion Tool")
+            print("[DELETE]  EKS Cluster Deletion Tool")
             print("=" * 80)
-            print(f"📅 Execution Date/Time: {self.current_time} UTC")
+            print(f"{Symbols.DATE} Execution Date/Time: {self.current_time} UTC")
             print(f"👤 Executed by: {self.current_user}")
-            print(f"🔑 Admin Config: {self.admin_config_file}")
-            print(f"🌍 Scan Regions: {', '.join(self.scan_regions)}")
-            print(f"📋 Log File: {self.log_filename}")
+            print(f"{Symbols.KEY} Admin Config: {self.admin_config_file}")
+            print(f"{Symbols.REGION} Scan Regions: {', '.join(self.scan_regions)}")
+            print(f"{Symbols.LIST} Log File: {self.log_filename}")
             print("=" * 80)
             
-            print("⚠️  WARNING: This tool will permanently delete EKS clusters!")
+            print("[WARN]  WARNING: This tool will permanently delete EKS clusters!")
             print("🚨 Deleted clusters cannot be recovered!")
             
             # Step 1: Select accounts to scan
             selected_accounts = self.display_accounts_menu()
             if not selected_accounts:
-                print("❌ Account selection cancelled")
+                print("[ERROR] Account selection cancelled")
                 return
             
             # Step 2: Scan all accounts and regions

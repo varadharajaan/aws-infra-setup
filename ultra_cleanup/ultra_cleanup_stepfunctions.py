@@ -18,6 +18,7 @@ import time
 from datetime import datetime
 from botocore.exceptions import ClientError
 from root_iam_credential_manager import AWSCredentialManager
+from text_symbols import Symbols
 
 
 class Colors:
@@ -37,9 +38,9 @@ class UltraCleanupStepFunctionsManager:
     def __init__(self):
         """Initialize the Step Functions cleanup manager"""
         self.cred_manager = AWSCredentialManager()
-        self.current_time = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+        self.current_time = datetime.now(datetime.UTC).strftime('%Y-%m-%d %H:%M:%S')
         self.current_user = os.getenv('USERNAME') or os.getenv('USER') or 'unknown'
-        self.execution_timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+        self.execution_timestamp = datetime.now(datetime.UTC).strftime('%Y%m%d_%H%M%S')
         
         # Create directories for logs and reports
         self.base_dir = os.path.join(os.getcwd(), 'aws', 'stepfunctions')
@@ -70,7 +71,7 @@ class UltraCleanupStepFunctionsManager:
 
     def log_action(self, message, level="INFO"):
         """Log action to file"""
-        timestamp = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp = datetime.now(datetime.UTC).strftime('%Y-%m-%d %H:%M:%S')
         log_entry = f"{timestamp} | {level:8} | {message}\n"
         with open(self.log_file, 'a') as f:
             f.write(log_entry)
@@ -81,7 +82,7 @@ class UltraCleanupStepFunctionsManager:
             # Extract state machine name from ARN
             state_machine_name = state_machine_arn.split(':')[-1]
             
-            self.print_colored(Colors.CYAN, f"[DELETE] Deleting state machine: {state_machine_name}")
+            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting state machine: {state_machine_name}")
             
             # Stop all running executions first
             try:
@@ -92,7 +93,7 @@ class UltraCleanupStepFunctionsManager:
                 
                 running_executions = executions_response.get('executions', [])
                 if running_executions:
-                    self.print_colored(Colors.YELLOW, f"   [STOP] Stopping {len(running_executions)} running executions")
+                    self.print_colored(Colors.YELLOW, f"   {Symbols.STOP} Stopping {len(running_executions)} running executions")
                     for execution in running_executions:
                         try:
                             sfn_client.stop_execution(executionArn=execution['executionArn'])
@@ -105,7 +106,7 @@ class UltraCleanupStepFunctionsManager:
             # Delete the state machine
             sfn_client.delete_state_machine(stateMachineArn=state_machine_arn)
             
-            self.print_colored(Colors.GREEN, f"[OK] Deleted state machine: {state_machine_name}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted state machine: {state_machine_name}")
             self.log_action(f"Deleted state machine: {state_machine_name} in {region}")
             
             self.cleanup_results['deleted_state_machines'].append({
@@ -118,7 +119,7 @@ class UltraCleanupStepFunctionsManager:
             
         except ClientError as e:
             error_msg = f"Failed to delete state machine {state_machine_arn}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['failed_deletions'].append({
                 'type': 'StateMachine',
@@ -135,11 +136,11 @@ class UltraCleanupStepFunctionsManager:
             # Extract activity name from ARN
             activity_name = activity_arn.split(':')[-1]
             
-            self.print_colored(Colors.CYAN, f"[DELETE] Deleting activity: {activity_name}")
+            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting activity: {activity_name}")
             
             sfn_client.delete_activity(activityArn=activity_arn)
             
-            self.print_colored(Colors.GREEN, f"[OK] Deleted activity: {activity_name}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted activity: {activity_name}")
             self.log_action(f"Deleted activity: {activity_name} in {region}")
             
             self.cleanup_results['deleted_activities'].append({
@@ -152,7 +153,7 @@ class UltraCleanupStepFunctionsManager:
             
         except ClientError as e:
             error_msg = f"Failed to delete activity {activity_arn}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['failed_deletions'].append({
                 'type': 'Activity',
@@ -166,7 +167,7 @@ class UltraCleanupStepFunctionsManager:
     def cleanup_region_stepfunctions(self, account_name, credentials, region):
         """Cleanup all Step Functions resources in a specific region"""
         try:
-            self.print_colored(Colors.YELLOW, f"\n[SCAN] Scanning region: {region}")
+            self.print_colored(Colors.YELLOW, f"\n{Symbols.SCAN} Scanning region: {region}")
             
             sfn_client = boto3.client(
                 'stepfunctions',
@@ -203,7 +204,7 @@ class UltraCleanupStepFunctionsManager:
             
         except Exception as e:
             error_msg = f"Error processing region {region}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['errors'].append(error_msg)
 
@@ -211,7 +212,7 @@ class UltraCleanupStepFunctionsManager:
         """Cleanup all Step Functions resources in an account across all regions"""
         try:
             self.print_colored(Colors.BLUE, f"\n{'='*100}")
-            self.print_colored(Colors.BLUE, f"[START] Processing Account: {account_name}")
+            self.print_colored(Colors.BLUE, f"{Symbols.START} Processing Account: {account_name}")
             self.print_colored(Colors.BLUE, f"{'='*100}")
             
             self.cleanup_results['accounts_processed'].append(account_name)
@@ -227,17 +228,17 @@ class UltraCleanupStepFunctionsManager:
             regions_response = ec2_client.describe_regions()
             regions = [region['RegionName'] for region in regions_response['Regions']]
             
-            self.print_colored(Colors.CYAN, f"[SCAN] Processing {len(regions)} regions")
+            self.print_colored(Colors.CYAN, f"{Symbols.SCAN} Processing {len(regions)} regions")
             
             # Process each region
             for region in regions:
                 self.cleanup_region_stepfunctions(account_name, credentials, region)
             
-            self.print_colored(Colors.GREEN, f"\n[OK] Account {account_name} cleanup completed!")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.OK} Account {account_name} cleanup completed!")
             
         except Exception as e:
             error_msg = f"Error processing account {account_name}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['errors'].append(error_msg)
 
@@ -264,20 +265,20 @@ class UltraCleanupStepFunctionsManager:
             with open(report_path, 'w') as f:
                 json.dump(summary, f, indent=2)
 
-            self.print_colored(Colors.GREEN, f"\n[STATS] Summary report saved: {report_path}")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.STATS} Summary report saved: {report_path}")
 
             # Print summary to console
             self.print_colored(Colors.BLUE, f"\n{'='*100}")
             self.print_colored(Colors.BLUE, "[STATS] CLEANUP SUMMARY")
             self.print_colored(Colors.BLUE, f"{'='*100}")
-            self.print_colored(Colors.GREEN, f"[OK] State Machines Deleted: {summary['summary']['total_state_machines_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Activities Deleted: {summary['summary']['total_activities_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} State Machines Deleted: {summary['summary']['total_state_machines_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Activities Deleted: {summary['summary']['total_activities_deleted']}")
 
             if summary['summary']['total_failed_deletions'] > 0:
-                self.print_colored(Colors.YELLOW, f"[WARN] Failed Deletions: {summary['summary']['total_failed_deletions']}")
+                self.print_colored(Colors.YELLOW, f"{Symbols.WARN} Failed Deletions: {summary['summary']['total_failed_deletions']}")
 
             if summary['summary']['total_errors'] > 0:
-                self.print_colored(Colors.RED, f"[ERROR] Errors: {summary['summary']['total_errors']}")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Errors: {summary['summary']['total_errors']}")
 
             # Display Account Summary
             self.print_colored(Colors.BLUE, f"\n{'='*100}")
@@ -301,14 +302,14 @@ class UltraCleanupStepFunctionsManager:
                 account_summary[account]['regions'].add(activity.get('region', 'unknown'))
 
             for account, stats in account_summary.items():
-                self.print_colored(Colors.CYAN, f"\n[LIST] Account: {account}")
-                self.print_colored(Colors.GREEN, f"  [OK] State Machines: {stats['state_machines']}")
-                self.print_colored(Colors.GREEN, f"  [OK] Activities: {stats['activities']}")
+                self.print_colored(Colors.CYAN, f"\n{Symbols.LIST} Account: {account}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} State Machines: {stats['state_machines']}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Activities: {stats['activities']}")
                 regions_str = ', '.join(sorted(stats['regions'])) if stats['regions'] else 'N/A'
-                self.print_colored(Colors.YELLOW, f"  [SCAN] Regions: {regions_str}")
+                self.print_colored(Colors.YELLOW, f"  {Symbols.SCAN} Regions: {regions_str}")
 
         except Exception as e:
-            self.print_colored(Colors.RED, f"[ERROR] Failed to generate summary report: {e}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to generate summary report: {e}")
 
     def interactive_cleanup(self):
         """Interactive mode for Step Functions cleanup"""
@@ -319,15 +320,15 @@ class UltraCleanupStepFunctionsManager:
 
             config = self.cred_manager.load_root_accounts_config()
             if not config or 'accounts' not in config:
-                self.print_colored(Colors.RED, "[ERROR] No accounts configuration found!")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} No accounts configuration found!")
                 return
 
             accounts = config['accounts']
             account_list = list(accounts.keys())
 
-            self.print_colored(Colors.CYAN, "[KEY] Select Root AWS Accounts for Step Functions Cleanup:")
+            self.print_colored(Colors.CYAN, f"{Symbols.KEY} Select Root AWS Accounts for Step Functions Cleanup:")
             print(f"{Colors.CYAN}[BOOK] Loading root accounts config...{Colors.END}")
-            self.print_colored(Colors.GREEN, f"[OK] Loaded {len(accounts)} root accounts")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Loaded {len(accounts)} root accounts")
             
             self.print_colored(Colors.YELLOW, "\n[KEY] Available Root AWS Accounts:")
             print("=" * 100)
@@ -362,14 +363,14 @@ class UltraCleanupStepFunctionsManager:
                     indices = [int(x.strip()) for x in selection.split(',')]
                     selected_accounts = [account_list[i-1] for i in indices if 0 < i <= len(account_list)]
                 except (ValueError, IndexError):
-                    self.print_colored(Colors.RED, "[ERROR] Invalid selection!")
+                    self.print_colored(Colors.RED, f"{Symbols.ERROR} Invalid selection!")
                     return
 
             if not selected_accounts:
-                self.print_colored(Colors.RED, "[ERROR] No accounts selected!")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} No accounts selected!")
                 return
 
-            self.print_colored(Colors.RED, "\n[WARN] WARNING: This will DELETE all Step Functions resources!")
+            self.print_colored(Colors.RED, f"\n{Symbols.WARN} WARNING: This will DELETE all Step Functions resources!")
             confirm = input(f"\nType 'yes' to confirm: ").strip().lower()
             if confirm != 'yes':
                 self.print_colored(Colors.YELLOW, "[EXIT] Cleanup cancelled!")
@@ -387,13 +388,13 @@ class UltraCleanupStepFunctionsManager:
 
             self.generate_summary_report()
 
-            self.print_colored(Colors.GREEN, f"\n[OK] Step Functions cleanup completed!")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.OK} Step Functions cleanup completed!")
             self.print_colored(Colors.CYAN, f"[FILE] Log file: {self.log_file}")
 
         except KeyboardInterrupt:
             self.print_colored(Colors.YELLOW, "\n[WARN] Cleanup interrupted by user!")
         except Exception as e:
-            self.print_colored(Colors.RED, f"\n[ERROR] Error during cleanup: {e}")
+            self.print_colored(Colors.RED, f"\n{Symbols.ERROR} Error during cleanup: {e}")
 
 
 def main():
@@ -404,7 +405,7 @@ def main():
     except KeyboardInterrupt:
         print("\n\n[WARN] Operation cancelled by user!")
     except Exception as e:
-        print(f"\n[ERROR] Fatal error: {e}")
+        print(f"\n{Symbols.ERROR} Fatal error: {e}")
 
 
 if __name__ == "__main__":

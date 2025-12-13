@@ -1,4 +1,20 @@
-{
+IST] Total operations: 30
+[DELETE]  Target: All DynamoDB tables + backups
+[PROTECTED]  Protected: Tables with deletion protection enabled
+================================================================================
+
+[WARN]  WARNING: This will:
+    • Delete ALL DynamoDB tables
+    • Delete ALL on-demand backups
+    • Delete CloudWatch alarms for tables
+    • Across 6 accounts in 5 regions
+    • Tables with deletion protection will be SKIPPED
+    This action CANNOT be undone!
+
+[WARN]  Type 'DELETE' to confirm this destructive action:
+   → DELETE
+
+[START] Starting cl{
   "metadata": {
     "last_updated": "2025-07-04 12:45:00",
     "updated_by": "varadharajaan",

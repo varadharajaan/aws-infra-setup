@@ -6,35 +6,36 @@ Script to remove Unicode emojis from Python files and replace with text markers.
 import os
 import re
 from pathlib import Path
+from text_symbols import Symbols
 
 # Emoji to text replacement mapping
 EMOJI_REPLACEMENTS = {
-    '🔍': '[SCAN]',
-    '✅': '[OK]',
-    '❌': '[ERROR]',
-    '⚠️': '[WARN]',
-    '📊': '[STATS]',
-    '🗑️': '[DELETE]',
+    '🔍': f'{Symbols.SCAN}',
+    '✅': f'{Symbols.OK}',
+    '❌': f'{Symbols.ERROR}',
+    '⚠️': f'{Symbols.WARN}',
+    '📊': f'{Symbols.STATS}',
+    '🗑️': f'{Symbols.DELETE}',
     '🌐': '[NETWORK]',
     '🔓': '[UNLOCKED]',
     '📎': '[ATTACHED]',
-    '🛡️': '[PROTECTED]',
+    '🛡️': f'{Symbols.PROTECTED}',
     '🏢': '[ACCOUNT]',
-    '🚀': '[START]',
-    '📋': '[LIST]',
-    '💾': '[INSTANCE]',
-    '🗄️': '[CLUSTER]',
+    '🚀': f'{Symbols.START}',
+    '📋': f'{Symbols.LIST}',
+    '💾': f'{Symbols.INSTANCE}',
+    '🗄️': f'{Symbols.CLUSTER}',
     '📸': '[SNAPSHOT]',
-    '🌍': '[REGION]',
+    '🌍': f'{Symbols.REGION}',
     '📄': '[FILE]',
-    '📝': '[LOG]',
-    '🎯': '[TARGET]',
-    '❤️': '[HEALTH]',
+    '📝': f'{Symbols.LOG}',
+    '🎯': f'{Symbols.TARGET}',
+    '❤️': f'{Symbols.HEALTH}',
     '⏳': '[WAIT]',
-    '🔒': '[SECURE]',
-    '📁': '[FOLDER]',
+    '🔒': f'{Symbols.SECURE}',
+    '📁': f'{Symbols.FOLDER}',
     '🔧': '[CONFIG]',
-    '💡': '[TIP]',
+    '💡': f'{Symbols.TIP}',
     '🚦': '[TRAFFIC]',
     '🌟': '[STAR]',
     '⭐': '[STAR]',
@@ -42,23 +43,23 @@ EMOJI_REPLACEMENTS = {
     '💬': '[COMMENT]',
     '🎨': '[STYLE]',
     '📌': '[PIN]',
-    '🏦': '[BANK]',
+    '🏦': f'{Symbols.ACCOUNT}',
     '💻': '[COMPUTE]',
     '🌈': '[RAINBOW]',
     '📡': '[SIGNAL]',
-    '🔑': '[KEY]',
+    '🔑': f'{Symbols.KEY}',
     '⚙️': '[SETTINGS]',
     '📦': '[PACKAGE]',
     '🏷️': '[TAG]',
-    '🧹': '[CLEANUP]',
+    '🧹': f'{Symbols.CLEANUP}',
     '🎭': '[MASK]',
-    '🚨': '[ALERT]',
+    '🚨': f'{Symbols.ALERT}',
     '⚡': '[FAST]',
     '🎁': '[GIFT]',
     '🔎': '[SEARCH]',
     '📺': '[DISPLAY]',
     '🗂️': '[ORGANIZER]',
-    '💰': '[COST]',
+    '💰': f'{Symbols.COST}',
     '🌀': '[SPIN]',
     '🔔': '[NOTIFY]',
     '⭕': '[CIRCLE]',
@@ -78,7 +79,7 @@ EMOJI_REPLACEMENTS = {
     '🎓': '[LEARN]',
     '🔐': '[LOCKED]',
     '🆕': '[NEW]',
-    '🆗': '[OK]',
+    '🆗': f'{Symbols.OK}',
     '🆘': '[SOS]',
     '🔕': '[MUTE]',
     '📶': '[SIGNAL]',
@@ -88,16 +89,16 @@ EMOJI_REPLACEMENTS = {
     '🕒': '[TIME]',
     '⌚': '[WATCH]',
     '⏰': '[ALARM]',
-    '⏱️': '[TIMER]',
+    '⏱️': f'{Symbols.TIMER}',
     '⏲️': '[CLOCK]',
     '🔜': '[SOON]',
     '🔚': '[END]',
     '🔛': '[ON]',
     '🔝': '[TOP]',
     '🔞': '[ADULT]',
-    '⏭️': '[SKIP]',
-    '⏸️': '[PAUSE]',
-    '⏹️': '[STOP]',
+    '⏭️': f'{Symbols.SKIP}',
+    '⏸️': f'{Symbols.PAUSE}',
+    '⏹️': f'{Symbols.STOP}',
     '⏺️': '[RECORD]',
     '📭': '[MAILBOX]',
     '📬': '[MAILBOX]',
@@ -163,7 +164,7 @@ EMOJI_REPLACEMENTS = {
     '🗒️': '[NOTEPAD]',
     '🗓️': '[CALENDAR]',
     '📆': '[DATES]',
-    '📅': '[DATE]',
+    '📅': f'{Symbols.DATE}',
     '🗃️': '[CARDFILE]',
 }
 
@@ -187,13 +188,13 @@ def replace_emojis_in_file(file_path):
         if content != original_content:
             with open(file_path, 'w', encoding='utf-8') as f:
                 f.write(content)
-            print(f"[OK] {file_path.name}: {replacements_made} emoji(s) replaced")
+            print(f"{Symbols.OK} {file_path.name}: {replacements_made} emoji(s) replaced")
             return replacements_made
         
         return 0
         
     except Exception as e:
-        print(f"[ERROR] Failed to process {file_path}: {e}")
+        print(f"{Symbols.ERROR} Failed to process {file_path}: {e}")
         return 0
 
 def main():
@@ -216,8 +217,8 @@ def main():
             total_replacements += replacements
     
     print("="*80)
-    print(f"[STATS] Processed {total_files} files")
-    print(f"[STATS] Total replacements: {total_replacements}")
+    print(f"{Symbols.STATS} Processed {total_files} files")
+    print(f"{Symbols.STATS} Total replacements: {total_replacements}")
     print("[OK] Emoji removal completed!")
 
 if __name__ == "__main__":

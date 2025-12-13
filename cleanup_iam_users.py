@@ -6,6 +6,7 @@ import sys
 import os
 from datetime import datetime
 from botocore.exceptions import ClientError, BotoCoreError
+from text_symbols import Symbols
 
 class IAMUserCleanup:
     def __init__(self, config_file='aws_accounts_config.json', mapping_file='user_mapping.json'):
@@ -28,25 +29,25 @@ class IAMUserCleanup:
             self.aws_accounts = config['accounts']
             self.user_settings = config['user_settings']
             
-            print(f"✅ Configuration loaded from: {self.config_file}")
-            print(f"📊 Found {len(self.aws_accounts)} AWS accounts")
+            print(f"{Symbols.OK} Configuration loaded from: {self.config_file}")
+            print(f"{Symbols.STATS} Found {len(self.aws_accounts)} AWS accounts")
             
         except FileNotFoundError as e:
-            print(f"❌ {e}")
+            print(f"{Symbols.ERROR} {e}")
             print("Please ensure the configuration file exists in the same directory.")
             sys.exit(1)
         except json.JSONDecodeError as e:
-            print(f"❌ Invalid JSON in configuration file: {e}")
+            print(f"{Symbols.ERROR} Invalid JSON in configuration file: {e}")
             sys.exit(1)
         except Exception as e:
-            print(f"❌ Error loading configuration: {e}")
+            print(f"{Symbols.ERROR} Error loading configuration: {e}")
             sys.exit(1)
 
     def load_user_mapping(self):
         """Load user mapping from JSON file"""
         try:
             if not os.path.exists(self.mapping_file):
-                print(f"⚠️  User mapping file '{self.mapping_file}' not found")
+                print(f"{Symbols.WARN}  User mapping file '{self.mapping_file}' not found")
                 self.user_mappings = {}
                 return
             
@@ -54,10 +55,10 @@ class IAMUserCleanup:
                 mapping_data = json.load(f)
             
             self.user_mappings = mapping_data['user_mappings']
-            print(f"✅ User mapping loaded from: {self.mapping_file}")
+            print(f"{Symbols.OK} User mapping loaded from: {self.mapping_file}")
             
         except Exception as e:
-            print(f"⚠️  Warning: Error loading user mapping: {e}")
+            print(f"{Symbols.WARN}  Warning: Error loading user mapping: {e}")
             self.user_mappings = {}
 
     def get_user_info(self, username):
@@ -89,12 +90,12 @@ class IAMUserCleanup:
             
         except ClientError as e:
             if e.response['Error']['Code'] == 'AccessDenied':
-                print(f"❌ Access denied for {account_name}. Please check credentials.")
+                print(f"{Symbols.ERROR} Access denied for {account_name}. Please check credentials.")
             else:
-                print(f"❌ AWS Error for {account_name}: {e}")
+                print(f"{Symbols.ERROR} AWS Error for {account_name}: {e}")
             raise
         except Exception as e:
-            print(f"❌ Failed to create IAM client for {account_name}: {e}")
+            print(f"{Symbols.ERROR} Failed to create IAM client for {account_name}: {e}")
             raise
 
     def get_users_for_account(self, account_name):
@@ -128,16 +129,16 @@ class IAMUserCleanup:
                 iam_client.get_login_profile(UserName=username)
                 if not dry_run:
                     iam_client.delete_login_profile(UserName=username)
-                actions_taken.append("✅ Deleted login profile")
-                print("      ✅ Login profile deleted")
+                actions_taken.append("[OK] Deleted login profile")
+                print("      [OK] Login profile deleted")
             except ClientError as e:
                 if e.response['Error']['Code'] == 'NoSuchEntity':
-                    print("      ℹ️  No login profile found")
+                    print(f"      {Symbols.INFO}  No login profile found")
                 else:
-                    print(f"      ❌ Error deleting login profile: {e}")
+                    print(f"      {Symbols.ERROR} Error deleting login profile: {e}")
             
             # STEP 2: PROCESS ACCESS KEYS (deactivate then delete)
-            print("    🔑 Step 2: Processing access keys...")
+            print("    [KEY] Step 2: Processing access keys...")
             try:
                 access_keys_response = iam_client.list_access_keys(UserName=username)
                 access_keys = access_keys_response['AccessKeyMetadata']
@@ -155,10 +156,10 @@ class IAMUserCleanup:
                                         AccessKeyId=access_key_id,
                                         Status='Inactive'
                                     )
-                                print(f"      ✅ Deactivated access key: {access_key_id}")
-                                actions_taken.append(f"✅ Deactivated access key: {access_key_id}")
+                                print(f"      {Symbols.OK} Deactivated access key: {access_key_id}")
+                                actions_taken.append(f"{Symbols.OK} Deactivated access key: {access_key_id}")
                             except ClientError as e:
-                                print(f"      ⚠️  Warning deactivating access key {access_key_id}: {e}")
+                                print(f"      {Symbols.WARN}  Warning deactivating access key {access_key_id}: {e}")
                         
                         # Then delete
                         try:
@@ -167,18 +168,18 @@ class IAMUserCleanup:
                                     UserName=username,
                                     AccessKeyId=access_key_id
                                 )
-                            print(f"      ✅ Deleted access key: {access_key_id}")
-                            actions_taken.append(f"✅ Deleted access key: {access_key_id}")
+                            print(f"      {Symbols.OK} Deleted access key: {access_key_id}")
+                            actions_taken.append(f"{Symbols.OK} Deleted access key: {access_key_id}")
                         except ClientError as e:
-                            print(f"      ❌ Error deleting access key {access_key_id}: {e}")
+                            print(f"      {Symbols.ERROR} Error deleting access key {access_key_id}: {e}")
                 else:
-                    print("      ℹ️  No access keys found")
+                    print("      [INFO]  No access keys found")
                     
             except ClientError as e:
-                print(f"      ❌ Error listing access keys: {e}")
+                print(f"      {Symbols.ERROR} Error listing access keys: {e}")
             
             # STEP 3: DETACH MANAGED POLICIES
-            print("    📋 Step 3: Detaching managed policies...")
+            print("    [LIST] Step 3: Detaching managed policies...")
             try:
                 policies_response = iam_client.list_attached_user_policies(UserName=username)
                 attached_policies = policies_response['AttachedPolicies']
@@ -191,15 +192,15 @@ class IAMUserCleanup:
                                     UserName=username,
                                     PolicyArn=policy['PolicyArn']
                                 )
-                            print(f"      ✅ Detached policy: {policy['PolicyName']}")
-                            actions_taken.append(f"✅ Detached policy: {policy['PolicyName']}")
+                            print(f"      {Symbols.OK} Detached policy: {policy['PolicyName']}")
+                            actions_taken.append(f"{Symbols.OK} Detached policy: {policy['PolicyName']}")
                         except ClientError as e:
-                            print(f"      ❌ Error detaching policy {policy['PolicyName']}: {e}")
+                            print(f"      {Symbols.ERROR} Error detaching policy {policy['PolicyName']}: {e}")
                 else:
-                    print("      ℹ️  No attached policies found")
+                    print("      [INFO]  No attached policies found")
                     
             except ClientError as e:
-                print(f"      ❌ Error listing attached policies: {e}")
+                print(f"      {Symbols.ERROR} Error listing attached policies: {e}")
             
             # STEP 4: DELETE INLINE POLICIES
             print("    📄 Step 4: Deleting inline policies...")
@@ -215,15 +216,15 @@ class IAMUserCleanup:
                                     UserName=username,
                                     PolicyName=policy_name
                                 )
-                            print(f"      ✅ Deleted inline policy: {policy_name}")
-                            actions_taken.append(f"✅ Deleted inline policy: {policy_name}")
+                            print(f"      {Symbols.OK} Deleted inline policy: {policy_name}")
+                            actions_taken.append(f"{Symbols.OK} Deleted inline policy: {policy_name}")
                         except ClientError as e:
-                            print(f"      ❌ Error deleting inline policy {policy_name}: {e}")
+                            print(f"      {Symbols.ERROR} Error deleting inline policy {policy_name}: {e}")
                 else:
-                    print("      ℹ️  No inline policies found")
+                    print("      [INFO]  No inline policies found")
                     
             except ClientError as e:
-                print(f"      ❌ Error listing inline policies: {e}")
+                print(f"      {Symbols.ERROR} Error listing inline policies: {e}")
             
             # STEP 5: REMOVE FROM GROUPS
             print("    👥 Step 5: Removing from groups...")
@@ -239,18 +240,18 @@ class IAMUserCleanup:
                                     GroupName=group['GroupName'],
                                     UserName=username
                                 )
-                            print(f"      ✅ Removed from group: {group['GroupName']}")
-                            actions_taken.append(f"✅ Removed from group: {group['GroupName']}")
+                            print(f"      {Symbols.OK} Removed from group: {group['GroupName']}")
+                            actions_taken.append(f"{Symbols.OK} Removed from group: {group['GroupName']}")
                         except ClientError as e:
-                            print(f"      ❌ Error removing from group {group['GroupName']}: {e}")
+                            print(f"      {Symbols.ERROR} Error removing from group {group['GroupName']}: {e}")
                 else:
-                    print("      ℹ️  No group memberships found")
+                    print("      [INFO]  No group memberships found")
                     
             except ClientError as e:
                 if e.response['Error']['Code'] != 'NoSuchEntity':
-                    print(f"      ❌ Error listing groups: {e}")
+                    print(f"      {Symbols.ERROR} Error listing groups: {e}")
                 else:
-                    print("      ℹ️  No group memberships found")
+                    print("      [INFO]  No group memberships found")
             
             # STEP 6: DELETE MFA DEVICES (if any)
             print("    🔐 Step 6: Removing MFA devices...")
@@ -271,15 +272,15 @@ class IAMUserCleanup:
                                     iam_client.delete_virtual_mfa_device(
                                         SerialNumber=mfa_device['SerialNumber']
                                     )
-                            print(f"      ✅ Removed MFA device: {mfa_device['SerialNumber']}")
-                            actions_taken.append(f"✅ Removed MFA device: {mfa_device['SerialNumber']}")
+                            print(f"      {Symbols.OK} Removed MFA device: {mfa_device['SerialNumber']}")
+                            actions_taken.append(f"{Symbols.OK} Removed MFA device: {mfa_device['SerialNumber']}")
                         except ClientError as e:
-                            print(f"      ❌ Error removing MFA device: {e}")
+                            print(f"      {Symbols.ERROR} Error removing MFA device: {e}")
                 else:
-                    print("      ℹ️  No MFA devices found")
+                    print("      [INFO]  No MFA devices found")
                     
             except ClientError as e:
-                print(f"      ❌ Error listing MFA devices: {e}")
+                print(f"      {Symbols.ERROR} Error listing MFA devices: {e}")
             
             # STEP 7: DELETE SIGNING CERTIFICATES (if any)
             print("    📜 Step 7: Removing signing certificates...")
@@ -295,15 +296,15 @@ class IAMUserCleanup:
                                     UserName=username,
                                     CertificateId=cert['CertificateId']
                                 )
-                            print(f"      ✅ Deleted certificate: {cert['CertificateId']}")
-                            actions_taken.append(f"✅ Deleted certificate: {cert['CertificateId']}")
+                            print(f"      {Symbols.OK} Deleted certificate: {cert['CertificateId']}")
+                            actions_taken.append(f"{Symbols.OK} Deleted certificate: {cert['CertificateId']}")
                         except ClientError as e:
-                            print(f"      ❌ Error deleting certificate: {e}")
+                            print(f"      {Symbols.ERROR} Error deleting certificate: {e}")
                 else:
-                    print("      ℹ️  No signing certificates found")
+                    print("      [INFO]  No signing certificates found")
                     
             except ClientError as e:
-                print(f"      ❌ Error listing signing certificates: {e}")
+                print(f"      {Symbols.ERROR} Error listing signing certificates: {e}")
             
             # STEP 8: DELETE SSH PUBLIC KEYS (if any)
             print("    🔧 Step 8: Removing SSH public keys...")
@@ -319,18 +320,18 @@ class IAMUserCleanup:
                                     UserName=username,
                                     SSHPublicKeyId=ssh_key['SSHPublicKeyId']
                                 )
-                            print(f"      ✅ Deleted SSH key: {ssh_key['SSHPublicKeyId']}")
-                            actions_taken.append(f"✅ Deleted SSH key: {ssh_key['SSHPublicKeyId']}")
+                            print(f"      {Symbols.OK} Deleted SSH key: {ssh_key['SSHPublicKeyId']}")
+                            actions_taken.append(f"{Symbols.OK} Deleted SSH key: {ssh_key['SSHPublicKeyId']}")
                         except ClientError as e:
-                            print(f"      ❌ Error deleting SSH key: {e}")
+                            print(f"      {Symbols.ERROR} Error deleting SSH key: {e}")
                 else:
-                    print("      ℹ️  No SSH public keys found")
+                    print("      [INFO]  No SSH public keys found")
                     
             except ClientError as e:
-                print(f"      ❌ Error listing SSH public keys: {e}")
+                print(f"      {Symbols.ERROR} Error listing SSH public keys: {e}")
                 
         except Exception as e:
-            print(f"  ❌ Error in cleanup process for {username}: {e}")
+            print(f"  {Symbols.ERROR} Error in cleanup process for {username}: {e}")
             raise
         
         return actions_taken
@@ -338,10 +339,10 @@ class IAMUserCleanup:
     def delete_user(self, iam_client, username, dry_run=False):
         """Delete the IAM user after all resources are cleaned up"""
         try:
-            print("    🗑️  Step 9: Deleting user...")
+            print("    [DELETE]  Step 9: Deleting user...")
             if not dry_run:
                 iam_client.delete_user(UserName=username)
-                print(f"      ✅ User {username} deleted successfully")
+                print(f"      {Symbols.OK} User {username} deleted successfully")
             else:
                 print(f"      🧪 Would delete user: {username}")
             return True
@@ -349,10 +350,10 @@ class IAMUserCleanup:
         except ClientError as e:
             error_code = e.response['Error']['Code']
             error_message = e.response['Error']['Message']
-            print(f"      ❌ Cannot delete user {username}: {error_message}")
+            print(f"      {Symbols.ERROR} Cannot delete user {username}: {error_message}")
             
             if error_code == 'DeleteConflict':
-                print(f"      💡 There are still resources attached. Let me check what's remaining...")
+                print(f"      {Symbols.TIP} There are still resources attached. Let me check what's remaining...")
                 
                 # Quick check for remaining resources
                 remaining_resources = []
@@ -380,33 +381,33 @@ class IAMUserCleanup:
                         pass
                     
                     if remaining_resources:
-                        print(f"      📋 Remaining resources: {', '.join(remaining_resources)}")
+                        print(f"      {Symbols.LIST} Remaining resources: {', '.join(remaining_resources)}")
                     else:
                         print(f"      🤔 No obvious remaining resources found")
                         
                 except Exception as check_e:
-                    print(f"      ⚠️  Could not check remaining resources: {check_e}")
+                    print(f"      {Symbols.WARN}  Could not check remaining resources: {check_e}")
             
             return False
                 
         except Exception as e:
-            print(f"      ❌ Unexpected error deleting user {username}: {e}")
+            print(f"      {Symbols.ERROR} Unexpected error deleting user {username}: {e}")
             return False
 
     def cleanup_users_in_account(self, account_name, dry_run=False):
         """Cleanup users in a specific AWS account"""
-        action_prefix = "🧪 [DRY RUN]" if dry_run else "🗑️  [DELETING]"
-        print(f"\n🏦 {action_prefix} Working on Account: {account_name.upper()}")
+        action_prefix = "🧪 [DRY RUN]" if dry_run else "[DELETE]  [DELETING]"
+        print(f"\n{Symbols.ACCOUNT} {action_prefix} Working on Account: {account_name.upper()}")
         print("=" * 60)
         
         try:
             # Initialize IAM client for this account
             iam_client, account_config = self.create_iam_client(account_name)
-            print(f"✅ Connected to AWS Account: {account_config['account_id']}")
+            print(f"{Symbols.OK} Connected to AWS Account: {account_config['account_id']}")
             print(f"📧 Email: {account_config['email']}")
             
         except Exception as e:
-            print(f"❌ Failed to connect to {account_name}: {e}")
+            print(f"{Symbols.ERROR} Failed to connect to {account_name}: {e}")
             return [], [], []
         
         # Get users for this account
@@ -416,14 +417,14 @@ class IAMUserCleanup:
         not_found_users = []
         failed_users = []
         
-        print(f"\n🔍 Checking for users to cleanup...")
+        print(f"\n{Symbols.SCAN} Checking for users to cleanup...")
         
         for username in users_to_check:
             try:
                 exists, user_details = self.check_user_exists(iam_client, username)
                 
                 if not exists:
-                    print(f"  ℹ️  User {username} does not exist - SKIPPING")
+                    print(f"  {Symbols.INFO}  User {username} does not exist - SKIPPING")
                     not_found_users.append(username)
                     continue
                 
@@ -449,7 +450,7 @@ class IAMUserCleanup:
                 print("-" * 50)
                 
             except Exception as e:
-                print(f"❌ Error processing user {username}: {e}")
+                print(f"{Symbols.ERROR} Error processing user {username}: {e}")
                 failed_users.append(username)
                 continue
         
@@ -457,26 +458,26 @@ class IAMUserCleanup:
 
     def display_cleanup_options(self):
         """Display cleanup options menu"""
-        print("\n🗑️  Cleanup Options:")
+        print("\n[DELETE]  Cleanup Options:")
         print("  1. Cleanup all cloud users in all accounts")
         print("  2. Cleanup all cloud users in specific account")
         print("  3. Dry run - Show what would be deleted (recommended first)")
         
         while True:
             try:
-                choice = input("\n🔢 Select cleanup option (1-3): ").strip()
+                choice = input("\n[#] Select cleanup option (1-3): ").strip()
                 choice_num = int(choice)
                 
                 if 1 <= choice_num <= 3:
                     return choice_num
                 else:
-                    print("❌ Invalid choice. Please enter a number between 1 and 3")
+                    print("[ERROR] Invalid choice. Please enter a number between 1 and 3")
             except ValueError:
-                print("❌ Invalid input. Please enter a number.")
+                print("[ERROR] Invalid input. Please enter a number.")
 
     def select_accounts(self):
         """Select which accounts to process"""
-        print("\n📋 Available AWS Accounts:")
+        print("\n[LIST] Available AWS Accounts:")
         for i, (account_name, config) in enumerate(self.aws_accounts.items(), 1):
             print(f"  {i}. {account_name} ({config['account_id']}) - {config['email']}")
         
@@ -484,7 +485,7 @@ class IAMUserCleanup:
         
         while True:
             try:
-                choice = input(f"\n🔢 Select account(s) to process (1-{len(self.aws_accounts) + 1}): ").strip()
+                choice = input(f"\n[#] Select account(s) to process (1-{len(self.aws_accounts) + 1}): ").strip()
                 choice_num = int(choice)
                 
                 if choice_num == len(self.aws_accounts) + 1:
@@ -492,17 +493,17 @@ class IAMUserCleanup:
                 elif 1 <= choice_num <= len(self.aws_accounts):
                     return [list(self.aws_accounts.keys())[choice_num - 1]]
                 else:
-                    print(f"❌ Invalid choice. Please enter a number between 1 and {len(self.aws_accounts) + 1}")
+                    print(f"{Symbols.ERROR} Invalid choice. Please enter a number between 1 and {len(self.aws_accounts) + 1}")
             except ValueError:
-                print("❌ Invalid input. Please enter a number.")
+                print("[ERROR] Invalid input. Please enter a number.")
 
     def run(self):
         """Main execution method"""
-        print("🗑️  AWS IAM User Cleanup Script (FINAL FIX)")
+        print("[DELETE]  AWS IAM User Cleanup Script (FINAL FIX)")
         print("=" * 60)
-        print(f"📅 Execution Date/Time: {self.current_time} UTC")
+        print(f"{Symbols.DATE} Execution Date/Time: {self.current_time} UTC")
         print(f"👤 Executed by: {self.current_user}")
-        print("⚠️  WARNING: This script will DELETE IAM users and all associated resources!")
+        print("[WARN]  WARNING: This script will DELETE IAM users and all associated resources!")
         print("=" * 60)
         
         # Get cleanup option
@@ -517,12 +518,12 @@ class IAMUserCleanup:
         
         if not dry_run:
             # Final confirmation
-            print(f"\n⚠️  FINAL WARNING: You are about to DELETE IAM users in {len(accounts_to_process)} account(s)!")
+            print(f"\n{Symbols.WARN}  FINAL WARNING: You are about to DELETE IAM users in {len(accounts_to_process)} account(s)!")
             print("This action CANNOT be undone!")
             confirm = input("\nType 'DELETE' to confirm: ").strip()
             
             if confirm != 'DELETE':
-                print("❌ Cleanup cancelled")
+                print(f"{Symbols.ERROR} Cleanup cancelled")
                 return
         
         all_deleted_users = []
@@ -538,29 +539,29 @@ class IAMUserCleanup:
         
         # Overall Summary
         action_word = "Would be deleted" if dry_run else "Deleted"
-        print(f"\n{'🧪' if dry_run else '🎯'}" * 20 + " CLEANUP SUMMARY " + f"{'🧪' if dry_run else '🎯'}" * 20)
+        print(f"\n{'🧪' if dry_run else '{Symbols.TARGET}'}" * 20 + " CLEANUP SUMMARY " + f"{'🧪' if dry_run else '{Symbols.TARGET}'}" * 20)
         print("=" * 80)
-        print(f"✅ Total users {action_word.lower()}: {len(all_deleted_users)}")
-        print(f"ℹ️  Total users not found: {len(all_not_found_users)}")
-        print(f"❌ Total users failed: {len(all_failed_users)}")
+        print(f"{Symbols.OK} Total users {action_word.lower()}: {len(all_deleted_users)}")
+        print(f"{Symbols.INFO}  Total users not found: {len(all_not_found_users)}")
+        print(f"{Symbols.ERROR} Total users failed: {len(all_failed_users)}")
         
         if all_deleted_users:
-            print(f"\n{'🧪' if dry_run else '✅'} Users {action_word}:")
+            print(f"\n{'🧪' if dry_run else '{Symbols.OK}'} Users {action_word}:")
             current_account = None
             for user in all_deleted_users:
                 account_name = user['username'].split('_')[0]
                 if current_account != account_name:
                     current_account = account_name
-                    print(f"\n  🏦 {account_name}:")
+                    print(f"\n  {Symbols.ACCOUNT} {account_name}:")
                 print(f"    • {user['username']} → {user['user_info']} ({user['actions_taken']} actions, created: {user['created_date']})")
         
         if all_not_found_users:
-            print("\nℹ️  Users Not Found (already deleted or never existed):")
+            print("\n[INFO]  Users Not Found (already deleted or never existed):")
             for username in all_not_found_users:
                 print(f"  • {username}")
         
         if all_failed_users:
-            print("\n❌ Failed to Delete:")
+            print("\n[ERROR] Failed to Delete:")
             for username in all_failed_users:
                 print(f"  • {username}")
         
@@ -569,7 +570,7 @@ class IAMUserCleanup:
             print("Run the script again without dry run option to perform actual cleanup")
 
         else:
-            print(f"\n🎉 Cleanup completed!")
+            print(f"\n[PARTY] Cleanup completed!")
 
 def main():
     """Main function"""
@@ -577,10 +578,10 @@ def main():
         cleanup = IAMUserCleanup()
         cleanup.run()
     except KeyboardInterrupt:
-        print("\n\n❌ Script interrupted by user")
+        print("\n\n[ERROR] Script interrupted by user")
         sys.exit(1)
     except Exception as e:
-        print(f"❌ Unexpected error: {e}")
+        print(f"{Symbols.ERROR} Unexpected error: {e}")
         sys.exit(1)
 
 if __name__ == "__main__":

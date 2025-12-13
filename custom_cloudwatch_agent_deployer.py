@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 Custom CloudWatch Agent Deployer for EKS
 Deploys custom CloudWatch agent with different name to avoid Container Insights conflicts
@@ -16,6 +16,8 @@ import boto3
 from typing import Dict, List, Tuple, Optional
 from botocore.exceptions import ClientError
 import textwrap
+from text_symbols import Symbols
+
 
 class Colors:
     GREEN = '\033[92m'
@@ -368,10 +370,10 @@ class CustomCloudWatchAgentDeployer:
         )
 
         if success:
-            self.log_step("VERIFY", "[OK] DaemonSet status check passed", "SUCCESS")
+            self.log_step("VERIFY", f"{Symbols.OK} DaemonSet status check passed", "SUCCESS")
             self.print_colored(self.colors.WHITE, stdout, 1)
         else:
-            self.log_step("VERIFY", "[ERROR] DaemonSet status check failed", "ERROR")
+            self.log_step("VERIFY", f"{Symbols.ERROR} DaemonSet status check failed", "ERROR")
             verification_passed = False
 
         success, stdout, stderr = self.run_command(
@@ -380,10 +382,10 @@ class CustomCloudWatchAgentDeployer:
         )
 
         if success:
-            self.log_step("VERIFY", "[OK] Pod status check passed", "SUCCESS")
+            self.log_step("VERIFY", f"{Symbols.OK} Pod status check passed", "SUCCESS")
             self.print_colored(self.colors.WHITE, stdout, 1)
         else:
-            self.log_step("VERIFY", "[ERROR] Pod status check failed", "ERROR")
+            self.log_step("VERIFY", f"{Symbols.ERROR} Pod status check failed", "ERROR")
             verification_passed = False
 
         success, stdout, stderr = self.run_command(
@@ -392,9 +394,9 @@ class CustomCloudWatchAgentDeployer:
         )
 
         if success:
-            self.log_step("VERIFY", "[OK] ConfigMap exists", "SUCCESS")
+            self.log_step("VERIFY", f"{Symbols.OK} ConfigMap exists", "SUCCESS")
         else:
-            self.log_step("VERIFY", "[ERROR] ConfigMap missing", "ERROR")
+            self.log_step("VERIFY", f"{Symbols.ERROR} ConfigMap missing", "ERROR")
             verification_passed = False
 
         success, stdout, stderr = self.run_command(
@@ -403,9 +405,9 @@ class CustomCloudWatchAgentDeployer:
         )
 
         if success:
-            self.log_step("VERIFY", "[OK] AWS credentials secret exists", "SUCCESS")
+            self.log_step("VERIFY", f"{Symbols.OK} AWS credentials secret exists", "SUCCESS")
         else:
-            self.log_step("VERIFY", "[ERROR] AWS credentials secret missing", "ERROR")
+            self.log_step("VERIFY", f"{Symbols.ERROR} AWS credentials secret missing", "ERROR")
             verification_passed = False
 
         rbac_resources = [
@@ -421,9 +423,9 @@ class CustomCloudWatchAgentDeployer:
 
             success, stdout, stderr = self.run_command(cmd, env=env)
             if success:
-                self.log_step("VERIFY", f"[OK] {resource_type} {name} exists", "SUCCESS")
+                self.log_step("VERIFY", f"{Symbols.OK} {resource_type} {name} exists", "SUCCESS")
             else:
-                self.log_step("VERIFY", f"[ERROR] {resource_type} {name} missing", "ERROR")
+                self.log_step("VERIFY", f"{Symbols.ERROR} {resource_type} {name} missing", "ERROR")
                 verification_passed = False
 
         return verification_passed
@@ -450,7 +452,7 @@ class CustomCloudWatchAgentDeployer:
                 )
 
                 if response['logGroups']:
-                    self.log_step("CLOUDWATCH", f"[OK] Log group found: {log_group_name}", "SUCCESS")
+                    self.log_step("CLOUDWATCH", f"{Symbols.OK} Log group found: {log_group_name}", "SUCCESS")
 
                     streams_response = cloudwatch_logs.describe_log_streams(
                         logGroupName=log_group_name,
@@ -460,16 +462,16 @@ class CustomCloudWatchAgentDeployer:
                     )
 
                     if streams_response['logStreams']:
-                        self.log_step("CLOUDWATCH", f"[OK] Found {len(streams_response['logStreams'])} log streams", "SUCCESS")
+                        self.log_step("CLOUDWATCH", f"{Symbols.OK} Found {len(streams_response['logStreams'])} log streams", "SUCCESS")
                         for stream in streams_response['logStreams'][:3]:
                             self.print_colored(self.colors.WHITE, f"  Stream: {stream['logStreamName']}", 1)
                     else:
                         self.log_step("CLOUDWATCH", "[WARN]  No log streams found yet", "WARNING")
                 else:
-                    self.log_step("CLOUDWATCH", f"[WARN]  Log group not found: {log_group_name}", "WARNING")
+                    self.log_step("CLOUDWATCH", f"{Symbols.WARN}  Log group not found: {log_group_name}", "WARNING")
 
             except ClientError as e:
-                self.log_step("CLOUDWATCH", f"[WARN]  Error checking log groups: {str(e)}", "WARNING")
+                self.log_step("CLOUDWATCH", f"{Symbols.WARN}  Error checking log groups: {str(e)}", "WARNING")
 
             namespace = f"EKS/Custom/{cluster_name}"
 
@@ -479,22 +481,22 @@ class CustomCloudWatchAgentDeployer:
                 )
 
                 if response['Metrics']:
-                    self.log_step("CLOUDWATCH", f"[OK] Found {len(response['Metrics'])} custom metrics", "SUCCESS")
+                    self.log_step("CLOUDWATCH", f"{Symbols.OK} Found {len(response['Metrics'])} custom metrics", "SUCCESS")
 
                     for metric in response['Metrics'][:5]:
                         metric_name = metric['MetricName']
                         dimensions = ', '.join([f"{d['Name']}={d['Value']}" for d in metric.get('Dimensions', [])])
                         self.print_colored(self.colors.WHITE, f"  Metric: {metric_name} ({dimensions})", 1)
                 else:
-                    self.log_step("CLOUDWATCH", f"[WARN]  No custom metrics found in namespace: {namespace}", "WARNING")
+                    self.log_step("CLOUDWATCH", f"{Symbols.WARN}  No custom metrics found in namespace: {namespace}", "WARNING")
 
             except ClientError as e:
-                self.log_step("CLOUDWATCH", f"[WARN]  Error checking metrics: {str(e)}", "WARNING")
+                self.log_step("CLOUDWATCH", f"{Symbols.WARN}  Error checking metrics: {str(e)}", "WARNING")
 
             return True
 
         except Exception as e:
-            self.log_step("CLOUDWATCH", f"[ERROR] Failed to check CloudWatch: {str(e)}", "ERROR")
+            self.log_step("CLOUDWATCH", f"{Symbols.ERROR} Failed to check CloudWatch: {str(e)}", "ERROR")
             return False
 
     def print_agent_logs(self, env: Dict, lines: int = 50):
@@ -507,7 +509,7 @@ class CustomCloudWatchAgentDeployer:
         )
 
         if success:
-            self.print_colored(self.colors.WHITE, "[LIST] Recent CloudWatch Agent Logs:")
+            self.print_colored(self.colors.WHITE, f"{Symbols.LIST} Recent CloudWatch Agent Logs:")
             self.print_colored(self.colors.CYAN, "-" * 80)
             print(stdout)
             self.print_colored(self.colors.CYAN, "-" * 80)
@@ -521,7 +523,7 @@ class CustomCloudWatchAgentDeployer:
         elapsed_time = time.time() - self.deployment_start_time
 
         self.print_colored(self.colors.GREEN, "[OK] DEPLOYMENT COMPLETED SUCCESSFULLY!")
-        self.print_colored(self.colors.CYAN, f"[STATS] Deployment Summary:")
+        self.print_colored(self.colors.CYAN, f"{Symbols.STATS} Deployment Summary:")
         self.print_colored(self.colors.WHITE, f"   • Cluster: {cluster_name}", 1)
         self.print_colored(self.colors.WHITE, f"   • Region: {region}", 1)
         self.print_colored(self.colors.WHITE, f"   • Custom Agent Name: {self.custom_agent_name}", 1)
@@ -541,7 +543,7 @@ class CustomCloudWatchAgentDeployer:
         self.print_colored(self.colors.WHITE, "   # Check CloudWatch configuration:", 1)
         self.print_colored(self.colors.CYAN, f"   kubectl get configmap {self.custom_agent_name}-config -n {self.namespace} -o yaml", 1)
 
-        self.print_colored(self.colors.GREEN, f"\n[STATS] CloudWatch Resources:")
+        self.print_colored(self.colors.GREEN, f"\n{Symbols.STATS} CloudWatch Resources:")
         self.print_colored(self.colors.WHITE, f"   • Log Group: /aws/eks/{cluster_name}/custom-logs", 1)
         self.print_colored(self.colors.WHITE, f"   • Metrics Namespace: EKS/Custom/{cluster_name}", 1)
         self.print_colored(self.colors.WHITE, f"   • AWS Console: https://{region}.console.aws.amazon.com/cloudwatch/", 1)
@@ -622,7 +624,7 @@ class CustomCloudWatchAgentDeployer:
 
         except Exception as e:
             self.log_step("DEPLOY", f"Deployment failed with exception: {str(e)}", "ERROR")
-            self.print_colored(self.colors.RED, f"\n[ERROR] DEPLOYMENT FAILED: {str(e)}")
+            self.print_colored(self.colors.RED, f"\n{Symbols.ERROR} DEPLOYMENT FAILED: {str(e)}")
             return False
 
     def deploy_to_clusters(self, clusters: list):
@@ -639,7 +641,7 @@ class CustomCloudWatchAgentDeployer:
             print(f"\n=== Deploying to cluster: {cluster_name} ===")
             region = helper._extract_region_from_cluster_name(cluster_name)
             if not region:
-                print(f"[ERROR] Could not extract region from cluster name: {cluster_name}")
+                print(f"{Symbols.ERROR} Could not extract region from cluster name: {cluster_name}")
                 results[cluster_name] = False
                 continue
 
@@ -649,7 +651,7 @@ class CustomCloudWatchAgentDeployer:
                 try:
                     access_key, secret_key, _ = helper.get_root_credentials(cluster_name, region)
                 except Exception as e:
-                    print(f"[ERROR] Could not get credentials for cluster {cluster_name}: {e}")
+                    print(f"{Symbols.ERROR} Could not get credentials for cluster {cluster_name}: {e}")
                     results[cluster_name] = False
                     continue
 
@@ -705,10 +707,10 @@ class CustomCloudWatchAgentDeployer:
                 MetricName='my_custom_metric'
             )
             if response['Metrics']:
-                self.log_step("METRIC", "[OK] Custom metric found in CloudWatch", "SUCCESS")
+                self.log_step("METRIC", f"{Symbols.OK} Custom metric found in CloudWatch", "SUCCESS")
                 return True
             else:
-                self.log_step("METRIC", "[ERROR] Custom metric not found", "ERROR")
+                self.log_step("METRIC", f"{Symbols.ERROR} Custom metric not found", "ERROR")
                 return False
         except Exception as e:
             self.log_step("METRIC", f"Error verifying custom metric: {str(e)}", "ERROR")

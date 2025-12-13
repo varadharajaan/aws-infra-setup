@@ -19,6 +19,7 @@ import time
 from datetime import datetime
 from botocore.exceptions import ClientError
 from root_iam_credential_manager import AWSCredentialManager
+from text_symbols import Symbols
 
 
 class Colors:
@@ -33,9 +34,9 @@ class Colors:
 class UltraCleanupDocumentDBManager:
     def __init__(self):
         self.cred_manager = AWSCredentialManager()
-        self.current_time = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+        self.current_time = datetime.now(datetime.UTC).strftime('%Y-%m-%d %H:%M:%S')
         self.current_user = os.getenv('USERNAME') or os.getenv('USER') or 'unknown'
-        self.execution_timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+        self.execution_timestamp = datetime.now(datetime.UTC).strftime('%Y%m%d_%H%M%S')
         
         self.base_dir = os.path.join(os.getcwd(), 'aws', 'documentdb')
         self.logs_dir = os.path.join(self.base_dir, 'logs')
@@ -63,15 +64,15 @@ class UltraCleanupDocumentDBManager:
         print(f"{color}{message}{Colors.END}")
 
     def log_action(self, message, level="INFO"):
-        timestamp = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp = datetime.now(datetime.UTC).strftime('%Y-%m-%d %H:%M:%S')
         with open(self.log_file, 'a') as f:
             f.write(f"{timestamp} | {level:8} | {message}\n")
 
     def delete_db_instance(self, docdb_client, instance_id, region, account_key):
         try:
-            self.print_colored(Colors.CYAN, f"   [DELETE] Deleting instance: {instance_id}")
+            self.print_colored(Colors.CYAN, f"   {Symbols.DELETE} Deleting instance: {instance_id}")
             docdb_client.delete_db_instance(DBInstanceIdentifier=instance_id)
-            self.print_colored(Colors.GREEN, f"   [OK] Deleted instance: {instance_id}")
+            self.print_colored(Colors.GREEN, f"   {Symbols.OK} Deleted instance: {instance_id}")
             self.log_action(f"Deleted DocumentDB instance: {instance_id} in {region}")
             
             self.cleanup_results['deleted_instances'].append({
@@ -86,7 +87,7 @@ class UltraCleanupDocumentDBManager:
 
     def delete_db_cluster(self, docdb_client, cluster_id, region, account_key):
         try:
-            self.print_colored(Colors.CYAN, f"[DELETE] Deleting cluster: {cluster_id}")
+            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting cluster: {cluster_id}")
             
             # Delete instances first
             try:
@@ -96,7 +97,7 @@ class UltraCleanupDocumentDBManager:
                 instances = instances_response.get('DBInstances', [])
                 
                 if instances:
-                    self.print_colored(Colors.YELLOW, f"   [SCAN] Found {len(instances)} instances")
+                    self.print_colored(Colors.YELLOW, f"   {Symbols.SCAN} Found {len(instances)} instances")
                     for instance in instances:
                         self.delete_db_instance(docdb_client, instance['DBInstanceIdentifier'], region, account_key)
                         time.sleep(2)
@@ -118,7 +119,7 @@ class UltraCleanupDocumentDBManager:
             
             docdb_client.delete_db_cluster(**delete_params)
             
-            self.print_colored(Colors.GREEN, f"[OK] Deleted cluster: {cluster_id}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted cluster: {cluster_id}")
             self.log_action(f"Deleted DocumentDB cluster: {cluster_id} in {region}")
             
             self.cleanup_results['deleted_clusters'].append({
@@ -128,7 +129,7 @@ class UltraCleanupDocumentDBManager:
             })
             return True
         except ClientError as e:
-            self.print_colored(Colors.RED, f"[ERROR] Failed to delete cluster {cluster_id}: {e}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to delete cluster {cluster_id}: {e}")
             self.log_action(f"Failed to delete cluster {cluster_id}: {e}", "ERROR")
             self.cleanup_results['failed_deletions'].append({
                 'type': 'DocumentDBCluster',
@@ -141,7 +142,7 @@ class UltraCleanupDocumentDBManager:
 
     def cleanup_region_documentdb(self, account_name, credentials, region):
         try:
-            self.print_colored(Colors.YELLOW, f"\n[SCAN] Scanning region: {region}")
+            self.print_colored(Colors.YELLOW, f"\n{Symbols.SCAN} Scanning region: {region}")
             
             docdb_client = boto3.client(
                 'docdb',
@@ -156,7 +157,7 @@ class UltraCleanupDocumentDBManager:
                 clusters = clusters_response.get('DBClusters', [])
                 
                 if clusters:
-                    self.print_colored(Colors.CYAN, f"[CLUSTER] Found {len(clusters)} clusters")
+                    self.print_colored(Colors.CYAN, f"{Symbols.CLUSTER} Found {len(clusters)} clusters")
                     for cluster in clusters:
                         self.delete_db_cluster(docdb_client, cluster['DBClusterIdentifier'], region, account_name)
                         time.sleep(3)
@@ -177,7 +178,7 @@ class UltraCleanupDocumentDBManager:
                     self.print_colored(Colors.CYAN, f"[SNAPSHOT] Found {len(manual_snapshots)} manual snapshots")
                     for snapshot in manual_snapshots:
                         try:
-                            self.print_colored(Colors.CYAN, f"[DELETE] Deleting snapshot: {snapshot['DBClusterSnapshotIdentifier']}")
+                            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting snapshot: {snapshot['DBClusterSnapshotIdentifier']}")
                             docdb_client.delete_db_cluster_snapshot(
                                 DBClusterSnapshotIdentifier=snapshot['DBClusterSnapshotIdentifier']
                             )
@@ -201,7 +202,7 @@ class UltraCleanupDocumentDBManager:
                     self.print_colored(Colors.CYAN, f"[SUBNET] Found {len(subnet_groups)} subnet groups")
                     for group in subnet_groups:
                         try:
-                            self.print_colored(Colors.CYAN, f"[DELETE] Deleting subnet group: {group['DBSubnetGroupName']}")
+                            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting subnet group: {group['DBSubnetGroupName']}")
                             docdb_client.delete_db_subnet_group(DBSubnetGroupName=group['DBSubnetGroupName'])
                             self.cleanup_results['deleted_subnet_groups'].append({
                                 'group_name': group['DBSubnetGroupName'],
@@ -224,7 +225,7 @@ class UltraCleanupDocumentDBManager:
                     for group in param_groups:
                         if not group['DBClusterParameterGroupName'].startswith('default.'):
                             try:
-                                self.print_colored(Colors.CYAN, f"[DELETE] Deleting parameter group: {group['DBClusterParameterGroupName']}")
+                                self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting parameter group: {group['DBClusterParameterGroupName']}")
                                 docdb_client.delete_db_cluster_parameter_group(
                                     DBClusterParameterGroupName=group['DBClusterParameterGroupName']
                                 )
@@ -241,14 +242,14 @@ class UltraCleanupDocumentDBManager:
             
         except Exception as e:
             error_msg = f"Error processing region {region}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['errors'].append(error_msg)
 
     def cleanup_account_documentdb(self, account_name, credentials):
         try:
             self.print_colored(Colors.BLUE, f"\n{'='*100}")
-            self.print_colored(Colors.BLUE, f"[START] Processing Account: {account_name}")
+            self.print_colored(Colors.BLUE, f"{Symbols.START} Processing Account: {account_name}")
             self.print_colored(Colors.BLUE, f"{'='*100}")
             
             self.cleanup_results['accounts_processed'].append(account_name)
@@ -263,16 +264,16 @@ class UltraCleanupDocumentDBManager:
             regions_response = ec2_client.describe_regions()
             regions = [region['RegionName'] for region in regions_response['Regions']]
             
-            self.print_colored(Colors.CYAN, f"[SCAN] Processing {len(regions)} regions")
+            self.print_colored(Colors.CYAN, f"{Symbols.SCAN} Processing {len(regions)} regions")
             
             for region in regions:
                 self.cleanup_region_documentdb(account_name, credentials, region)
             
-            self.print_colored(Colors.GREEN, f"\n[OK] Account {account_name} cleanup completed!")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.OK} Account {account_name} cleanup completed!")
             
         except Exception as e:
             error_msg = f"Error processing account {account_name}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['errors'].append(error_msg)
 
@@ -301,16 +302,16 @@ class UltraCleanupDocumentDBManager:
             with open(report_path, 'w') as f:
                 json.dump(summary, f, indent=2)
 
-            self.print_colored(Colors.GREEN, f"\n[STATS] Summary report saved: {report_path}")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.STATS} Summary report saved: {report_path}")
             self.print_colored(Colors.BLUE, f"\n{'='*100}")
             self.print_colored(Colors.BLUE, "[STATS] CLEANUP SUMMARY")
             self.print_colored(Colors.BLUE, f"{'='*100}")
-            self.print_colored(Colors.GREEN, f"[OK] Clusters Deleted: {summary['summary']['total_clusters_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Instances Deleted: {summary['summary']['total_instances_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Snapshots Deleted: {summary['summary']['total_snapshots_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Clusters Deleted: {summary['summary']['total_clusters_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Instances Deleted: {summary['summary']['total_instances_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Snapshots Deleted: {summary['summary']['total_snapshots_deleted']}")
 
         except Exception as e:
-            self.print_colored(Colors.RED, f"[ERROR] Failed to generate summary report: {e}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to generate summary report: {e}")
 
     def interactive_cleanup(self):
         try:
@@ -320,15 +321,15 @@ class UltraCleanupDocumentDBManager:
 
             config = self.cred_manager.load_root_accounts_config()
             if not config or 'accounts' not in config:
-                self.print_colored(Colors.RED, "[ERROR] No accounts configuration found!")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} No accounts configuration found!")
                 return
 
             accounts = config['accounts']
             account_list = list(accounts.keys())
 
-            self.print_colored(Colors.CYAN, "[KEY] Select Root AWS Accounts for DocumentDB Cleanup:")
+            self.print_colored(Colors.CYAN, f"{Symbols.KEY} Select Root AWS Accounts for DocumentDB Cleanup:")
             print(f"{Colors.CYAN}[BOOK] Loading root accounts config...{Colors.END}")
-            self.print_colored(Colors.GREEN, f"[OK] Loaded {len(accounts)} root accounts")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Loaded {len(accounts)} root accounts")
             
             self.print_colored(Colors.YELLOW, "\n[KEY] Available Root AWS Accounts:")
             print("=" * 100)
@@ -363,19 +364,19 @@ class UltraCleanupDocumentDBManager:
                     indices = [int(x.strip()) for x in selection.split(',')]
                     selected_accounts = [account_list[i-1] for i in indices if 0 < i <= len(account_list)]
                 except (ValueError, IndexError):
-                    self.print_colored(Colors.RED, "[ERROR] Invalid selection!")
+                    self.print_colored(Colors.RED, f"{Symbols.ERROR} Invalid selection!")
                     return
 
             if not selected_accounts:
-                self.print_colored(Colors.RED, "[ERROR] No accounts selected!")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} No accounts selected!")
                 return
 
-            self.print_colored(Colors.YELLOW, "\n[KEY] Final Snapshot Options:")
+            self.print_colored(Colors.YELLOW, f"\n{Symbols.KEY} Final Snapshot Options:")
             snapshot_choice = input("Create final snapshots before deleting clusters? (yes/no) [default: no]: ").strip().lower()
             self.create_final_snapshot = snapshot_choice == 'yes'
 
-            self.print_colored(Colors.RED, "\n[WARN] WARNING: This will DELETE all DocumentDB resources!")
-            self.print_colored(Colors.YELLOW, "[WARN] Includes: Clusters, Instances, Snapshots, Subnet Groups, Parameter Groups")
+            self.print_colored(Colors.RED, f"\n{Symbols.WARN} WARNING: This will DELETE all DocumentDB resources!")
+            self.print_colored(Colors.YELLOW, f"{Symbols.WARN} Includes: Clusters, Instances, Snapshots, Subnet Groups, Parameter Groups")
             confirm = input(f"\nType 'yes' to confirm: ").strip().lower()
             if confirm != 'yes':
                 self.print_colored(Colors.YELLOW, "[EXIT] Cleanup cancelled!")
@@ -393,13 +394,13 @@ class UltraCleanupDocumentDBManager:
 
             self.generate_summary_report()
 
-            self.print_colored(Colors.GREEN, f"\n[OK] DocumentDB cleanup completed!")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.OK} DocumentDB cleanup completed!")
             self.print_colored(Colors.CYAN, f"[FILE] Log file: {self.log_file}")
 
         except KeyboardInterrupt:
             self.print_colored(Colors.YELLOW, "\n[WARN] Cleanup interrupted by user!")
         except Exception as e:
-            self.print_colored(Colors.RED, f"\n[ERROR] Error during cleanup: {e}")
+            self.print_colored(Colors.RED, f"\n{Symbols.ERROR} Error during cleanup: {e}")
 
 
 def main():
@@ -409,7 +410,7 @@ def main():
     except KeyboardInterrupt:
         print("\n\n[WARN] Operation cancelled by user!")
     except Exception as e:
-        print(f"\n[ERROR] Fatal error: {e}")
+        print(f"\n{Symbols.ERROR} Fatal error: {e}")
 
 
 if __name__ == "__main__":

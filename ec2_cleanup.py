@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 EC2 Instance Cleanup Script
 This script reads EC2 instance reference files, groups them by creation date,
@@ -21,6 +21,7 @@ from botocore.exceptions import ClientError, NoCredentialsError
 # Configure logging
 import os
 from datetime import datetime
+from text_symbols import Symbols
 
 # Create timestamp for filename
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

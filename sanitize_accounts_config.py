@@ -1,5 +1,6 @@
 import json
 from datetime import datetime
+from text_symbols import Symbols
 
 # Load the configuration file
 with open("aws_accounts_config.json") as f:
@@ -55,4 +56,4 @@ config["metadata"] = {
 with open("sanitized_aws_accounts_config.json", "w") as f:
     json.dump(config, f, indent=2)
 
-print(f"[OK] Sanitized config saved to 'sanitized_aws_accounts_config.json' at {timestamp}")
+print(f"{Symbols.OK} Sanitized config saved to 'sanitized_aws_accounts_config.json' at {timestamp}")

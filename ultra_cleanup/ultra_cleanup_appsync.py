@@ -23,6 +23,7 @@ import time
 from datetime import datetime
 from botocore.exceptions import ClientError
 from root_iam_credential_manager import AWSCredentialManager
+from text_symbols import Symbols
 
 
 class Colors:
@@ -42,9 +43,9 @@ class UltraCleanupAppSyncManager:
     def __init__(self):
         """Initialize the AppSync cleanup manager"""
         self.cred_manager = AWSCredentialManager()
-        self.current_time = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+        self.current_time = datetime.now(datetime.UTC).strftime('%Y-%m-%d %H:%M:%S')
         self.current_user = os.getenv('USERNAME') or os.getenv('USER') or 'unknown'
-        self.execution_timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+        self.execution_timestamp = datetime.now(datetime.UTC).strftime('%Y%m%d_%H%M%S')
         
         # Create directories for logs and reports
         self.base_dir = os.path.join(os.getcwd(), 'aws', 'appsync')
@@ -76,7 +77,7 @@ class UltraCleanupAppSyncManager:
 
     def log_action(self, message, level="INFO"):
         """Log action to file"""
-        timestamp = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp = datetime.now(datetime.UTC).strftime('%Y-%m-%d %H:%M:%S')
         log_entry = f"{timestamp} | {level:8} | {message}\n"
         with open(self.log_file, 'a') as f:
             f.write(log_entry)
@@ -84,12 +85,12 @@ class UltraCleanupAppSyncManager:
     def delete_api(self, appsync_client, api_id, api_name, region, account_key):
         """Delete an AppSync GraphQL API (includes all data sources, resolvers, functions)"""
         try:
-            self.print_colored(Colors.CYAN, f"[DELETE] Deleting API: {api_name}")
+            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting API: {api_name}")
             
             # Delete API (this automatically deletes data sources, resolvers, functions, types)
             appsync_client.delete_graphql_api(apiId=api_id)
             
-            self.print_colored(Colors.GREEN, f"[OK] Deleted API: {api_name}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted API: {api_name}")
             self.log_action(f"Deleted AppSync API: {api_name} ({api_id}) in {region}")
             
             self.cleanup_results['deleted_apis'].append({
@@ -102,7 +103,7 @@ class UltraCleanupAppSyncManager:
             
         except ClientError as e:
             error_msg = f"Failed to delete API {api_name}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['failed_deletions'].append({
                 'type': 'AppSyncAPI',
@@ -117,7 +118,7 @@ class UltraCleanupAppSyncManager:
     def delete_domain_name(self, appsync_client, domain_name, region, account_key):
         """Delete a custom domain name"""
         try:
-            self.print_colored(Colors.CYAN, f"[DELETE] Deleting domain name: {domain_name}")
+            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting domain name: {domain_name}")
             
             # Disassociate API first if associated
             try:
@@ -130,7 +131,7 @@ class UltraCleanupAppSyncManager:
             # Delete domain name
             appsync_client.delete_domain_name(domainName=domain_name)
             
-            self.print_colored(Colors.GREEN, f"[OK] Deleted domain name: {domain_name}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted domain name: {domain_name}")
             self.log_action(f"Deleted domain name: {domain_name} in {region}")
             
             self.cleanup_results['deleted_domain_names'].append({
@@ -142,7 +143,7 @@ class UltraCleanupAppSyncManager:
             
         except ClientError as e:
             error_msg = f"Failed to delete domain name {domain_name}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['failed_deletions'].append({
                 'type': 'DomainName',
@@ -156,7 +157,7 @@ class UltraCleanupAppSyncManager:
     def cleanup_region_appsync(self, account_name, credentials, region):
         """Cleanup all AppSync resources in a specific region"""
         try:
-            self.print_colored(Colors.YELLOW, f"\n[SCAN] Scanning region: {region}")
+            self.print_colored(Colors.YELLOW, f"\n{Symbols.SCAN} Scanning region: {region}")
             
             appsync_client = boto3.client(
                 'appsync',
@@ -197,7 +198,7 @@ class UltraCleanupAppSyncManager:
                             api_keys = keys_response.get('apiKeys', [])
                             
                             if api_keys:
-                                self.print_colored(Colors.YELLOW, f"   [KEY] API has {len(api_keys)} API keys (will be deleted)")
+                                self.print_colored(Colors.YELLOW, f"   {Symbols.KEY} API has {len(api_keys)} API keys (will be deleted)")
                                 self.cleanup_results['deleted_api_keys'].extend([
                                     {
                                         'api_id': api['apiId'],
@@ -224,7 +225,7 @@ class UltraCleanupAppSyncManager:
             
         except Exception as e:
             error_msg = f"Error processing region {region}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['errors'].append(error_msg)
 
@@ -232,7 +233,7 @@ class UltraCleanupAppSyncManager:
         """Cleanup all AppSync resources in an account across all regions"""
         try:
             self.print_colored(Colors.BLUE, f"\n{'='*100}")
-            self.print_colored(Colors.BLUE, f"[START] Processing Account: {account_name}")
+            self.print_colored(Colors.BLUE, f"{Symbols.START} Processing Account: {account_name}")
             self.print_colored(Colors.BLUE, f"{'='*100}")
             
             self.cleanup_results['accounts_processed'].append(account_name)
@@ -248,17 +249,17 @@ class UltraCleanupAppSyncManager:
             regions_response = ec2_client.describe_regions()
             regions = [region['RegionName'] for region in regions_response['Regions']]
             
-            self.print_colored(Colors.CYAN, f"[SCAN] Processing {len(regions)} regions")
+            self.print_colored(Colors.CYAN, f"{Symbols.SCAN} Processing {len(regions)} regions")
             
             # Process each region
             for region in regions:
                 self.cleanup_region_appsync(account_name, credentials, region)
             
-            self.print_colored(Colors.GREEN, f"\n[OK] Account {account_name} cleanup completed!")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.OK} Account {account_name} cleanup completed!")
             
         except Exception as e:
             error_msg = f"Error processing account {account_name}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['errors'].append(error_msg)
 
@@ -286,21 +287,21 @@ class UltraCleanupAppSyncManager:
             with open(report_path, 'w') as f:
                 json.dump(summary, f, indent=2)
 
-            self.print_colored(Colors.GREEN, f"\n[STATS] Summary report saved: {report_path}")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.STATS} Summary report saved: {report_path}")
 
             # Print summary to console
             self.print_colored(Colors.BLUE, f"\n{'='*100}")
             self.print_colored(Colors.BLUE, "[STATS] CLEANUP SUMMARY")
             self.print_colored(Colors.BLUE, f"{'='*100}")
-            self.print_colored(Colors.GREEN, f"[OK] GraphQL APIs Deleted: {summary['summary']['total_apis_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] API Keys Deleted: {summary['summary']['total_api_keys_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Domain Names Deleted: {summary['summary']['total_domain_names_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} GraphQL APIs Deleted: {summary['summary']['total_apis_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} API Keys Deleted: {summary['summary']['total_api_keys_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Domain Names Deleted: {summary['summary']['total_domain_names_deleted']}")
 
             if summary['summary']['total_failed_deletions'] > 0:
-                self.print_colored(Colors.YELLOW, f"[WARN] Failed Deletions: {summary['summary']['total_failed_deletions']}")
+                self.print_colored(Colors.YELLOW, f"{Symbols.WARN} Failed Deletions: {summary['summary']['total_failed_deletions']}")
 
             if summary['summary']['total_errors'] > 0:
-                self.print_colored(Colors.RED, f"[ERROR] Errors: {summary['summary']['total_errors']}")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Errors: {summary['summary']['total_errors']}")
 
             # Display Account Summary
             self.print_colored(Colors.BLUE, f"\n{'='*100}")
@@ -327,15 +328,15 @@ class UltraCleanupAppSyncManager:
                     account_summary[account]['regions'].add(item.get('region', 'unknown'))
 
             for account, stats in account_summary.items():
-                self.print_colored(Colors.CYAN, f"\n[LIST] Account: {account}")
-                self.print_colored(Colors.GREEN, f"  [OK] GraphQL APIs: {stats['apis']}")
-                self.print_colored(Colors.GREEN, f"  [OK] API Keys: {stats['api_keys']}")
-                self.print_colored(Colors.GREEN, f"  [OK] Domain Names: {stats['domain_names']}")
+                self.print_colored(Colors.CYAN, f"\n{Symbols.LIST} Account: {account}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} GraphQL APIs: {stats['apis']}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} API Keys: {stats['api_keys']}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Domain Names: {stats['domain_names']}")
                 regions_str = ', '.join(sorted(stats['regions'])) if stats['regions'] else 'N/A'
-                self.print_colored(Colors.YELLOW, f"  [SCAN] Regions: {regions_str}")
+                self.print_colored(Colors.YELLOW, f"  {Symbols.SCAN} Regions: {regions_str}")
 
         except Exception as e:
-            self.print_colored(Colors.RED, f"[ERROR] Failed to generate summary report: {e}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to generate summary report: {e}")
 
     def interactive_cleanup(self):
         """Interactive mode for AppSync cleanup"""
@@ -346,15 +347,15 @@ class UltraCleanupAppSyncManager:
 
             config = self.cred_manager.load_root_accounts_config()
             if not config or 'accounts' not in config:
-                self.print_colored(Colors.RED, "[ERROR] No accounts configuration found!")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} No accounts configuration found!")
                 return
 
             accounts = config['accounts']
             account_list = list(accounts.keys())
 
-            self.print_colored(Colors.CYAN, "[KEY] Select Root AWS Accounts for AppSync Cleanup:")
+            self.print_colored(Colors.CYAN, f"{Symbols.KEY} Select Root AWS Accounts for AppSync Cleanup:")
             print(f"{Colors.CYAN}[BOOK] Loading root accounts config...{Colors.END}")
-            self.print_colored(Colors.GREEN, f"[OK] Loaded {len(accounts)} root accounts")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Loaded {len(accounts)} root accounts")
             
             self.print_colored(Colors.YELLOW, "\n[KEY] Available Root AWS Accounts:")
             print("=" * 100)
@@ -389,16 +390,16 @@ class UltraCleanupAppSyncManager:
                     indices = [int(x.strip()) for x in selection.split(',')]
                     selected_accounts = [account_list[i-1] for i in indices if 0 < i <= len(account_list)]
                 except (ValueError, IndexError):
-                    self.print_colored(Colors.RED, "[ERROR] Invalid selection!")
+                    self.print_colored(Colors.RED, f"{Symbols.ERROR} Invalid selection!")
                     return
 
             if not selected_accounts:
-                self.print_colored(Colors.RED, "[ERROR] No accounts selected!")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} No accounts selected!")
                 return
 
-            self.print_colored(Colors.RED, "\n[WARN] WARNING: This will DELETE all AppSync resources!")
-            self.print_colored(Colors.YELLOW, "[WARN] Includes: GraphQL APIs, Data Sources, Resolvers, Functions, API Keys, Domain Names")
-            self.print_colored(Colors.YELLOW, "[INFO] Deleting API automatically removes all associated data sources, resolvers, and functions")
+            self.print_colored(Colors.RED, f"\n{Symbols.WARN} WARNING: This will DELETE all AppSync resources!")
+            self.print_colored(Colors.YELLOW, f"{Symbols.WARN} Includes: GraphQL APIs, Data Sources, Resolvers, Functions, API Keys, Domain Names")
+            self.print_colored(Colors.YELLOW, f"{Symbols.INFO} Deleting API automatically removes all associated data sources, resolvers, and functions")
             confirm = input(f"\nType 'yes' to confirm: ").strip().lower()
             if confirm != 'yes':
                 self.print_colored(Colors.YELLOW, "[EXIT] Cleanup cancelled!")
@@ -416,13 +417,13 @@ class UltraCleanupAppSyncManager:
 
             self.generate_summary_report()
 
-            self.print_colored(Colors.GREEN, f"\n[OK] AppSync cleanup completed!")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.OK} AppSync cleanup completed!")
             self.print_colored(Colors.CYAN, f"[FILE] Log file: {self.log_file}")
 
         except KeyboardInterrupt:
             self.print_colored(Colors.YELLOW, "\n[WARN] Cleanup interrupted by user!")
         except Exception as e:
-            self.print_colored(Colors.RED, f"\n[ERROR] Error during cleanup: {e}")
+            self.print_colored(Colors.RED, f"\n{Symbols.ERROR} Error during cleanup: {e}")
 
 
 def main():
@@ -433,7 +434,7 @@ def main():
     except KeyboardInterrupt:
         print("\n\n[WARN] Operation cancelled by user!")
     except Exception as e:
-        print(f"\n[ERROR] Fatal error: {e}")
+        print(f"\n{Symbols.ERROR} Fatal error: {e}")
 
 
 if __name__ == "__main__":

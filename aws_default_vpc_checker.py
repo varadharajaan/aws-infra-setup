@@ -8,6 +8,7 @@ from datetime import datetime
 from botocore.exceptions import ClientError, BotoCoreError
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from text_symbols import Symbols
 
 class AWSDefaultVPCChecker:
     def __init__(self, config_file='aws_accounts_config.json'):
@@ -37,18 +38,18 @@ class AWSDefaultVPCChecker:
                 'us-east-1', 'us-east-2', 'us-west-1', 'us-west-2', 'ap-south-1'
             ])
             
-            print(f"[OK] Configuration loaded from: {self.config_file}")
-            print(f"[STATS] Found {len(self.aws_accounts)} AWS accounts: {list(self.aws_accounts.keys())}")
-            print(f"[REGION] Will check {len(self.check_regions)} regions: {self.check_regions}")
+            print(f"{Symbols.OK} Configuration loaded from: {self.config_file}")
+            print(f"{Symbols.STATS} Found {len(self.aws_accounts)} AWS accounts: {list(self.aws_accounts.keys())}")
+            print(f"{Symbols.REGION} Will check {len(self.check_regions)} regions: {self.check_regions}")
             
         except FileNotFoundError as e:
-            print(f"[ERROR] Configuration file error: {e}")
+            print(f"{Symbols.ERROR} Configuration file error: {e}")
             sys.exit(1)
         except json.JSONDecodeError as e:
-            print(f"[ERROR] Invalid JSON in configuration file: {e}")
+            print(f"{Symbols.ERROR} Invalid JSON in configuration file: {e}")
             sys.exit(1)
         except Exception as e:
-            print(f"[ERROR] Error loading configuration: {e}")
+            print(f"{Symbols.ERROR} Error loading configuration: {e}")
             sys.exit(1)
 
     def get_regional_rules(self, region):
@@ -433,7 +434,7 @@ class AWSDefaultVPCChecker:
         
         while True:
             try:
-                choice = input(f"\n🔢 Select remediation option (1-3): ").strip()
+                choice = input(f"\n[#] Select remediation option (1-3): ").strip()
                 choice_num = int(choice)
                 if 1 <= choice_num <= 3:
                     break
@@ -460,17 +461,17 @@ class AWSDefaultVPCChecker:
         
         if choice_num == 1:
             issues_to_fix = missing_vpcs
-            print(f"\n[TARGET] Will create {len(missing_vpcs)} missing default VPCs")
+            print(f"\n{Symbols.TARGET} Will create {len(missing_vpcs)} missing default VPCs")
         else:
             issues_to_fix = missing_vpcs + compliance_issues
-            print(f"\n[TARGET] Will fix {len(missing_vpcs)} missing VPCs and {len(compliance_issues)} compliance issues")
+            print(f"\n{Symbols.TARGET} Will fix {len(missing_vpcs)} missing VPCs and {len(compliance_issues)} compliance issues")
         
         if not issues_to_fix:
             print("[OK] No issues found to fix!")
             return
         
         # Show what will be fixed
-        print(f"\n🔄 Starting remediation...")
+        print(f"\n{Symbols.SCAN} Starting remediation...")
         fixed_count = 0
         failed_count = 0
 
@@ -490,22 +491,22 @@ class AWSDefaultVPCChecker:
                     # Verify the fix
                     if self.verify_fixes(account, region):
                         fixed_count += 1
-                        print(f"   [OK] {account} | {region} - Fixed and verified")
+                        print(f"   {Symbols.OK} {account} | {region} - Fixed and verified")
                     else:
                         failed_count += 1
-                        print(f"   [WARN]  {account} | {region} - Partially fixed")
+                        print(f"   {Symbols.WARN}  {account} | {region} - Partially fixed")
                 else:
                     failed_count += 1
-                    print(f"   [ERROR] {account} | {region} - Failed")
+                    print(f"   {Symbols.ERROR} {account} | {region} - Failed")
                     
             except Exception as e:
                 failed_count += 1
-                print(f"   [ERROR] {account} | {region} - Error: {e}")
+                print(f"   {Symbols.ERROR} {account} | {region} - Error: {e}")
         
         # Summary of remediation    
-        print(f"\n[STATS] Remediation Summary:")
-        print(f"   [OK] Fixed: {fixed_count}")
-        print(f"   [ERROR] Failed: {failed_count}")
+        print(f"\n{Symbols.STATS} Remediation Summary:")
+        print(f"   {Symbols.OK} Fixed: {fixed_count}")
+        print(f"   {Symbols.ERROR} Failed: {failed_count}")
 
     def create_default_vpc(self, account_name, region):
         """Create default VPC in specified account and region"""
@@ -516,18 +517,18 @@ class AWSDefaultVPCChecker:
             
             response = ec2_client.create_default_vpc()
             vpc_id = response['Vpc']['VpcId']
-            print(f"      🏗️  Created default VPC: {vpc_id}")
+            print(f"      [BUILD]  Created default VPC: {vpc_id}")
             return True
             
         except ClientError as e:
             if 'DefaultVpcAlreadyExists' in str(e):
-                print(f"      [WARN]  Default VPC already exists")
+                print(f"      {Symbols.WARN}  Default VPC already exists")
                 return True
             else:
-                print(f"      [ERROR] AWS Error: {e}")
+                print(f"      {Symbols.ERROR} AWS Error: {e}")
                 return False
         except Exception as e:
-            print(f"      [ERROR] Error: {e}")
+            print(f"      {Symbols.ERROR} Error: {e}")
             return False
 
     def fix_vpc_compliance(self, account_name, region, issue_result):
@@ -548,7 +549,7 @@ class AWSDefaultVPCChecker:
             
             # Check if we need to clean up excess subnets
             if current_count > rules['max_subnets']:
-                print(f"      [CLEANUP] Cleaning up excess subnets: {current_count} > {rules['max_subnets']}")
+                print(f"      {Symbols.CLEANUP} Cleaning up excess subnets: {current_count} > {rules['max_subnets']}")
                 cleanup_success, cleanup_result = self.cleanup_excess_subnets(ec2_client, vpc_id, region)
                 
                 if cleanup_success:
@@ -557,7 +558,7 @@ class AWSDefaultVPCChecker:
                     else:
                         fixed_items.append(cleanup_result)
                 else:
-                    print(f"      [ERROR] Cleanup failed: {cleanup_result}")
+                    print(f"      {Symbols.ERROR} Cleanup failed: {cleanup_result}")
                     return False
             
             # Re-check subnet count after cleanup
@@ -605,7 +606,7 @@ class AWSDefaultVPCChecker:
                     break
             
             if not main_route_table_id:
-                print(f"      [ERROR] Could not find main route table for VPC {vpc_id}")
+                print(f"      {Symbols.ERROR} Could not find main route table for VPC {vpc_id}")
                 return False
             
             # 4. Fix routing only if needed
@@ -637,7 +638,7 @@ class AWSDefaultVPCChecker:
                             fixed_items.append(f"Updated internet route: {rt_id} -> {igw_id}")
                             
                         except ClientError as e:
-                            print(f"      [WARN]  Could not fix internet route: {e}")
+                            print(f"      {Symbols.WARN}  Could not fix internet route: {e}")
                             return False
                     else:
                         fixed_items.append(f"Internet route already correct: {rt_id} -> {igw_id}")
@@ -650,7 +651,7 @@ class AWSDefaultVPCChecker:
                         )
                         fixed_items.append(f"Added internet route: {rt_id} -> {igw_id}")
                     except ClientError as e:
-                        print(f"      [WARN]  Could not add internet route: {e}")
+                        print(f"      {Symbols.WARN}  Could not add internet route: {e}")
                         return False
             
             # 5. Create subnets only if needed (not if we have adequate coverage)
@@ -723,9 +724,9 @@ class AWSDefaultVPCChecker:
                                 except ClientError:
                                     continue
                             else:
-                                print(f"      [WARN]  Could not create subnet in {az}")
+                                print(f"      {Symbols.WARN}  Could not create subnet in {az}")
                         else:
-                            print(f"      [WARN]  Could not create subnet in {az}: {e}")
+                            print(f"      {Symbols.WARN}  Could not create subnet in {az}: {e}")
             
             # 6. Fix existing subnets' auto-assign IP settings
             current_subnets_response = ec2_client.describe_subnets(
@@ -747,7 +748,7 @@ class AWSDefaultVPCChecker:
                         )
                         fixed_items.append(f"Enabled auto-assign public IP: {subnet_id}")
                     except ClientError as e:
-                        print(f"      [WARN]  Could not enable auto-assign public IP for {subnet_id}: {e}")
+                        print(f"      {Symbols.WARN}  Could not enable auto-assign public IP for {subnet_id}: {e}")
             
             # Show what was fixed
             for item in fixed_items:
@@ -756,19 +757,19 @@ class AWSDefaultVPCChecker:
             return True
             
         except Exception as e:
-            print(f"      [ERROR] Error fixing compliance: {e}")
+            print(f"      {Symbols.ERROR} Error fixing compliance: {e}")
             return False
 
     def verify_fixes(self, account_name, region):
         """Verify that fixes were applied correctly"""
         try:
-            print(f"      [SCAN] Verifying fixes for {account_name} | {region}...")
+            print(f"      {Symbols.SCAN} Verifying fixes for {account_name} | {region}...")
             
             # Re-run the check to verify
             verification_result = self.check_account_region(account_name, region)
             
             if verification_result['status'] != 'SUCCESS':
-                print(f"      [ERROR] Verification failed: {verification_result.get('error', 'Unknown error')}")
+                print(f"      {Symbols.ERROR} Verification failed: {verification_result.get('error', 'Unknown error')}")
                 return False
             
             assessment = verification_result['checks'].get('overall_assessment', {})
@@ -777,7 +778,7 @@ class AWSDefaultVPCChecker:
             is_compliant = assessment.get('fully_compliant', False)
             
             if is_compliant:
-                print(f"      [OK] Verification passed: All requirements met")
+                print(f"      {Symbols.OK} Verification passed: All requirements met")
                 return True
             else:
                 # Show what's still missing
@@ -797,22 +798,22 @@ class AWSDefaultVPCChecker:
                 if not assessment.get('all_subnets_auto_assign_public_ip', False):
                     issues.append("Subnets don't auto-assign public IPs")
                 
-                print(f"      [WARN]  Verification incomplete: {', '.join(issues)}")
+                print(f"      {Symbols.WARN}  Verification incomplete: {', '.join(issues)}")
                 return False
                 
         except Exception as e:
-            print(f"      [ERROR] Verification error: {e}")
+            print(f"      {Symbols.ERROR} Verification error: {e}")
             return False
 
     def display_detailed_results(self, results):
         """Display detailed results for all accounts and regions"""
         print(f"\n{'='*100}")
-        print(f"[SCAN] DETAILED AWS DEFAULT VPC ANALYSIS REPORT")
+        print(f"{Symbols.SCAN} DETAILED AWS DEFAULT VPC ANALYSIS REPORT")
         print(f"{'='*100}")
-        print(f"[DATE] Generated: {self.current_time} UTC")
+        print(f"{Symbols.DATE} Generated: {self.current_time} UTC")
         print(f"👤 Generated by: {self.current_user}")
-        print(f"[REGION] Regions checked: {', '.join(self.check_regions)}")
-        print(f"[BANK] Accounts checked: {len(self.aws_accounts)}")
+        print(f"{Symbols.REGION} Regions checked: {', '.join(self.check_regions)}")
+        print(f"{Symbols.ACCOUNT} Accounts checked: {len(self.aws_accounts)}")
         
         # Group results by account
         accounts_summary = {}
@@ -844,14 +845,14 @@ class AWSDefaultVPCChecker:
         for account_name, summary in accounts_summary.items():
             account_id = self.aws_accounts[account_name]['account_id']
             
-            print(f"\n[BANK] ACCOUNT: {account_name.upper()} ({account_id})")
+            print(f"\n{Symbols.ACCOUNT} ACCOUNT: {account_name.upper()} ({account_id})")
             print(f"{'─'*80}")
-            print(f"   [STATS] Summary: {summary['compliant_regions']}/{summary['total_regions']} regions fully compliant")
+            print(f"   {Symbols.STATS} Summary: {summary['compliant_regions']}/{summary['total_regions']} regions fully compliant")
             
             if summary['no_vpc_regions'] > 0:
-                print(f"   [WARN]  {summary['no_vpc_regions']} regions missing default VPC")
+                print(f"   {Symbols.WARN}  {summary['no_vpc_regions']} regions missing default VPC")
             if summary['failed_regions'] > 0:
-                print(f"   [ERROR] {summary['failed_regions']} regions with issues")
+                print(f"   {Symbols.ERROR} {summary['failed_regions']} regions with issues")
             
             # Show region details
             for region, result in summary['regions'].items():
@@ -861,13 +862,13 @@ class AWSDefaultVPCChecker:
                     assessment = result['checks'].get('overall_assessment', {})
                     
                     if assessment.get('fully_compliant', False):
-                        status_icon = "[OK]"
+                        status_icon = f"{Symbols.OK}"
                         status_text = "FULLY COMPLIANT"
                     else:
-                        status_icon = "[WARN] "
+                        status_icon = f"{Symbols.WARN} "
                         status_text = "HAS ISSUES"
                     
-                    print(f"\n   [REGION] {region}: {status_icon} {status_text}")
+                    print(f"\n   {Symbols.REGION} {region}: {status_icon} {status_text}")
                     print(f"      [MEASURE] Regional rules: {rules['min_subnets']}-{rules['max_subnets']} subnets")
                     
                     # VPC Details
@@ -875,7 +876,7 @@ class AWSDefaultVPCChecker:
                     if vpc_check.get('exists'):
                         vpc_id = vpc_check['details']['VpcId']
                         vpc_cidr = vpc_check['details']['CidrBlock']
-                        print(f"      🏗️  Default VPC: {vpc_id} ({vpc_cidr})")
+                        print(f"      [BUILD]  Default VPC: {vpc_id} ({vpc_cidr})")
                     
                     # Subnet Details with regional validation
                     subnet_check = result['checks'].get('default_subnets', {})
@@ -884,21 +885,21 @@ class AWSDefaultVPCChecker:
                     within_max = subnet_check.get('within_limits', False)
                     valid_dist = subnet_check.get('valid_distribution', False)
                     
-                    subnet_icon = "[OK]" if meets_min and within_max and valid_dist else "[ERROR]"
+                    subnet_icon = f"{Symbols.OK}" if meets_min and within_max and valid_dist else f"{Symbols.ERROR}"
                     print(f"      [NETWORK] Subnets: {subnet_icon} {subnet_count} subnets ({rules['min_subnets']}-{rules['max_subnets']} required)")
                     
                     if not valid_dist:
                         dist_msg = subnet_check.get('distribution_message', 'Invalid distribution')
-                        print(f"         [WARN]  {dist_msg}")
+                        print(f"         {Symbols.WARN}  {dist_msg}")
                     
                     if isinstance(subnet_check.get('details'), list):
                         for subnet in subnet_check['details']:
-                            auto_ip_icon = "[OK]" if subnet['auto_assign_public_ip'] else "[ERROR]"
+                            auto_ip_icon = f"{Symbols.OK}" if subnet['auto_assign_public_ip'] else f"{Symbols.ERROR}"
                             print(f"         • {subnet['subnet_id']} ({subnet['availability_zone']}) - Auto IP: {auto_ip_icon}")
                     
                     # Internet Gateway
                     igw_check = result['checks'].get('internet_gateway', {})
-                    igw_icon = "[OK]" if igw_check.get('exists') else "[ERROR]"
+                    igw_icon = f"{Symbols.OK}" if igw_check.get('exists') else f"{Symbols.ERROR}"
                     if igw_check.get('exists'):
                         igw_id = igw_check['details']['igw_id']
                         print(f"      [NETWORK] Internet Gateway: {igw_icon} {igw_id}")
@@ -910,21 +911,21 @@ class AWSDefaultVPCChecker:
                     subnet_access = routing.get('subnet_internet_access', {})
                     
                     all_have_access = assessment.get('all_subnets_have_internet_access', False)
-                    access_icon = "[OK]" if all_have_access else "[ERROR]"
+                    access_icon = f"{Symbols.OK}" if all_have_access else f"{Symbols.ERROR}"
                     print(f"      [LINK] Internet Access: {access_icon} All subnets routed to internet")
                     
                     if not all_have_access:
                         for subnet_id, access_info in subnet_access.items():
-                            access_status = "[OK]" if access_info['has_internet_access'] else "[ERROR]"
+                            access_status = "[OK]" if access_info['has_internet_access'] else f"{Symbols.ERROR}"
                             rt_id = access_info['route_table_id']
                             print(f"         • {subnet_id}: {access_status} (Route Table: {rt_id})")
                 
                 elif result['status'] == 'NO_DEFAULT_VPC':
-                    print(f"\n   [REGION] {region}: [ERROR] NO DEFAULT VPC")
-                    print(f"      [TIP] Run: aws ec2 create-default-vpc --region {region}")
+                    print(f"\n   {Symbols.REGION} {region}: {Symbols.ERROR} NO DEFAULT VPC")
+                    print(f"      {Symbols.TIP} Run: aws ec2 create-default-vpc --region {region}")
                 
                 else:
-                    print(f"\n   [REGION] {region}: [ERROR] ERROR")
+                    print(f"\n   {Symbols.REGION} {region}: {Symbols.ERROR} ERROR")
                     print(f"      🐛 {result.get('error', 'Unknown error')}")
         
         # Overall Summary
@@ -934,11 +935,11 @@ class AWSDefaultVPCChecker:
         error_regions = sum(1 for r in results if r['status'] in ['ERROR', 'FAILED'])
         
         print(f"\n{'='*100}")
-        print(f"📈 OVERALL SUMMARY")
+        print(f"[UP] OVERALL SUMMARY")
         print(f"{'='*100}")
-        print(f"[OK] Fully Compliant: {compliant_regions}/{total_regions} regions ({compliant_regions/total_regions*100:.1f}%)")
-        print(f"[ERROR] Missing Default VPC: {no_vpc_regions} regions")
-        print(f"[WARN]  Has Issues: {total_regions - compliant_regions - no_vpc_regions - error_regions} regions")
+        print(f"{Symbols.OK} Fully Compliant: {compliant_regions}/{total_regions} regions ({compliant_regions/total_regions*100:.1f}%)")
+        print(f"{Symbols.ERROR} Missing Default VPC: {no_vpc_regions} regions")
+        print(f"{Symbols.WARN}  Has Issues: {total_regions - compliant_regions - no_vpc_regions - error_regions} regions")
         print(f"🐛 Errors: {error_regions} regions")
         
         # Regional Rules Summary
@@ -969,11 +970,11 @@ class AWSDefaultVPCChecker:
             with open(filename, 'w') as f:
                 json.dump(report_data, f, indent=2, default=str)
             
-            print(f"\n[INSTANCE] Detailed report saved to: {filename}")
+            print(f"\n{Symbols.INSTANCE} Detailed report saved to: {filename}")
             return filename
             
         except Exception as e:
-            print(f"[ERROR] Failed to save report: {e}")
+            print(f"{Symbols.ERROR} Failed to save report: {e}")
             return None
 
     def parse_number_input(self, input_str, max_value):
@@ -1020,39 +1021,39 @@ class AWSDefaultVPCChecker:
 
     def select_accounts_and_regions(self):
         """Allow user to select accounts and regions to check"""
-        print(f"\n[LIST] Account Selection:")
+        print(f"\n{Symbols.LIST} Account Selection:")
         print(f"  1. Check all accounts ({len(self.aws_accounts)} accounts)")
         print(f"  2. Select specific accounts")
         
         while True:
             try:
-                choice = input(f"\n🔢 Select option (1-2): ").strip()
+                choice = input(f"\n[#] Select option (1-2): ").strip()
                 choice_num = int(choice)
                 
                 if choice_num == 1:
                     selected_accounts = list(self.aws_accounts.keys())
                     break
                 elif choice_num == 2:
-                    print(f"\n[LIST] Available Accounts:")
+                    print(f"\n{Symbols.LIST} Available Accounts:")
                     account_names = list(self.aws_accounts.keys())
                     for i, account_name in enumerate(account_names, 1):
                         config = self.aws_accounts[account_name]
                         print(f"  {i}. {account_name} ({config['account_id']})")
                     
                     while True:
-                        account_input = input(f"\n🔢 Enter account numbers (e.g., 1,3,5 or 1-3 or 2): ").strip()
+                        account_input = input(f"\n[#] Enter account numbers (e.g., 1,3,5 or 1-3 or 2): ").strip()
                         account_numbers, error = self.parse_number_input(account_input, len(account_names))
                         
                         if error:
-                            print(f"[ERROR] {error}. Please try again.")
+                            print(f"{Symbols.ERROR} {error}. Please try again.")
                             continue
                         
                         if not account_numbers:
-                            print(f"[ERROR] No valid account numbers entered. Please try again.")
+                            print(f"{Symbols.ERROR} No valid account numbers entered. Please try again.")
                             continue
                         
                         selected_accounts = [account_names[i-1] for i in account_numbers]
-                        print(f"[OK] Selected accounts: {', '.join(selected_accounts)}")
+                        print(f"{Symbols.OK} Selected accounts: {', '.join(selected_accounts)}")
                         break
                     break
                 else:
@@ -1060,37 +1061,37 @@ class AWSDefaultVPCChecker:
             except ValueError:
                 print("[ERROR] Invalid input. Please enter 1 or 2")
         
-        print(f"\n[REGION] Region Selection:")
+        print(f"\n{Symbols.REGION} Region Selection:")
         print(f"  1. Check all configured regions ({len(self.check_regions)} regions)")
         print(f"  2. Select specific regions")
         
         while True:
             try:
-                choice = input(f"\n🔢 Select option (1-2): ").strip()
+                choice = input(f"\n[#] Select option (1-2): ").strip()
                 choice_num = int(choice)
                 
                 if choice_num == 1:
                     selected_regions = self.check_regions
                     break
                 elif choice_num == 2:
-                    print(f"\n[REGION] Available Regions:")
+                    print(f"\n{Symbols.REGION} Available Regions:")
                     for i, region in enumerate(self.check_regions, 1):
                         print(f"  {i}. {region}")
                     
                     while True:
-                        region_input = input(f"\n🔢 Enter region numbers (e.g., 1,3,5 or 1-3 or 2): ").strip()
+                        region_input = input(f"\n[#] Enter region numbers (e.g., 1,3,5 or 1-3 or 2): ").strip()
                         region_numbers, error = self.parse_number_input(region_input, len(self.check_regions))
                         
                         if error:
-                            print(f"[ERROR] {error}. Please try again.")
+                            print(f"{Symbols.ERROR} {error}. Please try again.")
                             continue
                         
                         if not region_numbers:
-                            print(f"[ERROR] No valid region numbers entered. Please try again.")
+                            print(f"{Symbols.ERROR} No valid region numbers entered. Please try again.")
                             continue
                         
                         selected_regions = [self.check_regions[i-1] for i in region_numbers]
-                        print(f"[OK] Selected regions: {', '.join(selected_regions)}")
+                        print(f"{Symbols.OK} Selected regions: {', '.join(selected_regions)}")
                         break
                     break
                 else:
@@ -1102,17 +1103,17 @@ class AWSDefaultVPCChecker:
 
     def run(self):
         """Main execution method"""
-        print(f"[START] AWS Default VPC Configuration Checker")
+        print(f"{Symbols.START} AWS Default VPC Configuration Checker")
         print(f"[ALARM] Started at: {self.current_time} UTC")
         print(f"👤 User: {self.current_user}")
         
         # Select accounts and regions
         selected_accounts, selected_regions = self.select_accounts_and_regions()
         
-        print(f"\n[STATS] Check Summary:")
-        print(f"   [BANK] Accounts: {len(selected_accounts)} ({', '.join(selected_accounts)})")
-        print(f"   [REGION] Regions: {len(selected_regions)} ({', '.join(selected_regions)})")
-        print(f"   [SCAN] Total checks: {len(selected_accounts) * len(selected_regions)}")
+        print(f"\n{Symbols.STATS} Check Summary:")
+        print(f"   {Symbols.ACCOUNT} Accounts: {len(selected_accounts)} ({', '.join(selected_accounts)})")
+        print(f"   {Symbols.REGION} Regions: {len(selected_regions)} ({', '.join(selected_regions)})")
+        print(f"   {Symbols.SCAN} Total checks: {len(selected_accounts) * len(selected_regions)}")
         
         # Show regional rules
         print(f"\n[MEASURE] Regional Rules:")
@@ -1120,9 +1121,9 @@ class AWSDefaultVPCChecker:
             rules = self.get_regional_rules(region)
             print(f"   {region}: {rules['min_subnets']}-{rules['max_subnets']} subnets")
         
-        confirm = input(f"\n[OK] Proceed with the check? (y/N): ").lower().strip()
+        confirm = input(f"\n{Symbols.OK} Proceed with the check? (y/N): ").lower().strip()
         if confirm != 'y':
-            print("[ERROR] Check cancelled")
+            print(f"{Symbols.ERROR} Check cancelled")
             return
         
         # Prepare tasks for concurrent execution
@@ -1131,7 +1132,7 @@ class AWSDefaultVPCChecker:
             for region in selected_regions:
                 tasks.append((account, region))
         
-        print(f"\n🔄 Running checks...")
+        print(f"\n{Symbols.SCAN} Running checks...")
         results = []
         
         # Use ThreadPoolExecutor for concurrent checks
@@ -1152,11 +1153,11 @@ class AWSDefaultVPCChecker:
                     completed += 1
                     
                     # Show progress
-                    status = "[OK]" if result.get('checks', {}).get('overall_assessment', {}).get('fully_compliant', False) else "[WARN]"
+                    status = "[OK]" if result.get('checks', {}).get('overall_assessment', {}).get('fully_compliant', False) else f"{Symbols.WARN}"
                     print(f"   {status} {account} | {region} ({completed}/{len(tasks)})")
                     
                 except Exception as e:
-                    print(f"   [ERROR] {account} | {region} - Error: {e}")
+                    print(f"   {Symbols.ERROR} {account} | {region} - Error: {e}")
                     results.append({
                         'account': account,
                         'region': region,
@@ -1169,7 +1170,7 @@ class AWSDefaultVPCChecker:
         self.display_detailed_results(results)
         
         # Offer to save results
-        save_report = input(f"\n[INSTANCE] Save detailed report to JSON file? (y/N): ").lower().strip()
+        save_report = input(f"\n{Symbols.INSTANCE} Save detailed report to JSON file? (y/N): ").lower().strip()
         if save_report == 'y':
             self.save_results_to_file(results)
         
@@ -1193,10 +1194,10 @@ def main():
         checker = AWSDefaultVPCChecker()
         checker.run()
     except KeyboardInterrupt:
-        print(f"\n\n[ERROR] Check interrupted by user")
+        print(f"\n\n{Symbols.ERROR} Check interrupted by user")
         sys.exit(1)
     except Exception as e:
-        print(f"[ERROR] Unexpected error: {e}")
+        print(f"{Symbols.ERROR} Unexpected error: {e}")
         sys.exit(1)
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 EKS Cluster Manager - Enhanced for Phase 2
 Handles EKS cluster creation with on-demand, spot, and mixed nodegroup strategies
@@ -17,6 +17,8 @@ from datetime import datetime
 from typing import Dict, Optional
 
 import yaml
+from text_symbols import Symbols
+
 
 import subprocess
 import random
@@ -134,12 +136,12 @@ class EKSClusterManager:
             if self.config_file and os.path.exists(self.config_file):
                 with open(self.config_file, 'r') as f:
                     self.config_data = json.load(f)
-                print(f"[OK] Configuration loaded from: {self.config_file}")
+                print(f"{Symbols.OK} Configuration loaded from: {self.config_file}")
             else:
                 self.config_data = {}
                 print("[LOG] Using default configuration")
         except Exception as e:
-            print(f"[WARN]  Error loading configuration: {e}")
+            print(f"{Symbols.WARN}  Error loading configuration: {e}")
             self.config_data = {}
 
     def log_operation(self, level: str, message: str):
@@ -287,7 +289,7 @@ class EKSClusterManager:
         """Enable CloudWatch Application Signals for comprehensive observability"""
         try:
             self.log_operation('INFO', f"Enabling CloudWatch Application Signals for cluster {cluster_name}")
-            self.print_colored(Colors.YELLOW, f"[STATS] Enabling CloudWatch Application Signals for {cluster_name}...")
+            self.print_colored(Colors.YELLOW, f"{Symbols.STATS} Enabling CloudWatch Application Signals for {cluster_name}...")
         
             # Check if kubectl is available
             import subprocess
@@ -297,7 +299,7 @@ class EKSClusterManager:
         
             if not kubectl_available:
                 self.log_operation('WARNING', f"kubectl not found. Cannot deploy Application Signals for {cluster_name}")
-                self.print_colored(Colors.YELLOW, f"[WARN]  kubectl not found. Application Signals deployment skipped.")
+                self.print_colored(Colors.YELLOW, f"{Symbols.WARN}  kubectl not found. Application Signals deployment skipped.")
                 return False
         
             # Set environment variables for admin access
@@ -313,12 +315,12 @@ class EKSClusterManager:
                 '--name', cluster_name
             ]
         
-            self.print_colored(Colors.CYAN, "   🔄 Updating kubeconfig for Application Signals...")
+            self.print_colored(Colors.CYAN, f"   {Symbols.SCAN} Updating kubeconfig for Application Signals...")
             update_result = subprocess.run(update_cmd, env=env, capture_output=True, text=True, timeout=120)
         
             if update_result.returncode != 0:
                 self.log_operation('ERROR', f"Failed to update kubeconfig: {update_result.stderr}")
-                self.print_colored(Colors.RED, f"[ERROR] Failed to update kubeconfig: {update_result.stderr}")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to update kubeconfig: {update_result.stderr}")
                 return False
         
             # Step 1: Create IAM role first
@@ -333,7 +335,7 @@ class EKSClusterManager:
         
             role_arn = self.create_application_signals_iam_role(iam_client, account_id)
             if not role_arn:
-                self.print_colored(Colors.YELLOW, "   [WARN]  IAM role creation failed, continuing with deployment...")
+                self.print_colored(Colors.YELLOW, f"   {Symbols.WARN}  IAM role creation failed, continuing with deployment...")
         
             # Step 2: Enable Application Signals service
             self.print_colored(Colors.CYAN, "   [SIGNAL] Enabling Application Signals service...")
@@ -347,13 +349,13 @@ class EKSClusterManager:
                 enable_result = subprocess.run(enable_cmd, env=env, capture_output=True, text=True, timeout=120)
             
                 if enable_result.returncode == 0:
-                    self.print_colored(Colors.GREEN, "   [OK] Application Signals service enabled")
+                    self.print_colored(Colors.GREEN, f"   {Symbols.OK} Application Signals service enabled")
                     self.log_operation('INFO', f"Application Signals service enabled for {cluster_name}")
                 else:
                     self.log_operation('WARNING', f"Application Signals service enablement failed: {enable_result.stderr}")
-                    self.print_colored(Colors.YELLOW, f"   [WARN]  Application Signals service enablement failed, continuing...")
+                    self.print_colored(Colors.YELLOW, f"   {Symbols.WARN}  Application Signals service enablement failed, continuing...")
             except Exception as e:
-                self.print_colored(Colors.YELLOW, f"   [WARN]  Could not enable Application Signals service: {str(e)}")
+                self.print_colored(Colors.YELLOW, f"   {Symbols.WARN}  Could not enable Application Signals service: {str(e)}")
         
             # Step 3: Deploy Application Signals operator
             self.print_colored(Colors.CYAN, "   [START] Deploying Application Signals operator...")
@@ -414,11 +416,11 @@ class EKSClusterManager:
                 pod_lines = [line.strip() for line in verify_result.stdout.strip().split('\n') if line.strip()]
                 running_pods = [line for line in pod_lines if 'Running' in line or 'Completed' in line]
             
-                self.print_colored(Colors.GREEN, f"   [OK] Application Signals pods: {len(running_pods)} ready out of {len(pod_lines)} total")
+                self.print_colored(Colors.GREEN, f"   {Symbols.OK} Application Signals pods: {len(running_pods)} ready out of {len(pod_lines)} total")
                 self.log_operation('INFO', f"Application Signals deployment verified: {len(running_pods)} pods ready")
             
                 # Access information
-                self.print_colored(Colors.CYAN, f"[STATS] Access Application Signals in AWS Console:")
+                self.print_colored(Colors.CYAN, f"{Symbols.STATS} Access Application Signals in AWS Console:")
                 self.print_colored(Colors.CYAN, f"   CloudWatch → Application Signals → Services")
                 self.print_colored(Colors.CYAN, f"   Filter by cluster: {cluster_name}")
                 self.print_colored(Colors.CYAN, f"   Supported languages: Java, Python, .NET, Node.js, Go")
@@ -435,7 +437,7 @@ class EKSClusterManager:
         except Exception as e:
             error_msg = str(e)
             self.log_operation('ERROR', f"Failed to enable Application Signals for {cluster_name}: {error_msg}")
-            self.print_colored(Colors.RED, f"[ERROR] Application Signals deployment failed: {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Application Signals deployment failed: {error_msg}")
             return False
 
     def create_application_signals_iam_role(self, iam_client, account_id: str) -> str:
@@ -542,13 +544,13 @@ class EKSClusterManager:
                     serviceAccountRoleArn=node_role_arn,
                     resolveConflicts='OVERWRITE'
                 )
-                self.print_colored(Colors.GREEN, f"[OK] Applied NodeInstanceRole to {addon_name}")
+                self.print_colored(Colors.GREEN, f"{Symbols.OK} Applied NodeInstanceRole to {addon_name}")
             except eks_client.exceptions.ResourceNotFoundException:
                 self.log_operation('WARNING', f"{addon_name} not found on cluster {cluster_name}, skipping.")
             except Exception as e:
                 self.log_operation('ERROR', f"Failed to update {addon_name}: {str(e)}")
 
-                self.print_colored(Colors.RED, f"[ERROR] Failed to update {addon_name}: {str(e)}")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to update {addon_name}: {str(e)}")
 
     def format_instance_types_summary(self, instance_selections: Dict) -> str:
         """Format instance types for summary display"""
@@ -676,14 +678,14 @@ class EKSClusterManager:
                         RoleName=role_name,
                         PolicyArn=policy_arn
                     )
-                    self.print_colored(Colors.GREEN, f"   [OK] IAM policy attached to role: {role_name}")
+                    self.print_colored(Colors.GREEN, f"   {Symbols.OK} IAM policy attached to role: {role_name}")
                     attached_to_role = True
                     break
                 except Exception as e:
                     self.log_operation('DEBUG', f"Could not attach policy to role {role_name}: {str(e)}")
 
             if not attached_to_role:
-                self.print_colored(Colors.YELLOW, f"   [WARN] Could not attach IAM policy to any node role")
+                self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} Could not attach IAM policy to any node role")
 
             return True
 
@@ -753,12 +755,12 @@ class EKSClusterManager:
         self.print_colored(Colors.BLUE, "    [PARTY] CLUSTER AUTOSCALER DEPLOYMENT SUCCESSFUL!")
         self.print_colored(Colors.BLUE, "="*70)
     
-        self.print_colored(Colors.GREEN, f"\n[LIST] Cluster Information:")
+        self.print_colored(Colors.GREEN, f"\n{Symbols.LIST} Cluster Information:")
         self.print_colored(Colors.GREEN, f"   • Cluster Name: {cluster_name}")
         self.print_colored(Colors.GREEN, f"   • Region: {region}")
         self.print_colored(Colors.GREEN, f"   • Deployment Time: {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())}")
     
-        self.print_colored(Colors.CYAN, f"\n[SCAN] Monitoring Commands:")
+        self.print_colored(Colors.CYAN, f"\n{Symbols.SCAN} Monitoring Commands:")
         self.print_colored(Colors.CYAN, f"   • Monitor autoscaler logs:")
         self.print_colored(Colors.WHITE, f"     kubectl logs -n kube-system -l app=cluster-autoscaler -f")
     
@@ -778,7 +780,7 @@ class EKSClusterManager:
         self.print_colored(Colors.YELLOW, f"   • Monitor test pods:")
         self.print_colored(Colors.WHITE, f"     kubectl get pods -l app=stress-test")
     
-        self.print_colored(Colors.GREEN, f"\n[OK] Expected Behavior:")
+        self.print_colored(Colors.GREEN, f"\n{Symbols.OK} Expected Behavior:")
         self.print_colored(Colors.GREEN, f"   • Scale Up: New nodes added when pods are pending (2-5 minutes)")
         self.print_colored(Colors.GREEN, f"   • Scale Down: Unused nodes removed after 10+ minutes")
         self.print_colored(Colors.GREEN, f"   • Auto-discovery: ASGs tagged for autoscaler discovery")
@@ -852,20 +854,20 @@ class EKSClusterManager:
 
                     self.log_operation('INFO',
                                        f"Successfully imported public key '{public_key_path}' as EC2 key pair '{key_name}'")
-                    self.print_colored(Colors.GREEN, f"[OK] Imported public key as EC2 key pair '{key_name}'")
+                    self.print_colored(Colors.GREEN, f"{Symbols.OK} Imported public key as EC2 key pair '{key_name}'")
                     return key_name
 
                 except FileNotFoundError:
                     self.log_operation('ERROR', f"Public key file not found: {public_key_path}")
-                    self.print_colored(Colors.RED, f"[ERROR] Public key file not found: {public_key_path}")
+                    self.print_colored(Colors.RED, f"{Symbols.ERROR} Public key file not found: {public_key_path}")
                     raise
                 except ValueError as ve:
                     self.log_operation('ERROR', f"Invalid public key format: {str(ve)}")
-                    self.print_colored(Colors.RED, f"[ERROR] Invalid public key format in {public_key_path}")
+                    self.print_colored(Colors.RED, f"{Symbols.ERROR} Invalid public key format in {public_key_path}")
                     raise
                 except Exception as upload_error:
                     self.log_operation('ERROR', f"Error importing public key: {str(upload_error)}")
-                    self.print_colored(Colors.RED, f"[ERROR] Error importing public key: {str(upload_error)}")
+                    self.print_colored(Colors.RED, f"{Symbols.ERROR} Error importing public key: {str(upload_error)}")
                     raise
             else:
                 self.log_operation('ERROR', f"Error checking key pair: {str(e)}")
@@ -938,10 +940,10 @@ class EKSClusterManager:
             with open(filename, 'w') as f:
                 json.dump(details, f, indent=2)
         
-            print(f"[FOLDER] Enhanced cluster details saved to: {filename}")
+            print(f"{Symbols.FOLDER} Enhanced cluster details saved to: {filename}")
         
         except Exception as e:
-            print(f"[WARN]  Warning: Could not save enhanced cluster details: {e}")
+            print(f"{Symbols.WARN}  Warning: Could not save enhanced cluster details: {e}")
 
     def generate_mini_instructions(self, credential_info, cluster_name, region, username):
         """Generate minimal instruction file with just the essential commands"""
@@ -986,12 +988,12 @@ class EKSClusterManager:
 
             self.log_operation('INFO', f"Mini instruction file generated: {instruction_mini_file}")
             self.print_colored(Colors.GREEN,
-                               f"[OK] Mini instruction files generated:\n→ {instruction_mini_file}\n→ {instruction_copy_file}")
+                               f"{Symbols.OK} Mini instruction files generated:\n→ {instruction_mini_file}\n→ {instruction_copy_file}")
             return instruction_mini_file
 
         except Exception as e:
             self.log_operation('ERROR', f"Failed to generate mini instruction file: {str(e)}")
-            self.print_colored(Colors.RED, f"[ERROR] Failed to generate mini instruction file: {str(e)}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to generate mini instruction file: {str(e)}")
             return None
 
     def generate_user_instructions_enhanced(self, credential_info, cluster_name, region, username, nodegroup_configs):
@@ -1212,7 +1214,7 @@ class EKSClusterManager:
         except Exception as e:
             error_msg = f"Could not create enhanced user instruction file: {e}"
             self.log_operation('WARNING', error_msg)
-            self.print_colored(Colors.YELLOW, f"[WARN]  Warning: {error_msg}")
+            self.print_colored(Colors.YELLOW, f"{Symbols.WARN}  Warning: {error_msg}")
 
     def print_enhanced_cluster_summary_multi_nodegroup(self, cluster_name: str, cluster_info: dict):
         """Print enhanced cluster creation summary with multi-nodegroup support"""
@@ -1221,9 +1223,9 @@ class EKSClusterManager:
         nodegroups_created = cluster_info.get('nodegroups_created', [])
     
         self.print_colored(Colors.GREEN, f"[PARTY] Enhanced Cluster Summary for {cluster_name}:")
-        self.print_colored(Colors.GREEN, f"   [OK] EKS Version: {cluster_info.get('eks_version', 'Unknown')}")
-        self.print_colored(Colors.GREEN, f"   [OK] AMI Type: {cluster_info.get('ami_type', 'Unknown')}")
-        self.print_colored(Colors.GREEN, f"   [OK] Total Nodegroups: {len(nodegroups_created)}/{len(nodegroup_configs)}")
+        self.print_colored(Colors.GREEN, f"   {Symbols.OK} EKS Version: {cluster_info.get('eks_version', 'Unknown')}")
+        self.print_colored(Colors.GREEN, f"   {Symbols.OK} AMI Type: {cluster_info.get('ami_type', 'Unknown')}")
+        self.print_colored(Colors.GREEN, f"   {Symbols.OK} Total Nodegroups: {len(nodegroups_created)}/{len(nodegroup_configs)}")
     
         # Display nodegroup details
         for config in nodegroup_configs:
@@ -1237,46 +1239,46 @@ class EKSClusterManager:
                 suffix_info = f" → {ondemand_name}, {spot_name}"
             else:
                 # For non-mixed strategies, check for exact match
-                status = "[OK]" if config['name'] in nodegroups_created else "[ERROR]"
+                status = "[OK]" if config['name'] in nodegroups_created else f"{Symbols.ERROR}"
                 suffix_info = ""
 
             instance_summary = self.format_instance_types_summary(config['instance_selections'])
             self.print_colored(
-                Colors.GREEN if status == "[OK]" else Colors.YELLOW if status == "[WARN]" else Colors.RED,
+                Colors.GREEN if status == f"{Symbols.OK}" else Colors.YELLOW if status == f"{Symbols.WARN}" else Colors.RED,
                 f"   {status} {config['name']}{suffix_info}: {config['strategy'].upper()} "
                 f"({config['min_nodes']}-{config['desired_nodes']}-{config['max_nodes']}) "
                 f"[{instance_summary}]"
             )
     
-        self.print_colored(Colors.GREEN, f"   [OK] CloudWatch Logging: Enabled")
-        self.print_colored(Colors.GREEN, f"   [OK] Essential Add-ons: {'Installed' if cluster_info.get('addons_installed') else 'Failed'}")
-        self.print_colored(Colors.GREEN, f"   [OK] Container Insights: {'Enabled' if cluster_info.get('container_insights_enabled') else 'Failed'}")
-        self.print_colored(Colors.GREEN, f"   [OK] Cluster Autoscaler: {'Enabled' if cluster_info.get('autoscaler_enabled') else 'Failed'}")
-        self.print_colored(Colors.GREEN, f"   [OK] Scheduled Scaling: {'Enabled' if cluster_info.get('scheduled_scaling_enabled') else 'Failed'}")
-        self.print_colored(Colors.GREEN, f"   [OK] CloudWatch Agent: {'Deployed' if cluster_info.get('cloudwatch_agent_enabled') else 'Failed'}")
-        self.print_colored(Colors.GREEN, f"   [OK] CloudWatch Alarms: {'Configured' if cluster_info.get('cloudwatch_alarms_enabled') else 'Failed'}")
-        self.print_colored(Colors.GREEN, f"   [OK] Cost Monitoring: {'Enabled' if cluster_info.get('cost_alarms_enabled') else 'Failed'}")
+        self.print_colored(Colors.GREEN, f"   {Symbols.OK} CloudWatch Logging: Enabled")
+        self.print_colored(Colors.GREEN, f"   {Symbols.OK} Essential Add-ons: {'Installed' if cluster_info.get('addons_installed') else 'Failed'}")
+        self.print_colored(Colors.GREEN, f"   {Symbols.OK} Container Insights: {'Enabled' if cluster_info.get('container_insights_enabled') else 'Failed'}")
+        self.print_colored(Colors.GREEN, f"   {Symbols.OK} Cluster Autoscaler: {'Enabled' if cluster_info.get('autoscaler_enabled') else 'Failed'}")
+        self.print_colored(Colors.GREEN, f"   {Symbols.OK} Scheduled Scaling: {'Enabled' if cluster_info.get('scheduled_scaling_enabled') else 'Failed'}")
+        self.print_colored(Colors.GREEN, f"   {Symbols.OK} CloudWatch Agent: {'Deployed' if cluster_info.get('cloudwatch_agent_enabled') else 'Failed'}")
+        self.print_colored(Colors.GREEN, f"   {Symbols.OK} CloudWatch Alarms: {'Configured' if cluster_info.get('cloudwatch_alarms_enabled') else 'Failed'}")
+        self.print_colored(Colors.GREEN, f"   {Symbols.OK} Cost Monitoring: {'Enabled' if cluster_info.get('cost_alarms_enabled') else 'Failed'}")
     
         # Health check status
         health_check = cluster_info.get('initial_health_check', {})
         health_status = health_check.get('overall_healthy', False)
         if health_status:
             health_score = health_check.get('summary', {}).get('health_score', 0)
-            self.print_colored(Colors.GREEN, f"   [OK] Health Check: HEALTHY (Score: {health_score}/100)")
+            self.print_colored(Colors.GREEN, f"   {Symbols.OK} Health Check: HEALTHY (Score: {health_score}/100)")
         else:
             issues = len(health_check.get('issues', []))
             warnings = len(health_check.get('warnings', []))
-            self.print_colored(Colors.YELLOW, f"   [WARN]  Health Check: NEEDS ATTENTION ({issues} issues, {warnings} warnings)")
+            self.print_colored(Colors.YELLOW, f"   {Symbols.WARN}  Health Check: NEEDS ATTENTION ({issues} issues, {warnings} warnings)")
     
         # User access status
         auth_status = cluster_info.get('auth_configured', False)
         access_verified = cluster_info.get('access_verified', False)
         if auth_status and access_verified:
-            self.print_colored(Colors.GREEN, f"   [OK] User Access: Configured & Verified")
+            self.print_colored(Colors.GREEN, f"   {Symbols.OK} User Access: Configured & Verified")
         elif auth_status:
-            self.print_colored(Colors.YELLOW, f"   [WARN]  User Access: Configured (verification pending)")
+            self.print_colored(Colors.YELLOW, f"   {Symbols.WARN}  User Access: Configured (verification pending)")
         else:
-            self.print_colored(Colors.RED, f"   [ERROR] User Access: Failed")
+            self.print_colored(Colors.RED, f"   {Symbols.ERROR} User Access: Failed")
 
     ######
 
@@ -1285,10 +1287,10 @@ class EKSClusterManager:
         try:
             supported_versions = ["1.26", "1.27", "1.28", "1.29", "1.30", "1.31", "1.32", "1.33"]
             if not any(eks_version.startswith(v) for v in supported_versions):
-                print(f"[WARN] Warning: EKS version {eks_version} may not be fully supported")
+                print(f"{Symbols.WARN} Warning: EKS version {eks_version} may not be fully supported")
                 proceed = input(f"Proceed with version {eks_version}? (y/N): ").strip().lower()
                 if proceed not in ['y', 'yes']:
-                    print("[ERROR] EKS creation canceled due to unsupported version")
+                    print(f"{Symbols.ERROR} EKS creation canceled due to unsupported version")
                     return False
 
             print(f"Creating EKS cluster {cluster_name} with version {eks_version}")
@@ -1320,11 +1322,11 @@ class EKSClusterManager:
             waiter = eks_client.get_waiter('cluster_active')
             waiter.wait(name=cluster_name, WaiterConfig={'Delay': 30, 'MaxAttempts': 40})
             
-            print(f"[OK] Cluster {cluster_name} is now active")
+            print(f"{Symbols.OK} Cluster {cluster_name} is now active")
             return True
             
         except Exception as e:
-            print(f"[ERROR] Error creating EKS control plane: {e}")
+            print(f"{Symbols.ERROR} Error creating EKS control plane: {e}")
             return False
 
     @staticmethod
@@ -1566,17 +1568,17 @@ class EKSClusterManager:
             # Validation checks
             if on_demand_percentage is None:
                 self.log_operation('ERROR', f"No on_demand_percentage specified for mixed nodegroup {nodegroup_name}")
-                self.print_colored(Colors.RED, f"[ERROR] Failed to create mixed nodegroup: on_demand_percentage not specified")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to create mixed nodegroup: on_demand_percentage not specified")
                 return False
             
             if not on_demand_types:
                 self.log_operation('ERROR', f"No on-demand instance types provided for mixed nodegroup {nodegroup_name}")
-                self.print_colored(Colors.RED, f"[ERROR] Failed to create mixed nodegroup: on-demand instance types not provided")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to create mixed nodegroup: on-demand instance types not provided")
                 return False
             
             if not spot_types:
                 self.log_operation('ERROR', f"No spot instance types provided for mixed nodegroup {nodegroup_name}")
-                self.print_colored(Colors.RED, f"[ERROR] Failed to create mixed nodegroup: spot instance types not provided")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to create mixed nodegroup: spot instance types not provided")
                 return False
 
             # Make sure both instance type lists are properly formatted as lists, not comma-separated strings
@@ -1589,12 +1591,12 @@ class EKSClusterManager:
             # Validate lists aren't empty after processing
             if not on_demand_types:
                 self.log_operation('ERROR', f"Empty on-demand instance types list after processing for {nodegroup_name}")
-                self.print_colored(Colors.RED, f"[ERROR] Failed to create mixed nodegroup: Empty on-demand instance types")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to create mixed nodegroup: Empty on-demand instance types")
                 return False
             
             if not spot_types:
                 self.log_operation('ERROR', f"Empty spot instance types list after processing for {nodegroup_name}")
-                self.print_colored(Colors.RED, f"[ERROR] Failed to create mixed nodegroup: Empty spot instance types")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to create mixed nodegroup: Empty spot instance types")
                 return False
 
             self.print_colored(Colors.CYAN, f"Creating mixed strategy with {on_demand_percentage}% On-Demand, {100-on_demand_percentage}% Spot")
@@ -1622,7 +1624,7 @@ class EKSClusterManager:
             spot_min = max(0, spot_min)
             spot_max = max(0, spot_max)
 
-            self.print_colored(Colors.CYAN, f"[STATS] Node Distribution:")
+            self.print_colored(Colors.CYAN, f"{Symbols.STATS} Node Distribution:")
             self.print_colored(Colors.CYAN, f"   On-Demand: Min={ondemand_min}, Desired={ondemand_desired}, Max={ondemand_max}")
             self.print_colored(Colors.CYAN, f"   Spot: Min={spot_min}, Desired={spot_desired}, Max={spot_max}")
 
@@ -1632,7 +1634,7 @@ class EKSClusterManager:
             # Create On-Demand nodegroup if we have on-demand allocation
             if on_demand_types and ondemand_max > 0:
                 ondemand_ng_name = f"{nodegroup_name}-ondemand"
-                self.print_colored(Colors.CYAN, f"\n🏗️ Creating On-Demand nodegroup: {ondemand_ng_name}")
+                self.print_colored(Colors.CYAN, f"\n[BUILD] Creating On-Demand nodegroup: {ondemand_ng_name}")
                 self.print_colored(Colors.CYAN, f"   Instance Types: {', '.join(on_demand_types)}")
                 self.print_colored(Colors.CYAN, f"   Scaling: Min={ondemand_min}, Desired={ondemand_desired}, Max={ondemand_max}")
             
@@ -1677,18 +1679,18 @@ class EKSClusterManager:
                         nodegroupName=ondemand_ng_name,
                         WaiterConfig={'Delay': 30, 'MaxAttempts': 40}
                     )
-                    self.print_colored(Colors.GREEN, f"[OK] On-Demand nodegroup {ondemand_ng_name} is now active")
+                    self.print_colored(Colors.GREEN, f"{Symbols.OK} On-Demand nodegroup {ondemand_ng_name} is now active")
                     success_count += 1
                     created_nodegroups.append(ondemand_ng_name)
             
                 except Exception as e:
                     self.log_operation('ERROR', f"Failed to create On-Demand nodegroup: {str(e)}")
-                    self.print_colored(Colors.RED, f"[ERROR] Failed to create On-Demand nodegroup: {str(e)}")
+                    self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to create On-Demand nodegroup: {str(e)}")
 
             # Create Spot nodegroup if we have spot allocation
             if spot_types and spot_max > 0:
                 spot_ng_name = f"{nodegroup_name}-spot"
-                self.print_colored(Colors.CYAN, f"\n🏗️ Creating Spot nodegroup: {spot_ng_name}")
+                self.print_colored(Colors.CYAN, f"\n[BUILD] Creating Spot nodegroup: {spot_ng_name}")
                 self.print_colored(Colors.CYAN, f"   Instance Types: {', '.join(spot_types)}")
                 self.print_colored(Colors.CYAN, f"   Scaling: Min={spot_min}, Desired={spot_desired}, Max={spot_max}")
             
@@ -1728,28 +1730,27 @@ class EKSClusterManager:
                         nodegroupName=spot_ng_name,
                         WaiterConfig={'Delay': 30, 'MaxAttempts': 40}
                     )
-                    self.print_colored(Colors.GREEN, f"[OK] Spot nodegroup {spot_ng_name} is now active")
+                    self.print_colored(Colors.GREEN, f"{Symbols.OK} Spot nodegroup {spot_ng_name} is now active")
                     success_count += 1
                     created_nodegroups.append(spot_ng_name)
             
                 except Exception as e:
                     self.log_operation('ERROR', f"Failed to create Spot nodegroup: {str(e)}")
-                    self.print_colored(Colors.RED, f"[ERROR] Failed to create Spot nodegroup: {str(e)}")
+                    self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to create Spot nodegroup: {str(e)}")
 
             # Final result
             if success_count > 0:
                 self.print_colored(Colors.GREEN, f"\n[PARTY] Mixed strategy implemented successfully!")
-                self.print_colored(Colors.GREEN, f"   [OK] Created {success_count} nodegroups: {', '.join(created_nodegroups)}")
-                self.print_colored(Colors.GREEN, f"   [STATS] Distribution: {on_demand_percentage}% On-Demand, {100-on_demand_percentage}% Spot")
+                self.print_colored(Colors.GREEN, f"   {Symbols.OK} Created {success_count} nodegroups: {', '.join(created_nodegroups)}")
+                self.print_colored(Colors.GREEN, f"   {Symbols.STATS} Distribution: {on_demand_percentage}% On-Demand, {100-on_demand_percentage}% Spot")
                 return True
             else:
-                self.print_colored(Colors.RED, f"\n[ERROR] Failed to create any nodegroups for mixed strategy")
+                self.print_colored(Colors.RED, f"\n{Symbols.ERROR} Failed to create any nodegroups for mixed strategy")
                 return False
 
         except Exception as e:
             self.log_operation('ERROR', f"Error creating mixed nodegroups: {e}")
-            self.print_colored(Colors.RED, f"[ERROR] Error creating mixed nodegroups: {e}")
-            import traceback
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Error creating mixed nodegroups: {e}")
             self.log_operation('ERROR', f"Stack trace: {traceback.format_exc()}")
             return False
 
@@ -1767,7 +1768,7 @@ class EKSClusterManager:
             # Validate we have at least one instance type after processing
             if not instance_types:
                 self.log_operation('ERROR', f"Empty instance types list after processing for spot nodegroup {nodegroup_name}")
-                self.print_colored(Colors.RED, f"[ERROR] Failed to create spot nodegroup: Empty instance types list")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to create spot nodegroup: Empty instance types list")
                 return False
 
             self.print_colored(Colors.CYAN, f"Creating spot nodegroup {nodegroup_name}")
@@ -1813,12 +1814,12 @@ class EKSClusterManager:
                 WaiterConfig={'Delay': 30, 'MaxAttempts': 40}
             )
 
-            self.print_colored(Colors.GREEN, f"[OK] Nodegroup {nodegroup_name} is now active")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Nodegroup {nodegroup_name} is now active")
             return True
 
         except Exception as e:
             self.log_operation('ERROR', f"Error creating spot nodegroup: {e}")
-            self.print_colored(Colors.RED, f"[ERROR] Error creating spot nodegroup: {e}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Error creating spot nodegroup: {e}")
             return False
 
     def create_ondemand_nodegroup(self, eks_client, cluster_name: str, nodegroup_name: str,
@@ -1829,7 +1830,7 @@ class EKSClusterManager:
             # Validate that instance types are provided
             if not instance_types:
                 self.log_operation('ERROR', f"No instance types provided for on-demand nodegroup {nodegroup_name}")
-                self.print_colored(Colors.RED, f"[ERROR] Failed to create nodegroup: No instance types provided")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to create nodegroup: No instance types provided")
                 return False
         
             # Make sure instance_types is a list of individual strings, not a comma-separated string
@@ -1839,7 +1840,7 @@ class EKSClusterManager:
             # Validate we have at least one instance type after processing
             if not instance_types:
                 self.log_operation('ERROR', f"Empty instance types list after processing for nodegroup {nodegroup_name}")
-                self.print_colored(Colors.RED, f"[ERROR] Failed to create nodegroup: Empty instance types list")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to create nodegroup: Empty instance types list")
                 return False
 
             self.print_colored(Colors.CYAN, f"Creating on-demand nodegroup {nodegroup_name}")
@@ -1885,12 +1886,12 @@ class EKSClusterManager:
                 WaiterConfig={'Delay': 30, 'MaxAttempts': 40}
             )
 
-            self.print_colored(Colors.GREEN, f"[OK] Nodegroup {nodegroup_name} is now active")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Nodegroup {nodegroup_name} is now active")
             return True
 
         except Exception as e:
             self.log_operation('ERROR', f"Error creating on-demand nodegroup: {e}")
-            self.print_colored(Colors.RED, f"[ERROR] Error creating on-demand nodegroup: {e}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Error creating on-demand nodegroup: {e}")
             return False
     
     def ensure_iam_roles(self, iam_client, account_id: str) -> Tuple[str, str]:
@@ -2058,10 +2059,10 @@ class EKSClusterManager:
                     PolicyArn=csi_policy_arn
                 )
                 self.log_operation('INFO', f"Attached AWS CSI policy to {node_role_name}")
-                print(f"[OK] AWS CSI policy attached to {node_role_name}")
+                print(f"{Symbols.OK} AWS CSI policy attached to {node_role_name}")
             except Exception as e:
                 self.log_operation('ERROR', f"Failed to attach CSI policy: {str(e)}")
-                print(f"[ERROR] Failed to attach CSI policy: {str(e)}")
+                print(f"{Symbols.ERROR} Failed to attach CSI policy: {str(e)}")
     
             return eks_role_arn, node_role_arn
 
@@ -2286,32 +2287,32 @@ class EKSClusterManager:
                 self.log_operation('INFO',
                                    f"API access not supported for cluster {cluster_name} (auth mode: {auth_mode})")
                 self.print_colored(Colors.YELLOW,
-                                   f"[WARN] Skipping API access setup: cluster uses ConfigMap authentication only")
+                                   f"{Symbols.WARN} Skipping API access setup: cluster uses ConfigMap authentication only")
 
             # Return success if at least one method worked
             if configmap_success and api_success:
-                self.print_colored(Colors.GREEN, f"[OK] Both ConfigMap and API access enabled successfully")
+                self.print_colored(Colors.GREEN, f"{Symbols.OK} Both ConfigMap and API access enabled successfully")
                 return True
             elif configmap_success:
-                self.print_colored(Colors.YELLOW, f"[WARN] ConfigMap access enabled, API access failed")
+                self.print_colored(Colors.YELLOW, f"{Symbols.WARN} ConfigMap access enabled, API access failed")
                 return True
             elif api_success:
-                self.print_colored(Colors.YELLOW, f"[WARN] API access enabled, ConfigMap access failed")
+                self.print_colored(Colors.YELLOW, f"{Symbols.WARN} API access enabled, ConfigMap access failed")
                 return True
             else:
-                self.print_colored(Colors.RED, f"[ERROR] Both access methods failed")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Both access methods failed")
                 return False
 
         except Exception as e:
             self.log_operation('ERROR', f"Error enabling cluster access modes: {str(e)}")
-            self.print_colored(Colors.RED, f"[ERROR] Error enabling cluster access modes: {str(e)}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Error enabling cluster access modes: {str(e)}")
             return False
 
     def _enable_api_access(self, eks_client, cluster_name: str, user_arn: str, username: str) -> bool:
         """Enable API access for the user"""
         try:
             self.log_operation('INFO', f"Enabling API access for user {username}")
-            self.print_colored(Colors.CYAN, f"[KEY] Enabling API access for user {username}")
+            self.print_colored(Colors.CYAN, f"{Symbols.KEY} Enabling API access for user {username}")
 
             # Create access entry for the user
             try:
@@ -2324,7 +2325,7 @@ class EKSClusterManager:
 
             except eks_client.exceptions.ResourceInUseException:
                 self.log_operation('INFO', f"Access entry already exists for {user_arn}")
-                self.print_colored(Colors.YELLOW, f"[WARN] Access entry already exists for {username}")
+                self.print_colored(Colors.YELLOW, f"{Symbols.WARN} Access entry already exists for {username}")
 
             # Associate admin policy with the access entry
             try:
@@ -2337,17 +2338,17 @@ class EKSClusterManager:
                     }
                 )
                 self.log_operation('INFO', f"Associated admin policy with access entry for {user_arn}")
-                self.print_colored(Colors.GREEN, f"[OK] API access enabled for user {username}")
+                self.print_colored(Colors.GREEN, f"{Symbols.OK} API access enabled for user {username}")
                 return True
 
             except eks_client.exceptions.ResourceInUseException:
                 self.log_operation('INFO', f"Access policy already associated for {user_arn}")
-                self.print_colored(Colors.YELLOW, f"[WARN] Access policy already associated for {username}")
+                self.print_colored(Colors.YELLOW, f"{Symbols.WARN} Access policy already associated for {username}")
                 return True
 
         except Exception as e:
             self.log_operation('WARNING', f"Failed to enable API access for {username}: {str(e)}")
-            self.print_colored(Colors.YELLOW, f"[WARN] API access setup failed for {username}: {str(e)}")
+            self.print_colored(Colors.YELLOW, f"{Symbols.WARN} API access setup failed for {username}: {str(e)}")
             return False
 
     def configure_aws_auth_configmap(self, cluster_name: str, region: str, account_id: str, user_data: Dict, admin_access_key: str, admin_secret_key: str) -> bool:
@@ -2412,7 +2413,7 @@ class EKSClusterManager:
                 principals_to_add.append(root_arn)
 
                 self.log_operation('INFO', f"Configuring access for root user: {root_arn}")
-                self.print_colored(Colors.CYAN, f"   👑 Creator is root user - configuring root access only")
+                self.print_colored(Colors.CYAN, f"   [CROWN] Creator is root user - configuring root access only")
 
             else:
                 # If created by IAM user, add both IAM user and root user access
@@ -2449,11 +2450,11 @@ class EKSClusterManager:
             access_config = cluster_info['cluster'].get('accessConfig', {})
             auth_mode = access_config.get('authenticationMode', 'CONFIG_MAP')
 
-            self.print_colored(Colors.CYAN, f"   [LIST] Cluster authentication mode: {auth_mode}")
+            self.print_colored(Colors.CYAN, f"   {Symbols.LIST} Cluster authentication mode: {auth_mode}")
 
             # If cluster uses CONFIG_MAP mode, create/update aws-auth ConfigMap
             if auth_mode in ['CONFIG_MAP', 'API_AND_CONFIG_MAP']:
-                self.print_colored(Colors.CYAN, "   [LIST] Creating/updating aws-auth ConfigMap...")
+                self.print_colored(Colors.CYAN, f"   {Symbols.LIST} Creating/updating aws-auth ConfigMap...")
 
                 # Create aws-auth ConfigMap YAML with appropriate users
                 aws_auth_config = {
@@ -2494,7 +2495,7 @@ class EKSClusterManager:
                 if not kubectl_available:
                     self.log_operation('WARNING',
                                        f"kubectl not found. ConfigMap file created but not applied: {configmap_file}")
-                    self.print_colored(Colors.YELLOW, f"[WARN]  kubectl not found. Manual setup required.")
+                    self.print_colored(Colors.YELLOW, f"{Symbols.WARN}  kubectl not found. Manual setup required.")
 
                     # Create manual instruction file
                     instruction_file = os.path.join(temp_dir,
@@ -2560,7 +2561,7 @@ class EKSClusterManager:
                                 f.write(f"kubectl get pods\n")
 
                         self.log_operation('INFO', f"Manual setup instructions saved to: {instruction_file}")
-                        self.print_colored(Colors.CYAN, f"[LIST] Manual setup instructions: {instruction_file}")
+                        self.print_colored(Colors.CYAN, f"{Symbols.LIST} Manual setup instructions: {instruction_file}")
 
                     except Exception as e:
                         self.log_operation('WARNING', f"Failed to create instruction file: {str(e)}")
@@ -2570,7 +2571,7 @@ class EKSClusterManager:
 
                 # Apply ConfigMap using kubectl with admin credentials
                 self.log_operation('INFO', f"Applying ConfigMap using admin credentials")
-                self.print_colored(Colors.YELLOW, f"[START] Applying ConfigMap with admin credentials...")
+                self.print_colored(Colors.YELLOW, f"{Symbols.START} Applying ConfigMap with admin credentials...")
 
                 # Set environment variables for admin access
                 myenv = os.environ.copy()
@@ -2603,7 +2604,7 @@ class EKSClusterManager:
 
                     if apply_result.returncode == 0:
                         self.log_operation('INFO', f"Successfully applied aws-auth ConfigMap for {cluster_name}")
-                        self.print_colored(Colors.GREEN, f"[OK] ConfigMap applied successfully")
+                        self.print_colored(Colors.GREEN, f"{Symbols.OK} ConfigMap applied successfully")
 
                         # Verify the ConfigMap was applied
                         verify_cmd = ['kubectl', 'get', 'configmap', 'aws-auth', '-n', 'kube-system', '-o', 'yaml']
@@ -2618,16 +2619,16 @@ class EKSClusterManager:
                         success = True
                     else:
                         self.log_operation('ERROR', f"Failed to apply aws-auth ConfigMap: {apply_result.stderr}")
-                        self.print_colored(Colors.RED, f"[ERROR] Failed to apply ConfigMap: {apply_result.stderr}")
+                        self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to apply ConfigMap: {apply_result.stderr}")
                         success = False
 
                 except subprocess.TimeoutExpired:
                     self.log_operation('ERROR', f"kubectl/aws command timed out for {cluster_name}")
-                    self.print_colored(Colors.RED, f"[ERROR] Command timed out")
+                    self.print_colored(Colors.RED, f"{Symbols.ERROR} Command timed out")
                     success = False
                 except Exception as e:
                     self.log_operation('ERROR', f"Failed to execute kubectl/aws commands: {str(e)}")
-                    self.print_colored(Colors.RED, f"[ERROR] Command execution failed: {str(e)}")
+                    self.print_colored(Colors.RED, f"{Symbols.ERROR} Command execution failed: {str(e)}")
                     success = False
 
                 # Clean up temporary files
@@ -2642,10 +2643,10 @@ class EKSClusterManager:
 
             if success:
                 if is_root_user:
-                    self.print_colored(Colors.GREEN, f"[OK] Root user configured for cluster access")
+                    self.print_colored(Colors.GREEN, f"{Symbols.OK} Root user configured for cluster access")
                 else:
                     username = user_data.get('username', 'unknown')
-                    self.print_colored(Colors.GREEN, f"[OK] User [{username}] and root user configured for cluster access")
+                    self.print_colored(Colors.GREEN, f"{Symbols.OK} User [{username}] and root user configured for cluster access")
 
                 # Test access after a brief delay (only for IAM user, not root)
                 if not is_root_user:
@@ -2681,11 +2682,11 @@ class EKSClusterManager:
 
                             if test_result.returncode == 0:
                                 self.log_operation('INFO', f"User access test successful for {username}")
-                                self.print_colored(Colors.GREEN, f"[OK] User access verified - can access cluster")
+                                self.print_colored(Colors.GREEN, f"{Symbols.OK} User access verified - can access cluster")
                             else:
                                 self.log_operation('WARNING', f"User access test failed: {test_result.stderr}")
                                 self.print_colored(Colors.YELLOW,
-                                                   f"[WARN]  User access test failed - may need manual verification")
+                                                   f"{Symbols.WARN}  User access test failed - may need manual verification")
                         else:
                             self.log_operation('WARNING',
                                                f"Failed to update kubeconfig for user test: {user_update_result.stderr}")
@@ -2698,7 +2699,7 @@ class EKSClusterManager:
         except Exception as e:
             error_msg = str(e)
             self.log_operation('ERROR', f"Failed to configure aws-auth ConfigMap for {cluster_name}: {error_msg}")
-            self.print_colored(Colors.RED, f"[ERROR] ConfigMap configuration failed: {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} ConfigMap configuration failed: {error_msg}")
             return False
 
     def health_check_cluster(self, cluster_name: str, region: str, admin_access_key: str, admin_secret_key: str) -> Dict:
@@ -2714,7 +2715,7 @@ class EKSClusterManager:
             
                 eks_client = admin_session.client('eks')
                 from datetime import datetime
-                current_timestamp = int(datetime.utcnow().timestamp())
+                current_timestamp = int(datetime.now(datetime.UTC).timestamp())
                 health_status = {
                     'cluster_name': cluster_name,
                     'region': region,
@@ -2740,25 +2741,25 @@ class EKSClusterManager:
                     if cluster_status != 'ACTIVE':
                         health_status['overall_healthy'] = False
                         health_status['issues'].append(f"Cluster status is {cluster_status}, expected ACTIVE")
-                        self.print_colored(Colors.RED, f"   [ERROR] Cluster status: {cluster_status}")
+                        self.print_colored(Colors.RED, f"   {Symbols.ERROR} Cluster status: {cluster_status}")
                     else:
                         health_status['success_items'].append(f"Cluster is ACTIVE (version {cluster_version})")
-                        self.print_colored(Colors.GREEN, f"   [OK] Cluster status: {cluster_status} (v{cluster_version})")
+                        self.print_colored(Colors.GREEN, f"   {Symbols.OK} Cluster status: {cluster_status} (v{cluster_version})")
                 
                     # Check cluster logging
                     logging_config = cluster.get('logging', {}).get('clusterLogging', [])
                     if logging_config and any(log.get('enabled', False) for log in logging_config):
                         health_status['success_items'].append("CloudWatch logging is enabled")
-                        self.print_colored(Colors.GREEN, f"   [OK] CloudWatch logging: Enabled")
+                        self.print_colored(Colors.GREEN, f"   {Symbols.OK} CloudWatch logging: Enabled")
                     else:
                         health_status['warnings'].append("CloudWatch logging may not be fully configured")
-                        self.print_colored(Colors.YELLOW, f"   [WARN]  CloudWatch logging: Limited or disabled")
+                        self.print_colored(Colors.YELLOW, f"   {Symbols.WARN}  CloudWatch logging: Limited or disabled")
                     
                 except Exception as e:
                     health_status['cluster_status'] = 'ERROR'
                     health_status['overall_healthy'] = False
                     health_status['issues'].append(f"Failed to get cluster status: {str(e)}")
-                    self.print_colored(Colors.RED, f"   [ERROR] Cluster check failed: {str(e)}")
+                    self.print_colored(Colors.RED, f"   {Symbols.ERROR} Cluster check failed: {str(e)}")
             
                 # 2. Check node groups with detailed analysis
                 try:
@@ -2792,11 +2793,11 @@ class EKSClusterManager:
                         if ng_status != 'ACTIVE':
                             health_status['overall_healthy'] = False
                             health_status['issues'].append(f"NodeGroup {ng_name} status is {ng_status}")
-                            self.print_colored(Colors.RED, f"   [ERROR] NodeGroup {ng_name}: {ng_status}")
+                            self.print_colored(Colors.RED, f"   {Symbols.ERROR} NodeGroup {ng_name}: {ng_status}")
                         else:
                             active_nodegroups += 1
                             health_status['success_items'].append(f"NodeGroup {ng_name} is ACTIVE ({capacity_type}, {', '.join(instance_types)})")
-                            self.print_colored(Colors.GREEN, f"   [OK] NodeGroup {ng_name}: {ng_status} ({capacity_type}, {ami_type})")
+                            self.print_colored(Colors.GREEN, f"   {Symbols.OK} NodeGroup {ng_name}: {ng_status} ({capacity_type}, {ami_type})")
                             self.print_colored(Colors.CYAN, f"      Scaling: {scaling_config.get('desiredSize', 0)}/{scaling_config.get('maxSize', 0)} nodes")
                 
                     health_status['nodegroup_health'] = nodegroup_health
@@ -2807,7 +2808,7 @@ class EKSClusterManager:
                     health_status['nodegroup_health'] = {}
                     health_status['overall_healthy'] = False
                     health_status['issues'].append(f"Failed to check nodegroups: {str(e)}")
-                    self.print_colored(Colors.RED, f"   [ERROR] NodeGroup check failed: {str(e)}")
+                    self.print_colored(Colors.RED, f"   {Symbols.ERROR} NodeGroup check failed: {str(e)}")
             
                 # 3. Check add-ons with version information
                 try:
@@ -2837,15 +2838,15 @@ class EKSClusterManager:
                             if addon_name in essential_addons:
                                 health_status['overall_healthy'] = False
                                 health_status['issues'].append(f"Essential add-on {addon_name} status is {addon_status}")
-                                self.print_colored(Colors.RED, f"   [ERROR] Add-on {addon_name}: {addon_status} (ESSENTIAL)")
+                                self.print_colored(Colors.RED, f"   {Symbols.ERROR} Add-on {addon_name}: {addon_status} (ESSENTIAL)")
                             else:
                                 health_status['warnings'].append(f"Non-essential add-on {addon_name} status is {addon_status}")
-                                self.print_colored(Colors.YELLOW, f"   [WARN]  Add-on {addon_name}: {addon_status}")
+                                self.print_colored(Colors.YELLOW, f"   {Symbols.WARN}  Add-on {addon_name}: {addon_status}")
                         else:
                             active_addons += 1
                             health_status['success_items'].append(f"Add-on {addon_name} is {addon_status} (v{addon_version})")
                             addon_type = "ESSENTIAL" if addon_name in essential_addons else "optional"
-                            self.print_colored(Colors.GREEN, f"   [OK] Add-on {addon_name}: {addon_status} (v{addon_version}, {addon_type})")
+                            self.print_colored(Colors.GREEN, f"   {Symbols.OK} Add-on {addon_name}: {addon_status} (v{addon_version}, {addon_type})")
                 
                     health_status['addon_health'] = addon_health
                     health_status['total_addons'] = total_addons
@@ -2857,12 +2858,12 @@ class EKSClusterManager:
                 
                     if missing_essential:
                         health_status['warnings'].append(f"Missing essential add-ons: {', '.join(missing_essential)}")
-                        self.print_colored(Colors.YELLOW, f"   [WARN]  Missing essential add-ons: {', '.join(missing_essential)}")
+                        self.print_colored(Colors.YELLOW, f"   {Symbols.WARN}  Missing essential add-ons: {', '.join(missing_essential)}")
                 
                 except Exception as e:
                     health_status['addon_health'] = {}
                     health_status['issues'].append(f"Failed to check add-ons: {str(e)}")
-                    self.print_colored(Colors.RED, f"   [ERROR] Add-on check failed: {str(e)}")
+                    self.print_colored(Colors.RED, f"   {Symbols.ERROR} Add-on check failed: {str(e)}")
             
                 # 4. Check nodes using kubectl (if available)
                 try:
@@ -2902,13 +2903,13 @@ class EKSClusterManager:
                                 if len(ready_nodes) == 0:
                                     health_status['overall_healthy'] = False
                                     health_status['issues'].append("No nodes are in Ready state")
-                                    self.print_colored(Colors.RED, f"   [ERROR] No nodes ready")
+                                    self.print_colored(Colors.RED, f"   {Symbols.ERROR} No nodes ready")
                                 elif len(not_ready_nodes) > 0:
                                     health_status['warnings'].append(f"{len(not_ready_nodes)} nodes are not ready")
-                                    self.print_colored(Colors.YELLOW, f"   [WARN]  Nodes ready: {len(ready_nodes)}/{len(node_lines)} ({len(not_ready_nodes)} not ready)")
+                                    self.print_colored(Colors.YELLOW, f"   {Symbols.WARN}  Nodes ready: {len(ready_nodes)}/{len(node_lines)} ({len(not_ready_nodes)} not ready)")
                                 else:
                                     health_status['success_items'].append(f"All {len(ready_nodes)} nodes are ready")
-                                    self.print_colored(Colors.GREEN, f"   [OK] All nodes ready: {len(ready_nodes)}/{len(node_lines)}")
+                                    self.print_colored(Colors.GREEN, f"   {Symbols.OK} All nodes ready: {len(ready_nodes)}/{len(node_lines)}")
                             
                                 # Check system pods
                                 pods_result = subprocess.run([
@@ -2926,22 +2927,22 @@ class EKSClusterManager:
                                 
                                     if len(failed_pods) > 0:
                                         health_status['warnings'].append(f"{len(failed_pods)} system pods have failed")
-                                        self.print_colored(Colors.YELLOW, f"   [WARN]  System pods: {len(running_pods)}/{len(pod_lines)} running ({len(failed_pods)} failed)")
+                                        self.print_colored(Colors.YELLOW, f"   {Symbols.WARN}  System pods: {len(running_pods)}/{len(pod_lines)} running ({len(failed_pods)} failed)")
                                     else:
                                         health_status['success_items'].append(f"All {len(running_pods)} system pods are running")
-                                        self.print_colored(Colors.GREEN, f"   [OK] System pods: {len(running_pods)}/{len(pod_lines)} running")
+                                        self.print_colored(Colors.GREEN, f"   {Symbols.OK} System pods: {len(running_pods)}/{len(pod_lines)} running")
                             else:
                                 health_status['warnings'].append("Could not retrieve node status via kubectl")
-                                self.print_colored(Colors.YELLOW, f"   [WARN]  Could not check nodes via kubectl")
+                                self.print_colored(Colors.YELLOW, f"   {Symbols.WARN}  Could not check nodes via kubectl")
                         else:
                             health_status['warnings'].append("Could not update kubeconfig for kubectl access")
                     else:
                         health_status['warnings'].append("kubectl not available for node status check")
-                        self.print_colored(Colors.YELLOW, f"   [WARN]  kubectl not available for detailed node check")
+                        self.print_colored(Colors.YELLOW, f"   {Symbols.WARN}  kubectl not available for detailed node check")
                     
                 except Exception as e:
                     health_status['warnings'].append(f"Failed to check nodes via kubectl: {str(e)}")
-                    self.print_colored(Colors.YELLOW, f"   [WARN]  kubectl check failed: {str(e)}")
+                    self.print_colored(Colors.YELLOW, f"   {Symbols.WARN}  kubectl check failed: {str(e)}")
             
                 # 5. Final health assessment
                 total_issues = len(health_status['issues'])
@@ -2961,17 +2962,17 @@ class EKSClusterManager:
                     self.print_colored(Colors.GREEN, f"   [PARTY] Overall Health: HEALTHY (Score: {health_status['summary']['health_score']}/100)")
                 else:
                     self.log_operation('WARNING', f"Health check FAILED for {cluster_name} - {total_issues} issues, {total_warnings} warnings")
-                    self.print_colored(Colors.YELLOW, f"   [WARN]  Overall Health: NEEDS ATTENTION ({total_issues} issues, {total_warnings} warnings)")
+                    self.print_colored(Colors.YELLOW, f"   {Symbols.WARN}  Overall Health: NEEDS ATTENTION ({total_issues} issues, {total_warnings} warnings)")
             
                 return health_status
             
             except Exception as e:
                 from datetime import datetime
-                current_timestamp = int(datetime.utcnow().timestamp())
+                current_timestamp = int(datetime.now(datetime.UTC).timestamp())
 
                 error_msg = str(e)
                 self.log_operation('ERROR', f"Health check exception for {cluster_name}: {error_msg}")
-                self.print_colored(Colors.RED, f"   [ERROR] Health check failed: {error_msg}")
+                self.print_colored(Colors.RED, f"   {Symbols.ERROR} Health check failed: {error_msg}")
                 return {
                     'cluster_name': cluster_name,
                     'region': region,
@@ -3042,7 +3043,7 @@ class EKSClusterManager:
 
                     if layer_exists:
                         self.print_colored(Colors.YELLOW,
-                                           f"   [WARN]  Layer {layer_name} already exists, using existing version")
+                                           f"   {Symbols.WARN}  Layer {layer_name} already exists, using existing version")
                         # Get the latest version
                         layer_versions = lambda_client.list_layer_versions(LayerName=layer_name)
                         if layer_versions.get('LayerVersions'):
@@ -3061,16 +3062,16 @@ class EKSClusterManager:
                     )
 
                     layer_arn = response['LayerVersionArn']
-                    self.print_colored(Colors.GREEN, f"   [OK] kubectl layer created: {layer_arn}")
+                    self.print_colored(Colors.GREEN, f"   {Symbols.OK} kubectl layer created: {layer_arn}")
 
                     return layer_arn
 
                 except Exception as e:
-                    self.print_colored(Colors.RED, f"   [ERROR] Failed to create kubectl layer: {str(e)}")
+                    self.print_colored(Colors.RED, f"   {Symbols.ERROR} Failed to create kubectl layer: {str(e)}")
                     return None
 
         except Exception as e:
-            self.print_colored(Colors.RED, f"[ERROR] Failed to create kubectl layer: {str(e)}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to create kubectl layer: {str(e)}")
             return None
 
     def create_minimal_kubectl_layer(self, region: str, admin_access_key: str, admin_secret_key: str) -> str:
@@ -3124,7 +3125,7 @@ class EKSClusterManager:
                 os.chmod(kubectl_path, 0o755)
 
                 kubectl_size_mb = os.path.getsize(kubectl_path) / 1024 / 1024
-                self.print_colored(Colors.GREEN, f"   [OK] kubectl downloaded ({kubectl_size_mb:.1f} MB)")
+                self.print_colored(Colors.GREEN, f"   {Symbols.OK} kubectl downloaded ({kubectl_size_mb:.1f} MB)")
 
                 # Create zip
                 temp_zip = tempfile.NamedTemporaryFile(suffix='.zip', delete=False)
@@ -3154,7 +3155,7 @@ class EKSClusterManager:
                     )
 
                     layer_arn = response['LayerVersionArn']
-                    self.print_colored(Colors.GREEN, f"   [OK] Minimal layer created: {layer_arn}")
+                    self.print_colored(Colors.GREEN, f"   {Symbols.OK} Minimal layer created: {layer_arn}")
                     return layer_arn
 
             finally:
@@ -3165,7 +3166,7 @@ class EKSClusterManager:
                     pass
 
         except Exception as e:
-            self.print_colored(Colors.RED, f"[ERROR] Minimal layer creation failed: {str(e)}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Minimal layer creation failed: {str(e)}")
             return None
 
     def setup_node_protection_monitoring(self, cluster_name: str, region: str, admin_access_key: str,
@@ -3178,7 +3179,7 @@ class EKSClusterManager:
             cluster_suffix = cluster_name.split('-')[-1] if '-' in cluster_name else cluster_name
 
             # Get current datetime dynamically
-            current_datetime = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+            current_datetime = datetime.now(datetime.UTC).strftime('%Y-%m-%d %H:%M:%S')
 
             self.log_operation('INFO',
                                f"Setting up optimized node protection monitoring for cluster {cluster_name} (suffix: {cluster_suffix})")
@@ -3205,14 +3206,14 @@ class EKSClusterManager:
             kubectl_layer_arn = self.create_kubectl_only_layer(lambda_client)
 
             if not kubectl_layer_arn:
-                self.print_colored(Colors.RED, "   [ERROR] Failed to create kubectl layer")
+                self.print_colored(Colors.RED, f"   {Symbols.ERROR} Failed to create kubectl layer")
                 return False
 
-            self.print_colored(Colors.GREEN, f"   [OK] kubectl layer created: {kubectl_layer_arn}")
+            self.print_colored(Colors.GREEN, f"   {Symbols.OK} kubectl layer created: {kubectl_layer_arn}")
 
             # Step 2: Create IAM role with new naming convention
             role_name = f"NodeProtectionMonitorRole-{cluster_suffix}"
-            self.print_colored(Colors.CYAN, f"   [KEY] Creating IAM role: {role_name}")
+            self.print_colored(Colors.CYAN, f"   {Symbols.KEY} Creating IAM role: {role_name}")
 
             trust_policy = {
                 "Version": "2012-10-17",
@@ -3231,9 +3232,9 @@ class EKSClusterManager:
                     AssumeRolePolicyDocument=json.dumps(trust_policy),
                     Description=f"Role for optimized Lambda node protection monitoring - {cluster_name} (suffix: {cluster_suffix})"
                 )
-                self.print_colored(Colors.GREEN, f"   [OK] Created IAM role: {role_name}")
+                self.print_colored(Colors.GREEN, f"   {Symbols.OK} Created IAM role: {role_name}")
             except iam_client.exceptions.EntityAlreadyExistsException:
-                self.print_colored(Colors.YELLOW, f"   [WARN]  IAM role already exists: {role_name}")
+                self.print_colored(Colors.YELLOW, f"   {Symbols.WARN}  IAM role already exists: {role_name}")
 
             # Attach policies
             policies = [
@@ -3246,9 +3247,9 @@ class EKSClusterManager:
             for policy_arn in policies:
                 try:
                     iam_client.attach_role_policy(RoleName=role_name, PolicyArn=policy_arn)
-                    self.print_colored(Colors.GREEN, f"   [OK] Attached policy: {policy_arn}")
+                    self.print_colored(Colors.GREEN, f"   {Symbols.OK} Attached policy: {policy_arn}")
                 except Exception as e:
-                    self.print_colored(Colors.YELLOW, f"   [WARN]  Policy may already be attached: {policy_arn}")
+                    self.print_colored(Colors.YELLOW, f"   {Symbols.WARN}  Policy may already be attached: {policy_arn}")
 
             # Enhanced inline policy for EKS and EC2 access
             inline_policy = {
@@ -3280,19 +3281,19 @@ class EKSClusterManager:
                     PolicyName="OptimizedNodeProtectionPolicy",
                     PolicyDocument=json.dumps(inline_policy)
                 )
-                self.print_colored(Colors.GREEN, f"   [OK] Created optimized inline policy")
+                self.print_colored(Colors.GREEN, f"   {Symbols.OK} Created optimized inline policy")
             except Exception as e:
-                self.print_colored(Colors.YELLOW, f"   [WARN]  Inline policy may already exist: {str(e)}")
+                self.print_colored(Colors.YELLOW, f"   {Symbols.WARN}  Inline policy may already exist: {str(e)}")
 
             role_arn = f"arn:aws:iam::{account_id}:role/{role_name}"
 
             # Wait for role to be ready
-            self.print_colored(Colors.CYAN, f"   [TIMER]  Waiting for IAM role to be ready...")
+            self.print_colored(Colors.CYAN, f"   {Symbols.TIMER}  Waiting for IAM role to be ready...")
             time.sleep(10)
 
             # Step 3: Create optimized Lambda function with template replacement
             function_name = f"node-protection-monitor-eks-{cluster_suffix}"
-            self.print_colored(Colors.CYAN, f"   [START] Creating optimized Lambda function: {function_name}")
+            self.print_colored(Colors.CYAN, f"   {Symbols.START} Creating optimized Lambda function: {function_name}")
 
             # Read Lambda template and replace variables with proper encoding
             try:
@@ -3300,7 +3301,7 @@ class EKSClusterManager:
                 with open('lambda_node_protection_template.py', 'r', encoding='utf-8') as f:
                     lambda_template = f.read()
 
-                self.print_colored(Colors.GREEN, f"   [OK] Lambda template loaded successfully with UTF-8 encoding")
+                self.print_colored(Colors.GREEN, f"   {Symbols.OK} Lambda template loaded successfully with UTF-8 encoding")
 
                 # Replace template variables with actual values
                 lambda_code = lambda_template.replace('{{CLUSTER_NAME}}', cluster_name)
@@ -3310,20 +3311,20 @@ class EKSClusterManager:
                 lambda_code = lambda_code.replace('{{CURRENT_DATETIME}}', current_datetime)
                 lambda_code = lambda_code.replace('{{CURRENT_USER}}', self.current_user)
 
-                self.print_colored(Colors.GREEN, f"   [OK] Template variables replaced successfully")
-                self.print_colored(Colors.CYAN, f"   [DATE] Generated: {current_datetime} UTC by {self.current_user}")
+                self.print_colored(Colors.GREEN, f"   {Symbols.OK} Template variables replaced successfully")
+                self.print_colored(Colors.CYAN, f"   {Symbols.DATE} Generated: {current_datetime} UTC by {self.current_user}")
 
             except FileNotFoundError:
                 self.print_colored(Colors.RED,
-                                   f"   [ERROR] Lambda template file 'lambda_node_protection_template.py' not found")
+                                   f"   {Symbols.ERROR} Lambda template file 'lambda_node_protection_template.py' not found")
                 return False
             except UnicodeDecodeError as e:
-                self.print_colored(Colors.RED, f"   [ERROR] Unicode decode error reading template file: {str(e)}")
+                self.print_colored(Colors.RED, f"   {Symbols.ERROR} Unicode decode error reading template file: {str(e)}")
                 self.print_colored(Colors.YELLOW,
-                                   f"   [WARN]  Template file may have encoding issues. Please save it as UTF-8.")
+                                   f"   {Symbols.WARN}  Template file may have encoding issues. Please save it as UTF-8.")
                 return False
             except Exception as e:
-                self.print_colored(Colors.RED, f"   [ERROR] Failed to read Lambda template: {str(e)}")
+                self.print_colored(Colors.RED, f"   {Symbols.ERROR} Failed to read Lambda template: {str(e)}")
                 return False
 
             # Create proper Lambda deployment package as ZIP
@@ -3348,10 +3349,10 @@ class EKSClusterManager:
                         lambda_zip_content = zip_file.read()
 
                     self.print_colored(Colors.GREEN,
-                                       f"   [OK] Lambda deployment package created: {len(lambda_zip_content)} bytes")
+                                       f"   {Symbols.OK} Lambda deployment package created: {len(lambda_zip_content)} bytes")
 
             except Exception as e:
-                self.print_colored(Colors.RED, f"   [ERROR] Failed to create Lambda deployment package: {str(e)}")
+                self.print_colored(Colors.RED, f"   {Symbols.ERROR} Failed to create Lambda deployment package: {str(e)}")
                 return False
 
             # Check if function exists
@@ -3359,9 +3360,9 @@ class EKSClusterManager:
             try:
                 lambda_client.get_function(FunctionName=function_name)
                 function_exists = True
-                self.print_colored(Colors.YELLOW, f"   [WARN]  Lambda function already exists: {function_name}")
+                self.print_colored(Colors.YELLOW, f"   {Symbols.WARN}  Lambda function already exists: {function_name}")
             except lambda_client.exceptions.ResourceNotFoundException:
-                self.print_colored(Colors.CYAN, f"   [LOG] Creating new optimized Lambda function...")
+                self.print_colored(Colors.CYAN, f"   {Symbols.LOG} Creating new optimized Lambda function...")
 
             if not function_exists:
                 try:
@@ -3384,9 +3385,9 @@ class EKSClusterManager:
                             }
                         }
                     )
-                    self.print_colored(Colors.GREEN, f"   [OK] Created optimized Lambda function: {function_name}")
+                    self.print_colored(Colors.GREEN, f"   {Symbols.OK} Created optimized Lambda function: {function_name}")
                 except Exception as e:
-                    self.print_colored(Colors.RED, f"   [ERROR] Failed to create Lambda function: {str(e)}")
+                    self.print_colored(Colors.RED, f"   {Symbols.ERROR} Failed to create Lambda function: {str(e)}")
                     return False
             else:
                 # Update existing function
@@ -3421,20 +3422,20 @@ class EKSClusterManager:
                             }
                         )
 
-                        self.print_colored(Colors.GREEN, f"   [OK] Updated optimized Lambda function: {function_name}")
+                        self.print_colored(Colors.GREEN, f"   {Symbols.OK} Updated optimized Lambda function: {function_name}")
                         break
 
                     except lambda_client.exceptions.ResourceConflictException:
                         if attempt < max_retries - 1:
                             self.print_colored(Colors.YELLOW,
-                                               f"   [WARN]  Function update in progress, retrying in {10 * (attempt + 1)} seconds...")
+                                               f"   {Symbols.WARN}  Function update in progress, retrying in {10 * (attempt + 1)} seconds...")
                             time.sleep(10 * (attempt + 1))
                         else:
                             self.print_colored(Colors.RED,
-                                               f"   [ERROR] Failed to update Lambda function after {max_retries} attempts")
+                                               f"   {Symbols.ERROR} Failed to update Lambda function after {max_retries} attempts")
                             return False
                     except Exception as e:
-                        self.print_colored(Colors.RED, f"   [ERROR] Failed to update Lambda function: {str(e)}")
+                        self.print_colored(Colors.RED, f"   {Symbols.ERROR} Failed to update Lambda function: {str(e)}")
                         return False
 
             # Step 4: Create EventBridge rule with new naming convention
@@ -3443,7 +3444,7 @@ class EKSClusterManager:
                                          aws_secret_access_key=admin_secret_key)
 
             rule_name = f"node-protection-monitor-eks-{cluster_suffix}-rule"
-            self.print_colored(Colors.CYAN, f"   [DATE] Creating EventBridge rule: {rule_name}")
+            self.print_colored(Colors.CYAN, f"   {Symbols.DATE} Creating EventBridge rule: {rule_name}")
 
             # Create event pattern for EC2 instance state changes
             event_pattern = {
@@ -3461,12 +3462,12 @@ class EKSClusterManager:
                     State='ENABLED',
                     Description=f'Optimized node protection monitoring for EKS cluster {cluster_name} (suffix: {cluster_suffix})'
                 )
-                self.print_colored(Colors.GREEN, f"   [OK] Created EventBridge rule: {rule_name}")
+                self.print_colored(Colors.GREEN, f"   {Symbols.OK} Created EventBridge rule: {rule_name}")
             except Exception as e:
-                self.print_colored(Colors.YELLOW, f"   [WARN]  EventBridge rule may already exist: {str(e)}")
+                self.print_colored(Colors.YELLOW, f"   {Symbols.WARN}  EventBridge rule may already exist: {str(e)}")
 
             # Step 5: Add Lambda permission for EventBridge
-            self.print_colored(Colors.CYAN, f"   [SECURE] Adding Lambda permission for EventBridge...")
+            self.print_colored(Colors.CYAN, f"   {Symbols.SECURE} Adding Lambda permission for EventBridge...")
 
             try:
                 lambda_client.add_permission(
@@ -3476,14 +3477,14 @@ class EKSClusterManager:
                     Principal='events.amazonaws.com',
                     SourceArn=f"arn:aws:events:{region}:{account_id}:rule/{rule_name}"
                 )
-                self.print_colored(Colors.GREEN, f"   [OK] Added Lambda permission for EventBridge")
+                self.print_colored(Colors.GREEN, f"   {Symbols.OK} Added Lambda permission for EventBridge")
             except lambda_client.exceptions.ResourceConflictException:
-                self.print_colored(Colors.YELLOW, f"   [WARN]  Lambda permission already exists")
+                self.print_colored(Colors.YELLOW, f"   {Symbols.WARN}  Lambda permission already exists")
             except Exception as e:
-                self.print_colored(Colors.RED, f"   [ERROR] Failed to add Lambda permission: {str(e)}")
+                self.print_colored(Colors.RED, f"   {Symbols.ERROR} Failed to add Lambda permission: {str(e)}")
 
             # Step 6: Create EventBridge target
-            self.print_colored(Colors.CYAN, f"   [TARGET] Creating EventBridge target...")
+            self.print_colored(Colors.CYAN, f"   {Symbols.TARGET} Creating EventBridge target...")
 
             try:
                 events_client.put_targets(
@@ -3508,9 +3509,9 @@ class EKSClusterManager:
                         }
                     ]
                 )
-                self.print_colored(Colors.GREEN, f"   [OK] Created EventBridge target")
+                self.print_colored(Colors.GREEN, f"   {Symbols.OK} Created EventBridge target")
             except Exception as e:
-                self.print_colored(Colors.RED, f"   [ERROR] Failed to create EventBridge target: {str(e)}")
+                self.print_colored(Colors.RED, f"   {Symbols.ERROR} Failed to create EventBridge target: {str(e)}")
                 return False
 
             # Step 7: Test the Lambda function
@@ -3535,15 +3536,15 @@ class EKSClusterManager:
             #     response_payload = json.loads(response['Payload'].read())
             #
             #     if response.get('StatusCode') == 200:
-            #         self.print_colored(Colors.GREEN, f"   [OK] Lambda function test successful")
+            #         self.print_colored(Colors.GREEN, f"   {Symbols.OK} Lambda function test successful")
             #         self.print_colored(Colors.CYAN,
-            #                            f"   [STATS] Test result: {response_payload.get('statusCode', 'Unknown')}")
+            #                            f"   {Symbols.STATS} Test result: {response_payload.get('statusCode', 'Unknown')}")
             #     else:
-            #         self.print_colored(Colors.YELLOW, f"   [WARN]  Lambda function test returned non-200 status")
+            #         self.print_colored(Colors.YELLOW, f"   {Symbols.WARN}  Lambda function test returned non-200 status")
             #
             # except Exception as e:
             #     self.print_colored(Colors.YELLOW,
-            #                        f"   [WARN]  Lambda function test failed (this is often normal): {str(e)}")
+            #                        f"   {Symbols.WARN}  Lambda function test failed (this is often normal): {str(e)}")
 
             # # Step 8: Create scheduled trigger for regular monitoring
             # self.print_colored(Colors.CYAN, f"   [ALARM] Creating scheduled monitoring rule...")
@@ -3584,31 +3585,31 @@ class EKSClusterManager:
             #         ]
             #     )
             #
-            #     self.print_colored(Colors.GREEN, f"   [OK] Created scheduled monitoring rule (5-minute interval)")
+            #     self.print_colored(Colors.GREEN, f"   {Symbols.OK} Created scheduled monitoring rule (5-minute interval)")
 
             except lambda_client.exceptions.ResourceConflictException:
-                self.print_colored(Colors.YELLOW, f"   [WARN]  Scheduled monitoring rule already exists")
+                self.print_colored(Colors.YELLOW, f"   {Symbols.WARN}  Scheduled monitoring rule already exists")
             except Exception as e:
-                self.print_colored(Colors.YELLOW, f"   [WARN]  Failed to create scheduled monitoring: {str(e)}")
+                self.print_colored(Colors.YELLOW, f"   {Symbols.WARN}  Failed to create scheduled monitoring: {str(e)}")
 
-            self.print_colored(Colors.GREEN, f"[OK] Optimized node protection monitoring setup completed!")
-            self.print_colored(Colors.CYAN, f"   [LIST] Function: {function_name}")
-            self.print_colored(Colors.CYAN, f"   [KEY] Role: {role_name}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Optimized node protection monitoring setup completed!")
+            self.print_colored(Colors.CYAN, f"   {Symbols.LIST} Function: {function_name}")
+            self.print_colored(Colors.CYAN, f"   {Symbols.KEY} Role: {role_name}")
             self.print_colored(Colors.CYAN, f"   [PACKAGE] Layer: kubectl only (~15MB vs 70MB)")
             self.print_colored(Colors.CYAN, f"   [CONFIG] Method: Boto3 kubeconfig generation")
-            self.print_colored(Colors.CYAN, f"   [TIMER]  Timeout: 180s (optimized)")
-            self.print_colored(Colors.CYAN, f"   [INSTANCE] Memory: 256MB (optimized)")
-            self.print_colored(Colors.CYAN, f"   [TARGET] Monitoring: {len(nodegroup_names)} nodegroups")
+            self.print_colored(Colors.CYAN, f"   {Symbols.TIMER}  Timeout: 180s (optimized)")
+            self.print_colored(Colors.CYAN, f"   {Symbols.INSTANCE} Memory: 256MB (optimized)")
+            self.print_colored(Colors.CYAN, f"   {Symbols.TARGET} Monitoring: {len(nodegroup_names)} nodegroups")
             self.print_colored(Colors.CYAN, f"   [TAG]  Cluster Suffix: {cluster_suffix}")
-            self.print_colored(Colors.CYAN, f"   [DATE] Generated: {current_datetime} UTC by {self.current_user}")
-            self.print_colored(Colors.CYAN, f"   [LOG] Encoding: UTF-8 (prevents charmap errors)")
+            self.print_colored(Colors.CYAN, f"   {Symbols.DATE} Generated: {current_datetime} UTC by {self.current_user}")
+            self.print_colored(Colors.CYAN, f"   {Symbols.LOG} Encoding: UTF-8 (prevents charmap errors)")
             self.print_colored(Colors.CYAN, f"   [PACKAGE] Package: Proper ZIP format (prevents unzip errors)")
 
             return True
 
         except Exception as e:
             self.log_operation('ERROR', f"Failed to setup optimized node protection monitoring: {str(e)}")
-            self.print_colored(Colors.RED, f"[ERROR] Optimized node protection monitoring setup failed: {str(e)}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Optimized node protection monitoring setup failed: {str(e)}")
             return False
 
     def create_kubectl_only_layer(self, lambda_client):
@@ -3659,12 +3660,12 @@ class EKSClusterManager:
                     )
 
                 layer_arn = layer_response['LayerVersionArn']
-                self.print_colored(Colors.GREEN, f"   [OK] kubectl-only layer created: {layer_arn}")
+                self.print_colored(Colors.GREEN, f"   {Symbols.OK} kubectl-only layer created: {layer_arn}")
 
                 return layer_arn
 
         except Exception as e:
-            self.print_colored(Colors.RED, f"   [ERROR] Failed to create kubectl-only layer: {str(e)}")
+            self.print_colored(Colors.RED, f"   {Symbols.ERROR} Failed to create kubectl-only layer: {str(e)}")
             return None
 
     def create_kubectl_pyyaml_layer(self, lambda_client):
@@ -3711,10 +3712,10 @@ class EKSClusterManager:
                         '--only-binary=:all:'
                     ], check=True, capture_output=True)
 
-                    self.print_colored(Colors.GREEN, f"   [OK] PyYAML installed successfully")
+                    self.print_colored(Colors.GREEN, f"   {Symbols.OK} PyYAML installed successfully")
 
                 except subprocess.CalledProcessError as e:
-                    self.print_colored(Colors.RED, f"   [ERROR] Failed to install PyYAML: {e.stderr.decode()}")
+                    self.print_colored(Colors.RED, f"   {Symbols.ERROR} Failed to install PyYAML: {e.stderr.decode()}")
                     return None
 
                 # Create zip file
@@ -3729,7 +3730,7 @@ class EKSClusterManager:
                 # Check layer size
                 layer_size = os.path.getsize(zip_path)
                 layer_size_mb = layer_size / (1024 * 1024)
-                self.print_colored(Colors.CYAN, f"   [STATS] Layer size: {layer_size_mb:.2f} MB")
+                self.print_colored(Colors.CYAN, f"   {Symbols.STATS} Layer size: {layer_size_mb:.2f} MB")
 
                 # Upload layer
                 with open(zip_path, 'rb') as zip_file:
@@ -3742,12 +3743,12 @@ class EKSClusterManager:
                     )
 
                 layer_arn = layer_response['LayerVersionArn']
-                self.print_colored(Colors.GREEN, f"   [OK] kubectl + PyYAML layer created: {layer_arn}")
+                self.print_colored(Colors.GREEN, f"   {Symbols.OK} kubectl + PyYAML layer created: {layer_arn}")
 
                 return layer_arn
 
         except Exception as e:
-            self.print_colored(Colors.RED, f"   [ERROR] Failed to create kubectl + PyYAML layer: {str(e)}")
+            self.print_colored(Colors.RED, f"   {Symbols.ERROR} Failed to create kubectl + PyYAML layer: {str(e)}")
             return None
 
     def create_node_termination_eventbridge_rule(self, region: str, account_id: str, lambda_arn: str,
@@ -3773,7 +3774,7 @@ class EKSClusterManager:
             current_account = sts_client.get_caller_identity()['Account']
 
             if current_account != account_id:
-                self.print_colored(Colors.RED, f"[ERROR] Account mismatch: Current={current_account}, Expected={account_id}")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Account mismatch: Current={current_account}, Expected={account_id}")
                 return False
 
             # Create event pattern
@@ -3797,10 +3798,10 @@ class EKSClusterManager:
                     State='ENABLED',
                     Description=f'Monitor EC2 terminations for EKS nodegroups: {", ".join(nodegroup_names)}'
                 )
-                self.print_colored(Colors.GREEN, f"   [OK] EventBridge rule {rule_name} created")
+                self.print_colored(Colors.GREEN, f"   {Symbols.OK} EventBridge rule {rule_name} created")
             except Exception as e:
                 if "already exists" in str(e):
-                    self.print_colored(Colors.CYAN, f"   [LOG] EventBridge rule {rule_name} already exists")
+                    self.print_colored(Colors.CYAN, f"   {Symbols.LOG} EventBridge rule {rule_name} already exists")
                 else:
                     raise e
 
@@ -3818,9 +3819,9 @@ class EKSClusterManager:
                     Principal='events.amazonaws.com',
                     SourceArn=rule_arn
                 )
-                self.print_colored(Colors.GREEN, f"   [OK] Lambda permission added for EventBridge")
+                self.print_colored(Colors.GREEN, f"   {Symbols.OK} Lambda permission added for EventBridge")
             except lambda_client.exceptions.ResourceConflictException:
-                self.print_colored(Colors.CYAN, f"   [LOG] Lambda permission already exists")
+                self.print_colored(Colors.CYAN, f"   {Symbols.LOG} Lambda permission already exists")
             except Exception as e:
                 if "Cross-account access" in str(e):
                     # Method 2: Remove and re-add permission
@@ -3837,9 +3838,9 @@ class EKSClusterManager:
                             Principal='events.amazonaws.com',
                             SourceArn=rule_arn
                         )
-                        self.print_colored(Colors.GREEN, f"   [OK] Lambda permission recreated successfully")
+                        self.print_colored(Colors.GREEN, f"   {Symbols.OK} Lambda permission recreated successfully")
                     except Exception as e2:
-                        self.print_colored(Colors.YELLOW, f"   [WARN] Permission issue: {str(e2)}")
+                        self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} Permission issue: {str(e2)}")
                         # Continue anyway - the rule might still work
                 else:
                     raise e
@@ -3871,12 +3872,12 @@ class EKSClusterManager:
                 ]
             )
 
-            self.print_colored(Colors.GREEN, f"   [OK] Lambda target added to EventBridge rule")
+            self.print_colored(Colors.GREEN, f"   {Symbols.OK} Lambda target added to EventBridge rule")
             return True
 
         except Exception as e:
             self.log_operation('ERROR', f"Failed to create EventBridge rule: {str(e)}")
-            self.print_colored(Colors.RED, f"[ERROR] Failed to create EventBridge rule: {str(e)}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to create EventBridge rule: {str(e)}")
             return False
 
     def apply_no_delete_to_matching_nodegroups(self, cluster_name, region, access_key, secret_key):
@@ -3895,13 +3896,13 @@ class EKSClusterManager:
         current_datetime = current_timestamp
 
         print("=" * 80)
-        print("[START] STARTING NO_DELETE LABEL APPLICATION")
+        print(f"{Symbols.START} STARTING NO_DELETE LABEL APPLICATION")
         print("=" * 80)
-        print(f"[DATE] Current Date and Time (UTC - YYYY-MM-DD HH:MM:SS formatted): {current_datetime}")
+        print(f"{Symbols.DATE} Current Date and Time (UTC - YYYY-MM-DD HH:MM:SS formatted): {current_datetime}")
         print(f"👤 Current User's Login: {current_user}")
         print(f"[TAG]  Cluster Name: {cluster_name}")
-        print(f"[REGION] Region: {region}")
-        print(f"[TARGET] Target Pattern: nodegroup-*-ondemand (where * is 0-9) if not found then Target Pattern: nodegroup-*-")
+        print(f"{Symbols.REGION} Region: {region}")
+        print(f"{Symbols.TARGET} Target Pattern: nodegroup-*-ondemand (where * is 0-9) if not found then Target Pattern: nodegroup-*-")
         print("=" * 80)
 
         try:
@@ -3924,10 +3925,10 @@ class EKSClusterManager:
                 '--region', region,
                 '--name', cluster_name
             ], check=True, capture_output=True, env=env)
-            print("[OK] Kubeconfig updated successfully")
+            print(f"{Symbols.OK} Kubeconfig updated successfully")
 
             # Step 2: Get all nodegroups and filter matching ones
-            print("[LIST] Fetching all nodegroups from EKS...")
+            print(f"{Symbols.LIST} Fetching all nodegroups from EKS...")
             response = eks_client.list_nodegroups(clusterName=cluster_name)
             all_nodegroups = response.get('nodegroups', [])
 
@@ -3948,11 +3949,11 @@ class EKSClusterManager:
                 # If multiple found with the fallback pattern, just take the first one
                 if len(matching_nodegroups) > 1:
                     print(
-                        f"[WARN] Multiple nodegroups found with pattern 'nodegroup-*'. Selecting the first one: {matching_nodegroups[0]}")
+                        f"{Symbols.WARN} Multiple nodegroups found with pattern 'nodegroup-*'. Selecting the first one: {matching_nodegroups[0]}")
                     matching_nodegroups = [matching_nodegroups[0]]
 
-            print(f"[STATS] Total nodegroups found: {len(all_nodegroups)}")
-            print(f"[TARGET] Matching nodegroups found: {len(matching_nodegroups)}")
+            print(f"{Symbols.STATS} Total nodegroups found: {len(all_nodegroups)}")
+            print(f"{Symbols.TARGET} Matching nodegroups found: {len(matching_nodegroups)}")
 
             if matching_nodegroups:
                 for ng in matching_nodegroups:
@@ -3972,10 +3973,10 @@ class EKSClusterManager:
                 '--region', region,
                 '--name', cluster_name
             ], check=True, capture_output=True, env=env)
-            print("[OK] Kubeconfig updated successfully")
+            print(f"{Symbols.OK} Kubeconfig updated successfully")
 
             # Step 3: Get all nodes and process matching ones
-            print("[SCAN] Getting all nodes and processing...")
+            print(f"{Symbols.SCAN} Getting all nodes and processing...")
             # Now run kubectl
             result = subprocess.run([
                 'kubectl', 'get', 'nodes', '-o', 'json'
@@ -3993,7 +3994,7 @@ class EKSClusterManager:
                 'nodes_to_verify': []  # Track nodes we labeled for verification
             }
 
-            print(f"[LIST] Found {len(nodes_data['items'])} total nodes in cluster")
+            print(f"{Symbols.LIST} Found {len(nodes_data['items'])} total nodes in cluster")
 
             # Process each node
             count = 0
@@ -4007,26 +4008,26 @@ class EKSClusterManager:
                 nodegroup_label = node_labels.get('eks.amazonaws.com/nodegroup')
 
                 if nodegroup_label and nodegroup_label in matching_nodegroups:
-                    print(f"\n[TARGET] Processing node: {node_name} (nodegroup: {nodegroup_label})")
+                    print(f"\n{Symbols.TARGET} Processing node: {node_name} (nodegroup: {nodegroup_label})")
                     results['total_processed'] += 1
 
                     # Check if NO_DELETE label already exists
                     current_no_delete = node_labels.get('NO_DELETE')
 
                     if current_no_delete == 'true':
-                        print(f"[OK] Node {node_name} already has NO_DELETE=true")
+                        print(f"{Symbols.OK} Node {node_name} already has NO_DELETE=true")
                         results['already_labeled'] += 1
                     else:
                         # Apply NO_DELETE and related labels
-                        raw_datetime = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+                        raw_datetime = datetime.now(datetime.UTC).strftime('%Y-%m-%d %H:%M:%S')
                         label_safe_timestamp = raw_datetime.replace(' ', 'T').replace(':', '-')
 
                         protection_labels = {
                             'NO_DELETE': 'true',
                             'protection-level': 'high',
                             'protected-by': current_user,
-                            'protection-date': datetime.utcnow().strftime('%Y-%m-%d'),
-                            'protection-time': datetime.utcnow().strftime('%H-%M-%S'),
+                            'protection-date': datetime.now(datetime.UTC).strftime('%Y-%m-%d'),
+                            'protection-time': datetime.now(datetime.UTC).strftime('%H-%M-%S'),
                             'protection-timestamp': label_safe_timestamp,
                             'managed-by': 'automation',
                             'nodegroup-protected': nodegroup_label
@@ -4040,8 +4041,8 @@ class EKSClusterManager:
                                     f'{label_key}={label_value}', '--overwrite'
                                 ], check=True, capture_output=True, env=env)
 
-                            print(f"[OK] Successfully applied NO_DELETE protection to node: {node_name}")
-                            print(f"   [LIST] Labels applied: {list(protection_labels.keys())}")
+                            print(f"{Symbols.OK} Successfully applied NO_DELETE protection to node: {node_name}")
+                            print(f"   {Symbols.LIST} Labels applied: {list(protection_labels.keys())}")
                             results['newly_labeled'] += 1
                             results['nodes_to_verify'].append({
                                 'node_name': node_name,
@@ -4050,7 +4051,7 @@ class EKSClusterManager:
                             })
                             count = count +1
                         except subprocess.CalledProcessError as e:
-                            print(f"[ERROR] Failed to apply labels to node {node_name}: {e}")
+                            print(f"{Symbols.ERROR} Failed to apply labels to node {node_name}: {e}")
                             # print e.stderr.decode()
                             if e.stderr:
                                 error_msg = e.stderr.decode().strip() if isinstance(e.stderr, bytes) else e.stderr.strip()
@@ -4058,14 +4059,14 @@ class EKSClusterManager:
 
                             results['errors'] += 1
                         except Exception as e:
-                            print(f"[ERROR] Unexpected error applying labels to {node_name}: {e}")
+                            print(f"{Symbols.ERROR} Unexpected error applying labels to {node_name}: {e}")
                             results['errors'] += 1
                 else:
                     results['skipped'] += 1
 
             # Step 4: COMPREHENSIVE VERIFICATION OF APPLIED LABELS
             print("\n" + "=" * 80)
-            print("[SCAN] VERIFICATION: Checking Applied Labels")
+            print(f"{Symbols.SCAN} VERIFICATION: Checking Applied Labels")
             print("=" * 80)
 
             verification_results = {
@@ -4075,14 +4076,14 @@ class EKSClusterManager:
             }
 
             if results['nodes_to_verify']:
-                print(f"[SCAN] Verifying {len(results['nodes_to_verify'])} newly labeled nodes...")
+                print(f"{Symbols.SCAN} Verifying {len(results['nodes_to_verify'])} newly labeled nodes...")
 
                 for node_info in results['nodes_to_verify']:
                     node_name = node_info['node_name']
                     nodegroup = node_info['nodegroup']
                     expected_labels = node_info['labels_applied']
 
-                    print(f"\n[LIST] Verifying node: {node_name} (nodegroup: {nodegroup})")
+                    print(f"\n{Symbols.LIST} Verifying node: {node_name} (nodegroup: {nodegroup})")
 
                     try:
                         # Get current node labels
@@ -4101,30 +4102,30 @@ class EKSClusterManager:
                             actual_value = current_labels.get(label_key)
 
                             if actual_value == expected_value:
-                                print(f"   [OK] {label_key}={actual_value}")
+                                print(f"   {Symbols.OK} {label_key}={actual_value}")
                             else:
-                                print(f"   [ERROR] {label_key}: expected='{expected_value}', actual='{actual_value}'")
+                                print(f"   {Symbols.ERROR} {label_key}: expected='{expected_value}', actual='{actual_value}'")
                                 all_labels_present = False
                                 missing_labels.append(label_key)
 
                         if all_labels_present:
-                            print(f"   [TARGET] All labels verified successfully on {node_name}")
+                            print(f"   {Symbols.TARGET} All labels verified successfully on {node_name}")
                             verification_results['verified_successfully'] += 1
                         else:
-                            print(f"   [WARN] Some labels missing on {node_name}: {missing_labels}")
+                            print(f"   {Symbols.WARN} Some labels missing on {node_name}: {missing_labels}")
                             verification_results['verification_failed'] += 1
                             verification_results['missing_labels'] += len(missing_labels)
 
                     except Exception as e:
-                        print(f"   [ERROR] Error verifying node {node_name}: {e}")
+                        print(f"   {Symbols.ERROR} Error verifying node {node_name}: {e}")
                         verification_results['verification_failed'] += 1
 
             # Step 5: Verify all nodes in matching nodegroups
-            print(f"\n[SCAN] VERIFICATION: All Nodes in Matching Nodegroups")
+            print(f"\n{Symbols.SCAN} VERIFICATION: All Nodes in Matching Nodegroups")
             print("-" * 60)
 
             for nodegroup in matching_nodegroups:
-                print(f"\n[LIST] Nodegroup: {nodegroup}")
+                print(f"\n{Symbols.LIST} Nodegroup: {nodegroup}")
 
                 try:
                     # Get nodes with their labels for this nodegroup
@@ -4146,9 +4147,9 @@ class EKSClusterManager:
                                 node_name = parts[0]
                                 no_delete_value = parts[1] if len(parts) > 1 else '<none>'
                                 if no_delete_value == 'true':
-                                    print(f"   [OK] {line}")
+                                    print(f"   {Symbols.OK} {line}")
                                 else:
-                                    print(f"   [WARN] {line}")
+                                    print(f"   {Symbols.WARN} {line}")
                             else:
                                 print(f"   {line}")
 
@@ -4160,32 +4161,32 @@ class EKSClusterManager:
                     ], capture_output=True, text=True, check=True, env=env)
 
                     protected_count = len([line for line in count_result.stdout.strip().split('\n') if line.strip()])
-                    print(f"   [STATS] Nodes with NO_DELETE=true: {protected_count}")
+                    print(f"   {Symbols.STATS} Nodes with NO_DELETE=true: {protected_count}")
 
                 except Exception as e:
-                    print(f"   [ERROR] Error verifying nodegroup {nodegroup}: {e}")
+                    print(f"   {Symbols.ERROR} Error verifying nodegroup {nodegroup}: {e}")
 
             # Step 6: Final Summary
             print("\n" + "=" * 80)
             print("[STATS] FINAL OPERATION SUMMARY")
             print("=" * 80)
             print(f"👤 Applied by: {current_user}")
-            print(f"[DATE] Completed at: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC")
-            print(f"[TARGET] Nodegroups targeted: {len(matching_nodegroups)}")
+            print(f"{Symbols.DATE} Completed at: {datetime.now(datetime.UTC).strftime('%Y-%m-%d %H:%M:%S')} UTC")
+            print(f"{Symbols.TARGET} Nodegroups targeted: {len(matching_nodegroups)}")
             print(f"   • {', '.join(matching_nodegroups)}")
-            print(f"[LIST] Nodes processed: {results['total_processed']}")
+            print(f"{Symbols.LIST} Nodes processed: {results['total_processed']}")
             print(f"[TAG]  Nodes newly labeled: {results['newly_labeled']}")
-            print(f"[OK] Nodes already labeled: {results['already_labeled']}")
-            print(f"[SKIP] Nodes skipped: {results['skipped']}")
-            print(f"[ERROR] Errors encountered: {results['errors']}")
+            print(f"{Symbols.OK} Nodes already labeled: {results['already_labeled']}")
+            print(f"{Symbols.SKIP} Nodes skipped: {results['skipped']}")
+            print(f"{Symbols.ERROR} Errors encountered: {results['errors']}")
             print("\n[SCAN] VERIFICATION SUMMARY:")
-            print(f"[OK] Nodes verified successfully: {verification_results['verified_successfully']}")
-            print(f"[ERROR] Nodes with verification issues: {verification_results['verification_failed']}")
-            print(f"[WARN] Missing labels found: {verification_results['missing_labels']}")
+            print(f"{Symbols.OK} Nodes verified successfully: {verification_results['verified_successfully']}")
+            print(f"{Symbols.ERROR} Nodes with verification issues: {verification_results['verification_failed']}")
+            print(f"{Symbols.WARN} Missing labels found: {verification_results['missing_labels']}")
             print("=" * 80)
 
             # Step 7: Quick command to verify all protected nodes
-            print(f"\n[SCAN] QUICK VERIFICATION COMMAND:")
+            print(f"\n{Symbols.SCAN} QUICK VERIFICATION COMMAND:")
             print(f"To quickly check all protected nodes, run:")
             print(
                 f"kubectl get nodes -l NO_DELETE=true -o custom-columns=NAME:.metadata.name,NODEGROUP:.metadata.labels.eks\\.amazonaws\\.com/nodegroup,NO_DELETE:.metadata.labels.NO_DELETE,PROTECTED_BY:.metadata.labels.protected-by")
@@ -4212,7 +4213,7 @@ class EKSClusterManager:
 
         except subprocess.CalledProcessError as e:
             error_msg = f"Command failed: {e}"
-            print(f"[ERROR] {error_msg}")
+            print(f"{Symbols.ERROR} {error_msg}")
             return {
                 'success': False,
                 'message': error_msg,
@@ -4222,7 +4223,7 @@ class EKSClusterManager:
 
         except Exception as e:
             error_msg = f"Unexpected error: {str(e)}"
-            print(f"[ERROR] CRITICAL ERROR: {error_msg}")
+            print(f"{Symbols.ERROR} CRITICAL ERROR: {error_msg}")
             return {
                 'success': False,
                 'message': error_msg,
@@ -4238,7 +4239,7 @@ class EKSClusterManager:
         try:
             self.log_operation('INFO', f"Prot"
                                        f"ecting nodes with NO_DELETE label in cluster {cluster_name}")
-            self.print_colored(Colors.YELLOW, f"[SECURE] Protecting nodes with NO_DELETE label...")
+            self.print_colored(Colors.YELLOW, f"{Symbols.SECURE} Protecting nodes with NO_DELETE label...")
 
             # Check if kubectl is available
             import subprocess
@@ -4359,7 +4360,7 @@ class EKSClusterManager:
                 report += f"- {alarm_name}: ${threshold} ({service})\n"
     
             report += f"""
-        Cost Control Status: {'[OK] ACTIVE' if details.get('success_rate', 0) >= 70 else '[WARN]  PARTIAL'}
+        Cost Control Status: {f'{Symbols.OK} ACTIVE' if details.get('success_rate', 0) >= 70 else f'{Symbols.WARN}  PARTIAL'}
         Monitoring: Daily cost tracking with multi-tier alerts
         Created By: {self.current_user} on {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}
         """
@@ -4384,7 +4385,7 @@ class EKSClusterManager:
         Checked By: {self.current_user}
 
         Status Overview:
-        - Overall Health: {'HEALTHY [OK]' if health_check.get('overall_healthy', True) else 'NEEDS ATTENTION [WARN]'}
+        - Overall Health: {f'HEALTHY {Symbols.OK}' if health_check.get('overall_healthy', True) else f'NEEDS ATTENTION {Symbols.WARN}'}
         - Components Checked: Cluster, NodeGroups, Add-ons, Nodes, Pods
         - Health Score: {health_score}/100
 
@@ -4417,7 +4418,7 @@ class EKSClusterManager:
     - Success Rate: {details.get('composite_success_rate', 0):.1f}%
     - Alarm Names: {', '.join(details.get('composite_alarm_names', []))}
 
-    Overall Status: {'[OK] SUCCESS' if details.get('overall_success') else '[WARN]  PARTIAL/FAILED'}
+    Overall Status: {f'{Symbols.OK} SUCCESS' if details.get('overall_success') else f'{Symbols.WARN}  PARTIAL/FAILED'}
     """
     
         return report
@@ -4521,13 +4522,13 @@ class EKSClusterManager:
         if capacity_type.lower() in ['spot', 'SPOT']:
             estimated_cost = base_cost * 0.3  # Spot instances are typically 70% cheaper
             savings = base_cost * 0.7
-            print(f"\n[COST] Estimated Cost (per hour):")
+            print(f"\n{Symbols.COST} Estimated Cost (per hour):")
             print(f"   On-Demand: ${base_cost:.4f}")
             print(f"   Spot: ${estimated_cost:.4f}")
             print(f"   Savings: ${savings:.4f} ({70}%)")
             print(f"   Monthly (730 hrs): ${estimated_cost * 730 * node_count:.2f}")
         else:
-            print(f"\n[COST] Estimated Cost (per hour):")
+            print(f"\n{Symbols.COST} Estimated Cost (per hour):")
             print(f"   On-Demand: ${base_cost:.4f}")
             print(f"   Monthly (730 hrs): ${base_cost * 730 * node_count:.2f}")
 
@@ -4537,7 +4538,7 @@ class EKSClusterManager:
             self.print_colored(Colors.YELLOW, "No clusters configured!")
             return False
     
-        print(f"\n[START] EKS Cluster Creation Summary")
+        print(f"\n{Symbols.START} EKS Cluster Creation Summary")
         print(f"Selected {len(cluster_configs)} clusters to create:")
     
         print("\n" + "="*100)
@@ -4548,17 +4549,17 @@ class EKSClusterManager:
             instance_type = cluster.get('instance_type', 'c6a.large')
         
             print(f"{i}. Cluster: {cluster['cluster_name']}")
-            print(f"   [BANK] Account: {cluster['account_key']} ({cluster['account_id']})")
+            print(f"   {Symbols.ACCOUNT} Account: {cluster['account_key']} ({cluster['account_id']})")
             print(f"   👤 User: {user.get('username', 'unknown')} ({full_name})")
-            print(f"   [REGION] Region: {user.get('region', 'unknown')}")
+            print(f"   {Symbols.REGION} Region: {user.get('region', 'unknown')}")
             print(f"   [COMPUTE] Instance Type: {instance_type}")
-            print(f"   [STATS] Default Nodes: 1")
-            print(f"   🔢 Max Nodes: {cluster['max_nodes']}")
+            print(f"   {Symbols.STATS} Default Nodes: 1")
+            print(f"   [#] Max Nodes: {cluster['max_nodes']}")
             print("-" * 100)
     
-        print(f"[STATS] Total clusters: {len(cluster_configs)}")
+        print(f"{Symbols.STATS} Total clusters: {len(cluster_configs)}")
         print(f"[COMPUTE] Instance types: {', '.join(set(cluster.get('instance_type', 'c6a.large') for cluster in cluster_configs))}")
-        print(f"[STATS] All clusters starting with: 1 node")
+        print(f"{Symbols.STATS} All clusters starting with: 1 node")
         print("=" * 100)
     
         confirm = input("\nDo you want to proceed with cluster creation? (y/N): ").lower().strip()
@@ -4645,15 +4646,15 @@ class EKSClusterManager:
                     self.log_operation('INFO',
                                        f"Created cost alarm: {alarm_config['name']} (${alarm_config['threshold']}, {alarm_config['severity']})")
                     self.print_colored(Colors.GREEN,
-                                       f"   [OK] Cost alarm: {alarm_config['name']} (${alarm_config['threshold']})")
+                                       f"   {Symbols.OK} Cost alarm: {alarm_config['name']} (${alarm_config['threshold']})")
 
                 except Exception as e:
                     self.log_operation('ERROR', f"Failed to create cost alarm {alarm_config['name']}: {str(e)}")
-                    self.print_colored(Colors.YELLOW, f"   [WARN] Failed cost alarm: {alarm_config['name']}")
+                    self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} Failed cost alarm: {alarm_config['name']}")
 
             # Print important note about cost alarm delays
             if cost_alarms_created > 0:
-                self.print_colored(Colors.CYAN, "   ℹ️  Note: Cost alarms may show 'Insufficient Data' for 24-48 hours")
+                self.print_colored(Colors.CYAN, "   [INFO]  Note: Cost alarms may show 'Insufficient Data' for 24-48 hours")
                 self.print_colored(Colors.CYAN, "      This is normal as AWS billing metrics update daily")
 
             success_rate = (cost_alarms_created / total_cost_alarms) * 100 if total_cost_alarms > 0 else 0
@@ -4664,7 +4665,7 @@ class EKSClusterManager:
 
         except Exception as e:
             self.log_operation('ERROR', f"Failed to setup cost alarms: {str(e)}")
-            self.print_colored(Colors.RED, f"[ERROR] Cost alarms setup failed: {str(e)}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Cost alarms setup failed: {str(e)}")
             return False
 
     def setup_cost_alarms_v1(self, cluster_name: str, region: str, cloudwatch_client, account_id: str) -> bool:
@@ -4774,17 +4775,17 @@ class EKSClusterManager:
                 
                     cost_alarms_created += 1
                     self.log_operation('INFO', f"Created cost alarm: {alarm_config['name']} (${alarm_config['threshold']}, {alarm_config['severity']})")
-                    self.print_colored(Colors.GREEN, f"   [OK] Cost alarm created: {alarm_config['name']} (${alarm_config['threshold']})")
+                    self.print_colored(Colors.GREEN, f"   {Symbols.OK} Cost alarm created: {alarm_config['name']} (${alarm_config['threshold']})")
                 
                 except Exception as e:
                     self.log_operation('ERROR', f"Failed to create cost alarm {alarm_config['name']}: {str(e)}")
-                    self.print_colored(Colors.YELLOW, f"   [WARN]  Failed to create cost alarm: {alarm_config['name']}")
+                    self.print_colored(Colors.YELLOW, f"   {Symbols.WARN}  Failed to create cost alarm: {alarm_config['name']}")
         
             # Calculate success rate
             success_rate = (cost_alarms_created / total_cost_alarms) * 100 if total_cost_alarms > 0 else 0
         
             self.log_operation('INFO', f"Cost alarms setup: {cost_alarms_created}/{total_cost_alarms} created ({success_rate:.1f}%)")
-            self.print_colored(Colors.GREEN, f"   [STATS] Cost alarms: {cost_alarms_created}/{total_cost_alarms} created ({success_rate:.1f}%)")
+            self.print_colored(Colors.GREEN, f"   {Symbols.STATS} Cost alarms: {cost_alarms_created}/{total_cost_alarms} created ({success_rate:.1f}%)")
         
             # Store cost alarm details for reporting
             if not hasattr(self, 'cost_alarm_details'):
@@ -4802,7 +4803,7 @@ class EKSClusterManager:
         
         except Exception as e:
             self.log_operation('ERROR', f"Failed to setup cost alarms: {str(e)}")
-            self.print_colored(Colors.RED, f"   [ERROR] Cost alarms setup failed: {str(e)}")
+            self.print_colored(Colors.RED, f"   {Symbols.ERROR} Cost alarms setup failed: {str(e)}")
             return False
 
     def _get_unsupported_azs(self, region: str) -> Set[str]:
@@ -4998,7 +4999,7 @@ class EKSClusterManager:
                         )
                 
                         successful_addons.append(addon['addonName'])
-                        self.print_colored(Colors.GREEN, f"   [OK] {addon['addonName']} installed successfully")
+                        self.print_colored(Colors.GREEN, f"   {Symbols.OK} {addon['addonName']} installed successfully")
                         self.log_operation('INFO', f"Add-on {addon['addonName']} installed successfully for {cluster_name}")
                     except Exception as waiter_error:
                         # Check addon status
@@ -5010,31 +5011,31 @@ class EKSClusterManager:
                     
                             status = addon_info['addon']['status']
                             if status in ['DEGRADED', 'UPDATE_FAILED'] and 'csi-driver' in addon['addonName']:
-                                self.print_colored(Colors.YELLOW, f"   [WARN] {addon['addonName']} installed but status is {status} (may work normally)")
+                                self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} {addon['addonName']} installed but status is {status} (may work normally)")
                                 self.log_operation('WARNING', f"Add-on {addon['addonName']} installed with status {status}")
                                 successful_addons.append(addon['addonName'])
                             else:
                                 failed_addons.append(addon['addonName'])
-                                self.print_colored(Colors.YELLOW, f"   [WARN] {addon['addonName']} installation completed but status is {status}")
+                                self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} {addon['addonName']} installation completed but status is {status}")
                                 self.log_operation('WARNING', f"Add-on {addon['addonName']} status: {status}")
                         except Exception as describe_error:
                             failed_addons.append(addon['addonName'])
                             self.log_operation('WARNING', f"Failed to verify {addon['addonName']} status: {str(describe_error)}")
-                            self.print_colored(Colors.YELLOW, f"   [WARN] Failed to verify {addon['addonName']} status: {str(describe_error)}")
+                            self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} Failed to verify {addon['addonName']} status: {str(describe_error)}")
                 
                 except Exception as e:
                     failed_addons.append(addon['addonName'])
                     self.log_operation('WARNING', f"Failed to install {addon['addonName']}: {str(e)}")
-                    self.print_colored(Colors.YELLOW, f"   [WARN] Failed to install {addon['addonName']}: {str(e)}")
+                    self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} Failed to install {addon['addonName']}: {str(e)}")
 
-            self.print_colored(Colors.GREEN, f"[OK] Add-ons installation completed: {len(successful_addons)} successful, {len(failed_addons)} failed")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Add-ons installation completed: {len(successful_addons)} successful, {len(failed_addons)} failed")
             self.log_operation('INFO', f"Add-ons installation completed for {cluster_name}: {successful_addons}")
 
             return len(successful_addons) > 0
 
         except Exception as e:
             self.log_operation('ERROR', f"Failed to install add-ons for {cluster_name}: {str(e)}")
-            self.print_colored(Colors.RED, f"[ERROR] Add-ons installation failed: {str(e)}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Add-ons installation failed: {str(e)}")
 
             return False
 
@@ -5062,7 +5063,7 @@ class EKSClusterManager:
                     )
                     policy_name = policy_arn.split('/')[-1]
                     self.log_operation('INFO', f"Attached AWS managed policy {policy_name} to {node_role_name}")
-                    self.print_colored(Colors.GREEN, f"   [OK] Attached {policy_name} to NodeInstanceRole")
+                    self.print_colored(Colors.GREEN, f"   {Symbols.OK} Attached {policy_name} to NodeInstanceRole")
                     managed_policies_attached += 1
                 
                 except Exception as e:
@@ -5070,18 +5071,18 @@ class EKSClusterManager:
                     if "attached" in str(e).lower() or "already" in str(e).lower():
                         policy_name = policy_arn.split('/')[-1]
                         self.log_operation('INFO', f"AWS managed policy {policy_name} already attached to {node_role_name}")
-                        self.print_colored(Colors.CYAN, f"   ℹ️  {policy_name} already attached to NodeInstanceRole")
+                        self.print_colored(Colors.CYAN, f"   {Symbols.INFO}  {policy_name} already attached to NodeInstanceRole")
                         managed_policies_attached += 1
                     else:
                         policy_name = policy_arn.split('/')[-1]
                         self.log_operation('WARNING', f"Failed to attach {policy_name}: {str(e)}")
-                        self.print_colored(Colors.YELLOW, f"   [WARN] Failed to attach {policy_name}: {str(e)}")
+                        self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} Failed to attach {policy_name}: {str(e)}")
         
             # Summary
             total_policies = len(aws_managed_policies) + (1 if custom_policy_attached else 0)
             attached_policies = managed_policies_attached + (1 if custom_policy_attached else 0)
         
-            self.print_colored(Colors.GREEN, f"   [STATS] Policy attachment summary: {attached_policies}/{total_policies} policies attached")
+            self.print_colored(Colors.GREEN, f"   {Symbols.STATS} Policy attachment summary: {attached_policies}/{total_policies} policies attached")
             self.log_operation('INFO', f"CSI policies attachment completed: {attached_policies}/{total_policies} successful")
         
             return attached_policies > 0
@@ -5105,7 +5106,7 @@ class EKSClusterManager:
             try:
                 iam_client.get_policy(PolicyArn=custom_policy_arn)
                 self.log_operation('INFO', f"Custom CSI policy {custom_policy_name} already exists")
-                self.print_colored(Colors.CYAN, f"   ℹ️  Custom CSI policy {custom_policy_name} already exists")
+                self.print_colored(Colors.CYAN, f"   {Symbols.INFO}  Custom CSI policy {custom_policy_name} already exists")
             
             except iam_client.exceptions.NoSuchEntityException:
                 # Step 3: Create the custom policy if it doesn't exist
@@ -5120,14 +5121,14 @@ class EKSClusterManager:
                     )
                     custom_policy_arn = policy_response['Policy']['Arn']
                     self.log_operation('INFO', f"Created custom CSI policy: {custom_policy_arn}")
-                    self.print_colored(Colors.GREEN, f"   [OK] Created custom CSI policy: {custom_policy_name}")
+                    self.print_colored(Colors.GREEN, f"   {Symbols.OK} Created custom CSI policy: {custom_policy_name}")
                 
                     # Wait for policy to be available
                     time.sleep(5)
                 
                 except Exception as e:
                     self.log_operation('ERROR', f"Failed to create custom CSI policy: {str(e)}")
-                    self.print_colored(Colors.RED, f"   [ERROR] Failed to create custom CSI policy: {str(e)}")
+                    self.print_colored(Colors.RED, f"   {Symbols.ERROR} Failed to create custom CSI policy: {str(e)}")
                     return False
         
             # Step 4: Attach the custom policy to NodeInstanceRole
@@ -5137,23 +5138,23 @@ class EKSClusterManager:
                     PolicyArn=custom_policy_arn
                 )
                 self.log_operation('INFO', f"Attached custom CSI policy {custom_policy_name} to {node_role_name}")
-                self.print_colored(Colors.GREEN, f"   [OK] Attached custom CSI policy {custom_policy_name} to NodeInstanceRole")
+                self.print_colored(Colors.GREEN, f"   {Symbols.OK} Attached custom CSI policy {custom_policy_name} to NodeInstanceRole")
                 return True
             
             except Exception as e:
                 # Check if policy is already attached
                 if "attached" in str(e).lower() or "already" in str(e).lower():
                     self.log_operation('INFO', f"Custom CSI policy {custom_policy_name} already attached to {node_role_name}")
-                    self.print_colored(Colors.CYAN, f"   ℹ️  Custom CSI policy {custom_policy_name} already attached to NodeInstanceRole")
+                    self.print_colored(Colors.CYAN, f"   {Symbols.INFO}  Custom CSI policy {custom_policy_name} already attached to NodeInstanceRole")
                     return True
                 else:
                     self.log_operation('ERROR', f"Failed to attach custom CSI policy to {node_role_name}: {str(e)}")
-                    self.print_colored(Colors.RED, f"   [ERROR] Failed to attach custom CSI policy: {str(e)}")
+                    self.print_colored(Colors.RED, f"   {Symbols.ERROR} Failed to attach custom CSI policy: {str(e)}")
                     return False
                 
         except Exception as e:
             self.log_operation('ERROR', f"Failed to create and attach custom CSI policy: {str(e)}")
-            self.print_colored(Colors.RED, f"   [ERROR] Custom CSI policy setup failed: {str(e)}")
+            self.print_colored(Colors.RED, f"   {Symbols.ERROR} Custom CSI policy setup failed: {str(e)}")
             return False
 
     def load_custom_csi_policy(self) -> str:
@@ -5164,7 +5165,7 @@ class EKSClusterManager:
             # Check if file exists
             if not os.path.exists(policy_file):
                 self.log_operation('ERROR', f"Custom CSI policy file not found: {policy_file}")
-                self.print_colored(Colors.RED, f"   [ERROR] Custom CSI policy file not found: {policy_file}")
+                self.print_colored(Colors.RED, f"   {Symbols.ERROR} Custom CSI policy file not found: {policy_file}")
                 return None
         
             # Load and validate JSON
@@ -5176,17 +5177,17 @@ class EKSClusterManager:
                 json.loads(policy_content)  # Validate JSON syntax
             except json.JSONDecodeError as e:
                 self.log_operation('ERROR', f"Invalid JSON in {policy_file}: {str(e)}")
-                self.print_colored(Colors.RED, f"   [ERROR] Invalid JSON in {policy_file}: {str(e)}")
+                self.print_colored(Colors.RED, f"   {Symbols.ERROR} Invalid JSON in {policy_file}: {str(e)}")
                 return None
         
             self.log_operation('INFO', f"Successfully loaded custom CSI policy from {policy_file}")
-            self.print_colored(Colors.GREEN, f"   [OK] Loaded custom CSI policy from {policy_file}")
+            self.print_colored(Colors.GREEN, f"   {Symbols.OK} Loaded custom CSI policy from {policy_file}")
         
             return policy_content
         
         except Exception as e:
             self.log_operation('ERROR', f"Failed to load custom CSI policy from {policy_file}: {str(e)}")
-            self.print_colored(Colors.RED, f"   [ERROR] Failed to load custom CSI policy: {str(e)}")
+            self.print_colored(Colors.RED, f"   {Symbols.ERROR} Failed to load custom CSI policy: {str(e)}")
             return None
 
     def verify_user_access(self, cluster_name: str, region: str, username: str, access_key: str,
@@ -5201,8 +5202,8 @@ class EKSClusterManager:
             CYAN = '\033[96m'
             RESET = '\033[0m'
 
-            print(f"{BLUE}[INFO] Verifying user access...{RESET}")
-            print(f"{BLUE}[INFO] Verifying user access for {username} to cluster {cluster_name}{RESET}")
+            print(f"{BLUE}{Symbols.INFO} Verifying user access...{RESET}")
+            print(f"{BLUE}{Symbols.INFO} Verifying user access for {username} to cluster {cluster_name}{RESET}")
             print(f"{YELLOW}[SECURITY] Verifying user access to cluster {cluster_name}...{RESET}")
 
             # Create user session
@@ -5217,8 +5218,8 @@ class EKSClusterManager:
             # Step 1: Check if user can describe the cluster
             try:
                 cluster_info = eks_client.describe_cluster(name=cluster_name)
-                print(f"{GREEN}   [OK] User {username} can access cluster information{RESET}")
-                print(f"{BLUE}[INFO] User {username} can access cluster {cluster_name}{RESET}")
+                print(f"{GREEN}   {Symbols.OK} User {username} can access cluster information{RESET}")
+                print(f"{BLUE}{Symbols.INFO} User {username} can access cluster {cluster_name}{RESET}")
 
                 # Check cluster endpoint access configuration
                 endpoint_access = cluster_info['cluster'].get('resourcesVpcConfig', {})
@@ -5226,17 +5227,17 @@ class EKSClusterManager:
                 endpoint_private_access = endpoint_access.get('endpointPrivateAccess', False)
                 public_access_cidrs = endpoint_access.get('publicAccessCidrs', ['0.0.0.0/0'])
 
-                print(f"{CYAN}   [STATS] Cluster Endpoint Configuration:{RESET}")
+                print(f"{CYAN}   {Symbols.STATS} Cluster Endpoint Configuration:{RESET}")
                 print(f"{CYAN}      - Public Access: {'Enabled' if endpoint_public_access else 'Disabled'}{RESET}")
                 print(f"{CYAN}      - Private Access: {'Enabled' if endpoint_private_access else 'Disabled'}{RESET}")
                 print(f"{CYAN}      - Public Access CIDRs: {', '.join(public_access_cidrs)}{RESET}")
 
                 # Log endpoint configuration
                 print(
-                    f"{BLUE}[INFO] Cluster endpoint config - Public: {endpoint_public_access}, Private: {endpoint_private_access}{RESET}")
+                    f"{BLUE}{Symbols.INFO} Cluster endpoint config - Public: {endpoint_public_access}, Private: {endpoint_private_access}{RESET}")
 
             except Exception as e:
-                print(f"{RED}   [ERROR] User {username} cannot access cluster information: {str(e)}{RESET}")
+                print(f"{RED}   {Symbols.ERROR} User {username} cannot access cluster information: {str(e)}{RESET}")
                 return False
 
             # Step 2: Update kubeconfig and test kubectl access
@@ -5264,7 +5265,7 @@ class EKSClusterManager:
                 update_result = subprocess.run(update_cmd, env=my_env, capture_output=True, text=True, timeout=120)
 
                 if update_result.returncode != 0:
-                    print(f"{RED}   [ERROR] Failed to update kubeconfig: {update_result.stderr}{RESET}")
+                    print(f"{RED}   {Symbols.ERROR} Failed to update kubeconfig: {update_result.stderr}{RESET}")
                     return False
 
                 # Test kubectl access - get nodes
@@ -5274,10 +5275,10 @@ class EKSClusterManager:
 
                 if nodes_result.returncode == 0:
                     node_count = len([line for line in nodes_result.stdout.strip().split('\n') if line.strip()]) - 1
-                    print(f"{GREEN}   [OK] kubectl access successful - {node_count} nodes found{RESET}")
-                    print(f"{BLUE}[INFO] User {username} has kubectl access to cluster {cluster_name}{RESET}")
+                    print(f"{GREEN}   {Symbols.OK} kubectl access successful - {node_count} nodes found{RESET}")
+                    print(f"{BLUE}{Symbols.INFO} User {username} has kubectl access to cluster {cluster_name}{RESET}")
                 else:
-                    print(f"{RED}   [ERROR] kubectl access failed: {nodes_result.stderr}{RESET}")
+                    print(f"{RED}   {Symbols.ERROR} kubectl access failed: {nodes_result.stderr}{RESET}")
                     return False
 
                 # Test kubectl access - get pods
@@ -5287,24 +5288,24 @@ class EKSClusterManager:
 
                 if pods_result.returncode == 0:
                     pod_count = len([line for line in pods_result.stdout.strip().split('\n') if line.strip()]) - 1
-                    print(f"{GREEN}   [OK] kubectl pod access successful - {pod_count} pods found{RESET}")
-                    print(f"{BLUE}[INFO] User {username} can access pods in cluster {cluster_name}{RESET}")
+                    print(f"{GREEN}   {Symbols.OK} kubectl pod access successful - {pod_count} pods found{RESET}")
+                    print(f"{BLUE}{Symbols.INFO} User {username} can access pods in cluster {cluster_name}{RESET}")
 
                     # Display kubectl access command for user
-                    print(f"{CYAN}[LIST] Kubectl access command:{RESET}")
+                    print(f"{CYAN}{Symbols.LIST} Kubectl access command:{RESET}")
                     print(f"{CYAN}   aws eks update-kubeconfig --region {region} --name {cluster_name}{RESET}")
 
                     return True
                 else:
-                    print(f"{RED}   [ERROR] kubectl pod access failed: {pods_result.stderr}{RESET}")
+                    print(f"{RED}   {Symbols.ERROR} kubectl pod access failed: {pods_result.stderr}{RESET}")
                     return False
             else:
-                print(f"{YELLOW}   [WARN] kubectl not available. Skipping kubectl access verification.{RESET}")
+                print(f"{YELLOW}   {Symbols.WARN} kubectl not available. Skipping kubectl access verification.{RESET}")
                 # Return True since we could at least access the cluster API
                 return True
 
         except Exception as e:
-            print(f"{RED}   [ERROR] User access verification failed: {str(e)}{RESET}")
+            print(f"{RED}   {Symbols.ERROR} User access verification failed: {str(e)}{RESET}")
             return False
 
     def setup_cloudwatch_alarms(self, cluster_name: str, region: str, cloudwatch_client, nodegroup_name: str,
@@ -5335,7 +5336,7 @@ class EKSClusterManager:
                 total_alarms += ci_alarms_created[1]
             else:
                 self.print_colored(Colors.YELLOW,
-                                   "   [WARN] Container Insights metrics not available, skipping related alarms")
+                                   f"   {Symbols.WARN} Container Insights metrics not available, skipping related alarms")
 
             # Step 4: Create composite alarms
             composite_success = self.create_composite_alarms(cloudwatch_client, cluster_name, alarms_created)
@@ -5347,13 +5348,13 @@ class EKSClusterManager:
             self.log_operation('INFO',
                                f"CloudWatch alarms setup: {alarms_created}/{total_alarms} created ({basic_alarm_success_rate:.1f}%)")
             self.print_colored(Colors.GREEN,
-                               f"   [STATS] CloudWatch alarms: {alarms_created}/{total_alarms} created ({basic_alarm_success_rate:.1f}%)")
+                               f"   {Symbols.STATS} CloudWatch alarms: {alarms_created}/{total_alarms} created ({basic_alarm_success_rate:.1f}%)")
 
             return overall_success
 
         except Exception as e:
             self.log_operation('ERROR', f"Failed to setup CloudWatch alarms: {str(e)}")
-            self.print_colored(Colors.RED, f"[ERROR] CloudWatch alarms setup failed: {str(e)}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} CloudWatch alarms setup failed: {str(e)}")
             return False
 
     def setup_cloudwatch_alarms_v1(self, cluster_name: str, region: str, cloudwatch_client, nodegroup_name: str, account_id: str) -> bool:
@@ -5590,16 +5591,16 @@ class EKSClusterManager:
 
                     created += 1
                     self.log_operation('INFO', f"Created Container Insights alarm: {alarm_config['name']}")
-                    self.print_colored(Colors.GREEN, f"   [OK] Created CI alarm: {alarm_config['name']}")
+                    self.print_colored(Colors.GREEN, f"   {Symbols.OK} Created CI alarm: {alarm_config['name']}")
                 else:
                     self.log_operation('WARNING',
                                        f"Metric {alarm_config['metric_name']} not found, skipping alarm {alarm_config['name']}")
-                    self.print_colored(Colors.YELLOW, f"   [WARN] Metric not found, skipped: {alarm_config['name']}")
+                    self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} Metric not found, skipped: {alarm_config['name']}")
 
             except Exception as e:
                 self.log_operation('ERROR',
                                    f"Failed to create Container Insights alarm {alarm_config['name']}: {str(e)}")
-                self.print_colored(Colors.YELLOW, f"   [WARN] Failed to create CI alarm: {alarm_config['name']}")
+                self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} Failed to create CI alarm: {alarm_config['name']}")
 
         return (created, total)
 
@@ -5713,11 +5714,11 @@ class EKSClusterManager:
 
                 created += 1
                 self.log_operation('INFO', f"Created EC2 alarm: {alarm_config['name']}")
-                self.print_colored(Colors.GREEN, f"   [OK] Created alarm: {alarm_config['name']}")
+                self.print_colored(Colors.GREEN, f"   {Symbols.OK} Created alarm: {alarm_config['name']}")
 
             except Exception as e:
                 self.log_operation('ERROR', f"Failed to create EC2 alarm {alarm_config['name']}: {str(e)}")
-                self.print_colored(Colors.YELLOW, f"   [WARN] Failed to create alarm: {alarm_config['name']}")
+                self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} Failed to create alarm: {alarm_config['name']}")
 
         return (created, total)
 
@@ -5866,13 +5867,13 @@ class EKSClusterManager:
 
                     composite_alarms_created += 1
                     self.log_operation('INFO', f"Created composite alarm: {composite_config['name']}")
-                    self.print_colored(Colors.GREEN, f"   [OK] Composite alarm: {composite_config['name']}")
+                    self.print_colored(Colors.GREEN, f"   {Symbols.OK} Composite alarm: {composite_config['name']}")
 
                 except Exception as e:
                     # This is expected if referenced alarms don't exist
                     self.log_operation('WARNING',
                                        f"Failed to create composite alarm {composite_config['name']}: {str(e)}")
-                    self.print_colored(Colors.YELLOW, f"   [WARN] Composite alarm skipped: {composite_config['name']}")
+                    self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} Composite alarm skipped: {composite_config['name']}")
 
             success_rate = (
                                        composite_alarms_created / total_composite_alarms) * 100 if total_composite_alarms > 0 else 100
@@ -6004,17 +6005,17 @@ class EKSClusterManager:
                     selected_type = allowed_types[choice_num - 1]
                     break
                 else:
-                    print(f"[ERROR] Please enter a number between 1 and {len(allowed_types)}")
+                    print(f"{Symbols.ERROR} Please enter a number between 1 and {len(allowed_types)}")
             except ValueError:
                 print("[ERROR] Please enter a valid number")
     
-        print(f"[OK] Selected instance type: {selected_type}")
+        print(f"{Symbols.OK} Selected instance type: {selected_type}")
         return selected_type
 
     def select_capacity_type(self, user_name: str = None) -> str:
         """Allow user to select capacity type: on-demand, spot, or mixed"""
         user_prefix = f"for {user_name} " if user_name else ""
-        print(f"\n🔄 Capacity Type Selection {user_prefix}")
+        print(f"\n{Symbols.SCAN} Capacity Type Selection {user_prefix}")
         print("=" * 60)
         print("Available capacity types:")
         print("  1. On-Demand (reliable, consistent performance, higher cost)")
@@ -6042,11 +6043,11 @@ class EKSClusterManager:
                     selected_type = "mixed"
                     break
                 else:
-                    print("[ERROR] Please enter a valid choice (1-3)")
+                    print(f"{Symbols.ERROR} Please enter a valid choice (1-3)")
             except ValueError:
-                print("[ERROR] Please enter a valid choice")
+                print(f"{Symbols.ERROR} Please enter a valid choice")
     
-        print(f"[OK] Selected capacity type: {selected_type.upper()}")
+        print(f"{Symbols.OK} Selected capacity type: {selected_type.upper()}")
 
         return selected_type
 
@@ -6133,17 +6134,17 @@ class EKSClusterManager:
             safe_message = message
             # Replace common Unicode symbols with ASCII alternatives
             replacements = {
-                '[OK]': '[OK]',
-                '[ERROR]': '[X]',
-                '[WARN]': '[WARNING]',
-                '[SCAN]': '[INFO]',
-                '[STATS]': '[STATS]',
-                '[START]': '[LAUNCH]',
-                '[COST]': '[COST]',
+                f'{Symbols.OK}': f'{Symbols.OK}',
+                f'{Symbols.ERROR}': f'{Symbols.CROSS}',
+                f'{Symbols.WARN}': '[WARNING]',
+                f'{Symbols.SCAN}': f'{Symbols.INFO}',
+                f'{Symbols.STATS}': f'{Symbols.STATS}',
+                f'{Symbols.START}': '[LAUNCH]',
+                f'{Symbols.COST}': f'{Symbols.COST}',
                 '[TOOLS]': '[TOOLS]',
-                '📈': '[GRAPH]',
-                '🏥': '[HEALTH]',
-                '🔄': '[SYNC]',
+                '[UP]': '[GRAPH]',
+                '🏥': f'{Symbols.HEALTH}',
+                f'{Symbols.SCAN}': '[SYNC]',
                 '[LOCKED]': '[SECURITY]',
                 '[FILE]': '[DOC]',
                 '[COMPUTE]': '[SYSTEM]'
@@ -6229,7 +6230,7 @@ class EKSClusterManager:
                         return True
                     else:
                         self.log_operation('ERROR', f"Failed to apply manifest: {result.stderr}")
-                        print(f"[ERROR] Failed to apply manifest: error parsing")
+                        print(f"{Symbols.ERROR} Failed to apply manifest: error parsing")
                         print(f"\n[DEBUG] manifest file failed: {manifest_file}")
                         print("[DEBUG] Manifest contents:\n" + "-"*60)
                         with open(manifest_file, 'r') as debug_f:
@@ -6293,7 +6294,7 @@ class EKSClusterManager:
         
                 if not kubectl_available:
                     self.log_operation('WARNING', f"kubectl not found. Cannot deploy CloudWatch agent for {cluster_name}")
-                    self.print_colored(Colors.YELLOW, f"[WARN]  kubectl not found. CloudWatch agent deployment skipped.")
+                    self.print_colored(Colors.YELLOW, f"{Symbols.WARN}  kubectl not found. CloudWatch agent deployment skipped.")
                     return False
         
                 # Set environment variables for admin access
@@ -6384,7 +6385,7 @@ class EKSClusterManager:
     
                 if not kubectl_available:
                     self.log_operation('WARNING', f"kubectl not found. Cannot deploy CloudWatch agent for {cluster_name}")
-                    self.print_colored(Colors.YELLOW, f"[WARN]  kubectl not found. CloudWatch agent deployment skipped.")
+                    self.print_colored(Colors.YELLOW, f"{Symbols.WARN}  kubectl not found. CloudWatch agent deployment skipped.")
                     return False
     
                 # Set environment variables for admin access
@@ -6400,12 +6401,12 @@ class EKSClusterManager:
                     '--name', cluster_name
                 ]
     
-                self.print_colored(Colors.CYAN, "   🔄 Updating kubeconfig...")
+                self.print_colored(Colors.CYAN, f"   {Symbols.SCAN} Updating kubeconfig...")
                 update_result = subprocess.run(update_cmd, env=env, capture_output=True, text=True, timeout=120)
     
                 if update_result.returncode != 0:
                     self.log_operation('ERROR', f"Failed to update kubeconfig: {update_result.stderr}")
-                    self.print_colored(Colors.RED, f"[ERROR] Failed to update kubeconfig: {update_result.stderr}")
+                    self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to update kubeconfig: {update_result.stderr}")
                     return False
     
                 # Create CloudWatch agent configuration
@@ -6425,7 +6426,7 @@ class EKSClusterManager:
                         cluster_name, region, access_key, secret_key, namespace_manifest
                     )
                     if not namespace_success:
-                        self.print_colored(Colors.YELLOW, "   [WARN] Could not create namespace, but continuing...")
+                        self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} Could not create namespace, but continuing...")
         
                     # 2. Apply service account
                     self.print_colored(Colors.CYAN, "   [PACKAGE] Creating CloudWatch service account...")
@@ -6439,11 +6440,11 @@ class EKSClusterManager:
                         cluster_name, region, access_key, secret_key, configmap_manifest
                     )
                     if not configmap_success:
-                        self.print_colored(Colors.RED, "   [ERROR] Failed to create ConfigMap, cannot proceed")
+                        self.print_colored(Colors.RED, f"   {Symbols.ERROR} Failed to create ConfigMap, cannot proceed")
                         return False
         
                     # 4. Completely remove existing DaemonSet to avoid selector conflicts
-                    self.print_colored(Colors.CYAN, "   [DELETE] Completely removing existing CloudWatch agent DaemonSet...")
+                    self.print_colored(Colors.CYAN, f"   {Symbols.DELETE} Completely removing existing CloudWatch agent DaemonSet...")
             
                     # First check if the DaemonSet exists
                     check_cmd = ['kubectl', 'get', 'daemonset', 'cloudwatch-agent', 
@@ -6456,7 +6457,7 @@ class EKSClusterManager:
                                      '-n', 'amazon-cloudwatch', '--force', '--grace-period=0']
                 
                         delete_result = subprocess.run(delete_cmd, env=env, capture_output=True, text=True, timeout=60)
-                        self.print_colored(Colors.CYAN, f"   [DELETE] Forcefully deleted existing DaemonSet")
+                        self.print_colored(Colors.CYAN, f"   {Symbols.DELETE} Forcefully deleted existing DaemonSet")
                 
                         # Wait for deletion to complete
                         import time
@@ -6468,10 +6469,10 @@ class EKSClusterManager:
                         verify_result = subprocess.run(verify_cmd, env=env, capture_output=True, text=True, timeout=30)
                 
                         if verify_result.returncode == 0 and verify_result.stdout.strip():
-                            self.print_colored(Colors.YELLOW, "   [WARN] DaemonSet still exists, waiting longer...")
+                            self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} DaemonSet still exists, waiting longer...")
                             time.sleep(10)  # Wait more if it still exists
                     else:
-                        self.print_colored(Colors.CYAN, "   [OK] No existing DaemonSet found, proceeding with creation")
+                        self.print_colored(Colors.CYAN, f"   {Symbols.OK} No existing DaemonSet found, proceeding with creation")
         
                     # 5. Apply DaemonSet manifest with retry
                     max_retries = 2
@@ -6485,7 +6486,7 @@ class EKSClusterManager:
                             self.print_colored(Colors.GREEN, "   [OK] CloudWatch agent DaemonSet deployed successfully")
                             break
                         elif attempt < max_retries - 1:
-                            self.print_colored(Colors.YELLOW, f"   [WARN] Deployment failed, retrying in 5 seconds...")
+                            self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} Deployment failed, retrying in 5 seconds...")
                             time.sleep(5)
                         else:
                             self.print_colored(Colors.RED, "   [ERROR] Failed to deploy CloudWatch agent DaemonSet after retries")
@@ -6498,9 +6499,9 @@ class EKSClusterManager:
                     )
         
                     if ready_success:
-                        self.print_colored(Colors.GREEN, "   [OK] CloudWatch agent DaemonSet is ready")
+                        self.print_colored(Colors.GREEN, f"   {Symbols.OK} CloudWatch agent DaemonSet is ready")
                     else:
-                        self.print_colored(Colors.YELLOW, "   [WARN] CloudWatch agent DaemonSet readiness check timed out")
+                        self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} CloudWatch agent DaemonSet readiness check timed out")
         
                     # Apply Fluent Bit for log collection
                     self.print_colored(Colors.CYAN, "   [PACKAGE] Setting up Fluent Bit for log collection...")
@@ -6518,21 +6519,21 @@ class EKSClusterManager:
                     )
         
                     if fluentbit_result:
-                        self.print_colored(Colors.GREEN, "   [OK] Fluent Bit configuration applied")
+                        self.print_colored(Colors.GREEN, f"   {Symbols.OK} Fluent Bit configuration applied")
                     else:
-                        self.print_colored(Colors.YELLOW, "   [WARN] Could not apply Fluent Bit configuration")
+                        self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} Could not apply Fluent Bit configuration")
         
-                    self.print_colored(Colors.GREEN, "[OK] CloudWatch monitoring deployment completed")
+                    self.print_colored(Colors.GREEN, f"{Symbols.OK} CloudWatch monitoring deployment completed")
                     return True
         
                 except Exception as e:
                     self.log_operation('ERROR', f"Failed to apply CloudWatch manifests: {str(e)}")
-                    self.print_colored(Colors.RED, f"[ERROR] Failed to apply CloudWatch manifests: {str(e)}")
+                    self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to apply CloudWatch manifests: {str(e)}")
                     return False
         
             except Exception as e:
                 self.log_operation('ERROR', f"Failed to deploy CloudWatch agent: {str(e)}")
-                self.print_colored(Colors.RED, f"[ERROR] Failed to deploy CloudWatch agent: {str(e)}")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to deploy CloudWatch agent: {str(e)}")
                 return False
     def get_cloudwatch_daemonset_manifest_fixed_chatgpt(self, cluster_name: str, region: str, account_id: str) -> str:
         """Load and prepare the cloudwatch-daemonset.yaml manifest with proper annotations"""
@@ -6603,7 +6604,7 @@ class EKSClusterManager:
                         'current_max': scaling_config.get('maxSize', 0)
                     }
                     self.print_colored(Colors.CYAN,
-                                       f"   ℹ️  Current {ng_name} scaling: min={scaling_config.get('minSize', 0)}, desired={scaling_config.get('desiredSize', 0)}, max={scaling_config.get('maxSize', 0)}")
+                                       f"   {Symbols.INFO}  Current {ng_name} scaling: min={scaling_config.get('minSize', 0)}, desired={scaling_config.get('desiredSize', 0)}, max={scaling_config.get('maxSize', 0)}")
                 except Exception as e:
                     self.log_operation('WARNING', f"Could not get current scaling config for {ng_name}: {str(e)}")
                     nodegroup_configs[ng_name] = {'current_min': 0, 'current_desired': 0, 'current_max': 0}
@@ -6656,7 +6657,7 @@ class EKSClusterManager:
                     scale_down_max = int(input("     Max nodes for scale-down: "))
 
                 except ValueError:
-                    self.print_colored(Colors.RED, "   [ERROR] Invalid input. Using default values.")
+                    self.print_colored(Colors.RED, f"   {Symbols.ERROR} Invalid input. Using default values.")
                     # Use default values
                     scale_up_min, scale_up_desired, scale_up_max = 1, 1, 8
                     scale_down_min, scale_down_desired, scale_down_max = 0, 0, 8
@@ -6835,7 +6836,7 @@ class EKSClusterManager:
                 self.log_operation('INFO', f"Updated existing Lambda function: {function_arn}")
 
             # Create EventBridge rules for scaling
-            self.print_colored(Colors.CYAN, f"   [DATE] Creating scheduled scaling rules (IST timezone):")
+            self.print_colored(Colors.CYAN, f"   {Symbols.DATE} Creating scheduled scaling rules (IST timezone):")
             self.print_colored(Colors.CYAN, f"      - Scale up: {scale_up_time} → {scale_up_desired} node(s)")
             self.print_colored(Colors.CYAN, f"      - Scale down: {scale_down_time} → {scale_down_desired} node(s)")
 
@@ -6925,11 +6926,11 @@ class EKSClusterManager:
                 ]
             )
 
-            self.print_colored(Colors.GREEN, "   [OK] Scheduled scaling configured")
+            self.print_colored(Colors.GREEN, f"   {Symbols.OK} Scheduled scaling configured")
             self.print_colored(Colors.CYAN,
-                               f"   [DATE] Scale up: {scale_up_time} → {scale_up_desired} node(s) per nodegroup")
+                               f"   {Symbols.DATE} Scale up: {scale_up_time} → {scale_up_desired} node(s) per nodegroup")
             self.print_colored(Colors.CYAN,
-                               f"   [DATE] Scale down: {scale_down_time} → {scale_down_desired} node(s) per nodegroup")
+                               f"   {Symbols.DATE} Scale down: {scale_down_time} → {scale_down_desired} node(s) per nodegroup")
             self.print_colored(Colors.CYAN, f"   🌏 Timezone: Indian Standard Time (UTC+5:30)")
 
             return True
@@ -6937,7 +6938,7 @@ class EKSClusterManager:
         except Exception as e:
             error_msg = str(e)
             self.log_operation('ERROR', f"Failed to setup multi-nodegroup scheduled scaling: {error_msg}")
-            self.print_colored(Colors.RED, f"[ERROR] Scheduled scaling setup failed: {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Scheduled scaling setup failed: {error_msg}")
             return False
 
     def setup_scheduled_scaling_multi_nodegroup(self, cluster_name: str, region: str, admin_access_key: str, admin_secret_key: str, nodegroup_names: List[str]) -> bool:
@@ -6976,7 +6977,7 @@ class EKSClusterManager:
                         'current_desired': scaling_config.get('desiredSize', 0),
                         'current_max': scaling_config.get('maxSize', 0)
                     }
-                    self.print_colored(Colors.CYAN, f"   ℹ️  Current {ng_name} scaling: min={scaling_config.get('minSize', 0)}, desired={scaling_config.get('desiredSize', 0)}, max={scaling_config.get('maxSize', 0)}")
+                    self.print_colored(Colors.CYAN, f"   {Symbols.INFO}  Current {ng_name} scaling: min={scaling_config.get('minSize', 0)}, desired={scaling_config.get('desiredSize', 0)}, max={scaling_config.get('maxSize', 0)}")
                 except Exception as e:
                     self.log_operation('WARNING', f"Could not get current scaling config for {ng_name}: {str(e)}")
                     nodegroup_configs[ng_name] = {'current_min': 0, 'current_desired': 0, 'current_max': 0}
@@ -7064,24 +7065,24 @@ class EKSClusterManager:
         
                     # Validate input
                     if scale_up_min < 0 or scale_up_desired < 0 or scale_up_max < 0 or scale_down_min < 0 or scale_down_desired < 0 or scale_down_max < 0:
-                        self.print_colored(Colors.YELLOW, "   [WARN]  Negative values not allowed, using defaults.")
+                        self.print_colored(Colors.YELLOW, f"   {Symbols.WARN}  Negative values not allowed, using defaults.")
                         scale_up_min, scale_up_desired, scale_up_max = 1, 1, 8
                         scale_down_min, scale_down_desired, scale_down_max = 0, 0, 8
         
                     if scale_up_min > scale_up_desired or scale_up_desired > scale_up_max:
-                        self.print_colored(Colors.YELLOW, "   [WARN]  Invalid scale-up values (should be min ≤ desired ≤ max), adjusting...")
+                        self.print_colored(Colors.YELLOW, f"   {Symbols.WARN}  Invalid scale-up values (should be min ≤ desired ≤ max), adjusting...")
                         scale_up_max = max(scale_up_max, scale_up_desired, scale_up_min)
                         scale_up_min = min(scale_up_min, scale_up_desired)
                         scale_up_desired = max(scale_up_min, min(scale_up_desired, scale_up_max))
         
                     if scale_down_min > scale_down_desired or scale_down_desired > scale_down_max:
-                        self.print_colored(Colors.YELLOW, "   [WARN]  Invalid scale-down values (should be min ≤ desired ≤ max), adjusting...")
+                        self.print_colored(Colors.YELLOW, f"   {Symbols.WARN}  Invalid scale-down values (should be min ≤ desired ≤ max), adjusting...")
                         scale_down_max = max(scale_down_max, scale_down_desired, scale_down_min)
                         scale_down_min = min(scale_down_min, scale_down_desired)
                         scale_down_desired = max(scale_down_min, min(scale_down_desired, scale_down_max))
         
                 except ValueError:
-                    self.print_colored(Colors.YELLOW, "   [WARN]  Invalid number format, using defaults.")
+                    self.print_colored(Colors.YELLOW, f"   {Symbols.WARN}  Invalid number format, using defaults.")
                     scale_up_min, scale_up_desired, scale_up_max = 1, 1, 8
                     scale_down_min, scale_down_desired, scale_down_max = 0, 0, 8
             else:
@@ -7096,12 +7097,12 @@ class EKSClusterManager:
                     break
 
             if size_reduction_detected:
-                self.print_colored(Colors.YELLOW, "\n   [WARN]  Warning: Some nodegroups currently have more nodes than the scale-down size.")
+                self.print_colored(Colors.YELLOW, f"\n   {Symbols.WARN}  Warning: Some nodegroups currently have more nodes than the scale-down size.")
                 self.print_colored(Colors.YELLOW, "      This will cause nodes to be terminated during scale-down.")
                 confirm = 'yes'
                 #confirm = input("   Continue with these settings? (y/N): ").strip().lower()
                 if confirm not in ['y', 'yes']:
-                    self.print_colored(Colors.YELLOW, "   [WARN]  Scheduled scaling setup canceled.")
+                    self.print_colored(Colors.YELLOW, f"   {Symbols.WARN}  Scheduled scaling setup canceled.")
                     return False
 
             # Step 3: Create IAM role for Lambda function - with shorter name
@@ -7255,7 +7256,7 @@ class EKSClusterManager:
                 self.log_operation('INFO', f"Updated existing Lambda function: {function_arn}")
 
             # Step 5: Create EventBridge rules for scaling
-            self.print_colored(Colors.CYAN, f"   [DATE] Creating scheduled scaling rules (IST timezone):")
+            self.print_colored(Colors.CYAN, f"   {Symbols.DATE} Creating scheduled scaling rules (IST timezone):")
             self.print_colored(Colors.CYAN, f"      - Scale up: {scale_up_time} → {scale_up_desired} node(s)")
             self.print_colored(Colors.CYAN, f"      - Scale down: {scale_down_time} → {scale_down_desired} node(s)")
 
@@ -7345,9 +7346,9 @@ class EKSClusterManager:
                 ]
             )
 
-            self.print_colored(Colors.GREEN, "   [OK] Scheduled scaling configured")
-            self.print_colored(Colors.CYAN, f"   [DATE] Scale up: {scale_up_time} → {scale_up_desired} node(s) per nodegroup")
-            self.print_colored(Colors.CYAN, f"   [DATE] Scale down: {scale_down_time} → {scale_down_desired} node(s) per nodegroup")
+            self.print_colored(Colors.GREEN, f"   {Symbols.OK} Scheduled scaling configured")
+            self.print_colored(Colors.CYAN, f"   {Symbols.DATE} Scale up: {scale_up_time} → {scale_up_desired} node(s) per nodegroup")
+            self.print_colored(Colors.CYAN, f"   {Symbols.DATE} Scale down: {scale_down_time} → {scale_down_desired} node(s) per nodegroup")
             self.print_colored(Colors.CYAN, f"   🌏 Timezone: Indian Standard Time (UTC+5:30)")
 
             return True
@@ -7355,7 +7356,7 @@ class EKSClusterManager:
         except Exception as e:
             error_msg = str(e)
             self.log_operation('ERROR', f"Failed to setup multi-nodegroup scheduled scaling: {error_msg}")
-            self.print_colored(Colors.RED, f"[ERROR] Scheduled scaling setup failed: {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Scheduled scaling setup failed: {error_msg}")
             return False
 
     # Correct IST to UTC conversion for EventBridge
@@ -7570,16 +7571,16 @@ class EKSClusterManager:
                         WaiterConfig={'Delay': 15, 'MaxAttempts': 20}
                     )
                 
-                    self.print_colored(Colors.GREEN, f"   [OK] Amazon EFS CSI Driver installed successfully")
+                    self.print_colored(Colors.GREEN, f"   {Symbols.OK} Amazon EFS CSI Driver installed successfully")
                     self.log_operation('INFO', f"Amazon EFS CSI Driver installed successfully for {cluster_name}")
                     results['efs_csi_driver'] = True
                 
                 except Exception as e:
-                    self.print_colored(Colors.YELLOW, f"   [WARN] Failed to install Amazon EFS CSI Driver: {str(e)}")
+                    self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} Failed to install Amazon EFS CSI Driver: {str(e)}")
                     self.log_operation('WARNING', f"Failed to install Amazon EFS CSI Driver: {str(e)}")
                 
             except Exception as e:
-                self.print_colored(Colors.RED, f"   [ERROR] EFS CSI Driver installation error: {str(e)}")
+                self.print_colored(Colors.RED, f"   {Symbols.ERROR} EFS CSI Driver installation error: {str(e)}")
                 self.log_operation('ERROR', f"EFS CSI Driver installation error: {str(e)}")
             
             # 2. Install Node monitoring agent (CloudWatch agent with Node metrics)
@@ -7592,7 +7593,7 @@ class EKSClusterManager:
             
                 kubectl_available = shutil.which('kubectl') is not None
                 if not kubectl_available:
-                    self.print_colored(Colors.YELLOW, f"   [WARN] kubectl not found. Node monitoring agent installation skipped.")
+                    self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} kubectl not found. Node monitoring agent installation skipped.")
                     self.log_operation('WARNING', f"kubectl not found. Node monitoring agent installation skipped.")
                 else:
                     # Setup environment
@@ -7672,11 +7673,11 @@ class EKSClusterManager:
                         apply_result = subprocess.run(apply_cmd, env=env, capture_output=True, text=True, timeout=120)
                     
                         if apply_result.returncode == 0:
-                            self.print_colored(Colors.GREEN, f"   [OK] Node monitoring agent configured successfully")
+                            self.print_colored(Colors.GREEN, f"   {Symbols.OK} Node monitoring agent configured successfully")
                             self.log_operation('INFO', f"Node monitoring agent configured for {cluster_name}")
                             results['node_monitoring_agent'] = True
                         else:
-                            self.print_colored(Colors.YELLOW, f"   [WARN] Failed to configure Node monitoring agent: {apply_result.stderr}")
+                            self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} Failed to configure Node monitoring agent: {apply_result.stderr}")
                             self.log_operation('WARNING', f"Failed to configure Node monitoring agent: {apply_result.stderr}")
                         
                     finally:
@@ -7687,7 +7688,7 @@ class EKSClusterManager:
                             pass
                 
             except Exception as e:
-                self.print_colored(Colors.RED, f"   [ERROR] Node monitoring agent installation error: {str(e)}")
+                self.print_colored(Colors.RED, f"   {Symbols.ERROR} Node monitoring agent installation error: {str(e)}")
                 self.log_operation('ERROR', f"Node monitoring agent installation error: {str(e)}")
             
             # 3. Install Amazon EKS Pod Identity Agent
@@ -7727,36 +7728,36 @@ class EKSClusterManager:
                         WaiterConfig={'Delay': 15, 'MaxAttempts': 20}
                     )
                 
-                    self.print_colored(Colors.GREEN, f"   [OK] Amazon EKS Pod Identity Agent installed successfully")
+                    self.print_colored(Colors.GREEN, f"   {Symbols.OK} Amazon EKS Pod Identity Agent installed successfully")
                     self.log_operation('INFO', f"Amazon EKS Pod Identity Agent installed successfully for {cluster_name}")
                     results['eks_pod_identity_agent'] = True
                 
                 except Exception as e:
-                    self.print_colored(Colors.YELLOW, f"   [WARN] Failed to install Amazon EKS Pod Identity Agent: {str(e)}")
+                    self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} Failed to install Amazon EKS Pod Identity Agent: {str(e)}")
                     self.log_operation('WARNING', f"Failed to install Amazon EKS Pod Identity Agent: {str(e)}")
                 
             except Exception as e:
-                self.print_colored(Colors.RED, f"   [ERROR] EKS Pod Identity Agent installation error: {str(e)}")
+                self.print_colored(Colors.RED, f"   {Symbols.ERROR} EKS Pod Identity Agent installation error: {str(e)}")
                 self.log_operation('ERROR', f"EKS Pod Identity Agent installation error: {str(e)}")
             
             # Summary of enhanced addons installation
             successful = sum(1 for value in results.values() if value)
             total = len(results)
         
-            self.print_colored(Colors.GREEN, f"[OK] Enhanced add-ons installation completed: {successful}/{total} successful")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Enhanced add-ons installation completed: {successful}/{total} successful")
             self.log_operation('INFO', f"Enhanced add-ons installation completed for {cluster_name}: {successful}/{total} successful")
         
             return results
         
         except Exception as e:
             self.log_operation('ERROR', f"Failed to install enhanced add-ons for {cluster_name}: {str(e)}")
-            self.print_colored(Colors.RED, f"[ERROR] Enhanced add-ons installation failed: {str(e)}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Enhanced add-ons installation failed: {str(e)}")
             return results
 
     def verify_scheduled_scaling(self, cluster_name: str, region: str, admin_access_key: str, admin_secret_key: str) -> bool:
         """Verify if scheduled scaling has been properly configured"""
         try:
-            self.print_colored(Colors.YELLOW, f"[SCAN] Verifying scheduled scaling for {cluster_name}...")
+            self.print_colored(Colors.YELLOW, f"{Symbols.SCAN} Verifying scheduled scaling for {cluster_name}...")
         
             # Create admin session
             admin_session = boto3.Session(
@@ -7787,7 +7788,7 @@ class EKSClusterManager:
             
                 if lambda_response and 'Configuration' in lambda_response:
                     verification_results['lambda_exists'] = True
-                    self.print_colored(Colors.GREEN, f"   [OK] Lambda function verified: {function_name}")
+                    self.print_colored(Colors.GREEN, f"   {Symbols.OK} Lambda function verified: {function_name}")
                 
                     # Show additional Lambda info
                     last_modified = lambda_response['Configuration'].get('LastModified', 'Unknown')
@@ -7799,7 +7800,7 @@ class EKSClusterManager:
                     self.print_colored(Colors.CYAN, f"      - Runtime: {runtime}")
                     self.print_colored(Colors.CYAN, f"      - Memory: {memory}MB, Timeout: {timeout}s")
             except Exception as e:
-                self.print_colored(Colors.RED, f"   [ERROR] Lambda function verification failed: {str(e)}")
+                self.print_colored(Colors.RED, f"   {Symbols.ERROR} Lambda function verification failed: {str(e)}")
             
             # 2. Verify EventBridge rules exist
             try:
@@ -7807,7 +7808,7 @@ class EKSClusterManager:
                 up_rule_response = events_client.describe_rule(Name=scale_up_rule)
                 if up_rule_response:
                     verification_results['scale_up_rule_exists'] = True
-                    self.print_colored(Colors.GREEN, f"   [OK] Scale-up rule verified: {scale_up_rule}")
+                    self.print_colored(Colors.GREEN, f"   {Symbols.OK} Scale-up rule verified: {scale_up_rule}")
                 
                     # Show schedule and state
                     schedule = up_rule_response.get('ScheduleExpression', 'Unknown')
@@ -7827,14 +7828,14 @@ class EKSClusterManager:
                             self.print_colored(Colors.CYAN, f"      - Action: Scale to {desired} nodes at {ist_time}")
                             self.print_colored(Colors.CYAN, f"      - Min/Max: {min_size}/{max_size}")
             except Exception as e:
-                self.print_colored(Colors.RED, f"   [ERROR] Scale-up rule verification failed: {str(e)}")
+                self.print_colored(Colors.RED, f"   {Symbols.ERROR} Scale-up rule verification failed: {str(e)}")
             
             try:
                 # Check scale down rule
                 down_rule_response = events_client.describe_rule(Name=scale_down_rule)
                 if down_rule_response:
                     verification_results['scale_down_rule_exists'] = True
-                    self.print_colored(Colors.GREEN, f"   [OK] Scale-down rule verified: {scale_down_rule}")
+                    self.print_colored(Colors.GREEN, f"   {Symbols.OK} Scale-down rule verified: {scale_down_rule}")
                 
                     # Show schedule and state
                     schedule = down_rule_response.get('ScheduleExpression', 'Unknown')
@@ -7854,23 +7855,23 @@ class EKSClusterManager:
                             self.print_colored(Colors.CYAN, f"      - Action: Scale to {desired} nodes at {ist_time}")
                             self.print_colored(Colors.CYAN, f"      - Min/Max: {min_size}/{max_size}")
             except Exception as e:
-                self.print_colored(Colors.RED, f"   [ERROR] Scale-down rule verification failed: {str(e)}")
+                self.print_colored(Colors.RED, f"   {Symbols.ERROR} Scale-down rule verification failed: {str(e)}")
         
             # 3. Overall verification status
             all_verified = all(verification_results.values())
         
             if all_verified:
-                self.print_colored(Colors.GREEN, f"[OK] Scheduled scaling verification successful")
+                self.print_colored(Colors.GREEN, f"{Symbols.OK} Scheduled scaling verification successful")
                 self.print_colored(Colors.GREEN, f"   All components verified: Lambda function, scale-up rule, scale-down rule")
             else:
-                self.print_colored(Colors.YELLOW, f"[WARN] Scheduled scaling verification incomplete")
+                self.print_colored(Colors.YELLOW, f"{Symbols.WARN} Scheduled scaling verification incomplete")
                 self.print_colored(Colors.YELLOW, f"   Some components could not be verified")
             
             return all_verified
         
         except Exception as e:
             self.log_operation('ERROR', f"Failed to verify scheduled scaling: {str(e)}")
-            self.print_colored(Colors.RED, f"[ERROR] Scheduled scaling verification failed: {str(e)}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Scheduled scaling verification failed: {str(e)}")
             return False
 
     def download_and_patch_fluentbit_config(self, manifest_url: str, cluster_name: str) -> str:
@@ -7904,7 +7905,7 @@ class EKSClusterManager:
             Returns a dictionary with verification status of each component
             """
             self.log_operation('INFO', f"Verifying enhanced cluster components for {cluster_name}")
-            self.print_colored(Colors.YELLOW, f"[SCAN] Verifying enhanced cluster components for {cluster_name}...")
+            self.print_colored(Colors.YELLOW, f"{Symbols.SCAN} Verifying enhanced cluster components for {cluster_name}...")
 
             # Initialize results dictionary
             verification_results = {
@@ -7936,12 +7937,12 @@ class EKSClusterManager:
     
             try:
                 # 1. Verify Container Insights
-                self.print_colored(Colors.CYAN, "[STATS] Verifying CloudWatch Container Insights...")
+                self.print_colored(Colors.CYAN, f"{Symbols.STATS} Verifying CloudWatch Container Insights...")
                 container_insights_verified = self._verify_container_insights(cluster_name, region, access_key, secret_key)
                 verification_results['container_insights'] = container_insights_verified
         
                 # 2. Verify Cluster Autoscaler
-                self.print_colored(Colors.CYAN, "🔄 Verifying Cluster Autoscaler...")
+                self.print_colored(Colors.CYAN, f"{Symbols.SCAN} Verifying Cluster Autoscaler...")
                 autoscaler_verified = self._verify_cluster_autoscaler(cluster_name, region, access_key, secret_key)
                 verification_results['cluster_autoscaler'] = autoscaler_verified
         
@@ -7958,9 +7959,9 @@ class EKSClusterManager:
                     lambda_response = lambda_client.get_function(FunctionName=function_name)
                     lambda_exists = 'Configuration' in lambda_response
                     if lambda_exists:
-                        self.print_colored(Colors.GREEN, f"   [OK] Lambda function verified: {function_name}")
+                        self.print_colored(Colors.GREEN, f"   {Symbols.OK} Lambda function verified: {function_name}")
                 except Exception:
-                    self.print_colored(Colors.YELLOW, f"   [WARN] Lambda function not found: {function_name}")
+                    self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} Lambda function not found: {function_name}")
         
                 # Check if EventBridge rules exist
                 rules_exist = False
@@ -7968,14 +7969,14 @@ class EKSClusterManager:
                     up_rule = events_client.describe_rule(Name=scale_up_rule)
                     down_rule = events_client.describe_rule(Name=scale_down_rule)
                     rules_exist = True
-                    self.print_colored(Colors.GREEN, f"   [OK] Scheduling rules verified: {scale_up_rule}, {scale_down_rule}")
+                    self.print_colored(Colors.GREEN, f"   {Symbols.OK} Scheduling rules verified: {scale_up_rule}, {scale_down_rule}")
                 except Exception:
-                    self.print_colored(Colors.YELLOW, f"   [WARN] Scheduling rules not found")
+                    self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} Scheduling rules not found")
             
                 verification_results['scheduled_scaling'] = lambda_exists and rules_exist
         
                 # 4. Verify CloudWatch Agent
-                self.print_colored(Colors.CYAN, "[SCAN] Verifying CloudWatch Agent...")
+                self.print_colored(Colors.CYAN, f"{Symbols.SCAN} Verifying CloudWatch Agent...")
         
                 # Check if CloudWatch agent deployment exists using kubectl
                 import subprocess
@@ -8009,20 +8010,20 @@ class EKSClusterManager:
                     
                             if running_pods:
                                 cloudwatch_agent_verified = True
-                                self.print_colored(Colors.GREEN, f"   [OK] CloudWatch agent pods: {len(running_pods)} running")
+                                self.print_colored(Colors.GREEN, f"   {Symbols.OK} CloudWatch agent pods: {len(running_pods)} running")
                             else:
-                                self.print_colored(Colors.YELLOW, f"   [WARN] No running CloudWatch agent pods found")
+                                self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} No running CloudWatch agent pods found")
                         else:
-                            self.print_colored(Colors.YELLOW, f"   [WARN] Could not check CloudWatch agent pods: {agent_result.stderr}")
+                            self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} Could not check CloudWatch agent pods: {agent_result.stderr}")
                     except Exception as e:
-                        self.print_colored(Colors.YELLOW, f"   [WARN] Error checking CloudWatch agent: {str(e)}")
+                        self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} Error checking CloudWatch agent: {str(e)}")
                 else:
-                    self.print_colored(Colors.YELLOW, f"   [WARN] kubectl not available, skipping CloudWatch agent check")
+                    self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} kubectl not available, skipping CloudWatch agent check")
             
                 verification_results['cloudwatch_agent'] = cloudwatch_agent_verified
         
                 # 5. Verify CloudWatch Alarms
-                self.print_colored(Colors.CYAN, "[ALERT] Verifying CloudWatch Alarms...")
+                self.print_colored(Colors.CYAN, f"{Symbols.ALERT} Verifying CloudWatch Alarms...")
         
                 # Check for basic alarms
                 alarm_prefix = f"{cluster_name}-"
@@ -8041,18 +8042,18 @@ class EKSClusterManager:
                     composite_alarms = composite_response.get('CompositeAlarms', [])
             
                     if len(metric_alarms) > 0:
-                        self.print_colored(Colors.GREEN, f"   [OK] CloudWatch metric alarms: {len(metric_alarms)} found")
+                        self.print_colored(Colors.GREEN, f"   {Symbols.OK} CloudWatch metric alarms: {len(metric_alarms)} found")
                         verification_results['cloudwatch_alarms'] = True
                     else:
-                        self.print_colored(Colors.YELLOW, f"   [WARN] No CloudWatch metric alarms found with prefix {alarm_prefix}")
+                        self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} No CloudWatch metric alarms found with prefix {alarm_prefix}")
                 
                     if len(composite_alarms) > 0:
-                        self.print_colored(Colors.GREEN, f"   [OK] CloudWatch composite alarms: {len(composite_alarms)} found")
+                        self.print_colored(Colors.GREEN, f"   {Symbols.OK} CloudWatch composite alarms: {len(composite_alarms)} found")
                     else:
-                        self.print_colored(Colors.YELLOW, f"   [WARN] No CloudWatch composite alarms found with prefix {alarm_prefix}")
+                        self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} No CloudWatch composite alarms found with prefix {alarm_prefix}")
         
                 except Exception as e:
-                    self.print_colored(Colors.YELLOW, f"   [WARN] Error checking CloudWatch alarms: {str(e)}")
+                    self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} Error checking CloudWatch alarms: {str(e)}")
             
                 # 6. Verify Cost Alarms
                 self.print_colored(Colors.CYAN, "[COST] Verifying Cost Monitoring Alarms...")
@@ -8071,16 +8072,16 @@ class EKSClusterManager:
                             cost_alarms_found += len(pattern_alarms)
                     
                             if pattern_alarms:
-                                self.print_colored(Colors.GREEN, f"   [OK] Cost alarms for {pattern}: {len(pattern_alarms)} found")
+                                self.print_colored(Colors.GREEN, f"   {Symbols.OK} Cost alarms for {pattern}: {len(pattern_alarms)} found")
                         except Exception:
                             continue
                     
                     verification_results['cost_alarms'] = cost_alarms_found > 0
             
                     if cost_alarms_found == 0:
-                        self.print_colored(Colors.YELLOW, f"   [WARN] No cost monitoring alarms found")
+                        self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} No cost monitoring alarms found")
                 except Exception as e:
-                    self.print_colored(Colors.YELLOW, f"   [WARN] Error checking cost alarms: {str(e)}")
+                    self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} Error checking cost alarms: {str(e)}")
             
                 # 7. Verify Core Add-ons
                 self.print_colored(Colors.CYAN, "🧩 Verifying Core Add-ons...")
@@ -8104,20 +8105,20 @@ class EKSClusterManager:
                     core_addons_complete = len(found_essential) == len(essential_addons)
                     verification_results['addons']['core_addons'] = core_addons_complete
             
-                    self.print_colored(Colors.GREEN, f"   [OK] Essential add-ons: {len(found_essential)}/{len(essential_addons)} found")
+                    self.print_colored(Colors.GREEN, f"   {Symbols.OK} Essential add-ons: {len(found_essential)}/{len(essential_addons)} found")
             
                     if efs_addon:
-                        self.print_colored(Colors.GREEN, f"   [OK] Amazon EFS CSI Driver: Installed")
+                        self.print_colored(Colors.GREEN, f"   {Symbols.OK} Amazon EFS CSI Driver: Installed")
                     else:
-                        self.print_colored(Colors.YELLOW, f"   [WARN] Amazon EFS CSI Driver: Not installed")
+                        self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} Amazon EFS CSI Driver: Not installed")
                 
                     if pod_identity:
-                        self.print_colored(Colors.GREEN, f"   [OK] Amazon EKS Pod Identity Agent: Installed")
+                        self.print_colored(Colors.GREEN, f"   {Symbols.OK} Amazon EKS Pod Identity Agent: Installed")
                     else:
-                        self.print_colored(Colors.YELLOW, f"   [WARN] Amazon EKS Pod Identity Agent: Not installed")
+                        self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} Amazon EKS Pod Identity Agent: Not installed")
                 
                 except Exception as e:
-                    self.print_colored(Colors.YELLOW, f"   [WARN] Error checking add-ons: {str(e)}")
+                    self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} Error checking add-ons: {str(e)}")
         
                 # Calculate overall verification status
                 # Consider core functionality (we can be lenient with enhanced features)
@@ -8137,7 +8138,7 @@ class EKSClusterManager:
                 total_items = len([key for key in verification_results if key != 'addons' and key != 'overall'])
                 total_addons = len(verification_results['addons'])
         
-                self.print_colored(Colors.GREEN, f"\n[LIST] Verification Summary:")
+                self.print_colored(Colors.GREEN, f"\n{Symbols.LIST} Verification Summary:")
                 self.print_colored(Colors.GREEN if verification_results['overall'] else Colors.YELLOW, 
                                   f"   ✓ Core functionality: {verification_results['overall']}")
                 self.print_colored(Colors.CYAN, f"   ✓ Components verified: {success_count}/{total_items}")
@@ -8147,7 +8148,7 @@ class EKSClusterManager:
         
             except Exception as e:
                 self.log_operation('ERROR', f"Error during component verification: {str(e)}")
-                self.print_colored(Colors.RED, f"[ERROR] Component verification failed: {str(e)}")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Component verification failed: {str(e)}")
                 return verification_results
 
     def setup_and_verify_all_components(self, cluster_name: str, region: str, access_key: str, secret_key: str,
@@ -8196,17 +8197,17 @@ class EKSClusterManager:
 
         # 1. Setup Container Insights
         if enable_container_insights:
-            print("\n[STATS] Step 1: Setting up CloudWatch Container Insights...")
+            print(f"\n{Symbols.STATS} Step 1: Setting up CloudWatch Container Insights...")
             insights_success = self.enable_container_insights(
                 cluster_name, region, access_key, secret_key
             )
             components_status['container_insights'] = insights_success
         else:
-            print("\n[STATS] Step 1: Skipping CloudWatch Container Insights setup as per user preference.")
+            print(f"\n{Symbols.STATS} Step 1: Skipping CloudWatch Container Insights setup as per user preference.")
             components_status['container_insights'] = False
 
         # 2. Setup Cluster Autoscaler
-        print("\n🔄 Step 2: Setting up Cluster Autoscaler for all nodegroups...")
+        print(f"\n{Symbols.SCAN} Step 2: Setting up Cluster Autoscaler for all nodegroups...")
         deployer = CompleteAutoscalerDeployer()
         autoscaler_success = deployer.deploy_complete_autoscaler(
             cluster_name, region, access_key, secret_key, account_id
@@ -8222,7 +8223,7 @@ class EKSClusterManager:
             components_status['scheduled_scaling'] = scheduling_success
 
         if False:  # Always skip for now
-            print("\n[SCAN] Step 4: Deploying CloudWatch agent...")
+            print(f"\n{Symbols.SCAN} Step 4: Deploying CloudWatch agent...")
             from custom_cloudwatch_agent_deployer import CustomCloudWatchAgentDeployer
             agent_deployer = CustomCloudWatchAgentDeployer()
             cloudwatch_agent_success = agent_deployer.deploy_custom_cloudwatch_agent(
@@ -8230,32 +8231,32 @@ class EKSClusterManager:
             )
             components_status['cloudwatch_agent'] = cloudwatch_agent_success
         else:
-            print("\n[SCAN] Step 4: Skipping CloudWatch agent deployment as per user preference.")
+            print(f"\n{Symbols.SCAN} Step 4: Skipping CloudWatch agent deployment as per user preference.")
             components_status['cloudwatch_agent'] = False
 
         if False:
             # 5. Setup CloudWatch alarms
-            print("\n[ALERT] Step 5: Setting up CloudWatch alarms...")
+            print(f"\n{Symbols.ALERT} Step 5: Setting up CloudWatch alarms...")
             cloudwatch_alarms_success = self.setup_cloudwatch_alarms_multi_nodegroup(
                 cluster_name, region, cloudwatch_client, nodegroups_created, account_id
             )
             components_status['cloudwatch_alarms'] = cloudwatch_alarms_success
 
             # 6. Setup cost monitoring alarms
-            print("\n[COST] Step 6: Setting up cost monitoring alarms...")
+            print(f"\n{Symbols.COST} Step 6: Setting up cost monitoring alarms...")
             cost_alarms_success = self.setup_cost_alarms(
                 cluster_name, region, cloudwatch_client, account_id
             )
             components_status['cost_alarms'] = cost_alarms_success
         else:
-            print("\n[ALERT] Step 5: Skipping CloudWatch alarms setup as per user preference.")
+            print(f"\n{Symbols.ALERT} Step 5: Skipping CloudWatch alarms setup as per user preference.")
             components_status['cloudwatch_alarms'] = False
-            print("\n[COST] Step 6: Skipping cost monitoring alarms setup as per user preference.")
+            print(f"\n{Symbols.COST} Step 6: Skipping cost monitoring alarms setup as per user preference.")
             components_status['cost_alarms'] = False
 
         if False:
             # 7. NEW: Verify Node Protection Status
-            print("\n[PROTECTED] Step 7: Verifying node protection status...")
+            print(f"\n{Symbols.PROTECTED} Step 7: Verifying node protection status...")
             try:
                 protection_status = self.verify_node_protection_status(cluster_name, region, access_key, secret_key)
 
@@ -8268,17 +8269,17 @@ class EKSClusterManager:
                     # Display node protection status
                     if components_status['node_protection']['enabled']:
                         self.print_colored(Colors.GREEN,
-                                           f"   [OK] Node protection enabled: {protection_status.get('protected_nodes', 0)} nodes protected")
+                                           f"   {Symbols.OK} Node protection enabled: {protection_status.get('protected_nodes', 0)} nodes protected")
                         for ng in protection_status.get('protected_nodegroups', []):
                             self.print_colored(Colors.CYAN, f"      - Protected nodegroup: {ng}")
                     else:
-                        self.print_colored(Colors.YELLOW, f"   [WARN] No node protection found")
+                        self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} No node protection found")
                 else:
-                    self.print_colored(Colors.YELLOW, f"   [WARN] Could not verify node protection status")
+                    self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} Could not verify node protection status")
 
             except Exception as e:
                 self.log_operation('WARNING', f"Could not verify node protection: {str(e)}")
-                self.print_colored(Colors.YELLOW, f"   [WARN] Node protection verification failed: {str(e)}")
+                self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} Node protection verification failed: {str(e)}")
         else:
             print("\n[PROTECTED] Step 7: Skipping node protection verification as per user preference.")
 
@@ -8304,7 +8305,7 @@ class EKSClusterManager:
                         lambda_response = lambda_client.get_function(FunctionName=function_name)
                         monitoring_found = True
                         components_status['node_protection']['monitoring_setup'] = True
-                        self.print_colored(Colors.GREEN, f"   [OK] Node protection monitoring Lambda found: {function_name}")
+                        self.print_colored(Colors.GREEN, f"   {Symbols.OK} Node protection monitoring Lambda found: {function_name}")
 
                         # Log additional details about the Lambda function
                         last_modified = lambda_response['Configuration'].get('LastModified', 'Unknown')
@@ -8318,12 +8319,12 @@ class EKSClusterManager:
 
                 if not monitoring_found:
                     components_status['node_protection']['monitoring_setup'] = False
-                    self.print_colored(Colors.YELLOW, f"   [WARN] No node protection monitoring Lambda found")
+                    self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} No node protection monitoring Lambda found")
                     self.print_colored(Colors.CYAN, f"      - Searched for: {', '.join(possible_function_names)}")
 
             except Exception as e:
                 self.log_operation('WARNING', f"Could not check node protection monitoring: {str(e)}")
-                self.print_colored(Colors.YELLOW, f"   [WARN] Node protection monitoring check failed: {str(e)}")
+                self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} Node protection monitoring check failed: {str(e)}")
         else:
             print("\n[SCAN] Step 8: Skipping node protection monitoring check as per user preference.")
 
@@ -8343,24 +8344,24 @@ class EKSClusterManager:
                     if not verification_results[key]:
                         components_status[key] = False
         else:
-            print("\n[SCAN] Step 9: Skipping verification of all components as per user preference.")
+            print(f"\n{Symbols.SCAN} Step 9: Skipping verification of all components as per user preference.")
 
         if False:
             # 10. Final Node Protection Summary
-            print("\n[PROTECTED] Final Node Protection Summary:")
+            print(f"\n{Symbols.PROTECTED} Final Node Protection Summary:")
             node_protection = components_status['node_protection']
             if node_protection['enabled']:
-                self.print_colored(Colors.GREEN, f"   [OK] Protection Status: ENABLED")
-                self.print_colored(Colors.GREEN, f"   [OK] Protected Nodes: {node_protection['protected_nodes_count']}")
+                self.print_colored(Colors.GREEN, f"   {Symbols.OK} Protection Status: ENABLED")
+                self.print_colored(Colors.GREEN, f"   {Symbols.OK} Protected Nodes: {node_protection['protected_nodes_count']}")
                 self.print_colored(Colors.GREEN,
-                                   f"   [OK] Protected Nodegroups: {len(node_protection['protected_nodegroups'])}")
+                                   f"   {Symbols.OK} Protected Nodegroups: {len(node_protection['protected_nodegroups'])}")
                 if node_protection['monitoring_setup']:
-                    self.print_colored(Colors.GREEN, f"   [OK] Monitoring Lambda: ACTIVE")
+                    self.print_colored(Colors.GREEN, f"   {Symbols.OK} Monitoring Lambda: ACTIVE")
                 else:
-                    self.print_colored(Colors.YELLOW, f"   [WARN] Monitoring Lambda: NOT FOUND")
+                    self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} Monitoring Lambda: NOT FOUND")
             else:
-                self.print_colored(Colors.YELLOW, f"   [WARN] Protection Status: NOT ENABLED")
-                self.print_colored(Colors.YELLOW, f"   [WARN] Consider enabling node protection for critical workloads")
+                self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} Protection Status: NOT ENABLED")
+                self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} Consider enabling node protection for critical workloads")
         else:
             print("\n[PROTECTED] Final Node Protection Summary: Skipped as per user preference.")
 
@@ -8448,7 +8449,7 @@ class EKSClusterManager:
             """Verify if CloudWatch Container Insights is working - FIXED"""
             try:
                 self.log_operation('INFO', f"Verifying CloudWatch Container Insights for cluster {cluster_name}")
-                self.print_colored(Colors.YELLOW, f"[SCAN] Verifying CloudWatch Container Insights...")
+                self.print_colored(Colors.YELLOW, f"{Symbols.SCAN} Verifying CloudWatch Container Insights...")
     
                 import subprocess
                 import shutil
@@ -8456,7 +8457,7 @@ class EKSClusterManager:
                 kubectl_available = shutil.which('kubectl') is not None
                 if not kubectl_available:
                     self.log_operation('WARNING', f"kubectl not found. Cannot verify Container Insights")
-                    self.print_colored(Colors.YELLOW, f"[WARN] kubectl not found. Manual verification required.")
+                    self.print_colored(Colors.YELLOW, f"{Symbols.WARN} kubectl not found. Manual verification required.")
                     return False
         
                 # Set environment variables for access
@@ -8474,7 +8475,7 @@ class EKSClusterManager:
     
                 update_result = subprocess.run(update_cmd, env=env, capture_output=True, text=True, timeout=120)
                 if update_result.returncode != 0:
-                    self.print_colored(Colors.RED, f"[ERROR] Failed to update kubeconfig: {update_result.stderr}")
+                    self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to update kubeconfig: {update_result.stderr}")
                     return False
         
                 # FIXED: Check multiple possible namespaces and pod patterns for Container Insights
@@ -8512,7 +8513,7 @@ class EKSClusterManager:
                                 running_pods = [line for line in insights_pods if 'Running' in line or 'Completed' in line]
                                 total_running_pods += len(running_pods)
                         
-                                self.print_colored(Colors.GREEN, f"   [OK] Found Container Insights pods in namespace '{namespace}': {len(running_pods)}/{len(insights_pods)} running")
+                                self.print_colored(Colors.GREEN, f"   {Symbols.OK} Found Container Insights pods in namespace '{namespace}': {len(running_pods)}/{len(insights_pods)} running")
                         
                                 # Display specific pod details
                                 for pod in insights_pods[:3]:  # Show first 3 pods
@@ -8526,10 +8527,10 @@ class EKSClusterManager:
                                 self.print_colored(Colors.CYAN, f"   [ROUNDPIN] No Container Insights pods found in namespace '{namespace}'")
                         
                     except Exception as e:
-                        self.print_colored(Colors.YELLOW, f"   [WARN] Error checking namespace '{namespace}': {str(e)}")
+                        self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} Error checking namespace '{namespace}': {str(e)}")
         
                 if found_insights_pods and total_running_pods > 0:
-                    self.print_colored(Colors.GREEN, f"[OK] CloudWatch Container Insights: {total_running_pods} total pods running")
+                    self.print_colored(Colors.GREEN, f"{Symbols.OK} CloudWatch Container Insights: {total_running_pods} total pods running")
             
                     # Display CloudWatch Console link
                     self.print_colored(Colors.CYAN, "[STATS] View in AWS Console:")
@@ -8538,13 +8539,13 @@ class EKSClusterManager:
             
                     return True
                 else:
-                    self.print_colored(Colors.YELLOW, f"[WARN] CloudWatch Container Insights: No running pods found")
+                    self.print_colored(Colors.YELLOW, f"{Symbols.WARN} CloudWatch Container Insights: No running pods found")
                     self.print_colored(Colors.YELLOW, f"   - Container Insights may still be starting, check again in a few minutes")
                     return False
         
             except Exception as e:
                 self.log_operation('ERROR', f"Failed to verify Container Insights: {str(e)}")
-                self.print_colored(Colors.RED, f"[ERROR] Container Insights verification failed: {str(e)}")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Container Insights verification failed: {str(e)}")
                 return False
 
     def _verify_container_insights(self, cluster_name: str, region: str, access_key: str, secret_key: str) -> bool:
@@ -8555,7 +8556,7 @@ class EKSClusterManager:
     
                 kubectl_available = shutil.which('kubectl') is not None
                 if not kubectl_available:
-                    self.print_colored(Colors.YELLOW, f"   [WARN] kubectl not found, skipping Container Insights check")
+                    self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} kubectl not found, skipping Container Insights check")
                     return False
         
                 env = os.environ.copy()
@@ -8599,19 +8600,19 @@ class EKSClusterManager:
                                 total_running_pods += len(running_pods)
                         
                                 if running_pods:
-                                    self.print_colored(Colors.GREEN, f"   [OK] Container Insights pods in '{namespace}': {len(running_pods)}/{len(insights_pods)} running")
+                                    self.print_colored(Colors.GREEN, f"   {Symbols.OK} Container Insights pods in '{namespace}': {len(running_pods)}/{len(insights_pods)} running")
                             
                     except Exception as e:
-                        self.print_colored(Colors.YELLOW, f"   [WARN] Error checking namespace '{namespace}': {str(e)}")
+                        self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} Error checking namespace '{namespace}': {str(e)}")
         
                 if total_running_pods > 0:
                     return True
                 else:
-                    self.print_colored(Colors.YELLOW, f"   [WARN] No running Container Insights pods found")
+                    self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} No running Container Insights pods found")
                     return False
         
             except Exception as e:
-                self.print_colored(Colors.YELLOW, f"   [WARN] Error checking Container Insights: {str(e)}")
+                self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} Error checking Container Insights: {str(e)}")
                 return False
 
     def _verify_cluster_autoscaler(self, cluster_name: str, region: str, access_key: str, secret_key: str) -> bool:
@@ -8625,13 +8626,13 @@ class EKSClusterManager:
             self.print_colored(Colors.CYAN, "   [LIST] Cluster Autoscaler Debug Information:")
         
             if 'error' in debug_info:
-                self.print_colored(Colors.RED, f"      [ERROR] Error: {debug_info['error']}")
+                self.print_colored(Colors.RED, f"      {Symbols.ERROR} Error: {debug_info['error']}")
             else:
                 # Print deployment status
                 if debug_info.get('deployment_exists', False):
-                    self.print_colored(Colors.GREEN, f"      [OK] Autoscaler deployment exists")
+                    self.print_colored(Colors.GREEN, f"      {Symbols.OK} Autoscaler deployment exists")
                 else:
-                    self.print_colored(Colors.YELLOW, f"      [WARN] Autoscaler deployment not found")
+                    self.print_colored(Colors.YELLOW, f"      {Symbols.WARN} Autoscaler deployment not found")
                     if 'deployment_error' in debug_info:
                         self.print_colored(Colors.YELLOW, f"         Error: {debug_info['deployment_error']}")
             
@@ -8639,33 +8640,33 @@ class EKSClusterManager:
                 if debug_info.get('pods_output'):
                     pod_lines = debug_info['pods_output'].strip().split('\n')
                     if len(pod_lines) > 1:  # If there are pods (more than just the header)
-                        self.print_colored(Colors.GREEN, f"      [OK] Found {len(pod_lines) - 1} autoscaler pods:")
+                        self.print_colored(Colors.GREEN, f"      {Symbols.OK} Found {len(pod_lines) - 1} autoscaler pods:")
                         for i, line in enumerate(pod_lines[:4]):  # Show first 4 lines max
                             if i > 0:  # Skip header
                                 self.print_colored(Colors.CYAN, f"         {line}")
                         if len(pod_lines) > 5:
                             self.print_colored(Colors.CYAN, f"         ...(and {len(pod_lines) - 5} more)")
                     else:
-                        self.print_colored(Colors.YELLOW, f"      [WARN] No autoscaler pods found")
+                        self.print_colored(Colors.YELLOW, f"      {Symbols.WARN} No autoscaler pods found")
             
                 # Print log sample if available
                 if debug_info.get('logs'):
                     log_lines = debug_info['logs'].strip().split('\n')
                     if log_lines and log_lines[0].strip():
-                        self.print_colored(Colors.GREEN, f"      [OK] Autoscaler logs available:")
+                        self.print_colored(Colors.GREEN, f"      {Symbols.OK} Autoscaler logs available:")
                         for i, line in enumerate(log_lines[:3]):  # Show first 3 log lines
                             if line.strip():
                                 self.print_colored(Colors.CYAN, f"         {line[:100]}...")
                         if len(log_lines) > 3:
                             self.print_colored(Colors.CYAN, f"         ...(and {len(log_lines) - 3} more lines)")
                     else:
-                        self.print_colored(Colors.YELLOW, f"      [WARN] No autoscaler logs found")
+                        self.print_colored(Colors.YELLOW, f"      {Symbols.WARN} No autoscaler logs found")
             
                 # Print recent events if available
                 if debug_info.get('events'):
                     event_lines = debug_info['events'].strip().split('\n')
                     if len(event_lines) > 1:  # More than just header
-                        self.print_colored(Colors.GREEN, f"      [OK] Recent cluster events:")
+                        self.print_colored(Colors.GREEN, f"      {Symbols.OK} Recent cluster events:")
                         for i, line in enumerate(event_lines[:3]):  # Show first 3 events
                             if i > 0:  # Skip header
                                 self.print_colored(Colors.CYAN, f"         {line}")
@@ -8678,7 +8679,7 @@ class EKSClusterManager:
 
             kubectl_available = shutil.which('kubectl') is not None
             if not kubectl_available:
-                self.print_colored(Colors.YELLOW, f"   [WARN] kubectl not found, skipping Cluster Autoscaler check")
+                self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} kubectl not found, skipping Cluster Autoscaler check")
                 return False
     
             env = os.environ.copy()
@@ -8706,7 +8707,7 @@ class EKSClusterManager:
             
                         if running_pods:
                             found_autoscaler = True
-                            self.print_colored(Colors.GREEN, f"   [OK] Cluster Autoscaler pods (selector: {selector}): {len(running_pods)} running")
+                            self.print_colored(Colors.GREEN, f"   {Symbols.OK} Cluster Autoscaler pods (selector: {selector}): {len(running_pods)} running")
                     
                             # Show pod details
                             for pod in running_pods[:2]:  # Show first 2 pods
@@ -8734,10 +8735,10 @@ class EKSClusterManager:
                             running_pods = [line for line in autoscaler_pods if 'Running' in line]
                             if running_pods:
                                 found_autoscaler = True
-                                self.print_colored(Colors.GREEN, f"   [OK] Cluster Autoscaler pods (by name): {len(running_pods)} running")
+                                self.print_colored(Colors.GREEN, f"   {Symbols.OK} Cluster Autoscaler pods (by name): {len(running_pods)} running")
                         
                 except Exception as e:
-                    self.print_colored(Colors.YELLOW, f"   [WARN] Error searching for autoscaler pods: {str(e)}")
+                    self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} Error searching for autoscaler pods: {str(e)}")
     
             if found_autoscaler:
                 # FIXED: Check Cluster Autoscaler service account with better error handling
@@ -8746,27 +8747,27 @@ class EKSClusterManager:
                     sa_result = subprocess.run(sa_cmd, env=env, capture_output=True, text=True, timeout=30)
         
                     if sa_result.returncode == 0 and sa_result.stdout.strip():
-                        self.print_colored(Colors.GREEN, f"   [OK] Cluster Autoscaler service account verified")
+                        self.print_colored(Colors.GREEN, f"   {Symbols.OK} Cluster Autoscaler service account verified")
                     else:
-                        self.print_colored(Colors.YELLOW, f"   [WARN] Cluster Autoscaler service account not found (but pods are running)")
+                        self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} Cluster Autoscaler service account not found (but pods are running)")
                 
                 except Exception as e:
-                    self.print_colored(Colors.YELLOW, f"   [WARN] Could not verify service account: {str(e)}")
+                    self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} Could not verify service account: {str(e)}")
             
                 return True
             else:
-                self.print_colored(Colors.YELLOW, f"   [WARN] No running Cluster Autoscaler pods found")
+                self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} No running Cluster Autoscaler pods found")
                 return False
     
         except Exception as e:
-            self.print_colored(Colors.YELLOW, f"   [WARN] Error checking Cluster Autoscaler: {str(e)}")
+            self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} Error checking Cluster Autoscaler: {str(e)}")
             return False
 
     def enable_container_insights(self, cluster_name: str, region: str, admin_access_key: str, admin_secret_key: str) -> bool:
             """Enable CloudWatch Container Insights for the cluster with FIXED deployment"""
             try:
                 self.log_operation('INFO', f"Enabling CloudWatch Container Insights for cluster {cluster_name}")
-                self.print_colored(Colors.YELLOW, f"[STATS] Enabling CloudWatch Container Insights for {cluster_name}...")
+                self.print_colored(Colors.YELLOW, f"{Symbols.STATS} Enabling CloudWatch Container Insights for {cluster_name}...")
     
                 # Check if kubectl is available
                 import subprocess
@@ -8776,7 +8777,7 @@ class EKSClusterManager:
     
                 if not kubectl_available:
                     self.log_operation('WARNING', f"kubectl not found. Cannot deploy Container Insights for {cluster_name}")
-                    self.print_colored(Colors.YELLOW, f"[WARN]  kubectl not found. Container Insights deployment skipped.")
+                    self.print_colored(Colors.YELLOW, f"{Symbols.WARN}  kubectl not found. Container Insights deployment skipped.")
                     return False
     
                 # Set environment variables for admin access
@@ -8792,12 +8793,12 @@ class EKSClusterManager:
                     '--name', cluster_name
                 ]
     
-                self.print_colored(Colors.CYAN, "   🔄 Updating kubeconfig...")
+                self.print_colored(Colors.CYAN, f"   {Symbols.SCAN} Updating kubeconfig...")
                 update_result = subprocess.run(update_cmd, env=env, capture_output=True, text=True, timeout=120)
     
                 if update_result.returncode != 0:
                     self.log_operation('ERROR', f"Failed to update kubeconfig: {update_result.stderr}")
-                    self.print_colored(Colors.RED, f"[ERROR] Failed to update kubeconfig: {update_result.stderr}")
+                    self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to update kubeconfig: {update_result.stderr}")
                     return False
     
                 # FIXED: Apply Container Insights using the official AWS deployment method
@@ -8827,7 +8828,7 @@ class EKSClusterManager:
                     insights_result = subprocess.run(insights_cmd, env=env, capture_output=True, text=True, timeout=300)
             
                     if insights_result.returncode == 0:
-                        self.print_colored(Colors.GREEN, "   [OK] Container Insights add-on deployed via AWS CLI")
+                        self.print_colored(Colors.GREEN, f"   {Symbols.OK} Container Insights add-on deployed via AWS CLI")
                         self.log_operation('INFO', f"Container Insights add-on deployed for {cluster_name}")
                 
                         # Wait for addon to be active
@@ -8837,17 +8838,17 @@ class EKSClusterManager:
                         return True
                     else:
                         # Fallback to manual deployment if add-on fails
-                        self.print_colored(Colors.YELLOW, f"   [WARN] Add-on deployment failed, trying manual deployment...")
+                        self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} Add-on deployment failed, trying manual deployment...")
                         return self._deploy_container_insights_manual(cluster_name, region, env)
                 
                 except Exception as e:
-                    self.print_colored(Colors.YELLOW, f"   [WARN] Add-on deployment error: {str(e)}, trying manual deployment...")
+                    self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} Add-on deployment error: {str(e)}, trying manual deployment...")
                     return self._deploy_container_insights_manual(cluster_name, region, env)
     
             except Exception as e:
                 error_msg = str(e)
                 self.log_operation('ERROR', f"Failed to enable Container Insights for {cluster_name}: {error_msg}")
-                self.print_colored(Colors.RED, f"[ERROR] Container Insights deployment failed: {error_msg}")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Container Insights deployment failed: {error_msg}")
                 return False
 
     def _deploy_container_insights_manual(self, cluster_name: str, region: str, env: dict) -> bool:
@@ -8924,24 +8925,24 @@ class EKSClusterManager:
                 time.sleep(45)  # Increased wait time
         
                 if success_count >= 2:  # At least 2 manifests applied successfully
-                    self.print_colored(Colors.GREEN, f"   [OK] Container Insights deployed manually ({success_count}/{len(manifests)} manifests applied)")
+                    self.print_colored(Colors.GREEN, f"   {Symbols.OK} Container Insights deployed manually ({success_count}/{len(manifests)} manifests applied)")
             
                     # Verify deployment
                     verify_result = self.verify_cloudwatch_insights(cluster_name, region, env.get('AWS_ACCESS_KEY_ID', ''), env.get('AWS_SECRET_ACCESS_KEY', ''))
             
                     if verify_result:
-                        self.print_colored(Colors.CYAN, f"[STATS] Access Container Insights in AWS Console:")
+                        self.print_colored(Colors.CYAN, f"{Symbols.STATS} Access Container Insights in AWS Console:")
                         self.print_colored(Colors.CYAN, f"   CloudWatch → Insights → Container Insights")
                         self.print_colored(Colors.CYAN, f"   Filter by cluster: {cluster_name}")
             
                     return True
                 else:
-                    self.print_colored(Colors.YELLOW, f"   [WARN] Container Insights deployment incomplete ({success_count}/{len(manifests)} manifests applied)")
+                    self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} Container Insights deployment incomplete ({success_count}/{len(manifests)} manifests applied)")
                     return False
             
             except Exception as e:
                 self.log_operation('ERROR', f"Manual Container Insights deployment failed: {str(e)}")
-                self.print_colored(Colors.RED, f"[ERROR] Manual deployment failed: {str(e)}")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Manual deployment failed: {str(e)}")
                 return False
     
     def generate_instance_tags(self, cluster_name: str, nodegroup_name: str, strategy: str) -> Dict:
@@ -8985,7 +8986,7 @@ class EKSClusterManager:
             eks_client = session.client('eks')
 
             # Get nodegroup details to find the ASG
-            self.print_colored(Colors.CYAN, f"   [SCAN] Finding ASG for nodegroup {nodegroup_name}...")
+            self.print_colored(Colors.CYAN, f"   {Symbols.SCAN} Finding ASG for nodegroup {nodegroup_name}...")
 
             nodegroup_response = eks_client.describe_nodegroup(
                 clusterName=cluster_name,
@@ -9014,15 +9015,15 @@ class EKSClusterManager:
                         if (asg_tags.get('eks:nodegroup-name') == nodegroup_name and
                                 asg_tags.get('eks:cluster-name') == cluster_name):
                             asg_name = potential_asg_name
-                            self.print_colored(Colors.GREEN, f"   [OK] Verified ASG belongs to nodegroup: {asg_name}")
+                            self.print_colored(Colors.GREEN, f"   {Symbols.OK} Verified ASG belongs to nodegroup: {asg_name}")
                             break
 
                 except Exception as e:
-                    self.print_colored(Colors.YELLOW, f"   [WARN] Could not verify ASG {potential_asg_name}: {str(e)}")
+                    self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} Could not verify ASG {potential_asg_name}: {str(e)}")
                     continue
 
             if not asg_name:
-                self.print_colored(Colors.YELLOW, f"   [WARN] No verified ASG found for nodegroup {nodegroup_name}")
+                self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} No verified ASG found for nodegroup {nodegroup_name}")
                 return False
 
             # Generate the short name for instances
@@ -9057,13 +9058,13 @@ class EKSClusterManager:
             # Update ASG with tags
             autoscaling_client.create_or_update_tags(Tags=tags_to_add)
 
-            self.print_colored(Colors.GREEN, f"   [OK] Added naming tags to verified ASG {asg_name}")
-            self.print_colored(Colors.GREEN, f"   [LOG] Instance base name: {base_instance_name}")
+            self.print_colored(Colors.GREEN, f"   {Symbols.OK} Added naming tags to verified ASG {asg_name}")
+            self.print_colored(Colors.GREEN, f"   {Symbols.LOG} Instance base name: {base_instance_name}")
 
             return True
 
         except Exception as e:
-            self.print_colored(Colors.RED, f"   [ERROR] Failed to add Name tag to ASG: {str(e)}")
+            self.print_colored(Colors.RED, f"   {Symbols.ERROR} Failed to add Name tag to ASG: {str(e)}")
             self.log_operation('ERROR', f"Failed to add Name tag to ASG for nodegroup {nodegroup_name}: {str(e)}")
             return False
 
@@ -9094,7 +9095,7 @@ class EKSClusterManager:
 
             # Log cluster creation start
             self.log_operation('INFO', f"Starting creation of cluster {cluster_name} in {region}")
-            self.print_colored(Colors.YELLOW, f"\n[START] Creating EKS cluster: {cluster_name}")
+            self.print_colored(Colors.YELLOW, f"\n{Symbols.START} Creating EKS cluster: {cluster_name}")
             self.print_colored(Colors.YELLOW, f"   Region: {region}")
             self.print_colored(Colors.YELLOW, f"   Account: {account_name} ({account_id})")
             self.print_colored(Colors.YELLOW, f"   User: {username}")
@@ -9111,7 +9112,7 @@ class EKSClusterManager:
                 print("="*60)
     
                 # 1.1 Ask for nodegroup strategy
-                print("\n🔄 Nodegroup Strategy Selection:")
+                print("\n[SCAN] Nodegroup Strategy Selection:")
                 print("1. On-demand (reliable, consistent performance, higher cost)")
                 print("2. Spot (cheaper, but can be terminated, best for non-critical workloads)")
                 print("3. Mixed (combination of on-demand and spot for balance)")
@@ -9136,13 +9137,13 @@ class EKSClusterManager:
                     else:
                         print("[ERROR] Invalid choice. Please enter 1, 2, or 3.")
     
-                self.print_colored(Colors.GREEN, f"[OK] Selected nodegroup strategy: {strategy.upper()}")
+                self.print_colored(Colors.GREEN, f"{Symbols.OK} Selected nodegroup strategy: {strategy.upper()}")
     
                 # 1.2 Select instance type
                 instance_type = self.select_instance_type(username)
     
                 # 1.3 Configure nodegroup sizing
-                print("\n🔢 Nodegroup Sizing:")
+                print("\n[#] Nodegroup Sizing:")
                 default_min = config.get('min_size', 1)
                 default_desired = config.get('desired_size', 1)
                 default_max = config.get('max_size', 3)
@@ -9167,12 +9168,12 @@ class EKSClusterManager:
                     print("[ERROR] Invalid number format. Using defaults.")
                     min_size, desired_size, max_size = default_min, default_desired, default_max
     
-                self.print_colored(Colors.GREEN, f"[OK] Nodegroup sizing: Min={min_size}, Desired={desired_size}, Max={max_size}")
+                self.print_colored(Colors.GREEN, f"{Symbols.OK} Nodegroup sizing: Min={min_size}, Desired={desired_size}, Max={max_size}")
     
                 # 1.4 For mixed strategy, ask for on-demand percentage
                 instance_selections = {}
                 if strategy == 'mixed':
-                    print("\n[STATS] Mixed Strategy Configuration:")
+                    print(f"\n{Symbols.STATS} Mixed Strategy Configuration:")
                     default_percentage = 30
                     try:
                         on_demand_percentage = int(input(f"Percentage of On-Demand capacity (0-100) [default: {default_percentage}%]: ").strip() or default_percentage)
@@ -9190,7 +9191,7 @@ class EKSClusterManager:
                         'on_demand_percentage': on_demand_percentage
                     }
         
-                    self.print_colored(Colors.GREEN, f"[OK] Mixed strategy: {on_demand_percentage}% On-Demand, {100-on_demand_percentage}% Spot")
+                    self.print_colored(Colors.GREEN, f"{Symbols.OK} Mixed strategy: {on_demand_percentage}% On-Demand, {100-on_demand_percentage}% Spot")
         
                 elif strategy == 'spot':
                     # Use diversified instance types for better spot availability
@@ -9198,7 +9199,7 @@ class EKSClusterManager:
                         'spot': self.get_diversified_instance_types(instance_type)
                     }
                     spot_types = ', '.join(instance_selections['spot'])
-                    self.print_colored(Colors.GREEN, f"[OK] Spot instance types: {spot_types}")
+                    self.print_colored(Colors.GREEN, f"{Symbols.OK} Spot instance types: {spot_types}")
         
                 elif strategy == 'on-demand':
                     print("\n[COMPUTE] On-Demand Instance Configuration:", instance_type)
@@ -9227,7 +9228,7 @@ class EKSClusterManager:
                 else:
                     subnet_preference = "auto"
         
-                self.print_colored(Colors.GREEN, f"[OK] Subnet preference: {subnet_preference.upper()}")
+                self.print_colored(Colors.GREEN, f"{Symbols.OK} Subnet preference: {subnet_preference.upper()}")
     
                 # Create a single nodegroup config
                 nodegroup_name = self.generate_nodegroup_name(cluster_name, strategy)
@@ -9255,14 +9256,14 @@ class EKSClusterManager:
                     self.setup_container_insights = config.get('enable_container_insights', True)
         
                     if self.setup_addons:
-                        self.print_colored(Colors.GREEN, "[OK] Essential add-ons will be installed")
+                        self.print_colored(Colors.GREEN, f"{Symbols.OK} Essential add-ons will be installed")
                     else:
-                        self.print_colored(Colors.YELLOW, "[WARN] Essential add-ons will NOT be installed")
+                        self.print_colored(Colors.YELLOW, f"{Symbols.WARN} Essential add-ons will NOT be installed")
             
                     if self.setup_container_insights:
-                        self.print_colored(Colors.GREEN, "[OK] CloudWatch Container Insights will be enabled")
+                        self.print_colored(Colors.GREEN, f"{Symbols.OK} CloudWatch Container Insights will be enabled")
                     else:
-                        self.print_colored(Colors.YELLOW, "[WARN] CloudWatch Container Insights will NOT be enabled")
+                        self.print_colored(Colors.YELLOW, f"{Symbols.WARN} CloudWatch Container Insights will NOT be enabled")
     
                 # Display cost estimation based on selected configuration
                 for ng_config in nodegroup_configs:
@@ -9283,7 +9284,7 @@ class EKSClusterManager:
 
             # Final confirmation
             print("\n" + "="*60)
-            print("[START] CLUSTER CREATION SUMMARY")
+            print(f"{Symbols.START} CLUSTER CREATION SUMMARY")
             print("="*60)
             print(f"Cluster Name: {cluster_name}")
             print(f"Region: {region}")
@@ -9313,7 +9314,7 @@ class EKSClusterManager:
             confirmation = 'Y'  # Default to 'Y' for confirmation
             #confirmation = input("\nConfirm cluster creation with these settings? (Y/n): ").strip().lower()
             if confirmation == 'n':
-                self.print_colored(Colors.YELLOW, "[ERROR] Cluster creation cancelled by user")
+                self.print_colored(Colors.YELLOW, f"{Symbols.ERROR} Cluster creation cancelled by user")
                 return False
 
             # Step 2: Create AWS session and clients
@@ -9343,7 +9344,7 @@ class EKSClusterManager:
             subnet_ids, security_group_id = self.get_or_create_vpc_resources(ec2_client, region)
 
             # Step 5: Create EKS control plane
-            self.print_colored(Colors.CYAN, f"   [START] Creating EKS control plane {cluster_name}...")
+            self.print_colored(Colors.CYAN, f"   {Symbols.START} Creating EKS control plane {cluster_name}...")
 
             # Set default EKS version - adjust based on your requirements
             eks_version = config.get('eks_version', '1.33')
@@ -9355,7 +9356,7 @@ class EKSClusterManager:
                     eks_client.describe_cluster(name=cluster_name)
                     cluster_exists = True
                     self.log_operation('INFO', f"Cluster {cluster_name} already exists")
-                    self.print_colored(Colors.YELLOW, f"   [WARN] Cluster {cluster_name} already exists, skipping creation")
+                    self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} Cluster {cluster_name} already exists, skipping creation")
                 except eks_client.exceptions.ResourceNotFoundException:
                     cluster_exists = False
     
@@ -9397,12 +9398,12 @@ class EKSClusterManager:
                         WaiterConfig={'Delay': 30, 'MaxAttempts': 40}
                     )
         
-                    self.print_colored(Colors.GREEN, f"   [OK] EKS control plane {cluster_name} is now active")
+                    self.print_colored(Colors.GREEN, f"   {Symbols.OK} EKS control plane {cluster_name} is now active")
                     self.log_operation('INFO', f"EKS control plane {cluster_name} created successfully")
 
             except Exception as e:
                 self.log_operation('ERROR', f"Failed to create EKS control plane {cluster_name}: {str(e)}")
-                self.print_colored(Colors.RED, f"[ERROR] Failed to create EKS control plane: {str(e)}")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to create EKS control plane: {str(e)}")
                 return False
 
             # Step 6: Configure Auth ConfigMap for user access
@@ -9415,7 +9416,7 @@ class EKSClusterManager:
                                                             access_key, secret_key)
 
             # Step 7: Create nodegroups based on strategy
-            self.print_colored(Colors.CYAN, f"   [START] Creating nodegroups with {strategy} strategy...")
+            self.print_colored(Colors.CYAN, f"   {Symbols.START} Creating nodegroups with {strategy} strategy...")
 
             # Generate nodegroup name
             ami_type = config.get('ami_type', 'AL2_x86_64')  # Amazon Linux 2 x86_64
@@ -9484,14 +9485,14 @@ class EKSClusterManager:
         
                 if not nodegroups_created:
                     self.log_operation('ERROR', f"Failed to create nodegroups for cluster {cluster_name}")
-                    self.print_colored(Colors.RED, f"[ERROR] Nodegroup creation failed")
+                    self.print_colored(Colors.RED, f"{Symbols.ERROR} Nodegroup creation failed")
                     return False
         
                 self.log_operation('INFO', f"Successfully created nodegroups: {', '.join(nodegroups_created)}")
     
             except Exception as e:
                 self.log_operation('ERROR', f"Failed to create nodegroups: {str(e)}")
-                self.print_colored(Colors.RED, f"[ERROR] Failed to create nodegroups: {str(e)}")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to create nodegroups: {str(e)}")
                 return False
 
             # Step 8: Verify user access to the cluster
@@ -9506,18 +9507,18 @@ class EKSClusterManager:
                 print("\n[SECURE] Step 9: Ensure only one node per nodegroup always NO_DELETE label using lambda function...")
 
                 # Apply initial node protection
-                self.print_colored(Colors.YELLOW, f"\n[SECURE] Setting up initial node protection...")
+                self.print_colored(Colors.YELLOW, f"\n{Symbols.SECURE} Setting up initial node protection...")
                 protection_result = self.apply_no_delete_to_matching_nodegroups(
                     cluster_name, region, access_key, secret_key
                 )
 
-                self.print_colored(Colors.CYAN, f"   [LIST] Ensuring only one node per nodegroup has NO_DELETE label...")
+                self.print_colored(Colors.CYAN, f"   {Symbols.LIST} Ensuring only one node per nodegroup has NO_DELETE label...")
                 self.protect_nodes_with_no_delete_label(cluster_name, region, access_key, secret_key)
 
                 nodegroup_names = nodegroups_created
 
                 if protection_result.get('success'):
-                    self.print_colored(Colors.GREEN, f"[OK] Initial node protection applied")
+                    self.print_colored(Colors.GREEN, f"{Symbols.OK} Initial node protection applied")
 
                     # Setup automated monitoring
                     self.print_colored(Colors.YELLOW, f"\n[ALARM] Setting up automated node protection monitoring...")
@@ -9526,13 +9527,13 @@ class EKSClusterManager:
                     )
 
                     if monitoring_setup:
-                        self.print_colored(Colors.GREEN, f"[OK] Automated node protection monitoring enabled")
-                        self.print_colored(Colors.CYAN, f"   [LIST] Lambda will run every time a ec2 is terminated to ensure node protection")
+                        self.print_colored(Colors.GREEN, f"{Symbols.OK} Automated node protection monitoring enabled")
+                        self.print_colored(Colors.CYAN, f"   {Symbols.LIST} Lambda will run every time a ec2 is terminated to ensure node protection")
                     else:
                         self.print_colored(Colors.YELLOW,
-                                           f"[WARN] Automated monitoring setup failed - manual monitoring required")
+                                           f"{Symbols.WARN} Automated monitoring setup failed - manual monitoring required")
             else:
-                self.print_colored(Colors.YELLOW, f"[WARN] Skipping node protection setup - manual monitoring required")
+                self.print_colored(Colors.YELLOW, f"{Symbols.WARN} Skipping node protection setup - manual monitoring required")
 
             # Step 10: Install essential add-ons if confirmed by user
             print("\n[SECURE] Step 10: Setting up add ons...")
@@ -9547,12 +9548,12 @@ class EKSClusterManager:
                 self.log_operation('INFO', "Essential add-ons installation skipped by user")
 
             # Step 11: Set up and verify all components
-            print("\n[SECURE] Step 11: Setting up and Verify all components...")
+            print(f"\n{Symbols.SECURE} Step 11: Setting up and Verify all components...")
             components_status = self.setup_and_verify_all_components(
                 cluster_name, region, access_key, secret_key, account_id, nodegroups_created,self.setup_container_insights
             )
 
-            # print("\n[SECURE] Step 12: disable public access to eks control plane and use only private access...")
+            # print(f"\n{Symbols.SECURE} Step 12: disable public access to eks control plane and use only private access...")
             # # Disable public access - using the same eks_client
             # self.log_operation('INFO', "Disabling public access for the EKS control plane...")
             # if self.disable_public_access(eks_client, cluster_name):
@@ -9560,7 +9561,7 @@ class EKSClusterManager:
 
 
             # Step 13: Perform health check
-            print("\n[SECURE] Step 13: Peform cluster health check...")
+            print(f"\n{Symbols.SECURE} Step 13: Peform cluster health check...")
             self.print_colored(Colors.CYAN, "   🏥 Running health check...")
             initial_health_check = self.health_check_cluster(
                 cluster_name, region, access_key, secret_key
@@ -9621,10 +9622,9 @@ class EKSClusterManager:
         except Exception as e:
             error_msg = str(e)
             self.log_operation('ERROR', f"Failed to create cluster {config.get('cluster_name', 'unknown')}: {error_msg}")
-            self.print_colored(Colors.RED, f"[ERROR] Cluster creation failed: {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Cluster creation failed: {error_msg}")
 
             # Get full stack trace for debugging
-            import traceback
             self.log_operation('ERROR', f"Stack trace: {traceback.format_exc()}")
             return False
 
@@ -9659,7 +9659,7 @@ class EKSClusterManager:
             matching_nodegroups = [ng for ng in all_nodegroups if fallback_pattern.match(ng)]
             if len(matching_nodegroups) > 1:
                 print(
-                    f"[WARN] Multiple nodegroups found with pattern 'nodegroup-*'. Selecting the first one: {matching_nodegroups[0]}")
+                    f"{Symbols.WARN} Multiple nodegroups found with pattern 'nodegroup-*'. Selecting the first one: {matching_nodegroups[0]}")
                 matching_nodegroups = [matching_nodegroups[0]]
 
         if not matching_nodegroups:
@@ -9734,7 +9734,7 @@ class EKSClusterManager:
     
         # Create all clusters with shared configuration
         total_clusters = len(cluster_configs)
-        print(f"\n[START] Starting creation of {total_clusters} clusters...")
+        print(f"\n{Symbols.START} Starting creation of {total_clusters} clusters...")
     
         for i, config in enumerate(cluster_configs, 1):
             cluster_name = config.get('cluster_name', 'unnamed')
@@ -9742,7 +9742,7 @@ class EKSClusterManager:
             region = config.get('region', 'unknown')
         
             self.logger.info(f"[{i}/{total_clusters}] Creating cluster {cluster_name} for {username} in {region}")
-            print(f"\n[{i}/{total_clusters}] [START] Creating cluster {cluster_name} for {username}...")
+            print(f"\n[{i}/{total_clusters}] {Symbols.START} Creating cluster {cluster_name} for {username}...")
         
             try:
                 # Create structured log entry for start of cluster creation
@@ -9794,11 +9794,11 @@ class EKSClusterManager:
                     "stack_trace": stack_trace
                 }))
             
-                self.print_colored(Colors.RED, f"[ERROR] Error creating cluster {cluster_name}: {error_msg}")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Error creating cluster {cluster_name}: {error_msg}")
             
                 # Ask if user wants to continue with remaining clusters
                 if i < total_clusters:
-                    continue_choice = input(f"\n[WARN] Failed to create cluster {cluster_name}. Continue with remaining {total_clusters - i} clusters? (y/N): ").strip().lower()
+                    continue_choice = input(f"\n{Symbols.WARN} Failed to create cluster {cluster_name}. Continue with remaining {total_clusters - i} clusters? (y/N): ").strip().lower()
                     if continue_choice not in ['y', 'yes']:
                         self.logger.warning(f"Batch creation aborted by user after failure of {cluster_name}")
                         break
@@ -9854,10 +9854,10 @@ class EKSClusterManager:
                 with open(report_file, 'w') as f:
                     json.dump(error_report, f, indent=2)
                 
-                self.print_colored(Colors.YELLOW, f"\n[LOG] Error details saved to: {report_file}")
+                self.print_colored(Colors.YELLOW, f"\n{Symbols.LOG} Error details saved to: {report_file}")
                 self.logger.info(f"Error report written to {report_file}")
             except Exception as e:
-                self.print_colored(Colors.YELLOW, f"\n[WARN] Could not save error report: {str(e)}")
+                self.print_colored(Colors.YELLOW, f"\n{Symbols.WARN} Could not save error report: {str(e)}")
                 self.logger.error(f"Failed to write error report: {str(e)}")
     
         return len(created_clusters) > 0
@@ -9938,7 +9938,7 @@ class EKSClusterManager:
                     "username": username,
                     "region": region
                 }))
-                self.print_colored(Colors.GREEN, f"[OK] Successfully created cluster {cluster_name} for {username}")
+                self.print_colored(Colors.GREEN, f"{Symbols.OK} Successfully created cluster {cluster_name} for {username}")
             else:
                 self.logger.error(json.dumps({
                     "event": "cluster_creation_failure",
@@ -9947,7 +9947,7 @@ class EKSClusterManager:
                     "region": region,
                     "error": "create_cluster method returned False"
                 }))
-                self.print_colored(Colors.RED, f"[ERROR] Failed to create cluster {cluster_name} for {username}")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to create cluster {cluster_name} for {username}")
         
             return result
         
@@ -9955,7 +9955,6 @@ class EKSClusterManager:
             error_msg = str(e)
         
             # Get the stack trace for detailed logging
-            import traceback
             stack_trace = traceback.format_exc()
         
             self.logger.error(json.dumps({
@@ -9965,7 +9964,7 @@ class EKSClusterManager:
                 "stack_trace": stack_trace
             }))
         
-            self.print_colored(Colors.RED, f"[ERROR] Error creating cluster for {user_data.get('username', 'unknown')}: {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Error creating cluster for {user_data.get('username', 'unknown')}: {error_msg}")
             return False
 
     def process_multiple_user_selection_bk(self, selected_users: List[Dict],automation_options) -> bool:
@@ -10101,7 +10100,7 @@ class EKSClusterManager:
             cluster_name = self.generate_cluster_name(username, region)
         
             self.logger.info(f"[{i}/{total_users}] Processing user {username} for cluster {cluster_name}")
-            print(f"\n[{i}/{total_users}] [START] Creating cluster {cluster_name} for {username}...")
+            print(f"\n[{i}/{total_users}] {Symbols.START} Creating cluster {cluster_name} for {username}...")
         
             try:
                 # Create structured log entry for start of cluster creation
@@ -10166,7 +10165,7 @@ class EKSClusterManager:
                         "cluster_name": cluster_name,
                         "username": username
                     }))
-                    self.print_colored(Colors.GREEN, f"[OK] Successfully created cluster {cluster_name}")
+                    self.print_colored(Colors.GREEN, f"{Symbols.OK} Successfully created cluster {cluster_name}")
                 else:
                     failed_clusters.append(cluster_name)
                     error_message = "Create cluster method returned False"
@@ -10177,11 +10176,11 @@ class EKSClusterManager:
                         "username": username,
                         "error": error_message
                     }))
-                    self.print_colored(Colors.RED, f"[ERROR] Failed to create cluster {cluster_name}")
+                    self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to create cluster {cluster_name}")
                 
                     # Ask if user wants to continue with remaining users
                     if i < total_users:
-                        continue_choice = input(f"\n[WARN] Failed to create cluster for {username}. Continue with remaining {total_users - i} users? (y/N): ").strip().lower()
+                        continue_choice = input(f"\n{Symbols.WARN} Failed to create cluster for {username}. Continue with remaining {total_users - i} users? (y/N): ").strip().lower()
                         if continue_choice not in ['y', 'yes']:
                             self.logger.warning(f"Multi-user cluster creation aborted by user after failure of {cluster_name}")
                             break
@@ -10192,7 +10191,6 @@ class EKSClusterManager:
                 error_details[cluster_name] = error_msg
             
                 # Log the full stack trace for debugging
-                import traceback
                 stack_trace = traceback.format_exc()
                 self.logger.error(json.dumps({
                     "event": "user_cluster_creation_exception", 
@@ -10202,11 +10200,11 @@ class EKSClusterManager:
                     "stack_trace": stack_trace
                 }))
             
-                self.print_colored(Colors.RED, f"[ERROR] Error creating cluster {cluster_name}: {error_msg}")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Error creating cluster {cluster_name}: {error_msg}")
             
                 # Ask if user wants to continue with remaining users
                 if i < total_users:
-                    continue_choice = input(f"\n[WARN] Error creating cluster for {username}. Continue with remaining {total_users - i} users? (y/N): ").strip().lower()
+                    continue_choice = input(f"\n{Symbols.WARN} Error creating cluster for {username}. Continue with remaining {total_users - i} users? (y/N): ").strip().lower()
                     if continue_choice not in ['y', 'yes']:
                         self.logger.warning(f"Multi-user cluster creation aborted by user after exception for {cluster_name}")
                         break
@@ -10262,10 +10260,10 @@ class EKSClusterManager:
                 with open(report_file, 'w') as f:
                     json.dump(error_report, f, indent=2)
                 
-                self.print_colored(Colors.YELLOW, f"\n[LOG] Error details saved to: {report_file}")
+                self.print_colored(Colors.YELLOW, f"\n{Symbols.LOG} Error details saved to: {report_file}")
                 self.logger.info(f"Error report written to {report_file}")
             except Exception as e:
-                self.print_colored(Colors.YELLOW, f"\n[WARN] Could not save error report: {str(e)}")
+                self.print_colored(Colors.YELLOW, f"\n{Symbols.WARN} Could not save error report: {str(e)}")
                 self.logger.error(f"Failed to write error report: {str(e)}")
     
         return len(created_clusters) > 0

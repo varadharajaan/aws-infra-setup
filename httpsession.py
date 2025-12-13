@@ -1,3 +1,4 @@
+﻿from text_symbols import Symbols
 import logging
 import os
 import os.path

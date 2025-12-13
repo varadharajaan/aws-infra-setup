@@ -19,6 +19,7 @@ import time
 from datetime import datetime
 from botocore.exceptions import ClientError
 from root_iam_credential_manager import AWSCredentialManager
+from text_symbols import Symbols
 
 
 class Colors:
@@ -38,9 +39,9 @@ class UltraCleanupKinesisManager:
     def __init__(self):
         """Initialize the Kinesis cleanup manager"""
         self.cred_manager = AWSCredentialManager()
-        self.current_time = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+        self.current_time = datetime.now(datetime.UTC).strftime('%Y-%m-%d %H:%M:%S')
         self.current_user = os.getenv('USERNAME') or os.getenv('USER') or 'unknown'
-        self.execution_timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+        self.execution_timestamp = datetime.now(datetime.UTC).strftime('%Y%m%d_%H%M%S')
         
         # Create directories for logs and reports
         self.base_dir = os.path.join(os.getcwd(), 'aws', 'kinesis')
@@ -73,7 +74,7 @@ class UltraCleanupKinesisManager:
 
     def log_action(self, message, level="INFO"):
         """Log action to file"""
-        timestamp = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp = datetime.now(datetime.UTC).strftime('%Y-%m-%d %H:%M:%S')
         log_entry = f"{timestamp} | {level:8} | {message}\n"
         with open(self.log_file, 'a') as f:
             f.write(log_entry)
@@ -81,14 +82,14 @@ class UltraCleanupKinesisManager:
     def delete_kinesis_data_stream(self, kinesis_client, stream_name, region, account_key):
         """Delete a Kinesis Data Stream"""
         try:
-            self.print_colored(Colors.CYAN, f"[DELETE] Deleting data stream: {stream_name}")
+            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting data stream: {stream_name}")
             
             kinesis_client.delete_stream(
                 StreamName=stream_name,
                 EnforceConsumerDeletion=True
             )
             
-            self.print_colored(Colors.GREEN, f"[OK] Deleted data stream: {stream_name}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted data stream: {stream_name}")
             self.log_action(f"Deleted Kinesis data stream: {stream_name} in {region}")
             
             self.cleanup_results['deleted_data_streams'].append({
@@ -100,7 +101,7 @@ class UltraCleanupKinesisManager:
             
         except ClientError as e:
             error_msg = f"Failed to delete data stream {stream_name}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['failed_deletions'].append({
                 'type': 'DataStream',
@@ -114,14 +115,14 @@ class UltraCleanupKinesisManager:
     def delete_firehose_stream(self, firehose_client, stream_name, region, account_key):
         """Delete a Kinesis Firehose Delivery Stream"""
         try:
-            self.print_colored(Colors.CYAN, f"[DELETE] Deleting firehose stream: {stream_name}")
+            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting firehose stream: {stream_name}")
             
             firehose_client.delete_delivery_stream(
                 DeliveryStreamName=stream_name,
                 AllowForceDelete=True
             )
             
-            self.print_colored(Colors.GREEN, f"[OK] Deleted firehose stream: {stream_name}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted firehose stream: {stream_name}")
             self.log_action(f"Deleted Firehose stream: {stream_name} in {region}")
             
             self.cleanup_results['deleted_firehose_streams'].append({
@@ -133,7 +134,7 @@ class UltraCleanupKinesisManager:
             
         except ClientError as e:
             error_msg = f"Failed to delete firehose stream {stream_name}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['failed_deletions'].append({
                 'type': 'FirehoseStream',
@@ -147,7 +148,7 @@ class UltraCleanupKinesisManager:
     def delete_analytics_app_v1(self, analytics_client, app_name, region, account_key):
         """Delete a Kinesis Data Analytics Application (v1 - SQL)"""
         try:
-            self.print_colored(Colors.CYAN, f"[DELETE] Deleting analytics app (v1): {app_name}")
+            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting analytics app (v1): {app_name}")
             
             # Get application details to find creation timestamp
             response = analytics_client.describe_application(ApplicationName=app_name)
@@ -158,7 +159,7 @@ class UltraCleanupKinesisManager:
                 CreateTimestamp=create_timestamp
             )
             
-            self.print_colored(Colors.GREEN, f"[OK] Deleted analytics app (v1): {app_name}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted analytics app (v1): {app_name}")
             self.log_action(f"Deleted Kinesis Analytics app (v1): {app_name} in {region}")
             
             self.cleanup_results['deleted_analytics_apps_v1'].append({
@@ -170,7 +171,7 @@ class UltraCleanupKinesisManager:
             
         except ClientError as e:
             error_msg = f"Failed to delete analytics app (v1) {app_name}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['failed_deletions'].append({
                 'type': 'AnalyticsAppV1',
@@ -184,7 +185,7 @@ class UltraCleanupKinesisManager:
     def delete_analytics_app_v2(self, analyticsv2_client, app_name, region, account_key):
         """Delete a Kinesis Data Analytics Application (v2 - Flink/Java)"""
         try:
-            self.print_colored(Colors.CYAN, f"[DELETE] Deleting analytics app (v2): {app_name}")
+            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting analytics app (v2): {app_name}")
             
             # Get application details
             response = analyticsv2_client.describe_application(ApplicationName=app_name)
@@ -195,7 +196,7 @@ class UltraCleanupKinesisManager:
                 CreateTimestamp=create_timestamp
             )
             
-            self.print_colored(Colors.GREEN, f"[OK] Deleted analytics app (v2): {app_name}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted analytics app (v2): {app_name}")
             self.log_action(f"Deleted Kinesis Analytics app (v2): {app_name} in {region}")
             
             self.cleanup_results['deleted_analytics_apps_v2'].append({
@@ -207,7 +208,7 @@ class UltraCleanupKinesisManager:
             
         except ClientError as e:
             error_msg = f"Failed to delete analytics app (v2) {app_name}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['failed_deletions'].append({
                 'type': 'AnalyticsAppV2',
@@ -221,7 +222,7 @@ class UltraCleanupKinesisManager:
     def cleanup_region_kinesis(self, account_name, credentials, region):
         """Cleanup all Kinesis resources in a specific region"""
         try:
-            self.print_colored(Colors.YELLOW, f"\n[SCAN] Scanning region: {region}")
+            self.print_colored(Colors.YELLOW, f"\n{Symbols.SCAN} Scanning region: {region}")
             
             # Create clients for the region
             kinesis_client = boto3.client(
@@ -306,7 +307,7 @@ class UltraCleanupKinesisManager:
             
         except Exception as e:
             error_msg = f"Error processing region {region}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['errors'].append(error_msg)
 
@@ -314,7 +315,7 @@ class UltraCleanupKinesisManager:
         """Cleanup all Kinesis resources in an account across all regions"""
         try:
             self.print_colored(Colors.BLUE, f"\n{'='*100}")
-            self.print_colored(Colors.BLUE, f"[START] Processing Account: {account_name}")
+            self.print_colored(Colors.BLUE, f"{Symbols.START} Processing Account: {account_name}")
             self.print_colored(Colors.BLUE, f"{'='*100}")
             
             self.cleanup_results['accounts_processed'].append(account_name)
@@ -330,17 +331,17 @@ class UltraCleanupKinesisManager:
             regions_response = ec2_client.describe_regions()
             regions = [region['RegionName'] for region in regions_response['Regions']]
             
-            self.print_colored(Colors.CYAN, f"[SCAN] Processing {len(regions)} regions")
+            self.print_colored(Colors.CYAN, f"{Symbols.SCAN} Processing {len(regions)} regions")
             
             # Process each region
             for region in regions:
                 self.cleanup_region_kinesis(account_name, credentials, region)
             
-            self.print_colored(Colors.GREEN, f"\n[OK] Account {account_name} cleanup completed!")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.OK} Account {account_name} cleanup completed!")
             
         except Exception as e:
             error_msg = f"Error processing account {account_name}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['errors'].append(error_msg)
 
@@ -369,23 +370,23 @@ class UltraCleanupKinesisManager:
             with open(report_path, 'w') as f:
                 json.dump(summary, f, indent=2)
 
-            self.print_colored(Colors.GREEN, f"\n[STATS] Summary report saved: {report_path}")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.STATS} Summary report saved: {report_path}")
             self.log_action(f"Summary report saved: {report_path}")
 
             # Print summary to console
             self.print_colored(Colors.BLUE, f"\n{'='*100}")
             self.print_colored(Colors.BLUE, "[STATS] CLEANUP SUMMARY")
             self.print_colored(Colors.BLUE, f"{'='*100}")
-            self.print_colored(Colors.GREEN, f"[OK] Data Streams Deleted: {summary['summary']['total_data_streams_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Firehose Streams Deleted: {summary['summary']['total_firehose_streams_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Analytics Apps (v1) Deleted: {summary['summary']['total_analytics_apps_v1_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Analytics Apps (v2) Deleted: {summary['summary']['total_analytics_apps_v2_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Data Streams Deleted: {summary['summary']['total_data_streams_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Firehose Streams Deleted: {summary['summary']['total_firehose_streams_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Analytics Apps (v1) Deleted: {summary['summary']['total_analytics_apps_v1_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Analytics Apps (v2) Deleted: {summary['summary']['total_analytics_apps_v2_deleted']}")
 
             if summary['summary']['total_failed_deletions'] > 0:
-                self.print_colored(Colors.YELLOW, f"[WARN] Failed Deletions: {summary['summary']['total_failed_deletions']}")
+                self.print_colored(Colors.YELLOW, f"{Symbols.WARN} Failed Deletions: {summary['summary']['total_failed_deletions']}")
 
             if summary['summary']['total_errors'] > 0:
-                self.print_colored(Colors.RED, f"[ERROR] Errors: {summary['summary']['total_errors']}")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Errors: {summary['summary']['total_errors']}")
 
             # Display Account Summary
             self.print_colored(Colors.BLUE, f"\n{'='*100}")
@@ -447,16 +448,16 @@ class UltraCleanupKinesisManager:
                 account_summary[account]['regions'].add(app.get('region', 'unknown'))
 
             for account, stats in account_summary.items():
-                self.print_colored(Colors.CYAN, f"\n[LIST] Account: {account}")
-                self.print_colored(Colors.GREEN, f"  [OK] Data Streams: {stats['data_streams']}")
-                self.print_colored(Colors.GREEN, f"  [OK] Firehose Streams: {stats['firehose_streams']}")
-                self.print_colored(Colors.GREEN, f"  [OK] Analytics Apps (v1): {stats['analytics_apps_v1']}")
-                self.print_colored(Colors.GREEN, f"  [OK] Analytics Apps (v2): {stats['analytics_apps_v2']}")
+                self.print_colored(Colors.CYAN, f"\n{Symbols.LIST} Account: {account}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Data Streams: {stats['data_streams']}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Firehose Streams: {stats['firehose_streams']}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Analytics Apps (v1): {stats['analytics_apps_v1']}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Analytics Apps (v2): {stats['analytics_apps_v2']}")
                 regions_str = ', '.join(sorted(stats['regions'])) if stats['regions'] else 'N/A'
-                self.print_colored(Colors.YELLOW, f"  [SCAN] Regions: {regions_str}")
+                self.print_colored(Colors.YELLOW, f"  {Symbols.SCAN} Regions: {regions_str}")
 
         except Exception as e:
-            self.print_colored(Colors.RED, f"[ERROR] Failed to generate summary report: {e}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to generate summary report: {e}")
             self.log_action(f"Failed to generate summary report: {e}", "ERROR")
 
     def interactive_cleanup(self):
@@ -469,15 +470,15 @@ class UltraCleanupKinesisManager:
             # Load accounts
             config = self.cred_manager.load_root_accounts_config()
             if not config or 'accounts' not in config:
-                self.print_colored(Colors.RED, "[ERROR] No accounts configuration found!")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} No accounts configuration found!")
                 return
 
             accounts = config['accounts']
 
             # Display accounts
-            self.print_colored(Colors.CYAN, "[KEY] Select Root AWS Accounts for Kinesis Cleanup:")
+            self.print_colored(Colors.CYAN, f"{Symbols.KEY} Select Root AWS Accounts for Kinesis Cleanup:")
             print(f"{Colors.CYAN}[BOOK] Loading root accounts config...{Colors.END}")
-            self.print_colored(Colors.GREEN, f"[OK] Loaded {len(accounts)} root accounts")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Loaded {len(accounts)} root accounts")
             
             self.print_colored(Colors.YELLOW, "\n[KEY] Available Root AWS Accounts:")
             print("=" * 100)
@@ -517,16 +518,16 @@ class UltraCleanupKinesisManager:
                     indices = [int(x.strip()) for x in selection.split(',')]
                     selected_accounts = [account_list[i-1] for i in indices if 0 < i <= len(account_list)]
                 except (ValueError, IndexError):
-                    self.print_colored(Colors.RED, "[ERROR] Invalid selection!")
+                    self.print_colored(Colors.RED, f"{Symbols.ERROR} Invalid selection!")
                     return
 
             if not selected_accounts:
-                self.print_colored(Colors.RED, "[ERROR] No accounts selected!")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} No accounts selected!")
                 return
 
             # Confirm deletion
-            self.print_colored(Colors.RED, "\n[WARN] WARNING: This will DELETE all Kinesis resources!")
-            self.print_colored(Colors.YELLOW, f"[INFO] Accounts: {len(selected_accounts)}")
+            self.print_colored(Colors.RED, f"\n{Symbols.WARN} WARNING: This will DELETE all Kinesis resources!")
+            self.print_colored(Colors.YELLOW, f"{Symbols.INFO} Accounts: {len(selected_accounts)}")
             
             confirm = input(f"\nType 'yes' to confirm: ").strip().lower()
             if confirm != 'yes':
@@ -549,14 +550,14 @@ class UltraCleanupKinesisManager:
             # Generate summary
             self.generate_summary_report()
 
-            self.print_colored(Colors.GREEN, f"\n[OK] Kinesis cleanup completed!")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.OK} Kinesis cleanup completed!")
             self.print_colored(Colors.CYAN, f"[FILE] Log file: {self.log_file}")
 
         except KeyboardInterrupt:
             self.print_colored(Colors.YELLOW, "\n[WARN] Cleanup interrupted by user!")
             self.log_action("Cleanup interrupted by user", "WARNING")
         except Exception as e:
-            self.print_colored(Colors.RED, f"\n[ERROR] Error during cleanup: {e}")
+            self.print_colored(Colors.RED, f"\n{Symbols.ERROR} Error during cleanup: {e}")
             self.log_action(f"Error during cleanup: {e}", "ERROR")
 
 
@@ -568,7 +569,7 @@ def main():
     except KeyboardInterrupt:
         print("\n\n[WARN] Operation cancelled by user!")
     except Exception as e:
-        print(f"\n[ERROR] Fatal error: {e}")
+        print(f"\n{Symbols.ERROR} Fatal error: {e}")
 
 
 if __name__ == "__main__":

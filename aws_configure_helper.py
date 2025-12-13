@@ -1,5 +1,6 @@
 import json
 import subprocess
+from text_symbols import Symbols
 
 def load_config(path="aws_accounts_config.json"):
     with open(path, "r") as f:
@@ -42,7 +43,7 @@ def set_aws_profile(profile, access_key, secret_key, region="us-east-1", output_
     subprocess.run(["aws", "configure", "--profile", profile, "set", "aws_secret_access_key", secret_key])
     subprocess.run(["aws", "configure", "--profile", profile, "set", "region", region])
     subprocess.run(["aws", "configure", "--profile", profile, "set", "output", output_format])
-    print(f"[OK] Profile configured: {profile}")
+    print(f"{Symbols.OK} Profile configured: {profile}")
 
 def configure_selected_accounts(accounts_data, selected_accounts, region="us-east-1"):
     print("\n[CONFIG] Setting AWS CLI Profiles...\n")

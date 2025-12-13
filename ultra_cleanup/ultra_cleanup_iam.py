@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 
 import os
 import json
@@ -12,6 +12,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from root_iam_credential_manager import AWSCredentialManager, Colors
+from text_symbols import Symbols
 
 
 class UltraCleanupIAMManager:
@@ -71,7 +72,6 @@ class UltraCleanupIAMManager:
             self.log_filename = f"{self.iam_dir}/ultra_iam_cleanup_log_{self.execution_timestamp}.log"
 
             # Create a file handler for detailed logging
-            import logging
 
             # Create logger for detailed operations
             self.operation_logger = logging.getLogger('ultra_iam_cleanup')
@@ -103,7 +103,7 @@ class UltraCleanupIAMManager:
 
             # Log initial information
             self.operation_logger.info("=" * 100)
-            self.operation_logger.info("[START] ULTRA IAM CLEANUP SESSION STARTED")
+            self.operation_logger.info(f"{Symbols.START} ULTRA IAM CLEANUP SESSION STARTED")
             self.operation_logger.info("=" * 100)
             self.operation_logger.info(f"Execution Time: {self.current_time} UTC")
             self.operation_logger.info(f"Executed By: {self.current_user}")
@@ -152,8 +152,8 @@ class UltraCleanupIAMManager:
             users = []
             account_name = account_info.get('account_key', 'Unknown')
 
-            self.log_operation('INFO', f"[SCAN] Scanning for IAM users in {account_name}")
-            print(f"   [SCAN] Scanning for IAM users in {account_name}...")
+            self.log_operation('INFO', f"{Symbols.SCAN} Scanning for IAM users in {account_name}")
+            print(f"   {Symbols.SCAN} Scanning for IAM users in {account_name}...")
 
             paginator = iam_client.get_paginator('list_users')
 
@@ -213,7 +213,7 @@ class UltraCleanupIAMManager:
         except Exception as e:
             account_name = account_info.get('account_key', 'Unknown')
             self.log_operation('ERROR', f"Error getting IAM users in {account_name}: {e}")
-            print(f"   [ERROR] Error getting IAM users in {account_name}: {e}")
+            print(f"   {Symbols.ERROR} Error getting IAM users in {account_name}: {e}")
             return []
 
     def get_all_iam_groups(self, iam_client, account_info):
@@ -222,8 +222,8 @@ class UltraCleanupIAMManager:
             groups = []
             account_name = account_info.get('account_key', 'Unknown')
 
-            self.log_operation('INFO', f"[SCAN] Scanning for IAM groups in {account_name}")
-            print(f"   [SCAN] Scanning for IAM groups in {account_name}...")
+            self.log_operation('INFO', f"{Symbols.SCAN} Scanning for IAM groups in {account_name}")
+            print(f"   {Symbols.SCAN} Scanning for IAM groups in {account_name}...")
 
             paginator = iam_client.get_paginator('list_groups')
 
@@ -275,7 +275,7 @@ class UltraCleanupIAMManager:
         except Exception as e:
             account_name = account_info.get('account_key', 'Unknown')
             self.log_operation('ERROR', f"Error getting IAM groups in {account_name}: {e}")
-            print(f"   [ERROR] Error getting IAM groups in {account_name}: {e}")
+            print(f"   {Symbols.ERROR} Error getting IAM groups in {account_name}: {e}")
             return []
 
     def delete_iam_user(self, iam_client, user_info):
@@ -284,8 +284,8 @@ class UltraCleanupIAMManager:
             username = user_info['username']
             account_name = user_info['account_info'].get('account_key', 'Unknown')
 
-            self.log_operation('INFO', f"[DELETE]  Deleting IAM user: {username} in {account_name}")
-            print(f"   [DELETE]  Deleting IAM user: {username}...")
+            self.log_operation('INFO', f"{Symbols.DELETE}  Deleting IAM user: {username} in {account_name}")
+            print(f"   {Symbols.DELETE}  Deleting IAM user: {username}...")
 
             # Step 1: Delete user's access keys
             for key_id in user_info['access_keys']:
@@ -413,14 +413,14 @@ class UltraCleanupIAMManager:
                 'deleted_at': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             })
 
-            self.log_operation('INFO', f"[OK] Successfully deleted IAM user: {username}")
-            print(f"   [OK] Successfully deleted IAM user: {username}")
+            self.log_operation('INFO', f"{Symbols.OK} Successfully deleted IAM user: {username}")
+            print(f"   {Symbols.OK} Successfully deleted IAM user: {username}")
             return True
 
         except Exception as e:
             account_name = user_info['account_info'].get('account_key', 'Unknown')
             self.log_operation('ERROR', f"Failed to delete IAM user {username}: {e}")
-            print(f"   [ERROR] Failed to delete IAM user {username}: {e}")
+            print(f"   {Symbols.ERROR} Failed to delete IAM user {username}: {e}")
 
             self.cleanup_results['failed_operations'].append({
                 'operation_type': 'delete_user',
@@ -437,8 +437,8 @@ class UltraCleanupIAMManager:
             group_name = group_info['group_name']
             account_name = group_info['account_info'].get('account_key', 'Unknown')
 
-            self.log_operation('INFO', f"[DELETE]  Deleting IAM group: {group_name} in {account_name}")
-            print(f"   [DELETE]  Deleting IAM group: {group_name}...")
+            self.log_operation('INFO', f"{Symbols.DELETE}  Deleting IAM group: {group_name} in {account_name}")
+            print(f"   {Symbols.DELETE}  Deleting IAM group: {group_name}...")
 
             # Step 1: Remove all users from the group
             already_deleted_users = [user['username'] for user in self.cleanup_results['users_deleted']
@@ -518,8 +518,8 @@ class UltraCleanupIAMManager:
                     'deleted_at': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 })
 
-                self.log_operation('INFO', f"[OK] Successfully deleted IAM group: {group_name}")
-                print(f"   [OK] Successfully deleted IAM group: {group_name}")
+                self.log_operation('INFO', f"{Symbols.OK} Successfully deleted IAM group: {group_name}")
+                print(f"   {Symbols.OK} Successfully deleted IAM group: {group_name}")
                 return True
             except Exception as e:
                 self.log_operation('ERROR', f"Failed to delete group {group_name}: {e}")
@@ -528,7 +528,7 @@ class UltraCleanupIAMManager:
         except Exception as e:
             account_name = group_info['account_info'].get('account_key', 'Unknown')
             self.log_operation('ERROR', f"Failed to delete IAM group {group_name}: {e}")
-            print(f"   [ERROR] Failed to delete IAM group {group_name}: {e}")
+            print(f"   {Symbols.ERROR} Failed to delete IAM group {group_name}: {e}")
 
             self.cleanup_results['failed_operations'].append({
                 'operation_type': 'delete_group',
@@ -547,8 +547,8 @@ class UltraCleanupIAMManager:
             account_id = account_info['account_id']
             account_key = account_info['account_key']
 
-            self.log_operation('INFO', f"[CLEANUP] Starting IAM cleanup for {account_key} ({account_id})")
-            print(f"\n[CLEANUP] Starting IAM cleanup for {account_key} ({account_id})")
+            self.log_operation('INFO', f"{Symbols.CLEANUP} Starting IAM cleanup for {account_key} ({account_id})")
+            print(f"\n{Symbols.CLEANUP} Starting IAM cleanup for {account_key} ({account_id})")
 
             # Create IAM client
             iam_client = self.create_iam_client(access_key, secret_key)
@@ -565,15 +565,15 @@ class UltraCleanupIAMManager:
                 'groups_found': len(groups)
             })
 
-            self.log_operation('INFO', f"[STATS] {account_key} IAM resources summary:")
+            self.log_operation('INFO', f"{Symbols.STATS} {account_key} IAM resources summary:")
             self.log_operation('INFO', f"   [USER] IAM Users: {len(users)}")
             self.log_operation('INFO', f"   👥 IAM Groups: {len(groups)}")
 
-            print(f"   [STATS] IAM resources found: {len(users)} users, {len(groups)} groups")
+            print(f"   {Symbols.STATS} IAM resources found: {len(users)} users, {len(groups)} groups")
 
             if not users and not groups:
                 self.log_operation('INFO', f"No IAM resources found in {account_key}")
-                print(f"   [OK] No IAM resources to clean up")
+                print(f"   {Symbols.OK} No IAM resources to clean up")
                 return True
 
             success_count = 0
@@ -583,8 +583,8 @@ class UltraCleanupIAMManager:
             if selected_users:
                 filtered_users = [u for u in users if u['username'] in [su['username'] for su in selected_users]]
 
-                self.log_operation('INFO', f"[DELETE]  Deleting {len(filtered_users)} IAM users in {account_key}")
-                print(f"\n   [DELETE]  Deleting {len(filtered_users)} IAM users...")
+                self.log_operation('INFO', f"{Symbols.DELETE}  Deleting {len(filtered_users)} IAM users in {account_key}")
+                print(f"\n   {Symbols.DELETE}  Deleting {len(filtered_users)} IAM users...")
 
                 for i, user_info in enumerate(filtered_users, 1):
                     username = user_info['username']
@@ -592,7 +592,7 @@ class UltraCleanupIAMManager:
                     # Skip root account user if flag is set
                     if exclude_root_account and 'root' in username.lower():
                         self.log_operation('WARNING', f"Skipping root account user: {username}")
-                        print(f"   [WARN]  Skipping root account user: {username}")
+                        print(f"   {Symbols.WARN}  Skipping root account user: {username}")
                         continue
 
                     print(f"   [{i}/{len(filtered_users)}] Processing user {username}...")
@@ -605,14 +605,14 @@ class UltraCleanupIAMManager:
                     except Exception as e:
                         failed_count += 1
                         self.log_operation('ERROR', f"Error deleting user {username}: {e}")
-                        print(f"   [ERROR] Error deleting user {username}: {e}")
+                        print(f"   {Symbols.ERROR} Error deleting user {username}: {e}")
 
             # Process selected groups
             if selected_groups:
                 filtered_groups = [g for g in groups if g['group_name'] in [sg['group_name'] for sg in selected_groups]]
 
-                self.log_operation('INFO', f"[DELETE]  Deleting {len(filtered_groups)} IAM groups in {account_key}")
-                print(f"\n   [DELETE]  Deleting {len(filtered_groups)} IAM groups...")
+                self.log_operation('INFO', f"{Symbols.DELETE}  Deleting {len(filtered_groups)} IAM groups in {account_key}")
+                print(f"\n   {Symbols.DELETE}  Deleting {len(filtered_groups)} IAM groups...")
 
                 for i, group_info in enumerate(filtered_groups, 1):
                     group_name = group_info['group_name']
@@ -626,18 +626,18 @@ class UltraCleanupIAMManager:
                     except Exception as e:
                         failed_count += 1
                         self.log_operation('ERROR', f"Error deleting group {group_name}: {e}")
-                        print(f"   [ERROR] Error deleting group {group_name}: {e}")
+                        print(f"   {Symbols.ERROR} Error deleting group {group_name}: {e}")
 
-            print(f"   [OK] Completed: {success_count} successful, {failed_count} failed")
+            print(f"   {Symbols.OK} Completed: {success_count} successful, {failed_count} failed")
 
-            self.log_operation('INFO', f"[OK] IAM cleanup completed for {account_key}")
-            print(f"\n   [OK] IAM cleanup completed for {account_key}")
+            self.log_operation('INFO', f"{Symbols.OK} IAM cleanup completed for {account_key}")
+            print(f"\n   {Symbols.OK} IAM cleanup completed for {account_key}")
             return True
 
         except Exception as e:
             account_key = account_info.get('account_key', 'Unknown')
             self.log_operation('ERROR', f"Error cleaning up IAM resources in {account_key}: {e}")
-            print(f"   [ERROR] Error cleaning up IAM resources in {account_key}: {e}")
+            print(f"   {Symbols.ERROR} Error cleaning up IAM resources in {account_key}: {e}")
             self.cleanup_results['errors'].append({
                 'account_info': account_info,
                 'error': str(e)
@@ -703,22 +703,22 @@ class UltraCleanupIAMManager:
             with open(report_filename, 'w', encoding='utf-8') as f:
                 json.dump(report_data, f, indent=2, default=str)
 
-            self.log_operation('INFO', f"[OK] Ultra IAM cleanup report saved to: {report_filename}")
+            self.log_operation('INFO', f"{Symbols.OK} Ultra IAM cleanup report saved to: {report_filename}")
             return report_filename
 
         except Exception as e:
-            self.log_operation('ERROR', f"[ERROR] Failed to save ultra IAM cleanup report: {e}")
+            self.log_operation('ERROR', f"{Symbols.ERROR} Failed to save ultra IAM cleanup report: {e}")
             return None
 
     def run(self):
         """Main execution method - sequential (no threading)"""
         try:
-            self.log_operation('INFO', "[START] ULTRA IAM CLEANUP SESSION STARTED")
+            self.log_operation('INFO', f"{Symbols.START} ULTRA IAM CLEANUP SESSION STARTED")
 
             self.print_colored(Colors.BLUE, "\n" + "="*100)
-            self.print_colored(Colors.BLUE, "[START] ULTRA IAM CLEANUP MANAGER")
+            self.print_colored(Colors.BLUE, f"{Symbols.START} ULTRA IAM CLEANUP MANAGER")
             self.print_colored(Colors.BLUE, "="*100)
-            self.print_colored(Colors.WHITE, f"[DATE] Execution Date/Time: {self.current_time} UTC")
+            self.print_colored(Colors.WHITE, f"{Symbols.DATE} Execution Date/Time: {self.current_time} UTC")
             self.print_colored(Colors.WHITE, f"[USER] Executed by: {self.current_user}")
             self.print_colored(Colors.WHITE, f"[FILE] Log File: {self.log_filename}")
 
@@ -732,14 +732,14 @@ class UltraCleanupIAMManager:
             selected_accounts = root_accounts
 
             # STEP 2: Calculate total operations and get IAM resources
-            self.print_colored(Colors.YELLOW, f"\n[TARGET] IAM CLEANUP CONFIGURATION")
+            self.print_colored(Colors.YELLOW, f"\n{Symbols.TARGET} IAM CLEANUP CONFIGURATION")
             self.print_colored(Colors.YELLOW, "=" * 80)
-            self.print_colored(Colors.WHITE, f"[KEY] Credential source: ROOT ACCOUNTS")
-            self.print_colored(Colors.WHITE, f"[BANK] Selected accounts: {len(selected_accounts)}")
+            self.print_colored(Colors.WHITE, f"{Symbols.KEY} Credential source: ROOT ACCOUNTS")
+            self.print_colored(Colors.WHITE, f"{Symbols.ACCOUNT} Selected accounts: {len(selected_accounts)}")
             self.print_colored(Colors.YELLOW, "=" * 80)
 
             # STEP 3: Discover IAM resources across all selected accounts
-            self.print_colored(Colors.CYAN, f"\n[SCAN] Scanning {len(selected_accounts)} accounts for IAM resources...")
+            self.print_colored(Colors.CYAN, f"\n{Symbols.SCAN} Scanning {len(selected_accounts)} accounts for IAM resources...")
 
             all_users = []
             all_groups = []
@@ -748,7 +748,7 @@ class UltraCleanupIAMManager:
             for account_info in selected_accounts:
                 try:
                     account_key = account_info.get('account_key', 'Unknown')
-                    print(f"   [SCAN] Scanning account: {account_key}...")
+                    print(f"   {Symbols.SCAN} Scanning account: {account_key}...")
 
                     access_key = account_info['access_key']
                     secret_key = account_info['secret_key']
@@ -769,17 +769,17 @@ class UltraCleanupIAMManager:
                     all_users.extend(users)
                     all_groups.extend(groups)
 
-                    print(f"   [OK] Found {len(users)} users, {len(groups)} groups in {account_key}")
+                    print(f"   {Symbols.OK} Found {len(users)} users, {len(groups)} groups in {account_key}")
 
                 except Exception as e:
-                    print(f"   [ERROR] Error scanning account {account_key}: {e}")
+                    print(f"   {Symbols.ERROR} Error scanning account {account_key}: {e}")
 
             if not account_resources:
                 self.print_colored(Colors.RED, "\n[ERROR] No accounts were successfully processed. Nothing to clean up.")
                 return
 
             # STEP 4: Display summary and get user selections
-            self.print_colored(Colors.YELLOW, f"\n[STATS] IAM RESOURCES FOUND:")
+            self.print_colored(Colors.YELLOW, f"\n{Symbols.STATS} IAM RESOURCES FOUND:")
             self.print_colored(Colors.YELLOW, "=" * 80)
             self.print_colored(Colors.WHITE, f"[USER] Total Users: {len(all_users)}")
             self.print_colored(Colors.WHITE, f"👥 Total Groups: {len(all_groups)}")
@@ -795,7 +795,7 @@ class UltraCleanupIAMManager:
             cleanup_option = input("\nSelect cleanup option (1-4): ").strip()
 
             if cleanup_option == '4' or not cleanup_option:
-                self.print_colored(Colors.RED, "[ERROR] Cleanup cancelled")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Cleanup cancelled")
                 return
 
             # Process cleanup option
@@ -808,7 +808,7 @@ class UltraCleanupIAMManager:
             # Option to exclude root accounts
             exclude_root = True
             if exclude_root:
-                self.print_colored(Colors.GREEN, "[OK] Root account users will be excluded from deletion")
+                self.print_colored(Colors.GREEN, f"{Symbols.OK} Root account users will be excluded from deletion")
 
             # USERS Selection
             if cleanup_users and all_users:
@@ -828,7 +828,7 @@ class UltraCleanupIAMManager:
 
                     # Highlight root users
                     if 'root' in username.lower():
-                        print(f"{i:<4} {username:<30} {account_name:<15} {user_id:<24} {groups} [WARN] ROOT USER")
+                        print(f"{i:<4} {username:<30} {account_name:<15} {user_id:<24} {groups} {Symbols.WARN} ROOT USER")
                     else:
                         print(f"{i:<4} {username:<30} {account_name:<15} {user_id:<24} {groups}")
 
@@ -840,19 +840,19 @@ class UltraCleanupIAMManager:
                 self.print_colored(Colors.WHITE, "  • All users: 'all' or press Enter")
                 self.print_colored(Colors.WHITE, "  • Skip users: 'skip'")
 
-                user_selection = input("\n🔢 Select users to delete: ").strip().lower()
+                user_selection = input("\n[#] Select users to delete: ").strip().lower()
 
                 if user_selection != 'skip':
                     if not user_selection or user_selection == 'all':
                         users_to_delete = all_users
-                        self.print_colored(Colors.GREEN, f"[OK] Selected all {len(all_users)} IAM users")
+                        self.print_colored(Colors.GREEN, f"{Symbols.OK} Selected all {len(all_users)} IAM users")
                     else:
                         try:
                             indices = self.cred_manager._parse_selection(user_selection, len(all_users))
                             users_to_delete = [all_users[i - 1] for i in indices]
-                            self.print_colored(Colors.GREEN, f"[OK] Selected {len(users_to_delete)} IAM users")
+                            self.print_colored(Colors.GREEN, f"{Symbols.OK} Selected {len(users_to_delete)} IAM users")
                         except ValueError as e:
-                            self.print_colored(Colors.RED, f"[ERROR] Invalid selection: {e}")
+                            self.print_colored(Colors.RED, f"{Symbols.ERROR} Invalid selection: {e}")
                             return
 
             # GROUPS Selection
@@ -881,19 +881,19 @@ class UltraCleanupIAMManager:
                 self.print_colored(Colors.WHITE, "  • All groups: 'all' or press Enter")
                 self.print_colored(Colors.WHITE, "  • Skip groups: 'skip'")
 
-                group_selection = input("\n🔢 Select groups to delete: ").strip().lower()
+                group_selection = input("\n[#] Select groups to delete: ").strip().lower()
 
                 if group_selection != 'skip':
                     if not group_selection or group_selection == 'all':
                         groups_to_delete = all_groups
-                        self.print_colored(Colors.GREEN, f"[OK] Selected all {len(all_groups)} IAM groups")
+                        self.print_colored(Colors.GREEN, f"{Symbols.OK} Selected all {len(all_groups)} IAM groups")
                     else:
                         try:
                             indices = self.cred_manager._parse_selection(group_selection, len(all_groups))
                             groups_to_delete = [all_groups[i - 1] for i in indices]
-                            self.print_colored(Colors.GREEN, f"[OK] Selected {len(groups_to_delete)} IAM groups")
+                            self.print_colored(Colors.GREEN, f"{Symbols.OK} Selected {len(groups_to_delete)} IAM groups")
                         except ValueError as e:
-                            self.print_colored(Colors.RED, f"[ERROR] Invalid selection: {e}")
+                            self.print_colored(Colors.RED, f"{Symbols.ERROR} Invalid selection: {e}")
                             return
 
             # STEP 5: Final confirmation
@@ -901,7 +901,7 @@ class UltraCleanupIAMManager:
                 self.print_colored(Colors.RED, "\n[ERROR] No IAM resources selected for deletion. Nothing to clean up.")
                 return
 
-            self.print_colored(Colors.YELLOW, f"\n[TARGET] FINAL CONFIRMATION")
+            self.print_colored(Colors.YELLOW, f"\n{Symbols.TARGET} FINAL CONFIRMATION")
             self.print_colored(Colors.YELLOW, "=" * 80)
             self.print_colored(Colors.WHITE, f"You are about to delete:")
             self.print_colored(Colors.WHITE, f"  • {len(users_to_delete)} IAM users")
@@ -911,12 +911,12 @@ class UltraCleanupIAMManager:
             confirm = input("\nType 'yes' to confirm deletion: ").strip().lower()
 
             if confirm != 'yes':
-                self.print_colored(Colors.RED, "[ERROR] Deletion cancelled.")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Deletion cancelled.")
                 return
 
             # STEP 6: Execute deletion
-            self.print_colored(Colors.CYAN, f"\n[START] Starting IAM cleanup...")
-            self.log_operation('INFO', f"[START] IAM cleanup initiated - {len(selected_accounts)} accounts")
+            self.print_colored(Colors.CYAN, f"\n{Symbols.START} Starting IAM cleanup...")
+            self.log_operation('INFO', f"{Symbols.START} IAM cleanup initiated - {len(selected_accounts)} accounts")
 
             start_time = time.time()
 
@@ -942,7 +942,7 @@ class UltraCleanupIAMManager:
                 account_groups = groups_by_account.get(account_key, [])
 
                 if account_users or account_groups:
-                    self.print_colored(Colors.CYAN, f"\n[BANK] Processing account: {account_key}")
+                    self.print_colored(Colors.CYAN, f"\n{Symbols.ACCOUNT} Processing account: {account_key}")
                     print(f"  • Deleting {len(account_users)} users and {len(account_groups)} groups")
 
                     self.cleanup_account_iam(
@@ -959,13 +959,13 @@ class UltraCleanupIAMManager:
             self.print_colored(Colors.GREEN, f"\n" + "=" * 100)
             self.print_colored(Colors.GREEN, "[OK] IAM CLEANUP COMPLETE")
             self.print_colored(Colors.GREEN, "=" * 100)
-            self.print_colored(Colors.WHITE, f"[TIMER]  Total execution time: {total_time} seconds")
+            self.print_colored(Colors.WHITE, f"{Symbols.TIMER}  Total execution time: {total_time} seconds")
             self.print_colored(Colors.WHITE, f"[USER] Users deleted: {len(self.cleanup_results['users_deleted'])}")
             self.print_colored(Colors.WHITE, f"👥 Groups deleted: {len(self.cleanup_results['groups_deleted'])}")
             self.print_colored(Colors.WHITE,
-                               f"[KEY] Access keys deleted: {len(self.cleanup_results['access_keys_deleted'])}")
-            self.print_colored(Colors.WHITE, f"[LOG] Policies detached: {len(self.cleanup_results['policies_detached'])}")
-            self.print_colored(Colors.RED, f"[ERROR] Failed operations: {len(self.cleanup_results['failed_operations'])}")
+                               f"{Symbols.KEY} Access keys deleted: {len(self.cleanup_results['access_keys_deleted'])}")
+            self.print_colored(Colors.WHITE, f"{Symbols.LOG} Policies detached: {len(self.cleanup_results['policies_detached'])}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed operations: {len(self.cleanup_results['failed_operations'])}")
 
             self.log_operation('INFO', f"IAM CLEANUP COMPLETED")
             self.log_operation('INFO', f"Execution time: {total_time} seconds")
@@ -974,7 +974,7 @@ class UltraCleanupIAMManager:
 
             # STEP 8: Show account summary
             if self.cleanup_results['users_deleted'] or self.cleanup_results['groups_deleted']:
-                self.print_colored(Colors.YELLOW, f"\n[STATS] Deletion Summary by Account:")
+                self.print_colored(Colors.YELLOW, f"\n{Symbols.STATS} Deletion Summary by Account:")
 
                 # Group by account
                 account_summary = {}
@@ -991,13 +991,13 @@ class UltraCleanupIAMManager:
                     account_summary[account]['groups'] += 1
 
                 for account, summary in account_summary.items():
-                    self.print_colored(Colors.PURPLE, f"   [BANK] {account}:")
+                    self.print_colored(Colors.PURPLE, f"   {Symbols.ACCOUNT} {account}:")
                     self.print_colored(Colors.WHITE, f"      [USER] Users: {summary['users']}")
                     self.print_colored(Colors.WHITE, f"      👥 Groups: {summary['groups']}")
 
             # STEP 9: Show failures if any
             if self.cleanup_results['failed_operations']:
-                self.print_colored(Colors.RED, f"\n[ERROR] Failed Operations:")
+                self.print_colored(Colors.RED, f"\n{Symbols.ERROR} Failed Operations:")
                 for failure in self.cleanup_results['failed_operations'][:10]:  # Show first 10
                     account_key = failure['account_info'].get('account_key', 'Unknown')
                     self.print_colored(Colors.WHITE,
@@ -1012,16 +1012,15 @@ class UltraCleanupIAMManager:
             self.print_colored(Colors.CYAN, f"\n[FILE] Saving IAM cleanup report...")
             report_file = self.save_cleanup_report()
             if report_file:
-                self.print_colored(Colors.GREEN, f"[OK] IAM cleanup report saved to: {report_file}")
+                self.print_colored(Colors.GREEN, f"{Symbols.OK} IAM cleanup report saved to: {report_file}")
 
-            self.print_colored(Colors.GREEN, f"[OK] Session log saved to: {self.log_filename}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Session log saved to: {self.log_filename}")
 
-            self.print_colored(Colors.GREEN, f"\n[OK] IAM cleanup completed successfully!")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.OK} IAM cleanup completed successfully!")
 
         except Exception as e:
             self.log_operation('ERROR', f"FATAL ERROR in IAM cleanup execution: {str(e)}")
-            self.print_colored(Colors.RED, f"\n[ERROR] FATAL ERROR: {e}")
-            import traceback
+            self.print_colored(Colors.RED, f"\n{Symbols.ERROR} FATAL ERROR: {e}")
             traceback.print_exc()
             raise
 
@@ -1035,7 +1034,7 @@ def main():
         print("\n\n[ERROR] IAM cleanup interrupted by user")
         exit(1)
     except Exception as e:
-        print(f"[ERROR] Unexpected error: {e}")
+        print(f"{Symbols.ERROR} Unexpected error: {e}")
         exit(1)
 
 

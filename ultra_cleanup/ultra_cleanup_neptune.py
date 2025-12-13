@@ -22,6 +22,7 @@ import time
 from datetime import datetime
 from botocore.exceptions import ClientError
 from root_iam_credential_manager import AWSCredentialManager
+from text_symbols import Symbols
 
 
 class Colors:
@@ -41,9 +42,9 @@ class UltraCleanupNeptuneManager:
     def __init__(self):
         """Initialize the Neptune cleanup manager"""
         self.cred_manager = AWSCredentialManager()
-        self.current_time = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+        self.current_time = datetime.now(datetime.UTC).strftime('%Y-%m-%d %H:%M:%S')
         self.current_user = os.getenv('USERNAME') or os.getenv('USER') or 'unknown'
-        self.execution_timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+        self.execution_timestamp = datetime.now(datetime.UTC).strftime('%Y%m%d_%H%M%S')
         
         # Create directories for logs and reports
         self.base_dir = os.path.join(os.getcwd(), 'aws', 'neptune')
@@ -80,7 +81,7 @@ class UltraCleanupNeptuneManager:
 
     def log_action(self, message, level="INFO"):
         """Log action to file"""
-        timestamp = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp = datetime.now(datetime.UTC).strftime('%Y-%m-%d %H:%M:%S')
         log_entry = f"{timestamp} | {level:8} | {message}\n"
         with open(self.log_file, 'a') as f:
             f.write(log_entry)
@@ -88,14 +89,14 @@ class UltraCleanupNeptuneManager:
     def delete_db_instance(self, neptune_client, instance_id, region, account_key):
         """Delete a Neptune DB instance"""
         try:
-            self.print_colored(Colors.CYAN, f"   [DELETE] Deleting instance: {instance_id}")
+            self.print_colored(Colors.CYAN, f"   {Symbols.DELETE} Deleting instance: {instance_id}")
             
             neptune_client.delete_db_instance(
                 DBInstanceIdentifier=instance_id,
                 SkipFinalSnapshot=True
             )
             
-            self.print_colored(Colors.GREEN, f"   [OK] Deleted instance: {instance_id}")
+            self.print_colored(Colors.GREEN, f"   {Symbols.OK} Deleted instance: {instance_id}")
             self.log_action(f"Deleted Neptune instance: {instance_id} in {region}")
             
             self.cleanup_results['deleted_instances'].append({
@@ -107,14 +108,14 @@ class UltraCleanupNeptuneManager:
             
         except ClientError as e:
             error_msg = f"Failed to delete instance {instance_id}: {e}"
-            self.print_colored(Colors.RED, f"   [ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"   {Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             return False
 
     def delete_db_cluster(self, neptune_client, cluster_id, region, account_key):
         """Delete a Neptune DB cluster"""
         try:
-            self.print_colored(Colors.CYAN, f"[DELETE] Deleting cluster: {cluster_id}")
+            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting cluster: {cluster_id}")
             
             # Delete all instances in the cluster first
             try:
@@ -124,7 +125,7 @@ class UltraCleanupNeptuneManager:
                 instances = instances_response.get('DBInstances', [])
                 
                 if instances:
-                    self.print_colored(Colors.YELLOW, f"   [SCAN] Found {len(instances)} instances in cluster")
+                    self.print_colored(Colors.YELLOW, f"   {Symbols.SCAN} Found {len(instances)} instances in cluster")
                     for instance in instances:
                         self.delete_db_instance(
                             neptune_client,
@@ -153,7 +154,7 @@ class UltraCleanupNeptuneManager:
             
             neptune_client.delete_db_cluster(**delete_params)
             
-            self.print_colored(Colors.GREEN, f"[OK] Deleted cluster: {cluster_id}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted cluster: {cluster_id}")
             self.log_action(f"Deleted Neptune cluster: {cluster_id} in {region}")
             
             self.cleanup_results['deleted_clusters'].append({
@@ -165,7 +166,7 @@ class UltraCleanupNeptuneManager:
             
         except ClientError as e:
             error_msg = f"Failed to delete cluster {cluster_id}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['failed_deletions'].append({
                 'type': 'NeptuneCluster',
@@ -179,13 +180,13 @@ class UltraCleanupNeptuneManager:
     def delete_cluster_snapshot(self, neptune_client, snapshot_id, region, account_key):
         """Delete a Neptune cluster snapshot"""
         try:
-            self.print_colored(Colors.CYAN, f"[DELETE] Deleting snapshot: {snapshot_id}")
+            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting snapshot: {snapshot_id}")
             
             neptune_client.delete_db_cluster_snapshot(
                 DBClusterSnapshotIdentifier=snapshot_id
             )
             
-            self.print_colored(Colors.GREEN, f"[OK] Deleted snapshot: {snapshot_id}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted snapshot: {snapshot_id}")
             self.log_action(f"Deleted snapshot: {snapshot_id} in {region}")
             
             self.cleanup_results['deleted_snapshots'].append({
@@ -197,18 +198,18 @@ class UltraCleanupNeptuneManager:
             
         except ClientError as e:
             error_msg = f"Failed to delete snapshot {snapshot_id}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             return False
 
     def delete_subnet_group(self, neptune_client, group_name, region, account_key):
         """Delete a DB subnet group"""
         try:
-            self.print_colored(Colors.CYAN, f"[DELETE] Deleting subnet group: {group_name}")
+            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting subnet group: {group_name}")
             
             neptune_client.delete_db_subnet_group(DBSubnetGroupName=group_name)
             
-            self.print_colored(Colors.GREEN, f"[OK] Deleted subnet group: {group_name}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted subnet group: {group_name}")
             self.log_action(f"Deleted subnet group: {group_name} in {region}")
             
             self.cleanup_results['deleted_subnet_groups'].append({
@@ -220,7 +221,7 @@ class UltraCleanupNeptuneManager:
             
         except ClientError as e:
             error_msg = f"Failed to delete subnet group {group_name}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             return False
 
@@ -228,14 +229,14 @@ class UltraCleanupNeptuneManager:
         """Delete a DB parameter group"""
         try:
             if group_name.startswith('default.'):
-                self.print_colored(Colors.YELLOW, f"[SKIP] Skipping default parameter group: {group_name}")
+                self.print_colored(Colors.YELLOW, f"{Symbols.SKIP} Skipping default parameter group: {group_name}")
                 return True
             
-            self.print_colored(Colors.CYAN, f"[DELETE] Deleting parameter group: {group_name}")
+            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting parameter group: {group_name}")
             
             neptune_client.delete_db_parameter_group(DBParameterGroupName=group_name)
             
-            self.print_colored(Colors.GREEN, f"[OK] Deleted parameter group: {group_name}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted parameter group: {group_name}")
             self.log_action(f"Deleted parameter group: {group_name} in {region}")
             
             self.cleanup_results['deleted_parameter_groups'].append({
@@ -247,7 +248,7 @@ class UltraCleanupNeptuneManager:
             
         except ClientError as e:
             error_msg = f"Failed to delete parameter group {group_name}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             return False
 
@@ -255,14 +256,14 @@ class UltraCleanupNeptuneManager:
         """Delete a DB cluster parameter group"""
         try:
             if group_name.startswith('default.'):
-                self.print_colored(Colors.YELLOW, f"[SKIP] Skipping default cluster parameter group: {group_name}")
+                self.print_colored(Colors.YELLOW, f"{Symbols.SKIP} Skipping default cluster parameter group: {group_name}")
                 return True
             
-            self.print_colored(Colors.CYAN, f"[DELETE] Deleting cluster parameter group: {group_name}")
+            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting cluster parameter group: {group_name}")
             
             neptune_client.delete_db_cluster_parameter_group(DBClusterParameterGroupName=group_name)
             
-            self.print_colored(Colors.GREEN, f"[OK] Deleted cluster parameter group: {group_name}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted cluster parameter group: {group_name}")
             self.log_action(f"Deleted cluster parameter group: {group_name} in {region}")
             
             self.cleanup_results['deleted_cluster_parameter_groups'].append({
@@ -274,14 +275,14 @@ class UltraCleanupNeptuneManager:
             
         except ClientError as e:
             error_msg = f"Failed to delete cluster parameter group {group_name}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             return False
 
     def cleanup_region_neptune(self, account_name, credentials, region):
         """Cleanup all Neptune resources in a specific region"""
         try:
-            self.print_colored(Colors.YELLOW, f"\n[SCAN] Scanning region: {region}")
+            self.print_colored(Colors.YELLOW, f"\n{Symbols.SCAN} Scanning region: {region}")
             
             neptune_client = boto3.client(
                 'neptune',
@@ -296,7 +297,7 @@ class UltraCleanupNeptuneManager:
                 clusters = clusters_response.get('DBClusters', [])
                 
                 if clusters:
-                    self.print_colored(Colors.CYAN, f"[CLUSTER] Found {len(clusters)} clusters")
+                    self.print_colored(Colors.CYAN, f"{Symbols.CLUSTER} Found {len(clusters)} clusters")
                     for cluster in clusters:
                         self.delete_db_cluster(
                             neptune_client,
@@ -389,7 +390,7 @@ class UltraCleanupNeptuneManager:
             
         except Exception as e:
             error_msg = f"Error processing region {region}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['errors'].append(error_msg)
 
@@ -397,7 +398,7 @@ class UltraCleanupNeptuneManager:
         """Cleanup all Neptune resources in an account across all regions"""
         try:
             self.print_colored(Colors.BLUE, f"\n{'='*100}")
-            self.print_colored(Colors.BLUE, f"[START] Processing Account: {account_name}")
+            self.print_colored(Colors.BLUE, f"{Symbols.START} Processing Account: {account_name}")
             self.print_colored(Colors.BLUE, f"{'='*100}")
             
             self.cleanup_results['accounts_processed'].append(account_name)
@@ -413,17 +414,17 @@ class UltraCleanupNeptuneManager:
             regions_response = ec2_client.describe_regions()
             regions = [region['RegionName'] for region in regions_response['Regions']]
             
-            self.print_colored(Colors.CYAN, f"[SCAN] Processing {len(regions)} regions")
+            self.print_colored(Colors.CYAN, f"{Symbols.SCAN} Processing {len(regions)} regions")
             
             # Process each region
             for region in regions:
                 self.cleanup_region_neptune(account_name, credentials, region)
             
-            self.print_colored(Colors.GREEN, f"\n[OK] Account {account_name} cleanup completed!")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.OK} Account {account_name} cleanup completed!")
             
         except Exception as e:
             error_msg = f"Error processing account {account_name}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['errors'].append(error_msg)
 
@@ -454,24 +455,24 @@ class UltraCleanupNeptuneManager:
             with open(report_path, 'w') as f:
                 json.dump(summary, f, indent=2)
 
-            self.print_colored(Colors.GREEN, f"\n[STATS] Summary report saved: {report_path}")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.STATS} Summary report saved: {report_path}")
 
             # Print summary to console
             self.print_colored(Colors.BLUE, f"\n{'='*100}")
             self.print_colored(Colors.BLUE, "[STATS] CLEANUP SUMMARY")
             self.print_colored(Colors.BLUE, f"{'='*100}")
-            self.print_colored(Colors.GREEN, f"[OK] Clusters Deleted: {summary['summary']['total_clusters_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Instances Deleted: {summary['summary']['total_instances_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Snapshots Deleted: {summary['summary']['total_snapshots_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Subnet Groups Deleted: {summary['summary']['total_subnet_groups_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Parameter Groups Deleted: {summary['summary']['total_parameter_groups_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Cluster Parameter Groups Deleted: {summary['summary']['total_cluster_parameter_groups_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Clusters Deleted: {summary['summary']['total_clusters_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Instances Deleted: {summary['summary']['total_instances_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Snapshots Deleted: {summary['summary']['total_snapshots_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Subnet Groups Deleted: {summary['summary']['total_subnet_groups_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Parameter Groups Deleted: {summary['summary']['total_parameter_groups_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Cluster Parameter Groups Deleted: {summary['summary']['total_cluster_parameter_groups_deleted']}")
 
             if summary['summary']['total_failed_deletions'] > 0:
-                self.print_colored(Colors.YELLOW, f"[WARN] Failed Deletions: {summary['summary']['total_failed_deletions']}")
+                self.print_colored(Colors.YELLOW, f"{Symbols.WARN} Failed Deletions: {summary['summary']['total_failed_deletions']}")
 
             if summary['summary']['total_errors'] > 0:
-                self.print_colored(Colors.RED, f"[ERROR] Errors: {summary['summary']['total_errors']}")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Errors: {summary['summary']['total_errors']}")
 
             # Display Account Summary
             self.print_colored(Colors.BLUE, f"\n{'='*100}")
@@ -504,18 +505,18 @@ class UltraCleanupNeptuneManager:
                     account_summary[account]['regions'].add(item.get('region', 'unknown'))
 
             for account, stats in account_summary.items():
-                self.print_colored(Colors.CYAN, f"\n[LIST] Account: {account}")
-                self.print_colored(Colors.GREEN, f"  [OK] Clusters: {stats['clusters']}")
-                self.print_colored(Colors.GREEN, f"  [OK] Instances: {stats['instances']}")
-                self.print_colored(Colors.GREEN, f"  [OK] Snapshots: {stats['snapshots']}")
-                self.print_colored(Colors.GREEN, f"  [OK] Subnet Groups: {stats['subnet_groups']}")
-                self.print_colored(Colors.GREEN, f"  [OK] Parameter Groups: {stats['parameter_groups']}")
-                self.print_colored(Colors.GREEN, f"  [OK] Cluster Parameter Groups: {stats['cluster_parameter_groups']}")
+                self.print_colored(Colors.CYAN, f"\n{Symbols.LIST} Account: {account}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Clusters: {stats['clusters']}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Instances: {stats['instances']}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Snapshots: {stats['snapshots']}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Subnet Groups: {stats['subnet_groups']}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Parameter Groups: {stats['parameter_groups']}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Cluster Parameter Groups: {stats['cluster_parameter_groups']}")
                 regions_str = ', '.join(sorted(stats['regions'])) if stats['regions'] else 'N/A'
-                self.print_colored(Colors.YELLOW, f"  [SCAN] Regions: {regions_str}")
+                self.print_colored(Colors.YELLOW, f"  {Symbols.SCAN} Regions: {regions_str}")
 
         except Exception as e:
-            self.print_colored(Colors.RED, f"[ERROR] Failed to generate summary report: {e}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to generate summary report: {e}")
 
     def interactive_cleanup(self):
         """Interactive mode for Neptune cleanup"""
@@ -526,15 +527,15 @@ class UltraCleanupNeptuneManager:
 
             config = self.cred_manager.load_root_accounts_config()
             if not config or 'accounts' not in config:
-                self.print_colored(Colors.RED, "[ERROR] No accounts configuration found!")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} No accounts configuration found!")
                 return
 
             accounts = config['accounts']
             account_list = list(accounts.keys())
 
-            self.print_colored(Colors.CYAN, "[KEY] Select Root AWS Accounts for Neptune Cleanup:")
+            self.print_colored(Colors.CYAN, f"{Symbols.KEY} Select Root AWS Accounts for Neptune Cleanup:")
             print(f"{Colors.CYAN}[BOOK] Loading root accounts config...{Colors.END}")
-            self.print_colored(Colors.GREEN, f"[OK] Loaded {len(accounts)} root accounts")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Loaded {len(accounts)} root accounts")
             
             self.print_colored(Colors.YELLOW, "\n[KEY] Available Root AWS Accounts:")
             print("=" * 100)
@@ -569,21 +570,21 @@ class UltraCleanupNeptuneManager:
                     indices = [int(x.strip()) for x in selection.split(',')]
                     selected_accounts = [account_list[i-1] for i in indices if 0 < i <= len(account_list)]
                 except (ValueError, IndexError):
-                    self.print_colored(Colors.RED, "[ERROR] Invalid selection!")
+                    self.print_colored(Colors.RED, f"{Symbols.ERROR} Invalid selection!")
                     return
 
             if not selected_accounts:
-                self.print_colored(Colors.RED, "[ERROR] No accounts selected!")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} No accounts selected!")
                 return
 
             # Ask about final snapshots
-            self.print_colored(Colors.YELLOW, "\n[KEY] Final Snapshot Options:")
+            self.print_colored(Colors.YELLOW, f"\n{Symbols.KEY} Final Snapshot Options:")
             snapshot_choice = input("Create final snapshots before deleting clusters? (yes/no) [default: no]: ").strip().lower()
             self.create_final_snapshot = snapshot_choice == 'yes'
 
-            self.print_colored(Colors.RED, "\n[WARN] WARNING: This will DELETE all Neptune resources!")
-            self.print_colored(Colors.YELLOW, "[WARN] Includes: Clusters, Instances, Snapshots, Subnet Groups, Parameter Groups")
-            self.print_colored(Colors.YELLOW, "[INFO] Default parameter groups will be skipped")
+            self.print_colored(Colors.RED, f"\n{Symbols.WARN} WARNING: This will DELETE all Neptune resources!")
+            self.print_colored(Colors.YELLOW, f"{Symbols.WARN} Includes: Clusters, Instances, Snapshots, Subnet Groups, Parameter Groups")
+            self.print_colored(Colors.YELLOW, f"{Symbols.INFO} Default parameter groups will be skipped")
             confirm = input(f"\nType 'yes' to confirm: ").strip().lower()
             if confirm != 'yes':
                 self.print_colored(Colors.YELLOW, "[EXIT] Cleanup cancelled!")
@@ -601,13 +602,13 @@ class UltraCleanupNeptuneManager:
 
             self.generate_summary_report()
 
-            self.print_colored(Colors.GREEN, f"\n[OK] Neptune cleanup completed!")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.OK} Neptune cleanup completed!")
             self.print_colored(Colors.CYAN, f"[FILE] Log file: {self.log_file}")
 
         except KeyboardInterrupt:
             self.print_colored(Colors.YELLOW, "\n[WARN] Cleanup interrupted by user!")
         except Exception as e:
-            self.print_colored(Colors.RED, f"\n[ERROR] Error during cleanup: {e}")
+            self.print_colored(Colors.RED, f"\n{Symbols.ERROR} Error during cleanup: {e}")
 
 
 def main():
@@ -618,7 +619,7 @@ def main():
     except KeyboardInterrupt:
         print("\n\n[WARN] Operation cancelled by user!")
     except Exception as e:
-        print(f"\n[ERROR] Fatal error: {e}")
+        print(f"\n{Symbols.ERROR} Fatal error: {e}")
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 
 import pandas as pd
 import os
@@ -8,6 +8,7 @@ from datetime import datetime
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils.dataframe import dataframe_to_rows
+from text_symbols import Symbols
 
 class ExcelCredentialsExporter:
     """Enhanced Excel export functionality for IAM credentials"""
@@ -287,8 +288,8 @@ class ExcelCredentialsExporter:
 # Example usage and testing
 if __name__ == "__main__":
     exporter = ExcelCredentialsExporter()
-    now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
-    now_date = datetime.utcnow().strftime("%Y-%m-%d")
+    now_str = datetime.now(datetime.UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
+    now_date = datetime.now(datetime.UTC).strftime("%Y-%m-%d")
 
     # Example JSON structure for testing
     sample_data = {

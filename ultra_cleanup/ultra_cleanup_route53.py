@@ -36,6 +36,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from root_iam_credential_manager import AWSCredentialManager, Colors
+from text_symbols import Symbols
 
 
 class UltraCleanupRoute53Manager:
@@ -98,9 +99,9 @@ class UltraCleanupRoute53Manager:
                 f.write(f"User: {self.current_user}\n")
                 f.write("=" * 80 + "\n\n")
 
-            self.print_colored(Colors.GREEN, f"[OK] Logging initialized: {self.log_file}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Logging initialized: {self.log_file}")
         except Exception as e:
-            self.print_colored(Colors.RED, f"[ERROR] Failed to setup logging: {e}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to setup logging: {e}")
 
     def log_action(self, message: str, level: str = "INFO"):
         """Log action to file with timestamp"""
@@ -196,7 +197,7 @@ class UltraCleanupRoute53Manager:
                 ChangeBatch=change_batch
             )
 
-            self.print_colored(Colors.GREEN, f"[OK] Deleted {record_type} record: {record_name}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted {record_type} record: {record_name}")
             self.log_action(f"Deleted {record_type} record: {record_name}")
             self.cleanup_results['deleted_record_sets'].append({
                 'zone_id': zone_id,
@@ -238,7 +239,7 @@ class UltraCleanupRoute53Manager:
                 }
             )
 
-            self.print_colored(Colors.GREEN, f"[OK] Disassociated VPC {vpc_id} from zone {zone_id}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Disassociated VPC {vpc_id} from zone {zone_id}")
             self.log_action(f"Disassociated VPC {vpc_id} ({vpc_region}) from zone {zone_id}")
             self.cleanup_results['disassociated_vpcs'].append({
                 'zone_id': zone_id,
@@ -264,7 +265,7 @@ class UltraCleanupRoute53Manager:
             zone_name = zone['Name']
             is_private = zone.get('Config', {}).get('PrivateZone', False)
 
-            self.print_colored(Colors.YELLOW, f"\n[SCAN] Processing hosted zone: {zone_name} ({zone_id})")
+            self.print_colored(Colors.YELLOW, f"\n{Symbols.SCAN} Processing hosted zone: {zone_name} ({zone_id})")
             self.log_action(f"Processing hosted zone: {zone_name} ({zone_id}) - Private: {is_private}")
 
             # Get detailed zone information
@@ -289,7 +290,7 @@ class UltraCleanupRoute53Manager:
             deletable_records = [r for r in record_sets if r['Type'] in self.deletable_record_types]
 
             if deletable_records:
-                self.print_colored(Colors.CYAN, f"   [LOG] Found {len(deletable_records)} deletable records")
+                self.print_colored(Colors.CYAN, f"   {Symbols.LOG} Found {len(deletable_records)} deletable records")
                 for record_set in deletable_records:
                     self.delete_record_set(route53_client, zone_id, record_set)
                     time.sleep(0.5)  # Rate limiting
@@ -300,7 +301,7 @@ class UltraCleanupRoute53Manager:
 
             route53_client.delete_hosted_zone(Id=zone_id)
 
-            self.print_colored(Colors.GREEN, f"[OK] Deleted hosted zone: {zone_name}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted hosted zone: {zone_name}")
             self.log_action(f"Deleted hosted zone: {zone_name} ({zone_id})")
             self.cleanup_results['deleted_hosted_zones'].append({
                 'zone_id': zone_id,
@@ -346,7 +347,7 @@ class UltraCleanupRoute53Manager:
         try:
             route53_client.delete_health_check(HealthCheckId=health_check_id)
 
-            self.print_colored(Colors.GREEN, f"[OK] Deleted health check: {health_check_id}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted health check: {health_check_id}")
             self.log_action(f"Deleted health check: {health_check_id}")
             self.cleanup_results['deleted_health_checks'].append({
                 'health_check_id': health_check_id
@@ -402,7 +403,7 @@ class UltraCleanupRoute53Manager:
         try:
             route53_client.delete_traffic_policy_instance(Id=instance_id)
 
-            self.print_colored(Colors.GREEN, f"[OK] Deleted traffic policy instance: {instance_id}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted traffic policy instance: {instance_id}")
             self.log_action(f"Deleted traffic policy instance: {instance_id}")
             return True
 
@@ -415,7 +416,7 @@ class UltraCleanupRoute53Manager:
         try:
             route53_client.delete_traffic_policy(Id=policy_id, Version=version)
 
-            self.print_colored(Colors.GREEN, f"[OK] Deleted traffic policy: {policy_id} v{version}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted traffic policy: {policy_id} v{version}")
             self.log_action(f"Deleted traffic policy: {policy_id} v{version}")
             self.cleanup_results['deleted_traffic_policies'].append({
                 'policy_id': policy_id,
@@ -446,7 +447,7 @@ class UltraCleanupRoute53Manager:
         try:
             route53_client.delete_query_logging_config(Id=config_id)
 
-            self.print_colored(Colors.GREEN, f"[OK] Deleted query logging config: {config_id}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted query logging config: {config_id}")
             self.log_action(f"Deleted query logging config: {config_id}")
             self.cleanup_results['deleted_query_logging_configs'].append({
                 'config_id': config_id
@@ -476,7 +477,7 @@ class UltraCleanupRoute53Manager:
         try:
             route53_client.delete_reusable_delegation_set(Id=delegation_set_id)
 
-            self.print_colored(Colors.GREEN, f"[OK] Deleted delegation set: {delegation_set_id}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted delegation set: {delegation_set_id}")
             self.log_action(f"Deleted delegation set: {delegation_set_id}")
             self.cleanup_results['deleted_reusable_delegation_sets'].append({
                 'delegation_set_id': delegation_set_id
@@ -551,7 +552,7 @@ class UltraCleanupRoute53Manager:
                 time.sleep(1)  # Rate limiting between zones
 
             # Step 5: Delete health checks (after zones, as they might be in use)
-            self.print_colored(Colors.YELLOW, "\n[HEALTH] Cleaning up health checks...")
+            self.print_colored(Colors.YELLOW, f"\n{Symbols.HEALTH} Cleaning up health checks...")
             health_checks = self.list_health_checks(route53_client)
 
             # First attempt
@@ -573,7 +574,7 @@ class UltraCleanupRoute53Manager:
                     time.sleep(0.5)
 
             # Step 6: Delete reusable delegation sets (if not in use)
-            self.print_colored(Colors.YELLOW, "\n[LIST] Cleaning up reusable delegation sets...")
+            self.print_colored(Colors.YELLOW, f"\n{Symbols.LIST} Cleaning up reusable delegation sets...")
             delegation_sets = self.list_reusable_delegation_sets(route53_client)
             for ds in delegation_sets:
                 self.delete_reusable_delegation_set(route53_client, ds['Id'])
@@ -584,12 +585,12 @@ class UltraCleanupRoute53Manager:
 
             self.cleanup_results['accounts_processed'].append(account_name)
 
-            self.print_colored(Colors.GREEN, f"\n[OK] Account {account_name} cleanup completed!")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.OK} Account {account_name} cleanup completed!")
             self.log_action(f"Account {account_name} cleanup completed successfully")
 
         except Exception as e:
             error_msg = f"Error processing account {account_name}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             results['errors'].append(error_msg)
             self.cleanup_results['errors'].append(error_msg)
@@ -624,25 +625,25 @@ class UltraCleanupRoute53Manager:
             with open(report_path, 'w') as f:
                 json.dump(summary, f, indent=2)
 
-            self.print_colored(Colors.GREEN, f"\n[STATS] Summary report saved: {report_path}")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.STATS} Summary report saved: {report_path}")
             self.log_action(f"Summary report saved: {report_path}")
 
             # Print summary to console
             self.print_colored(Colors.BLUE, f"\n{'='*80}")
             self.print_colored(Colors.BLUE, "[STATS] CLEANUP SUMMARY")
             self.print_colored(Colors.BLUE, f"{'='*80}")
-            self.print_colored(Colors.GREEN, f"[OK] Hosted Zones Deleted: {summary['summary']['total_hosted_zones_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Record Sets Deleted: {summary['summary']['total_record_sets_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Health Checks Deleted: {summary['summary']['total_health_checks_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Traffic Policies Deleted: {summary['summary']['total_traffic_policies_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Query Logging Configs Deleted: {summary['summary']['total_query_logging_configs_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] VPCs Disassociated: {summary['summary']['total_vpcs_disassociated']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Hosted Zones Deleted: {summary['summary']['total_hosted_zones_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Record Sets Deleted: {summary['summary']['total_record_sets_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Health Checks Deleted: {summary['summary']['total_health_checks_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Traffic Policies Deleted: {summary['summary']['total_traffic_policies_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Query Logging Configs Deleted: {summary['summary']['total_query_logging_configs_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} VPCs Disassociated: {summary['summary']['total_vpcs_disassociated']}")
 
             if summary['summary']['total_failed_deletions'] > 0:
-                self.print_colored(Colors.YELLOW, f"[WARN]  Failed Deletions: {summary['summary']['total_failed_deletions']}")
+                self.print_colored(Colors.YELLOW, f"{Symbols.WARN}  Failed Deletions: {summary['summary']['total_failed_deletions']}")
 
             if summary['summary']['total_errors'] > 0:
-                self.print_colored(Colors.RED, f"[ERROR] Errors: {summary['summary']['total_errors']}")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Errors: {summary['summary']['total_errors']}")
 
             # Display Account Summary
             self.print_colored(Colors.BLUE, f"\n{'='*80}")
@@ -772,19 +773,19 @@ class UltraCleanupRoute53Manager:
 
             # Display account summary
             for account, stats in account_summary.items():
-                self.print_colored(Colors.CYAN, f"\n[LIST] Account: {account}")
-                self.print_colored(Colors.GREEN, f"  [OK] Hosted Zones: {stats['hosted_zones']}")
-                self.print_colored(Colors.GREEN, f"  [OK] Record Sets: {stats['record_sets']}")
-                self.print_colored(Colors.GREEN, f"  [OK] Health Checks: {stats['health_checks']}")
-                self.print_colored(Colors.GREEN, f"  [OK] Traffic Policies: {stats['traffic_policies']}")
-                self.print_colored(Colors.GREEN, f"  [OK] Query Logging Configs: {stats['query_logging_configs']}")
-                self.print_colored(Colors.GREEN, f"  [OK] Delegation Sets: {stats['delegation_sets']}")
-                self.print_colored(Colors.GREEN, f"  [OK] VPCs Disassociated: {stats['vpcs_disassociated']}")
+                self.print_colored(Colors.CYAN, f"\n{Symbols.LIST} Account: {account}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Hosted Zones: {stats['hosted_zones']}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Record Sets: {stats['record_sets']}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Health Checks: {stats['health_checks']}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Traffic Policies: {stats['traffic_policies']}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Query Logging Configs: {stats['query_logging_configs']}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Delegation Sets: {stats['delegation_sets']}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} VPCs Disassociated: {stats['vpcs_disassociated']}")
                 regions_str = ', '.join(sorted(stats['regions'])) if stats['regions'] else 'N/A'
-                self.print_colored(Colors.YELLOW, f"  [SCAN] Regions: {regions_str}")
+                self.print_colored(Colors.YELLOW, f"  {Symbols.SCAN} Regions: {regions_str}")
 
         except Exception as e:
-            self.print_colored(Colors.RED, f"[ERROR] Failed to generate summary report: {e}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to generate summary report: {e}")
             self.log_action(f"Failed to generate summary report: {e}", "ERROR")
 
     def interactive_cleanup(self):
@@ -797,15 +798,15 @@ class UltraCleanupRoute53Manager:
             # Load accounts
             config = self.cred_manager.load_root_accounts_config()
             if not config or 'accounts' not in config:
-                self.print_colored(Colors.RED, "[ERROR] No accounts configuration found!")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} No accounts configuration found!")
                 return
 
             accounts = config['accounts']
 
             # Display accounts with detailed info
-            self.print_colored(Colors.CYAN, "[KEY] Select Root AWS Accounts for Route53 Cleanup:")
+            self.print_colored(Colors.CYAN, f"{Symbols.KEY} Select Root AWS Accounts for Route53 Cleanup:")
             print(f"{Colors.CYAN}[BOOK] Loading root accounts config...{Colors.END}")
-            self.print_colored(Colors.GREEN, f"[OK] Loaded {len(accounts)} root accounts")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Loaded {len(accounts)} root accounts")
             
             self.print_colored(Colors.YELLOW, "\n[KEY] Available Root AWS Accounts:")
             print("=" * 100)
@@ -843,21 +844,21 @@ class UltraCleanupRoute53Manager:
                     indices = [int(x.strip()) for x in selection.split(',')]
                     selected_accounts = [account_list[i-1] for i in indices if 0 < i <= len(account_list)]
                 except (ValueError, IndexError):
-                    self.print_colored(Colors.RED, "[ERROR] Invalid selection!")
+                    self.print_colored(Colors.RED, f"{Symbols.ERROR} Invalid selection!")
                     return
 
             if not selected_accounts:
-                self.print_colored(Colors.RED, "[ERROR] No accounts selected!")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} No accounts selected!")
                 return
 
             # Confirm deletion
-            self.print_colored(Colors.RED, "\n[WARN]  WARNING: This will DELETE Route53 resources!")
-            self.print_colored(Colors.RED, "[WARN]  VPCs will NOT be deleted (only disassociated from zones)")
+            self.print_colored(Colors.RED, f"\n{Symbols.WARN}  WARNING: This will DELETE Route53 resources!")
+            self.print_colored(Colors.RED, f"{Symbols.WARN}  VPCs will NOT be deleted (only disassociated from zones)")
             self.print_colored(Colors.YELLOW, f"Accounts: {len(selected_accounts)}")
             
             confirm = input(f"\nType 'yes' to confirm: ").strip().lower()
             if confirm != 'yes':
-                self.print_colored(Colors.YELLOW, "[ERROR] Cleanup cancelled!")
+                self.print_colored(Colors.YELLOW, f"{Symbols.ERROR} Cleanup cancelled!")
                 return
 
             # Process selected accounts
@@ -876,14 +877,14 @@ class UltraCleanupRoute53Manager:
             # Generate summary
             self.generate_summary_report()
 
-            self.print_colored(Colors.GREEN, f"\n[OK] Route53 cleanup completed!")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.OK} Route53 cleanup completed!")
             self.print_colored(Colors.CYAN, f"[FILE] Log file: {self.log_file}")
 
         except KeyboardInterrupt:
             self.print_colored(Colors.YELLOW, "\n[WARN]  Cleanup interrupted by user!")
             self.log_action("Cleanup interrupted by user", "WARNING")
         except Exception as e:
-            self.print_colored(Colors.RED, f"\n[ERROR] Error during cleanup: {e}")
+            self.print_colored(Colors.RED, f"\n{Symbols.ERROR} Error during cleanup: {e}")
             self.log_action(f"Error during cleanup: {e}", "ERROR")
 
 
@@ -895,7 +896,7 @@ def main():
     except KeyboardInterrupt:
         print("\n\n[WARN]  Operation cancelled by user!")
     except Exception as e:
-        print(f"\n[ERROR] Fatal error: {e}")
+        print(f"\n{Symbols.ERROR} Fatal error: {e}")
 
 
 if __name__ == "__main__":

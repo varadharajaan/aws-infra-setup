@@ -4,6 +4,7 @@ import glob
 import re
 from datetime import datetime
 import sys
+from text_symbols import Symbols
 
 
 def sanitize_credentials(input_file=None, output_dir=None):
@@ -16,14 +17,14 @@ def sanitize_credentials(input_file=None, output_dir=None):
     if not input_file:
         iam_dir = "aws/iam"
         if not os.path.exists(iam_dir):
-            print(f"[ERROR] Directory {iam_dir} not found")
+            print(f"{Symbols.ERROR} Directory {iam_dir} not found")
             return False
 
         pattern = os.path.join(iam_dir, "iam_users_credentials_*.json")
         files = glob.glob(pattern)
 
         if not files:
-            print(f"[ERROR] No credential files found in {iam_dir}")
+            print(f"{Symbols.ERROR} No credential files found in {iam_dir}")
             return False
 
         # Sort by timestamp (reverse = latest first)
@@ -33,7 +34,7 @@ def sanitize_credentials(input_file=None, output_dir=None):
     if not output_dir:
         output_dir = os.getcwd()
 
-    print(f"[SCAN] Processing file: {input_file}")
+    print(f"{Symbols.SCAN} Processing file: {input_file}")
 
     try:
         with open(input_file, 'r') as f:
@@ -121,12 +122,12 @@ def sanitize_credentials(input_file=None, output_dir=None):
         with open(output_path, 'w') as f:
             json.dump(sanitized_data, f, indent=2)
 
-        print(f"[OK] Successfully sanitized credentials")
+        print(f"{Symbols.OK} Successfully sanitized credentials")
         print(f"[FILE] Sanitized file saved to: {output_path}")
         return True
 
     except Exception as e:
-        print(f"[ERROR] Error during sanitization: {e}")
+        print(f"{Symbols.ERROR} Error during sanitization: {e}")
         return False
 
 

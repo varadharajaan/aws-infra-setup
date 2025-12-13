@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 import json
 import os
 import subprocess
@@ -10,6 +10,8 @@ import time
 import threading
 import queue
 import re
+from text_symbols import Symbols
+
 
 class CloudNukeManager:
     def __init__(self):
@@ -259,7 +261,7 @@ class CloudNukeManager:
         self.logger.info(f"Executing: {cmd_string}")
         
         print(f"\n{'='*80}")
-        print(f"🎯 EXECUTING CLOUDNUKE")
+        print(f"{Symbols.TARGET} EXECUTING CLOUDNUKE")
         print(f"{'='*80}")
         print(f"📍 Profile: {profile}")
         print(f"🆔 Account ID: {account_info['account_id']}")
@@ -270,14 +272,14 @@ class CloudNukeManager:
             print(f"🤖 Confirmation value: '{auto_confirm_value}'")
         print(f"{'='*80}")
         
-        confirm = input("\n⚠️  Do you want to proceed with this account? (yes/no): ").strip().lower()
+        confirm = input("\n[WARN]  Do you want to proceed with this account? (yes/no): ").strip().lower()
         if confirm != 'yes':
             self.logger.info(f"Skipped execution for profile {profile}")
             return False
             
         try:
-            start_time = datetime.utcnow()
-            print(f"\n🚀 Starting execution at {start_time.strftime('%H:%M:%S')} UTC...")
+            start_time = datetime.now(datetime.UTC)
+            print(f"\n{Symbols.START} Starting execution at {start_time.strftime('%H:%M:%S')} UTC...")
             
             if auto_confirm_enabled:
                 return self._execute_with_auto_confirm(command, env, auto_confirm_value, profile, start_time)
@@ -286,7 +288,7 @@ class CloudNukeManager:
                 
         except Exception as e:
             self.logger.error(f"Failed to execute cloudnuke: {e}")
-            print(f"\n❌ Error: {e}")
+            print(f"\n{Symbols.ERROR} Error: {e}")
             return False
         
     def _execute_with_auto_confirm_simple(self, command, env, auto_confirm_value, profile, start_time):
@@ -326,7 +328,7 @@ class CloudNukeManager:
                     process.stdin.write(f'{auto_confirm_value}\n')
                     process.stdin.flush()
                     confirmation_sent = True
-                    print(f"✅ Auto-confirmation sent!")
+                    print(f"{Symbols.OK} Auto-confirmation sent!")
                     
                     # Continue reading remaining output
                     continue
@@ -338,17 +340,17 @@ class CloudNukeManager:
             self.logger.error(f"Error in auto-confirmation: {e}")
             returncode = 1
         
-        end_time = datetime.utcnow()
+        end_time = datetime.now(datetime.UTC)
         duration = end_time - start_time
         
         if returncode == 0:
-            print(f"\n✅ Successfully completed cloudnuke for profile {profile}")
-            print(f"⏱️  Duration: {duration}")
+            print(f"\n{Symbols.OK} Successfully completed cloudnuke for profile {profile}")
+            print(f"{Symbols.TIMER}  Duration: {duration}")
             print(f"🕒 Completed at: {end_time.strftime('%Y-%m-%d %H:%M:%S')} UTC")
             self.logger.info(f"Successfully completed cloudnuke for profile {profile} in {duration}")
             return True
         else:
-            print(f"\n❌ Cloudnuke failed for profile {profile} with return code: {returncode}")
+            print(f"\n{Symbols.ERROR} Cloudnuke failed for profile {profile} with return code: {returncode}")
             self.logger.error(f"Cloudnuke failed for profile {profile} with return code: {returncode}")
             return False
 
@@ -415,7 +417,7 @@ class CloudNukeManager:
                                 process.stdin.write(f'{auto_confirm_value}\n')
                                 process.stdin.flush()
                                 confirmation_sent = True
-                                print(f"✅ Auto-confirmation sent!")
+                                print(f"{Symbols.OK} Auto-confirmation sent!")
                                 break
                     
                     # Clear buffer when it gets too long or on newline
@@ -443,7 +445,7 @@ class CloudNukeManager:
             
             # Check for timeout
             if current_time - start_wait > max_wait_time:
-                print(f"\n⏰ Process timeout after {max_wait_time} seconds")
+                print(f"\n{Symbols.TIMER} Process timeout after {max_wait_time} seconds")
                 process.terminate()
                 break
             
@@ -454,7 +456,7 @@ class CloudNukeManager:
                     process.stdin.write(f'{auto_confirm_value}\n')
                     process.stdin.flush()
                     confirmation_sent = True
-                    print(f"✅ Force auto-confirmation sent!")
+                    print(f"{Symbols.OK} Force auto-confirmation sent!")
                 except Exception as e:
                     self.logger.error(f"Error force sending confirmation: {e}")
             
@@ -469,7 +471,7 @@ class CloudNukeManager:
                         process.stdin.flush()
                         confirmation_sent = True
                         prompt_detected = True
-                        print(f"✅ Force auto-confirmation sent!")
+                        print(f"{Symbols.OK} Force auto-confirmation sent!")
                     except Exception as e:
                         self.logger.error(f"Error force sending confirmation: {e}")
             
@@ -492,19 +494,19 @@ class CloudNukeManager:
         duration = end_time - start_time
         
         if returncode == 0:
-            print(f"\n✅ Successfully completed cloudnuke for profile {profile}")
-            print(f"⏱️  Duration: {duration}")
+            print(f"\n{Symbols.OK} Successfully completed cloudnuke for profile {profile}")
+            print(f"{Symbols.TIMER}  Duration: {duration}")
             print(f"🕒 Completed at: {end_time.strftime('%Y-%m-%d %H:%M:%S')} UTC")
             self.logger.info(f"Successfully completed cloudnuke for profile {profile} in {duration}")
             return True
         else:
-            print(f"\n❌ Cloudnuke failed for profile {profile} with return code: {returncode}")
+            print(f"\n{Symbols.ERROR} Cloudnuke failed for profile {profile} with return code: {returncode}")
             self.logger.error(f"Cloudnuke failed for profile {profile} with return code: {returncode}")
             return False
         
     def _execute_manual(self, command, env, profile, start_time):
         """Execute in manual mode"""
-        print("📝 Manual confirmation mode - please respond to prompts as they appear...")
+        print("[LOG] Manual confirmation mode - please respond to prompts as they appear...")
         
         process = subprocess.Popen(
             command,
@@ -515,16 +517,16 @@ class CloudNukeManager:
         )
         
         returncode = process.wait()
-        end_time = datetime.utcnow()
+        end_time = datetime.now(datetime.UTC)
         duration = end_time - start_time
         
         if returncode == 0:
-            print(f"\n✅ Successfully completed cloudnuke for profile {profile}")
-            print(f"⏱️  Duration: {duration}")
+            print(f"\n{Symbols.OK} Successfully completed cloudnuke for profile {profile}")
+            print(f"{Symbols.TIMER}  Duration: {duration}")
             self.logger.info(f"Successfully completed cloudnuke for profile {profile} in {duration}")
             return True
         else:
-            print(f"\n❌ Cloudnuke failed for profile {profile} with return code: {returncode}")
+            print(f"\n{Symbols.ERROR} Cloudnuke failed for profile {profile} with return code: {returncode}")
             self.logger.error(f"Cloudnuke failed for profile {profile} with return code: {returncode}")
             return False
     
@@ -543,10 +545,10 @@ class CloudNukeManager:
             custom_value = input("Use custom confirmation value? (press Enter for 'nuke', or type custom value): ").strip()
             confirm_value = custom_value if custom_value else "nuke"
                 
-            print(f"\n✅ Auto-confirmation enabled with value: '{confirm_value}'")
+            print(f"\n{Symbols.OK} Auto-confirmation enabled with value: '{confirm_value}'")
             return True, confirm_value
         else:
-            print("\n✅ Manual confirmation mode - you'll need to confirm deletions manually")
+            print("\n[OK] Manual confirmation mode - you'll need to confirm deletions manually")
             return False, None
 
     def delete_aws_profiles(self, profiles):
@@ -629,7 +631,7 @@ class CloudNukeManager:
         # Store execution metadata
         self.execution_metadata = {
             "execution_id": f"{today}_{timestamp}",
-            "start_time": datetime.utcnow().isoformat(),
+            "start_time": datetime.now(datetime.UTC).isoformat(),
             "user": "varadharajaan",
             "execution_log": str(execution_log),
             "summary_log": str(summary_log),
@@ -657,7 +659,7 @@ class CloudNukeManager:
         
         if account not in self.execution_data["accounts"]:
             self.execution_data["accounts"][account] = {
-                "start_time": datetime.utcnow().isoformat(),
+                "start_time": datetime.now(datetime.UTC).isoformat(),
                 "status": "in_progress",
                 "resources_deleted": [],
                 "errors": [],
@@ -671,14 +673,14 @@ class CloudNukeManager:
         if details:
             if "error" in details:
                 account_data["errors"].append({
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(datetime.UTC).isoformat(),
                     "error": details["error"]
                 })
             if "resources" in details:
                 account_data["resources_deleted"].extend(details["resources"])
             if "duration" in details:
                 account_data["duration"] = str(details["duration"])
-                account_data["end_time"] = datetime.utcnow().isoformat()
+                account_data["end_time"] = datetime.now(datetime.UTC).isoformat()
         
         self.logger.info(f"Progress tracked for {account}: {status}")
 
@@ -694,8 +696,8 @@ class CloudNukeManager:
                 "total_accounts": len(self.execution_data["accounts"]) if hasattr(self, 'execution_data') else 0,
                 "successful_accounts": sum(1 for acc in self.execution_data["accounts"].values() if acc["status"] == "success") if hasattr(self, 'execution_data') else 0,
                 "failed_accounts": sum(1 for acc in self.execution_data["accounts"].values() if acc["status"] == "failed") if hasattr(self, 'execution_data') else 0,
-                "total_duration": str(datetime.utcnow() - datetime.fromisoformat(self.execution_metadata["start_time"])),
-                "end_time": datetime.utcnow().isoformat()
+                "total_duration": str(datetime.now(datetime.UTC) - datetime.fromisoformat(self.execution_metadata["start_time"])),
+                "end_time": datetime.now(datetime.UTC).isoformat()
             },
             "account_details": self.execution_data["accounts"] if hasattr(self, 'execution_data') else {},
             "configuration": {
@@ -758,8 +760,8 @@ class CloudNukeManager:
         </head>
         <body>
             <div class="container">
-                <div class="header">
-                    <h1>🚀 CloudNuke Execution Report</h1>
+                <div class="headerf">
+                    <h1>{Symbols.START} CloudNuke Execution Report</h1>
                     <p class="timestamp">Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} UTC</p>
                     <p class="timestamp">Execution ID: {self.execution_metadata['execution_id']}</p>
                     <p class="timestamp">User: varadharajaan</p>
@@ -781,10 +783,10 @@ class CloudNukeManager:
                 </div>
                 
                 <div class="section">
-                    <h2>📋 Execution Details</h2>
+                    <h2>[LIST] Execution Details</h2>
                     <div class="metadata">
                         <p><strong>Start Time:</strong> {self.execution_metadata['start_time']}</p>
-                        <p><strong>End Time:</strong> {datetime.utcnow().isoformat()}</p>
+                        <p><strong>End Time:</strong> {datetime.now(datetime.UTC).isoformat()}</p>
                         <p><strong>CloudNuke Executable:</strong> {self.cloudnuke_exe}</p>
                         <p><strong>Config File:</strong> {self.config_file}</p>
                         <p><strong>Execution Log:</strong> {self.execution_log_path}</p>
@@ -793,7 +795,7 @@ class CloudNukeManager:
                 </div>
                 
                 <div class="section">
-                    <h2>📊 Account Results</h2>
+                    <h2>[STATS] Account Results</h2>
                     <table>
                         <thead>
                             <tr>
@@ -827,8 +829,8 @@ class CloudNukeManager:
                     </table>
                 </div>
                 
-                <div class="section">
-                    <h2>ℹ️ System Information</h2>
+                <div class="sectionf">
+                    <h2>{Symbols.INFO} System Information</h2>
                     <div class="metadata">
                         <p><strong>Python Version:</strong> """ + sys.version + """</p>
                         <p><strong>Platform:</strong> """ + os.name + """</p>
@@ -942,15 +944,15 @@ class CloudNukeManager:
         </head>
         <body>
             <div class="header">
-                <h1>🚀 CloudNuke Management Dashboard</h1>
+                <h1>[START] CloudNuke Management Dashboard</h1>
                 <p>User: varadharajaan | Last Updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} UTC</p>
-                <button class="refresh-btn" onclick="location.reload()">🔄 Refresh Dashboard</button>
+                <button class="refresh-btn" onclick="location.reload()">[SCAN] Refresh Dashboard</button>
             </div>
             
             <div class="container">
                 <div class="dashboard-grid">
                     <div class="card">
-                        <h3>📊 Overall Statistics</h3>
+                        <h3>[STATS] Overall Statistics</h3>
                         <div class="stats-grid">
                             <div class="stat-item">
                                 <div class="stat-number">{len(recent_reports)}</div>
@@ -972,14 +974,14 @@ class CloudNukeManager:
                     </div>
                     
                     <div class="card">
-                        <h3>📈 Success Rate Chart</h3>
+                        <h3>[UP] Success Rate Chart</h3>
                         <div class="chart-container">
                             <canvas id="successChart"></canvas>
                         </div>
                     </div>
                     
                     <div class="card">
-                        <h3>📅 Recent Executions</h3>
+                        <h3>[DATE] Recent Executions</h3>
                         <div class="recent-executions">
         """
         
@@ -1009,9 +1011,9 @@ class CloudNukeManager:
                         <h3>🔗 Quick Links</h3>
                         <div style="display: flex; flex-direction: column; gap: 10px;">
                             <a href="reports/html/" style="padding: 10px; background: #e3f2fd; border-radius: 5px; text-decoration: none; color: #1976d2;">📄 HTML Reports</a>
-                            <a href="reports/json/" style="padding: 10px; background: #f3e5f5; border-radius: 5px; text-decoration: none; color: #7b1fa2;">📋 JSON Reports</a>
-                            <a href="reports/csv/" style="padding: 10px; background: #e8f5e8; border-radius: 5px; text-decoration: none; color: #388e3c;">📊 CSV Reports</a>
-                            <a href="logs/" style="padding: 10px; background: #fff3e0; border-radius: 5px; text-decoration: none; color: #f57c00;">📝 Execution Logs</a>
+                            <a href="reports/json/" style="padding: 10px; background: #f3e5f5; border-radius: 5px; text-decoration: none; color: #7b1fa2;f">{Symbols.LIST} JSON Reports</a>
+                            <a href="reports/csv/" style="padding: 10px; background: #e8f5e8; border-radius: 5px; text-decoration: none; color: #388e3c;f">{Symbols.STATS} CSV Reports</a>
+                            <a href="logs/" style="padding: 10px; background: #fff3e0; border-radius: 5px; text-decoration: none; color: #f57c00;">[LOG] Execution Logs</a>
                         </div>
                     </div>
                 </div>
@@ -1065,7 +1067,7 @@ class CloudNukeManager:
         config_data = {
             "name": config_name,
             "created_by": "varadharajaan",
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(datetime.UTC).isoformat(),
             "region_mode": region_mode,
             "regions": regions,
             "resource_mode": resource_mode,
@@ -1093,12 +1095,12 @@ class CloudNukeManager:
             reports_generated['dashboard'] = self.create_ui_dashboard()
             
             print(f"\n{'='*80}")
-            print("📊 REPORTS GENERATED")
+            print("[STATS] REPORTS GENERATED")
             print(f"{'='*80}")
             print(f"📄 JSON Report: {reports_generated['json']}")
             print(f"🌐 HTML Report: {reports_generated['html']}")
-            print(f"📊 CSV Report: {reports_generated['csv']}")
-            print(f"🚀 Dashboard: {reports_generated['dashboard']}")
+            print(f"{Symbols.STATS} CSV Report: {reports_generated['csv']}")
+            print(f"{Symbols.START} Dashboard: {reports_generated['dashboard']}")
             print(f"{'='*80}")
             
             self.logger.info("All reports generated successfully")
@@ -1110,7 +1112,7 @@ class CloudNukeManager:
             
     def run(self):
         """Main execution flow"""
-        start_time = datetime.utcnow()
+        start_time = datetime.now(datetime.UTC)
         
         # Check if cloudnuke executable exists
         if not Path(self.cloudnuke_exe).exists():
@@ -1152,10 +1154,10 @@ class CloudNukeManager:
         
         # Pre-execution summary
         print(f"\n{'='*80}")
-        print("📋 PRE-EXECUTION SUMMARY")
+        print("[LIST] PRE-EXECUTION SUMMARY")
         print(f"{'='*80}")
         print(f"🏢 Selected accounts: {', '.join(selected_accounts)}")
-        print(f"🌍 Region configuration: {region_mode}")
+        print(f"{Symbols.REGION} Region configuration: {region_mode}")
         if region_mode != "all":
             print(f"   Regions: {', '.join(selected_regions)}")
         print(f"🔧 Resource configuration: {resource_mode}")
@@ -1193,35 +1195,35 @@ class CloudNukeManager:
                 print(f"\n⏸️  Pausing before next account...")
                 time.sleep(3)
         
-        end_time = datetime.utcnow()
+        end_time = datetime.now(datetime.UTC)
         duration = end_time - start_time
         
         # Final summary
         print(f"\n{'='*100}")
-        print("📊 FINAL EXECUTION SUMMARY")
+        print("[STATS] FINAL EXECUTION SUMMARY")
         print(f"{'='*100}")
-        print(f"⏰ Start Time: {start_time.strftime('%Y-%m-%d %H:%M:%S')} UTC")
-        print(f"⏰ End Time: {end_time.strftime('%Y-%m-%d %H:%M:%S')} UTC")
-        print(f"⏱️  Total Duration: {duration}")
+        print(f"{Symbols.TIMER} Start Time: {start_time.strftime('%Y-%m-%d %H:%M:%S')} UTC")
+        print(f"{Symbols.TIMER} End Time: {end_time.strftime('%Y-%m-%d %H:%M:%S')} UTC")
+        print(f"{Symbols.TIMER}  Total Duration: {duration}")
         print(f"👤 User: varadharajaan")
-        print(f"📁 Config File: {self.config_file}")
+        print(f"{Symbols.FOLDER} Config File: {self.config_file}")
         print(f"🔧 Executable: {self.cloudnuke_exe}")
         print(f"🏢 Total accounts: {len(selected_accounts)}")
-        print(f"✅ Successful executions: {successful_executions}")
-        print(f"❌ Failed executions: {len(selected_accounts) - successful_executions}")
+        print(f"{Symbols.OK} Successful executions: {successful_executions}")
+        print(f"{Symbols.ERROR} Failed executions: {len(selected_accounts) - successful_executions}")
         
         if failed_accounts:
-            print(f"\n❌ Failed accounts: {', '.join(failed_accounts)}")
+            print(f"\n{Symbols.ERROR} Failed accounts: {', '.join(failed_accounts)}")
             
         print(f"{'='*100}\n")
         
         # Ask user if they want to delete the profiles
-        delete_confirm = input("\n🗑️  Do you want to delete the AWS profiles that were created? (yes/no): ").strip().lower()
+        delete_confirm = input("\n[DELETE]  Do you want to delete the AWS profiles that were created? (yes/no): ").strip().lower()
         if delete_confirm == 'yes':
             self.delete_aws_profiles(selected_accounts)
-            print("✅ AWS profiles have been deleted")
+            print(f"{Symbols.OK} AWS profiles have been deleted")
         else:
-            print("ℹ️  AWS profiles retained")
+            print(f"{Symbols.INFO}  AWS profiles retained")
         
         self.logger.info("Cloudnuke execution completed for all selected accounts")
 

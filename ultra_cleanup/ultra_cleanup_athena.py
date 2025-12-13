@@ -32,6 +32,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from root_iam_credential_manager import AWSCredentialManager, Colors
+from text_symbols import Symbols
 
 
 class UltraCleanupAthenaManager:
@@ -84,7 +85,7 @@ class UltraCleanupAthenaManager:
                     'us-east-1', 'us-east-2', 'us-west-1', 'us-west-2', 'ap-south-1'
                 ])
         except Exception as e:
-            self.print_colored(Colors.YELLOW, f"[WARN]  Warning: Could not load user regions: {e}")
+            self.print_colored(Colors.YELLOW, f"{Symbols.WARN}  Warning: Could not load user regions: {e}")
 
         return ['us-east-1', 'us-east-2', 'us-west-1', 'us-west-2', 'ap-south-1']
 
@@ -95,7 +96,6 @@ class UltraCleanupAthenaManager:
 
             self.log_filename = f"{self.athena_dir}/ultra_athena_cleanup_log_{self.execution_timestamp}.log"
             
-            import logging
             
             self.operation_logger = logging.getLogger('ultra_athena_cleanup')
             self.operation_logger.setLevel(logging.INFO)
@@ -121,7 +121,7 @@ class UltraCleanupAthenaManager:
             self.operation_logger.addHandler(console_handler)
             
             self.operation_logger.info("=" * 100)
-            self.operation_logger.info("[ALERT] ULTRA ATHENA CLEANUP SESSION STARTED [ALERT]")
+            self.operation_logger.info(f"{Symbols.ALERT} ULTRA ATHENA CLEANUP SESSION STARTED {Symbols.ALERT}")
             self.operation_logger.info("=" * 100)
             self.operation_logger.info(f"Execution Time: {self.current_time} UTC")
             self.operation_logger.info(f"Executed By: {self.current_user}")
@@ -174,11 +174,11 @@ class UltraCleanupAthenaManager:
                     
                     # PROTECTION: Skip primary workgroup
                     if wg_name.lower() == 'primary':
-                        self.log_operation('INFO', f"[PROTECTED]  PROTECTED: {wg_name} (primary workgroup)")
+                        self.log_operation('INFO', f"{Symbols.PROTECTED}  PROTECTED: {wg_name} (primary workgroup)")
                         continue
                     
                     try:
-                        self.log_operation('INFO', f"[DELETE]  Deleting workgroup: {wg_name}")
+                        self.log_operation('INFO', f"{Symbols.DELETE}  Deleting workgroup: {wg_name}")
                         athena_client.delete_work_group(
                             WorkGroup=wg_name,
                             RecursiveDeleteOption=True
@@ -204,7 +204,7 @@ class UltraCleanupAthenaManager:
                         })
             
             if deleted_count > 0:
-                self.print_colored(Colors.GREEN, f"   [OK] Deleted {deleted_count} workgroups")
+                self.print_colored(Colors.GREEN, f"   {Symbols.OK} Deleted {deleted_count} workgroups")
             
             return True
         except Exception as e:
@@ -234,7 +234,7 @@ class UltraCleanupAthenaManager:
                         self.log_operation('ERROR', f"Failed to delete query {query_id}: {e}")
             
             if deleted_count > 0:
-                self.print_colored(Colors.GREEN, f"   [OK] Deleted {deleted_count} named queries")
+                self.print_colored(Colors.GREEN, f"   {Symbols.OK} Deleted {deleted_count} named queries")
             
             return True
         except Exception as e:
@@ -249,15 +249,15 @@ class UltraCleanupAthenaManager:
             access_key = account_info.get('access_key')
             secret_key = account_info.get('secret_key')
         
-            self.log_operation('INFO', f"[CLEANUP] Starting cleanup for {account_name} ({account_id}) in {region}")
-            self.print_colored(Colors.CYAN, f"\n[CLEANUP] Starting cleanup for {account_name} ({account_id}) in {region}")
+            self.log_operation('INFO', f"{Symbols.CLEANUP} Starting cleanup for {account_name} ({account_id}) in {region}")
+            self.print_colored(Colors.CYAN, f"\n{Symbols.CLEANUP} Starting cleanup for {account_name} ({account_id}) in {region}")
         
             try:
                 athena_client = self.create_athena_client(access_key, secret_key, region)
             except Exception as client_error:
                 error_msg = f"Could not create Athena client for {region}: {client_error}"
                 self.log_operation('ERROR', error_msg)
-                self.print_colored(Colors.RED, f"   [ERROR] {error_msg}")
+                self.print_colored(Colors.RED, f"   {Symbols.ERROR} {error_msg}")
                 return False
         
             # Delete resources
@@ -277,14 +277,14 @@ class UltraCleanupAthenaManager:
                     'account_id': account_id
                 })
         
-            self.log_operation('INFO', f"[OK] Cleanup completed for {account_name} ({region})")
-            self.print_colored(Colors.GREEN, f"   [OK] Cleanup completed for {account_name} ({region})")
+            self.log_operation('INFO', f"{Symbols.OK} Cleanup completed for {account_name} ({region})")
+            self.print_colored(Colors.GREEN, f"   {Symbols.OK} Cleanup completed for {account_name} ({region})")
             return True
         
         except Exception as e:
             error_msg = f"Error cleaning up {account_name} ({region}): {e}"
             self.log_operation('ERROR', error_msg)
-            self.print_colored(Colors.RED, f"   [ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"   {Symbols.ERROR} {error_msg}")
             return False
 
     def save_cleanup_report(self):
@@ -314,7 +314,7 @@ class UltraCleanupAthenaManager:
             with open(report_filename, 'w', encoding='utf-8') as f:
                 json.dump(report_data, f, indent=2, default=str)
             
-            self.log_operation('INFO', f"[OK] Report saved to: {report_filename}")
+            self.log_operation('INFO', f"{Symbols.OK} Report saved to: {report_filename}")
             return report_filename
         except Exception as e:
             self.log_operation('ERROR', f"Failed to save report: {e}")
@@ -333,21 +333,21 @@ class UltraCleanupAthenaManager:
                 return
             
             self.user_regions = self._get_user_regions()
-            selected_regions = self.select_regions_interactive(self.user_regions)
+            selected_regions = self.cred_manager.select_regions_interactive()
             
             if not selected_regions:
                 self.print_colored(Colors.YELLOW, "[ERROR] No regions selected. Exiting.")
                 return
             
-            self.print_colored(Colors.RED, f"\n[WARN]  WARNING: This will delete Athena workgroups, queries, and catalogs!")
-            self.print_colored(Colors.YELLOW, f"\n[WARN]  Type 'DELETE' to confirm:")
-            confirm = input("   → ").strip()
+            self.print_colored(Colors.RED, f"\n{Symbols.WARN}  WARNING: This will delete Athena workgroups, queries, and catalogs!")
+            self.print_colored(Colors.YELLOW, f"\n{Symbols.WARN}  Type 'yes' to confirm:")
+            confirm = input("   → ").strip().lower()
             
-            if confirm.upper() != 'DELETE':
-                self.print_colored(Colors.YELLOW, "[ERROR] Cleanup cancelled")
+            if confirm != 'yes':
+                self.print_colored(Colors.YELLOW, f"{Symbols.ERROR} Cleanup cancelled")
                 return
             
-            self.print_colored(Colors.CYAN, f"\n[START] Starting cleanup...")
+            self.print_colored(Colors.CYAN, f"\n{Symbols.START} Starting cleanup...")
             start_time = time.time()
             
             for account_info in selected_accounts:
@@ -356,40 +356,18 @@ class UltraCleanupAthenaManager:
             
             total_time = int(time.time() - start_time)
             
-            self.print_colored(Colors.GREEN, f"\n[OK] Cleanup completed successfully!")
-            self.print_colored(Colors.WHITE, f"[TIMER]  Time: {total_time}s")
-            self.print_colored(Colors.WHITE, f"[DELETE]  Workgroups: {len(self.cleanup_results['deleted_workgroups'])}")
-            self.print_colored(Colors.WHITE, f"[LOG] Queries: {len(self.cleanup_results['deleted_queries'])}")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.OK} Cleanup completed successfully!")
+            self.print_colored(Colors.WHITE, f"{Symbols.TIMER}  Time: {total_time}s")
+            self.print_colored(Colors.WHITE, f"{Symbols.DELETE}  Workgroups: {len(self.cleanup_results['deleted_workgroups'])}")
+            self.print_colored(Colors.WHITE, f"{Symbols.LOG} Queries: {len(self.cleanup_results['deleted_queries'])}")
             
             report_file = self.save_cleanup_report()
             if report_file:
-                self.print_colored(Colors.GREEN, f"\n[OK] Report: {report_file}")
+                self.print_colored(Colors.GREEN, f"\n{Symbols.OK} Report: {report_file}")
             
         except Exception as e:
-            self.print_colored(Colors.RED, f"\n[ERROR] FATAL ERROR: {e}")
-            import traceback
+            self.print_colored(Colors.RED, f"\n{Symbols.ERROR} FATAL ERROR: {e}")
             traceback.print_exc()
-
-    def select_regions_interactive(self, available_regions: List[str]) -> List[str]:
-        """Interactive region selection"""
-        self.print_colored(Colors.CYAN, f"\n[REGION] AVAILABLE REGIONS:")
-        for i, region in enumerate(available_regions, 1):
-            self.print_colored(Colors.WHITE, f"  {i}. {region}")
-        
-        selection = input("\n🔢 Select regions (1-5, 'all', or 'q'): ").strip().lower()
-        
-        if selection in ['cancel', 'quit', 'q']:
-            return []
-        
-        if not selection or selection == 'all':
-            return available_regions
-        
-        try:
-            indices = self.cred_manager._parse_selection(selection, len(available_regions))
-            return [available_regions[i] for i in indices]
-        except ValueError as e:
-            self.print_colored(Colors.RED, f"[ERROR] Invalid selection: {e}")
-            return []
 
 def main():
     """Main function"""
@@ -399,7 +377,7 @@ def main():
     except KeyboardInterrupt:
         print("\n\n[ERROR] Cleanup interrupted by user")
     except Exception as e:
-        print(f"[ERROR] Unexpected error: {e}")
+        print(f"{Symbols.ERROR} Unexpected error: {e}")
 
 if __name__ == "__main__":
     main()

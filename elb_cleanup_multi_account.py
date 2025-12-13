@@ -1,4 +1,4 @@
-# Databricks notebook source
+﻿# Databricks notebook source
 #!/usr/bin/env python3
 """
 ELB (Elastic Load Balancer) Cleanup Tool for Multiple AWS Accounts
@@ -15,6 +15,8 @@ import boto3
 from datetime import datetime
 from typing import Dict, List, Tuple, Optional
 import threading
+from text_symbols import Symbols
+
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Fix Windows terminal encoding for Unicode characters
@@ -189,7 +191,7 @@ class ELBCleanupManager:
             
             total_accounts = len(self.config_data.get('accounts', {}))
             logger.info(f"Successfully loaded configuration with {total_accounts} accounts")
-            self.printer.print_colored(Colors.GREEN, f"✅ Loaded configuration with {total_accounts} accounts from {self.config_file}")
+            self.printer.print_colored(Colors.GREEN, f"{Symbols.OK} Loaded configuration with {total_accounts} accounts from {self.config_file}")
         
         except Exception as e:
             logger.error(f"Failed to load configuration: {str(e)}")
@@ -201,7 +203,6 @@ class ELBCleanupManager:
             self.log_filename = f"elb_cleanup_log_{self.execution_timestamp}.log"
             
             # Create a file handler for detailed logging
-            import logging
             
             # Create logger for detailed operations
             self.operation_logger = logging.getLogger('elb_cleanup_operations')
@@ -388,7 +389,7 @@ class ELBCleanupManager:
     
     def scan_all_accounts_and_regions(self, selected_accounts: List[str]) -> None:
         """Scan all selected accounts across all regions using parallel processing"""
-        self.printer.print_colored(Colors.BLUE, f"\n🔍 Scanning {len(selected_accounts)} accounts across {len(self.scan_regions)} regions for ELBs...")
+        self.printer.print_colored(Colors.BLUE, f"\n{Symbols.SCAN} Scanning {len(selected_accounts)} accounts across {len(self.scan_regions)} regions for ELBs...")
         
         total_scans = len(selected_accounts) * len(self.scan_regions)
         completed_scans = 0
@@ -430,7 +431,7 @@ class ELBCleanupManager:
                     self.discovered_elbs[account_key][region] = elbs
                     
                     total_elbs = len(elbs['classic']) + len(elbs['alb']) + len(elbs['nlb'])
-                    status_msg = f"✅ Found {total_elbs} ELB(s)" if total_elbs > 0 else "🔍 No ELBs found"
+                    status_msg = f"{Symbols.OK} Found {total_elbs} ELB(s)" if total_elbs > 0 else "[SCAN] No ELBs found"
                     
                     if total_elbs > 0:
                         detail_msg = f" (Classic: {len(elbs['classic'])}, ALB: {len(elbs['alb'])}, NLB: {len(elbs['nlb'])})"
@@ -440,9 +441,9 @@ class ELBCleanupManager:
                     
                 except Exception as e:
                     self.discovered_elbs[account_key][region] = {'classic': [], 'alb': [], 'nlb': []}
-                    self.printer.print_colored(Colors.RED, f"[{current_scan:2}/{total_scans}] {account_key} - {region}: ❌ Error: {str(e)}")
+                    self.printer.print_colored(Colors.RED, f"[{current_scan:2}/{total_scans}] {account_key} - {region}: {Symbols.ERROR} Error: {str(e)}")
         
-        self.printer.print_colored(Colors.GREEN, f"✅ Completed scanning {total_scans} account-region combinations")
+        self.printer.print_colored(Colors.GREEN, f"{Symbols.OK} Completed scanning {total_scans} account-region combinations")
     
     def display_discovered_elbs(self) -> bool:
         """Display all discovered ELBs and return True if any exist"""
@@ -460,12 +461,12 @@ class ELBCleanupManager:
         total_elbs = total_classic + total_alb + total_nlb
         
         if total_elbs == 0:
-            self.printer.print_colored(Colors.YELLOW, "\n🎉 No ELBs found in any of the scanned accounts and regions!")
+            self.printer.print_colored(Colors.YELLOW, "\n[PARTY] No ELBs found in any of the scanned accounts and regions!")
             return False
         
-        print(f"\n📊 ELB Discovery Summary")
+        print(f"\n{Symbols.STATS} ELB Discovery Summary")
         print("=" * 100)
-        print(f"🎯 Total ELBs Found: {total_elbs}")
+        print(f"{Symbols.TARGET} Total ELBs Found: {total_elbs}")
         print(f"⚖️  Classic Load Balancers: {total_classic}")
         print(f"🌐 Application Load Balancers (ALB): {total_alb}")
         print(f"🔗 Network Load Balancers (NLB): {total_nlb}")
@@ -484,14 +485,14 @@ class ELBCleanupManager:
             )
             
             if account_has_elbs:
-                print(f"\n🏦 Account: {account_key} ({account_id})")
+                print(f"\n{Symbols.ACCOUNT} Account: {account_key} ({account_id})")
                 print("-" * 80)
                 
                 for region, elbs in regions.items():
                     region_total = len(elbs['classic']) + len(elbs['alb']) + len(elbs['nlb'])
                     
                     if region_total > 0:
-                        print(f"\n   🌍 Region: {region} ({region_total} ELBs)")
+                        print(f"\n   {Symbols.REGION} Region: {region} ({region_total} ELBs)")
                         
                         # Display Classic ELBs
                         if elbs['classic']:
@@ -504,12 +505,12 @@ class ELBCleanupManager:
                                     created_str = str(created_time)
                                 
                                 print(f"         {elb_index:3}. {elb['name']}")
-                                print(f"              📊 Scheme: {elb['scheme']}")
+                                print(f"              {Symbols.STATS} Scheme: {elb['scheme']}")
                                 print(f"              🌐 DNS: {elb['dns_name']}")
                                 print(f"              🏠 VPC: {elb['vpc_id']}")
                                 print(f"              💻 Instances: {elb['instances']}")
-                                print(f"              📅 Created: {created_str}")
-                                print(f"              🌍 AZs: {', '.join(elb['availability_zones'])}")
+                                print(f"              {Symbols.DATE} Created: {created_str}")
+                                print(f"              {Symbols.REGION} AZs: {', '.join(elb['availability_zones'])}")
                                 
                                 elb_mapping[elb_index] = {
                                     'account_key': account_key,
@@ -531,13 +532,13 @@ class ELBCleanupManager:
                                     created_str = str(created_time)
                                 
                                 print(f"         {elb_index:3}. {elb['name']}")
-                                print(f"              📊 State: {elb['state']}")
-                                print(f"              📊 Scheme: {elb['scheme']}")
+                                print(f"              {Symbols.STATS} State: {elb['state']}")
+                                print(f"              {Symbols.STATS} Scheme: {elb['scheme']}")
                                 print(f"              🌐 DNS: {elb['dns_name']}")
                                 print(f"              🏠 VPC: {elb['vpc_id']}")
-                                print(f"              🎯 Target Groups: {elb['target_group_count']}")
-                                print(f"              📅 Created: {created_str}")
-                                print(f"              🌍 AZs: {', '.join(elb['availability_zones'])}")
+                                print(f"              {Symbols.TARGET} Target Groups: {elb['target_group_count']}")
+                                print(f"              {Symbols.DATE} Created: {created_str}")
+                                print(f"              {Symbols.REGION} AZs: {', '.join(elb['availability_zones'])}")
                                 
                                 elb_mapping[elb_index] = {
                                     'account_key': account_key,
@@ -559,13 +560,13 @@ class ELBCleanupManager:
                                     created_str = str(created_time)
                                 
                                 print(f"         {elb_index:3}. {elb['name']}")
-                                print(f"              📊 State: {elb['state']}")
-                                print(f"              📊 Scheme: {elb['scheme']}")
+                                print(f"              {Symbols.STATS} State: {elb['state']}")
+                                print(f"              {Symbols.STATS} Scheme: {elb['scheme']}")
                                 print(f"              🌐 DNS: {elb['dns_name']}")
                                 print(f"              🏠 VPC: {elb['vpc_id']}")
-                                print(f"              🎯 Target Groups: {elb['target_group_count']}")
-                                print(f"              📅 Created: {created_str}")
-                                print(f"              🌍 AZs: {', '.join(elb['availability_zones'])}")
+                                print(f"              {Symbols.TARGET} Target Groups: {elb['target_group_count']}")
+                                print(f"              {Symbols.DATE} Created: {created_str}")
+                                print(f"              {Symbols.REGION} AZs: {', '.join(elb['availability_zones'])}")
                                 
                                 elb_mapping[elb_index] = {
                                     'account_key': account_key,
@@ -586,9 +587,9 @@ class ELBCleanupManager:
         
         total_elbs = len(self.elb_mapping)
         
-        print(f"\n🗑️  ELB Deletion Selection")
+        print(f"\n{Symbols.DELETE}  ELB Deletion Selection")
         print("=" * 60)
-        print(f"📝 Selection Options:")
+        print(f"{Symbols.LOG} Selection Options:")
         print(f"   • Single ELBs: 1,3,5")
         print(f"   • Ranges: 1-{total_elbs}")
         print(f"   • Mixed: 1-3,5,7-9")
@@ -596,7 +597,7 @@ class ELBCleanupManager:
         print(f"   • Cancel: 'cancel' or 'quit'")
         
         while True:
-            selection = input(f"\n🔢 Select ELBs to DELETE (1-{total_elbs}) or all : ").strip()
+            selection = input(f"\n[#] Select ELBs to DELETE (1-{total_elbs}) or all : ").strip()
             
             self.log_operation('INFO', f"User input for ELB deletion selection: '{selection}'")
             
@@ -614,7 +615,7 @@ class ELBCleanupManager:
                     selected_elbs = [self.elb_mapping[idx] for idx in selected_indices]
                     
                     # Show confirmation
-                    print(f"\n⚠️  DELETION CONFIRMATION")
+                    print(f"\n{Symbols.WARN}  DELETION CONFIRMATION")
                     print("🚨 The following ELBs will be PERMANENTLY DELETED:")
                     print("-" * 60)
                     
@@ -626,12 +627,12 @@ class ELBCleanupManager:
                         if elb_type == 'CLASSIC':
                             print(f"      💻 {elb['instances']} instances attached")
                         else:
-                            print(f"      🎯 {elb['target_group_count']} target groups")
+                            print(f"      {Symbols.TARGET} {elb['target_group_count']} target groups")
                     
                     print("-" * 60)
-                    print(f"🔥 Total: {len(selected_elbs)} ELBs will be deleted")
-                    print(f"🚀 Parallel Processing: Up to {self.max_parallel_deletions} ELBs will be deleted simultaneously")
-                    print("⚠️  This action CANNOT be undone!")
+                    print(f"[FIRE] Total: {len(selected_elbs)} ELBs will be deleted")
+                    print(f"{Symbols.START} Parallel Processing: Up to {self.max_parallel_deletions} ELBs will be deleted simultaneously")
+                    print("[WARN]  This action CANNOT be undone!")
                     
                     confirm1 = input(f"\n❓ Are you sure you want to delete these {len(selected_elbs)} ELBs? (yes/no): ").lower().strip()
                     
@@ -641,16 +642,16 @@ class ELBCleanupManager:
                             self.log_operation('INFO', f"User confirmed deletion of {len(selected_elbs)} ELBs")
                             return selected_elbs
                         else:
-                            print("❌ Deletion cancelled - incorrect confirmation")
+                            print("[ERROR] Deletion cancelled - incorrect confirmation")
                     else:
-                        print("❌ Deletion cancelled")
+                        print("[ERROR] Deletion cancelled")
                     continue
                 else:
-                    print("❌ No valid ELBs selected. Please try again.")
+                    print("[ERROR] No valid ELBs selected. Please try again.")
                     continue
                     
             except ValueError as e:
-                print(f"❌ Invalid selection: {e}")
+                print(f"{Symbols.ERROR} Invalid selection: {e}")
                 print("   Please use format like: 1,3,5 or 1-5 or 1-3,5,7-9")
                 continue
     
@@ -707,7 +708,7 @@ class ELBCleanupManager:
             elb_name = elb['name']
             
             self.log_operation('INFO', f"Starting deletion of {elb_type.upper()} ELB {elb_name} in {account_key} - {region}", thread_id)
-            self.printer.print_colored(Colors.YELLOW, f"🗑️  Deleting {elb_type.upper()} ELB: {elb_name} ({account_key} - {region})", thread_id)
+            self.printer.print_colored(Colors.YELLOW, f"{Symbols.DELETE}  Deleting {elb_type.upper()} ELB: {elb_name} ({account_key} - {region})", thread_id)
             
             # Get credentials
             access_key, secret_key = self.get_credentials_for_account(account_key)
@@ -731,7 +732,7 @@ class ELBCleanupManager:
                 
                 # First delete target groups
                 if elb.get('target_groups'):
-                    self.printer.print_normal(f"   🎯 Deleting {len(elb['target_groups'])} target groups...", thread_id)
+                    self.printer.print_normal(f"   {Symbols.TARGET} Deleting {len(elb['target_groups'])} target groups...", thread_id)
                     
                     for tg_name in elb['target_groups']:
                         try:
@@ -749,14 +750,14 @@ class ELBCleanupManager:
                 self.log_operation('INFO', f"{elb_type.upper()} ELB {elb_name} deletion initiated", thread_id)
             
             self.log_operation('INFO', f"ELB {elb_name} successfully deleted", thread_id)
-            self.printer.print_colored(Colors.GREEN, f"   ✅ ELB {elb_name} deleted successfully", thread_id)
+            self.printer.print_colored(Colors.GREEN, f"   {Symbols.OK} ELB {elb_name} deleted successfully", thread_id)
             
             return True
             
         except Exception as e:
             error_msg = str(e)
             self.log_operation('ERROR', f"Failed to delete ELB {elb_name}: {error_msg}", thread_id)
-            self.printer.print_colored(Colors.RED, f"   ❌ Failed to delete ELB {elb_name}: {error_msg}", thread_id)
+            self.printer.print_colored(Colors.RED, f"   {Symbols.ERROR} Failed to delete ELB {elb_name}: {error_msg}", thread_id)
             return False
     
     def update_deletion_summary(self, deletion_record: Dict):
@@ -772,7 +773,7 @@ class ELBCleanupManager:
         
         self.log_operation('INFO', f"Starting parallel deletion of {len(selected_elbs)} ELBs")
         self.printer.print_colored(Colors.RED, f"\n🚨 Starting parallel deletion of {len(selected_elbs)} ELBs...")
-        self.printer.print_colored(Colors.CYAN, f"🚀 Maximum parallel deletions: {self.max_parallel_deletions}")
+        self.printer.print_colored(Colors.CYAN, f"{Symbols.START} Maximum parallel deletions: {self.max_parallel_deletions}")
         
         successful_deletions = []
         failed_deletions = []
@@ -790,11 +791,11 @@ class ELBCleanupManager:
                 else:
                     failed_deletions.append(deletion_record)
                 
-                progress_msg = f"📊 Progress: {completed_deletions}/{len(selected_elbs)} completed"
+                progress_msg = f"{Symbols.STATS} Progress: {completed_deletions}/{len(selected_elbs)} completed"
                 if successful_deletions:
-                    progress_msg += f" (✅ {len(successful_deletions)} successful"
+                    progress_msg += f" ({Symbols.OK} {len(successful_deletions)} successful"
                 if failed_deletions:
-                    progress_msg += f", ❌ {len(failed_deletions)} failed"
+                    progress_msg += f", {Symbols.ERROR} {len(failed_deletions)} failed"
                 if successful_deletions or failed_deletions:
                     progress_msg += ")"
                 
@@ -864,7 +865,7 @@ class ELBCleanupManager:
                 return deletion_record
         
         # Execute parallel deletions
-        self.printer.print_colored(Colors.YELLOW, f"🚀 Starting parallel execution...")
+        self.printer.print_colored(Colors.YELLOW, f"{Symbols.START} Starting parallel execution...")
         
         start_time = time.time()
         
@@ -891,17 +892,17 @@ class ELBCleanupManager:
         self.log_operation('INFO', f"Parallel ELB deletion completed - Deleted: {len(successful_deletions)}, Failed: {len(failed_deletions)}, Total Time: {total_time:.2f}s")
         
         print("\n" + "=" * 80)
-        self.printer.print_colored(Colors.GREEN, f"🎉 Parallel ELB Deletion Summary:")
-        self.printer.print_colored(Colors.GREEN, f"✅ Successfully Deleted: {len(successful_deletions)}")
+        self.printer.print_colored(Colors.GREEN, f"[PARTY] Parallel ELB Deletion Summary:")
+        self.printer.print_colored(Colors.GREEN, f"{Symbols.OK} Successfully Deleted: {len(successful_deletions)}")
         if failed_deletions:
-            self.printer.print_colored(Colors.RED, f"❌ Failed: {len(failed_deletions)}")
+            self.printer.print_colored(Colors.RED, f"{Symbols.ERROR} Failed: {len(failed_deletions)}")
         
-        self.printer.print_colored(Colors.CYAN, f"⏱️  Total Execution Time: {total_time:.2f} seconds")
-        self.printer.print_colored(Colors.CYAN, f"🚀 Parallel Workers Used: {self.max_parallel_deletions}")
+        self.printer.print_colored(Colors.CYAN, f"{Symbols.TIMER}  Total Execution Time: {total_time:.2f} seconds")
+        self.printer.print_colored(Colors.CYAN, f"{Symbols.START} Parallel Workers Used: {self.max_parallel_deletions}")
         
         if successful_deletions:
             avg_time = sum(r['duration_seconds'] for r in successful_deletions) / len(successful_deletions)
-            self.printer.print_colored(Colors.CYAN, f"📊 Average Deletion Time: {avg_time:.2f} seconds per ELB")
+            self.printer.print_colored(Colors.CYAN, f"{Symbols.STATS} Average Deletion Time: {avg_time:.2f} seconds per ELB")
         
         print("=" * 80)
         
@@ -916,7 +917,7 @@ class ELBCleanupManager:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         report_file = f"elb_deletion_report_{timestamp}.txt"
         
-        self.printer.print_colored(Colors.CYAN, f"\n💾 Deletion report saved to: {report_file}")
+        self.printer.print_colored(Colors.CYAN, f"\n{Symbols.INSTANCE} Deletion report saved to: {report_file}")
         
         with open(report_file, 'w') as f:
             f.write(f"# ELB Parallel Deletion Report\n")
@@ -930,9 +931,9 @@ class ELBCleanupManager:
             failed = [r for r in self.deletion_summary if r['status'] == 'FAILED']
             
             f.write(f"## Summary\n")
-            f.write(f"✅ Successfully deleted: {len(successful)}\n")
-            f.write(f"❌ Failed deletions: {len(failed)}\n")
-            f.write(f"🚀 Parallel execution enabled: {self.max_parallel_deletions} max workers\n\n")
+            f.write(f"{Symbols.OK} Successfully deleted: {len(successful)}\n")
+            f.write(f"{Symbols.ERROR} Failed deletions: {len(failed)}\n")
+            f.write(f"{Symbols.START} Parallel execution enabled: {self.max_parallel_deletions} max workers\n\n")
             
             if successful:
                 f.write(f"## Successful Deletions\n")
@@ -958,7 +959,7 @@ class ELBCleanupManager:
         accounts = list(self.config_data['accounts'].keys())
         user_settings = self.config_data.get('user_settings', {})
         
-        print(f"\n🏦 Available AWS Accounts ({len(accounts)} total):")
+        print(f"\n{Symbols.ACCOUNT} Available AWS Accounts ({len(accounts)} total):")
         print("=" * 60)
         
         for i, account_key in enumerate(accounts, 1):
@@ -972,18 +973,18 @@ class ELBCleanupManager:
             print()
         
         print("=" * 60)
-        print(f"🌍 Scan Regions (from user_settings): {', '.join(self.scan_regions)}")
-        print(f"📊 Total scan operations: {len(accounts)} accounts × {len(self.scan_regions)} regions = {len(accounts) * len(self.scan_regions)} scans")
-        print(f"🚀 Parallel processing: Max {self.max_parallel_deletions} simultaneous deletions")
+        print(f"{Symbols.REGION} Scan Regions (from user_settings): {', '.join(self.scan_regions)}")
+        print(f"{Symbols.STATS} Total scan operations: {len(accounts)} accounts × {len(self.scan_regions)} regions = {len(accounts) * len(self.scan_regions)} scans")
+        print(f"{Symbols.START} Parallel processing: Max {self.max_parallel_deletions} simultaneous deletions")
         
-        print(f"\n📝 Selection Options:")
+        print(f"\n{Symbols.LOG} Selection Options:")
         print(f"   • Single accounts: 1,3,5")
         print(f"   • Ranges: 1-{len(accounts)}")
         print(f"   • All accounts: 'all' or press Enter")
         print(f"   • Cancel: 'cancel' or 'quit'")
         
         while True:
-            selection = input(f"\n🔢 Select accounts to scan: ").strip()
+            selection = input(f"\n[#] Select accounts to scan: ").strip()
             
             if not selection or selection.lower() == 'all':
                 return accounts
@@ -996,51 +997,51 @@ class ELBCleanupManager:
                 if selected_indices:
                     selected_accounts = [accounts[idx - 1] for idx in selected_indices]
                     
-                    print(f"\n✅ Selected {len(selected_accounts)} accounts:")
+                    print(f"\n{Symbols.OK} Selected {len(selected_accounts)} accounts:")
                     for account_key in selected_accounts:
                         account_data = self.config_data['accounts'][account_key]
                         print(f"   • {account_key} ({account_data.get('account_id', 'Unknown')})")
                     
                     total_scans = len(selected_accounts) * len(self.scan_regions)
-                    print(f"\n📊 Total scan operations: {total_scans}")
+                    print(f"\n{Symbols.STATS} Total scan operations: {total_scans}")
                     
-                    confirm = input(f"\n🚀 Proceed with scanning these {len(selected_accounts)} accounts? (y/N): ").lower().strip()
+                    confirm = input(f"\n{Symbols.START} Proceed with scanning these {len(selected_accounts)} accounts? (y/N): ").lower().strip()
                     
                     if confirm == 'y':
                         return selected_accounts
                     else:
                         continue
                 else:
-                    print("❌ No valid accounts selected. Please try again.")
+                    print(f"{Symbols.ERROR} No valid accounts selected. Please try again.")
                     continue
                     
             except ValueError as e:
-                print(f"❌ Invalid selection: {e}")
+                print(f"{Symbols.ERROR} Invalid selection: {e}")
                 continue
     
     def run(self) -> None:
         """Main execution flow"""
         try:
-            self.printer.print_colored(Colors.RED, "🗑️  Welcome to ELB Cleanup Manager (Parallel Edition)")
+            self.printer.print_colored(Colors.RED, "[DELETE]  Welcome to ELB Cleanup Manager (Parallel Edition)")
             
-            print("🗑️  ELB Cleanup Tool (Parallel Processing)")
+            print("[DELETE]  ELB Cleanup Tool (Parallel Processing)")
             print("=" * 80)
-            print(f"📅 Execution Date/Time: {self.current_time} UTC")
+            print(f"{Symbols.DATE} Execution Date/Time: {self.current_time} UTC")
             print(f"👤 Executed by: {self.current_user}")
-            print(f"🔑 Config File: {self.config_file}")
-            print(f"🌍 Scan Regions: {', '.join(self.scan_regions)}")
-            print(f"🚀 Max Parallel Deletions: {self.max_parallel_deletions}")
-            print(f"📋 Log File: {self.log_filename}")
+            print(f"{Symbols.KEY} Config File: {self.config_file}")
+            print(f"{Symbols.REGION} Scan Regions: {', '.join(self.scan_regions)}")
+            print(f"{Symbols.START} Max Parallel Deletions: {self.max_parallel_deletions}")
+            print(f"{Symbols.LIST} Log File: {self.log_filename}")
             print("=" * 80)
             
-            print("⚠️  WARNING: This tool will permanently delete ELBs!")
+            print("[WARN]  WARNING: This tool will permanently delete ELBs!")
             print("🚨 Deleted ELBs cannot be recovered!")
-            print("🚀 Parallel processing will speed up deletions!")
+            print("[START] Parallel processing will speed up deletions!")
             
             # Step 1: Select accounts to scan
             selected_accounts = self.display_accounts_menu()
             if not selected_accounts:
-                print("❌ Account selection cancelled")
+                print("[ERROR] Account selection cancelled")
                 return
             
             # Step 2: Scan all accounts and regions

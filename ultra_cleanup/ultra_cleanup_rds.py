@@ -41,6 +41,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from root_iam_credential_manager import AWSCredentialManager, Colors
+from text_symbols import Symbols
 
 
 class UltraCleanupRDSManager:
@@ -93,7 +94,7 @@ class UltraCleanupRDSManager:
                     'us-east-1', 'us-east-2', 'us-west-1', 'us-west-2', 'ap-south-1'
                 ])
         except Exception as e:
-            self.print_colored(Colors.YELLOW, f"[WARN]  Warning: Could not load user regions: {e}")
+            self.print_colored(Colors.YELLOW, f"{Symbols.WARN}  Warning: Could not load user regions: {e}")
 
         return ['us-east-1', 'us-east-2', 'us-west-1', 'us-west-2', 'ap-south-1']
 
@@ -106,7 +107,6 @@ class UltraCleanupRDSManager:
             self.log_filename = f"{self.rds_dir}/ultra_rds_cleanup_log_{self.execution_timestamp}.log"
 
             # Create a file handler for detailed logging
-            import logging
 
             # Create logger for detailed operations
             self.operation_logger = logging.getLogger('ultra_rds_cleanup')
@@ -138,7 +138,7 @@ class UltraCleanupRDSManager:
 
             # Log initial information
             self.operation_logger.info("=" * 100)
-            self.operation_logger.info("[ALERT] ULTRA RDS CLEANUP SESSION STARTED [ALERT]")
+            self.operation_logger.info(f"{Symbols.ALERT} ULTRA RDS CLEANUP SESSION STARTED {Symbols.ALERT}")
             self.operation_logger.info("=" * 100)
             self.operation_logger.info(f"Execution Time: {self.current_time} UTC")
             self.operation_logger.info(f"Executed By: {self.current_user}")
@@ -196,8 +196,8 @@ class UltraCleanupRDSManager:
             instances = []
             account_name = account_info.get('account_key', 'Unknown')
 
-            self.log_operation('INFO', f"[SCAN] Scanning for RDS DB instances in {region} ({account_name})")
-            print(f"   [SCAN] Scanning for RDS DB instances in {region} ({account_name})...")
+            self.log_operation('INFO', f"{Symbols.SCAN} Scanning for RDS DB instances in {region} ({account_name})")
+            print(f"   {Symbols.SCAN} Scanning for RDS DB instances in {region} ({account_name})...")
 
             paginator = rds_client.get_paginator('describe_db_instances')
             
@@ -232,7 +232,7 @@ class UltraCleanupRDSManager:
         except Exception as e:
             account_name = account_info.get('account_key', 'Unknown')
             self.log_operation('ERROR', f"Error getting RDS instances in {region} ({account_name}): {e}")
-            print(f"   [ERROR] Error getting instances in {region}: {e}")
+            print(f"   {Symbols.ERROR} Error getting instances in {region}: {e}")
             return []
 
     def get_all_db_clusters_in_region(self, rds_client, region, account_info):
@@ -241,8 +241,8 @@ class UltraCleanupRDSManager:
             clusters = []
             account_name = account_info.get('account_key', 'Unknown')
 
-            self.log_operation('INFO', f"[SCAN] Scanning for RDS DB clusters in {region} ({account_name})")
-            print(f"   [SCAN] Scanning for RDS DB clusters in {region} ({account_name})...")
+            self.log_operation('INFO', f"{Symbols.SCAN} Scanning for RDS DB clusters in {region} ({account_name})")
+            print(f"   {Symbols.SCAN} Scanning for RDS DB clusters in {region} ({account_name})...")
 
             paginator = rds_client.get_paginator('describe_db_clusters')
             
@@ -276,7 +276,7 @@ class UltraCleanupRDSManager:
         except Exception as e:
             account_name = account_info.get('account_key', 'Unknown')
             self.log_operation('ERROR', f"Error getting RDS clusters in {region} ({account_name}): {e}")
-            print(f"   [ERROR] Error getting clusters in {region}: {e}")
+            print(f"   {Symbols.ERROR} Error getting clusters in {region}: {e}")
             return []
 
     def delete_db_instance(self, rds_client, instance_info):
@@ -286,8 +286,8 @@ class UltraCleanupRDSManager:
             region = instance_info['region']
             account_name = instance_info['account_info'].get('account_key', 'Unknown')
 
-            self.log_operation('INFO', f"[DELETE]  Deleting RDS DB instance {instance_id} ({region}, {account_name})")
-            print(f"      [DELETE]  Deleting DB instance {instance_id}...")
+            self.log_operation('INFO', f"{Symbols.DELETE}  Deleting RDS DB instance {instance_id} ({region}, {account_name})")
+            print(f"      {Symbols.DELETE}  Deleting DB instance {instance_id}...")
 
             # Delete the instance without final snapshot
             rds_client.delete_db_instance(
@@ -321,8 +321,8 @@ class UltraCleanupRDSManager:
                         break
                 except ClientError as e:
                     if 'DBInstanceNotFound' in str(e):
-                        self.log_operation('INFO', f"[OK] DB instance {instance_id} deleted successfully")
-                        print(f"      [OK] DB instance {instance_id} deleted successfully")
+                        self.log_operation('INFO', f"{Symbols.OK} DB instance {instance_id} deleted successfully")
+                        print(f"      {Symbols.OK} DB instance {instance_id} deleted successfully")
                         waiter_active = False
                     else:
                         self.log_operation('ERROR', f"Error checking instance status: {e}")
@@ -330,7 +330,7 @@ class UltraCleanupRDSManager:
 
             if retry_count >= max_retries:
                 self.log_operation('WARNING', f"Timed out waiting for instance {instance_id} deletion")
-                print(f"      [WARN]  Timed out waiting for instance {instance_id} deletion")
+                print(f"      {Symbols.WARN}  Timed out waiting for instance {instance_id} deletion")
 
             self.cleanup_results['deleted_instances'].append({
                 'instance_id': instance_id,
@@ -344,7 +344,7 @@ class UltraCleanupRDSManager:
 
         except Exception as e:
             self.log_operation('ERROR', f"Failed to delete DB instance {instance_info['instance_id']}: {e}")
-            print(f"      [ERROR] Failed to delete DB instance {instance_info['instance_id']}: {e}")
+            print(f"      {Symbols.ERROR} Failed to delete DB instance {instance_info['instance_id']}: {e}")
 
             self.cleanup_results['failed_deletions'].append({
                 'resource_type': 'db_instance',
@@ -362,8 +362,8 @@ class UltraCleanupRDSManager:
             region = cluster_info['region']
             account_name = cluster_info['account_info'].get('account_key', 'Unknown')
 
-            self.log_operation('INFO', f"[DELETE]  Deleting RDS DB cluster {cluster_id} ({region}, {account_name})")
-            print(f"      [DELETE]  Deleting DB cluster {cluster_id}...")
+            self.log_operation('INFO', f"{Symbols.DELETE}  Deleting RDS DB cluster {cluster_id} ({region}, {account_name})")
+            print(f"      {Symbols.DELETE}  Deleting DB cluster {cluster_id}...")
 
             # Delete the cluster without final snapshot
             rds_client.delete_db_cluster(
@@ -396,8 +396,8 @@ class UltraCleanupRDSManager:
                         break
                 except ClientError as e:
                     if 'DBClusterNotFoundFault' in str(e):
-                        self.log_operation('INFO', f"[OK] DB cluster {cluster_id} deleted successfully")
-                        print(f"      [OK] DB cluster {cluster_id} deleted successfully")
+                        self.log_operation('INFO', f"{Symbols.OK} DB cluster {cluster_id} deleted successfully")
+                        print(f"      {Symbols.OK} DB cluster {cluster_id} deleted successfully")
                         waiter_active = False
                     else:
                         self.log_operation('ERROR', f"Error checking cluster status: {e}")
@@ -405,7 +405,7 @@ class UltraCleanupRDSManager:
 
             if retry_count >= max_retries:
                 self.log_operation('WARNING', f"Timed out waiting for cluster {cluster_id} deletion")
-                print(f"      [WARN]  Timed out waiting for cluster {cluster_id} deletion")
+                print(f"      {Symbols.WARN}  Timed out waiting for cluster {cluster_id} deletion")
 
             self.cleanup_results['deleted_clusters'].append({
                 'cluster_id': cluster_id,
@@ -419,7 +419,7 @@ class UltraCleanupRDSManager:
 
         except Exception as e:
             self.log_operation('ERROR', f"Failed to delete DB cluster {cluster_info['cluster_id']}: {e}")
-            print(f"      [ERROR] Failed to delete DB cluster {cluster_info['cluster_id']}: {e}")
+            print(f"      {Symbols.ERROR} Failed to delete DB cluster {cluster_info['cluster_id']}: {e}")
 
             self.cleanup_results['failed_deletions'].append({
                 'resource_type': 'db_cluster',
@@ -442,8 +442,8 @@ class UltraCleanupRDSManager:
 
             deleted_count = 0
             
-            self.log_operation('INFO', f"[DELETE]  Deleting manual DB snapshots in {region}")
-            print(f"   [DELETE]  Deleting manual DB snapshots in {region}...")
+            self.log_operation('INFO', f"{Symbols.DELETE}  Deleting manual DB snapshots in {region}")
+            print(f"   {Symbols.DELETE}  Deleting manual DB snapshots in {region}...")
 
             # Delete DB snapshots
             paginator = rds_client.get_paginator('describe_db_snapshots')
@@ -453,8 +453,8 @@ class UltraCleanupRDSManager:
                     
                     try:
                         rds_client.delete_db_snapshot(DBSnapshotIdentifier=snapshot_id)
-                        self.log_operation('INFO', f"[OK] Deleted DB snapshot: {snapshot_id}")
-                        print(f"      [OK] Deleted DB snapshot: {snapshot_id}")
+                        self.log_operation('INFO', f"{Symbols.OK} Deleted DB snapshot: {snapshot_id}")
+                        print(f"      {Symbols.OK} Deleted DB snapshot: {snapshot_id}")
                         deleted_count += 1
                         
                         self.cleanup_results['deleted_snapshots'].append({
@@ -474,8 +474,8 @@ class UltraCleanupRDSManager:
                     
                     try:
                         rds_client.delete_db_cluster_snapshot(DBClusterSnapshotIdentifier=snapshot_id)
-                        self.log_operation('INFO', f"[OK] Deleted cluster snapshot: {snapshot_id}")
-                        print(f"      [OK] Deleted cluster snapshot: {snapshot_id}")
+                        self.log_operation('INFO', f"{Symbols.OK} Deleted cluster snapshot: {snapshot_id}")
+                        print(f"      {Symbols.OK} Deleted cluster snapshot: {snapshot_id}")
                         deleted_count += 1
                         
                         self.cleanup_results['deleted_snapshots'].append({
@@ -488,7 +488,7 @@ class UltraCleanupRDSManager:
                         self.log_operation('ERROR', f"Failed to delete cluster snapshot {snapshot_id}: {e}")
 
             if deleted_count > 0:
-                self.print_colored(Colors.GREEN, f"   [OK] Deleted {deleted_count} snapshots")
+                self.print_colored(Colors.GREEN, f"   {Symbols.OK} Deleted {deleted_count} snapshots")
             else:
                 self.log_operation('INFO', f"No manual snapshots found in {region}")
 
@@ -510,8 +510,8 @@ class UltraCleanupRDSManager:
 
             deleted_count = 0
             
-            self.log_operation('INFO', f"[DELETE]  Deleting automated backups in {region}")
-            print(f"   [DELETE]  Deleting automated backups in {region}...")
+            self.log_operation('INFO', f"{Symbols.DELETE}  Deleting automated backups in {region}")
+            print(f"   {Symbols.DELETE}  Deleting automated backups in {region}...")
 
             response = rds_client.describe_db_instance_automated_backups()
             
@@ -523,13 +523,13 @@ class UltraCleanupRDSManager:
                         rds_client.delete_db_instance_automated_backup(
                             DBInstanceAutomatedBackupsArn=backup_arn
                         )
-                        self.log_operation('INFO', f"[OK] Deleted automated backup: {backup_arn}")
+                        self.log_operation('INFO', f"{Symbols.OK} Deleted automated backup: {backup_arn}")
                         deleted_count += 1
                     except Exception as e:
                         self.log_operation('ERROR', f"Failed to delete automated backup: {e}")
 
             if deleted_count > 0:
-                self.print_colored(Colors.GREEN, f"   [OK] Deleted {deleted_count} automated backups")
+                self.print_colored(Colors.GREEN, f"   {Symbols.OK} Deleted {deleted_count} automated backups")
 
             return True
 
@@ -556,13 +556,13 @@ class UltraCleanupRDSManager:
                 
                 try:
                     rds_client.cancel_export_task(ExportTaskIdentifier=export_id)
-                    self.log_operation('INFO', f"[OK] Canceled export task: {export_id}")
+                    self.log_operation('INFO', f"{Symbols.OK} Canceled export task: {export_id}")
                     deleted_count += 1
                 except Exception as e:
                     self.log_operation('ERROR', f"Failed to cancel export {export_id}: {e}")
 
             if deleted_count > 0:
-                self.print_colored(Colors.GREEN, f"   [OK] Canceled {deleted_count} export tasks")
+                self.print_colored(Colors.GREEN, f"   {Symbols.OK} Canceled {deleted_count} export tasks")
 
             return True
 
@@ -590,13 +590,13 @@ class UltraCleanupRDSManager:
                     
                     try:
                         rds_client.delete_event_subscription(SubscriptionName=sub_name)
-                        self.log_operation('INFO', f"[OK] Deleted event subscription: {sub_name}")
+                        self.log_operation('INFO', f"{Symbols.OK} Deleted event subscription: {sub_name}")
                         deleted_count += 1
                     except Exception as e:
                         self.log_operation('ERROR', f"Failed to delete subscription {sub_name}: {e}")
 
             if deleted_count > 0:
-                self.print_colored(Colors.GREEN, f"   [OK] Deleted {deleted_count} event subscriptions")
+                self.print_colored(Colors.GREEN, f"   {Symbols.OK} Deleted {deleted_count} event subscriptions")
 
             return True
 
@@ -625,7 +625,7 @@ class UltraCleanupRDSManager:
                     
                     # PROTECTION: Skip default parameter groups
                     if self._is_default_parameter_group(pg_name):
-                        self.log_operation('INFO', f"[PROTECTED]  PROTECTED (default): {pg_name}")
+                        self.log_operation('INFO', f"{Symbols.PROTECTED}  PROTECTED (default): {pg_name}")
                         protected_count += 1
                         self.cleanup_results['skipped_resources'].append({
                             'resource_type': 'parameter_group',
@@ -636,7 +636,7 @@ class UltraCleanupRDSManager:
                     
                     try:
                         rds_client.delete_db_parameter_group(DBParameterGroupName=pg_name)
-                        self.log_operation('INFO', f"[OK] Deleted parameter group: {pg_name}")
+                        self.log_operation('INFO', f"{Symbols.OK} Deleted parameter group: {pg_name}")
                         deleted_count += 1
                     except ClientError as e:
                         if 'InvalidDBParameterGroupState' in str(e):
@@ -652,19 +652,19 @@ class UltraCleanupRDSManager:
                     pg_name = pg['DBClusterParameterGroupName']
                     
                     if self._is_default_parameter_group(pg_name):
-                        self.log_operation('INFO', f"[PROTECTED]  PROTECTED (default cluster): {pg_name}")
+                        self.log_operation('INFO', f"{Symbols.PROTECTED}  PROTECTED (default cluster): {pg_name}")
                         protected_count += 1
                         continue
                     
                     try:
                         rds_client.delete_db_cluster_parameter_group(DBClusterParameterGroupName=pg_name)
-                        self.log_operation('INFO', f"[OK] Deleted cluster parameter group: {pg_name}")
+                        self.log_operation('INFO', f"{Symbols.OK} Deleted cluster parameter group: {pg_name}")
                         deleted_count += 1
                     except Exception as e:
                         self.log_operation('ERROR', f"Failed to delete {pg_name}: {e}")
 
             if deleted_count > 0:
-                self.print_colored(Colors.GREEN, f"   [OK] Deleted {deleted_count} parameter groups, protected {protected_count}")
+                self.print_colored(Colors.GREEN, f"   {Symbols.OK} Deleted {deleted_count} parameter groups, protected {protected_count}")
 
             return True
 
@@ -693,7 +693,7 @@ class UltraCleanupRDSManager:
                     
                     # PROTECTION: Skip default option groups
                     if self._is_default_option_group(og_name):
-                        self.log_operation('INFO', f"[PROTECTED]  PROTECTED (default): {og_name}")
+                        self.log_operation('INFO', f"{Symbols.PROTECTED}  PROTECTED (default): {og_name}")
                         protected_count += 1
                         self.cleanup_results['skipped_resources'].append({
                             'resource_type': 'option_group',
@@ -704,13 +704,13 @@ class UltraCleanupRDSManager:
                     
                     try:
                         rds_client.delete_option_group(OptionGroupName=og_name)
-                        self.log_operation('INFO', f"[OK] Deleted option group: {og_name}")
+                        self.log_operation('INFO', f"{Symbols.OK} Deleted option group: {og_name}")
                         deleted_count += 1
                     except Exception as e:
                         self.log_operation('ERROR', f"Failed to delete {og_name}: {e}")
 
             if deleted_count > 0:
-                self.print_colored(Colors.GREEN, f"   [OK] Deleted {deleted_count} option groups, protected {protected_count}")
+                self.print_colored(Colors.GREEN, f"   {Symbols.OK} Deleted {deleted_count} option groups, protected {protected_count}")
 
             return True
 
@@ -742,13 +742,13 @@ class UltraCleanupRDSManager:
                         
                         try:
                             cw_client.delete_alarms(AlarmNames=[alarm_name])
-                            self.log_operation('INFO', f"[OK] Deleted CloudWatch alarm: {alarm_name}")
+                            self.log_operation('INFO', f"{Symbols.OK} Deleted CloudWatch alarm: {alarm_name}")
                             deleted_count += 1
                         except Exception as e:
                             self.log_operation('ERROR', f"Failed to delete alarm {alarm_name}: {e}")
 
             if deleted_count > 0:
-                self.print_colored(Colors.GREEN, f"   [OK] Deleted {deleted_count} CloudWatch alarms")
+                self.print_colored(Colors.GREEN, f"   {Symbols.OK} Deleted {deleted_count} CloudWatch alarms")
 
             return True
 
@@ -778,13 +778,13 @@ class UltraCleanupRDSManager:
                     if '/aws/rds/' in log_group_name or log_group_name.startswith('RDS'):
                         try:
                             logs_client.delete_log_group(logGroupName=log_group_name)
-                            self.log_operation('INFO', f"[OK] Deleted log group: {log_group_name}")
+                            self.log_operation('INFO', f"{Symbols.OK} Deleted log group: {log_group_name}")
                             deleted_count += 1
                         except Exception as e:
                             self.log_operation('ERROR', f"Failed to delete log group {log_group_name}: {e}")
 
             if deleted_count > 0:
-                self.print_colored(Colors.GREEN, f"   [OK] Deleted {deleted_count} CloudWatch log groups")
+                self.print_colored(Colors.GREEN, f"   {Symbols.OK} Deleted {deleted_count} CloudWatch log groups")
 
             return True
 
@@ -800,15 +800,15 @@ class UltraCleanupRDSManager:
             account_id = account_info['account_id']
             account_key = account_info['account_key']
 
-            self.log_operation('INFO', f"[CLEANUP] Starting RDS cleanup for {account_key} ({account_id}) in {region}")
-            print(f"\n[CLEANUP] Starting RDS cleanup for {account_key} ({account_id}) in {region}")
+            self.log_operation('INFO', f"{Symbols.CLEANUP} Starting RDS cleanup for {account_key} ({account_id}) in {region}")
+            print(f"\n{Symbols.CLEANUP} Starting RDS cleanup for {account_key} ({account_id}) in {region}")
 
             # Create RDS client
             try:
                 rds_client = self.create_rds_client(access_key, secret_key, region)
             except Exception as client_error:
                 self.log_operation('ERROR', f"Could not create RDS client for {region}: {client_error}")
-                print(f"   [ERROR] Could not create RDS client for {region}: {client_error}")
+                print(f"   {Symbols.ERROR} Could not create RDS client for {region}: {client_error}")
                 return False
 
             # Get all RDS instances
@@ -831,11 +831,11 @@ class UltraCleanupRDSManager:
                 }
                 self.cleanup_results['regions_processed'].append(region_summary)
 
-                self.log_operation('INFO', f"[STATS] {account_key} ({region}) RDS resources summary:")
-                self.log_operation('INFO', f"   [CLUSTER]  DB Instances: {len(instances)}")
-                self.log_operation('INFO', f"   🔄 DB Clusters: {len(clusters)}")
+                self.log_operation('INFO', f"{Symbols.STATS} {account_key} ({region}) RDS resources summary:")
+                self.log_operation('INFO', f"   {Symbols.CLUSTER}  DB Instances: {len(instances)}")
+                self.log_operation('INFO', f"   {Symbols.SCAN} DB Clusters: {len(clusters)}")
 
-                print(f"   [STATS] RDS resources found: {len(instances)} instances, {len(clusters)} clusters")
+                print(f"   {Symbols.STATS} RDS resources found: {len(instances)} instances, {len(clusters)} clusters")
 
                 # Delete instances
                 deleted_instances = 0
@@ -869,7 +869,7 @@ class UltraCleanupRDSManager:
                         failed_clusters += 1
                         self.log_operation('ERROR', f"Error deleting cluster: {e}")
 
-                print(f"   [OK] Deleted {deleted_instances} instances, {deleted_clusters} clusters")
+                print(f"   {Symbols.OK} Deleted {deleted_instances} instances, {deleted_clusters} clusters")
 
             # Delete snapshots
             self.delete_all_snapshots(access_key, secret_key, region, account_info)
@@ -895,59 +895,20 @@ class UltraCleanupRDSManager:
             # Delete option groups (custom only)
             self.delete_option_groups(access_key, secret_key, region)
 
-            self.log_operation('INFO', f"[OK] RDS cleanup completed for {account_key} ({region})")
-            print(f"\n   [OK] RDS cleanup completed for {account_key} ({region})")
+            self.log_operation('INFO', f"{Symbols.OK} RDS cleanup completed for {account_key} ({region})")
+            print(f"\n   {Symbols.OK} RDS cleanup completed for {account_key} ({region})")
             return True
 
         except Exception as e:
             account_key = account_info.get('account_key', 'Unknown')
             self.log_operation('ERROR', f"Error cleaning up RDS resources in {account_key} ({region}): {e}")
-            print(f"   [ERROR] Error cleaning up RDS resources in {account_key} ({region}): {e}")
+            print(f"   {Symbols.ERROR} Error cleaning up RDS resources in {account_key} ({region}): {e}")
             self.cleanup_results['errors'].append({
                 'account_info': account_info,
                 'region': region,
                 'error': str(e)
             })
             return False
-
-    def select_regions_interactive(self) -> Optional[List[str]]:
-        """Interactive region selection."""
-        self.print_colored(Colors.YELLOW, "\n[REGION] Available AWS Regions:")
-        self.print_colored(Colors.YELLOW, "=" * 80)
-
-        for i, region in enumerate(self.user_regions, 1):
-            self.print_colored(Colors.CYAN, f"   {i}. {region}")
-
-        self.print_colored(Colors.YELLOW, "=" * 80)
-        self.print_colored(Colors.YELLOW, "[TIP] Selection options:")
-        self.print_colored(Colors.WHITE, "   • Single: 1")
-        self.print_colored(Colors.WHITE, "   • Multiple: 1,3,5")
-        self.print_colored(Colors.WHITE, "   • Range: 1-5")
-        self.print_colored(Colors.WHITE, "   • All: all")
-        self.print_colored(Colors.YELLOW, "=" * 80)
-
-        while True:
-            try:
-                choice = input(f"Select regions (1-{len(self.user_regions)}, comma-separated, range, or 'all') or 'q' to quit: ").strip()
-
-                if choice.lower() == 'q':
-                    return None
-
-                if choice.lower() == "all" or not choice:
-                    self.print_colored(Colors.GREEN, f"[OK] Selected all {len(self.user_regions)} regions")
-                    return self.user_regions
-
-                selected_indices = self.cred_manager._parse_selection(choice, len(self.user_regions))
-                if not selected_indices:
-                    self.print_colored(Colors.RED, "[ERROR] Invalid selection format")
-                    continue
-
-                selected_regions = [self.user_regions[i - 1] for i in selected_indices]
-                self.print_colored(Colors.GREEN, f"[OK] Selected {len(selected_regions)} regions: {', '.join(selected_regions)}")
-                return selected_regions
-
-            except Exception as e:
-                self.print_colored(Colors.RED, f"[ERROR] Error processing selection: {str(e)}")
 
     def save_cleanup_report(self):
         """Save comprehensive cleanup results to JSON report"""
@@ -996,11 +957,11 @@ class UltraCleanupRDSManager:
             with open(report_filename, 'w', encoding='utf-8') as f:
                 json.dump(report_data, f, indent=2, default=str)
 
-            self.log_operation('INFO', f"[OK] Ultra RDS cleanup report saved to: {report_filename}")
+            self.log_operation('INFO', f"{Symbols.OK} Ultra RDS cleanup report saved to: {report_filename}")
             return report_filename
 
         except Exception as e:
-            self.log_operation('ERROR', f"[ERROR] Failed to save ultra RDS cleanup report: {e}")
+            self.log_operation('ERROR', f"{Symbols.ERROR} Failed to save ultra RDS cleanup report: {e}")
             return None
 
     def run(self):
@@ -1017,7 +978,7 @@ class UltraCleanupRDSManager:
                 return
 
             # Select regions
-            selected_regions = self.select_regions_interactive()
+            selected_regions = self.cred_manager.select_regions_interactive()
             if not selected_regions:
                 self.print_colored(Colors.YELLOW, "No regions selected. Exiting.")
                 return
@@ -1045,17 +1006,17 @@ class UltraCleanupRDSManager:
 
             # Display summary
             self.print_colored(Colors.CYAN, "\n" + "=" * 100)
-            self.print_colored(Colors.CYAN, "[STATS] CLEANUP SUMMARY")
+            self.print_colored(Colors.CYAN, f"{Symbols.STATS} CLEANUP SUMMARY")
             self.print_colored(Colors.CYAN, "=" * 100)
-            self.print_colored(Colors.GREEN, f"[OK] DB Instances Deleted: {len(self.cleanup_results['deleted_instances'])}")
-            self.print_colored(Colors.GREEN, f"[OK] DB Clusters Deleted: {len(self.cleanup_results['deleted_clusters'])}")
-            self.print_colored(Colors.GREEN, f"[OK] Snapshots Deleted: {len(self.cleanup_results['deleted_snapshots'])}")
-            self.print_colored(Colors.YELLOW, f"[WARN]  Resources Skipped: {len(self.cleanup_results['skipped_resources'])}")
-            self.print_colored(Colors.RED, f"[ERROR] Failed Deletions: {len(self.cleanup_results['failed_deletions'])}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} DB Instances Deleted: {len(self.cleanup_results['deleted_instances'])}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} DB Clusters Deleted: {len(self.cleanup_results['deleted_clusters'])}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Snapshots Deleted: {len(self.cleanup_results['deleted_snapshots'])}")
+            self.print_colored(Colors.YELLOW, f"{Symbols.WARN}  Resources Skipped: {len(self.cleanup_results['skipped_resources'])}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed Deletions: {len(self.cleanup_results['failed_deletions'])}")
 
             # Show deletion summary by account
             if self.cleanup_results['deleted_instances'] or self.cleanup_results['deleted_clusters']:
-                self.print_colored(Colors.CYAN, f"\n[STATS] Deletion Summary by Account:")
+                self.print_colored(Colors.CYAN, f"\n{Symbols.STATS} Deletion Summary by Account:")
                 
                 account_summary = {}
                 
@@ -1086,21 +1047,20 @@ class UltraCleanupRDSManager:
                 
                 for account, summary in account_summary.items():
                     regions_list = ', '.join(sorted(summary['regions'])) if summary['regions'] else 'N/A'
-                    self.print_colored(Colors.WHITE, f"   [BANK] {account}:")
-                    self.print_colored(Colors.WHITE, f"      [INSTANCE] DB Instances: {summary['instances']}")
-                    self.print_colored(Colors.WHITE, f"      [CLUSTER]  DB Clusters: {summary['clusters']}")
+                    self.print_colored(Colors.WHITE, f"   {Symbols.ACCOUNT} {account}:")
+                    self.print_colored(Colors.WHITE, f"      {Symbols.INSTANCE} DB Instances: {summary['instances']}")
+                    self.print_colored(Colors.WHITE, f"      {Symbols.CLUSTER}  DB Clusters: {summary['clusters']}")
                     self.print_colored(Colors.WHITE, f"      [SNAPSHOT] Snapshots: {summary['snapshots']}")
-                    self.print_colored(Colors.WHITE, f"      [REGION] Regions: {regions_list}")
+                    self.print_colored(Colors.WHITE, f"      {Symbols.REGION} Regions: {regions_list}")
 
             self.print_colored(Colors.CYAN, f"\n[FILE] Report: {report_file}")
-            self.print_colored(Colors.CYAN, f"[LOG] Log: {self.log_filename}")
+            self.print_colored(Colors.CYAN, f"{Symbols.LOG} Log: {self.log_filename}")
             self.print_colored(Colors.CYAN, "=" * 100)
 
         except KeyboardInterrupt:
             self.print_colored(Colors.YELLOW, "\n\nCleanup interrupted by user.")
         except Exception as e:
-            self.print_colored(Colors.RED, f"\n[ERROR] Error during cleanup: {e}")
-            import traceback
+            self.print_colored(Colors.RED, f"\n{Symbols.ERROR} Error during cleanup: {e}")
             traceback.print_exc()
 
 
@@ -1112,7 +1072,7 @@ def main():
     except KeyboardInterrupt:
         print("\n\nOperation cancelled by user.")
     except Exception as e:
-        print(f"\n[ERROR] Fatal error: {e}")
+        print(f"\n{Symbols.ERROR} Fatal error: {e}")
         import traceback
         traceback.print_exc()
 

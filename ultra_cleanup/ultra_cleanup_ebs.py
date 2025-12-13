@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 
 import os
 import json
@@ -11,6 +11,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from root_iam_credential_manager import AWSCredentialManager, Colors
+from text_symbols import Symbols
 
 
 class UltraCleanupEBSManager:
@@ -71,7 +72,7 @@ class UltraCleanupEBSManager:
                     'us-east-1', 'us-east-2', 'us-west-1', 'us-west-2', 'ap-south-1'
                 ])
         except Exception as e:
-            self.print_colored(Colors.YELLOW, f"[WARN]  Warning: Could not load user regions: {e}")
+            self.print_colored(Colors.YELLOW, f"{Symbols.WARN}  Warning: Could not load user regions: {e}")
 
         return ['us-east-1', 'us-east-2', 'us-west-1', 'us-west-2', 'ap-south-1']
 
@@ -84,7 +85,6 @@ class UltraCleanupEBSManager:
             self.log_filename = f"{self.ebs_dir}/ultra_ebs_cleanup_log_{self.execution_timestamp}.log"
 
             # Create a file handler for detailed logging
-            import logging
 
             # Create logger for detailed operations
             self.operation_logger = logging.getLogger('ultra_ebs_cleanup')
@@ -116,7 +116,7 @@ class UltraCleanupEBSManager:
 
             # Log initial information
             self.operation_logger.info("=" * 100)
-            self.operation_logger.info("[ALERT] ULTRA ELASTIC BEANSTALK CLEANUP SESSION STARTED [ALERT]")
+            self.operation_logger.info(f"{Symbols.ALERT} ULTRA ELASTIC BEANSTALK CLEANUP SESSION STARTED {Symbols.ALERT}")
             self.operation_logger.info("=" * 100)
             self.operation_logger.info(f"Execution Time: {self.current_time} UTC")
             self.operation_logger.info(f"Executed By: {self.current_user}")
@@ -168,8 +168,8 @@ class UltraCleanupEBSManager:
             applications = []
             account_name = account_info.get('account_key', 'Unknown')
 
-            self.log_operation('INFO', f"[SCAN] Scanning for Elastic Beanstalk applications in {region} ({account_name})")
-            print(f"   [SCAN] Scanning for Elastic Beanstalk applications in {region} ({account_name})...")
+            self.log_operation('INFO', f"{Symbols.SCAN} Scanning for Elastic Beanstalk applications in {region} ({account_name})")
+            print(f"   {Symbols.SCAN} Scanning for Elastic Beanstalk applications in {region} ({account_name})...")
 
             # Get all applications
             response = ebs_client.describe_applications()
@@ -214,7 +214,7 @@ class UltraCleanupEBSManager:
         except Exception as e:
             account_name = account_info.get('account_key', 'Unknown')
             self.log_operation('ERROR', f"Error getting Elastic Beanstalk applications in {region} ({account_name}): {e}")
-            print(f"   [ERROR] Error getting applications in {region}: {e}")
+            print(f"   {Symbols.ERROR} Error getting applications in {region}: {e}")
             return []
 
     def get_environments_for_app(self, ebs_client, app_name, region, account_info):
@@ -316,8 +316,8 @@ class UltraCleanupEBSManager:
             env_id = env_info['environment_id']
             account_name = account_info.get('account_key', 'Unknown')
 
-            self.log_operation('INFO', f"[DELETE]  Terminating environment {env_name} ({env_id}) in app {app_name} ({region}, {account_name})")
-            print(f"      [DELETE]  Terminating environment {env_name} ({env_id})...")
+            self.log_operation('INFO', f"{Symbols.DELETE}  Terminating environment {env_name} ({env_id}) in app {app_name} ({region}, {account_name})")
+            print(f"      {Symbols.DELETE}  Terminating environment {env_name} ({env_id})...")
 
             # Check if environment is already being terminated
             if env_info['status'] in ['Terminating', 'Terminated']:
@@ -360,16 +360,16 @@ class UltraCleanupEBSManager:
                     if not response['Environments']:
                         # Environment is gone
                         waiter = False
-                        self.log_operation('INFO', f"[OK] Environment {env_name} terminated successfully")
-                        print(f"      [OK] Environment {env_name} terminated successfully")
+                        self.log_operation('INFO', f"{Symbols.OK} Environment {env_name} terminated successfully")
+                        print(f"      {Symbols.OK} Environment {env_name} terminated successfully")
                         break
 
                     status = response['Environments'][0]['Status']
 
                     if status == 'Terminated':
                         waiter = False
-                        self.log_operation('INFO', f"[OK] Environment {env_name} terminated successfully")
-                        print(f"      [OK] Environment {env_name} terminated successfully")
+                        self.log_operation('INFO', f"{Symbols.OK} Environment {env_name} terminated successfully")
+                        print(f"      {Symbols.OK} Environment {env_name} terminated successfully")
                         break
                     elif status == 'Terminating':
                         if retry_count % 6 == 0:  # Log every 3 minutes
@@ -384,8 +384,8 @@ class UltraCleanupEBSManager:
                 except ClientError as e:
                     if 'No Environment found' in str(e):
                         waiter = False
-                        self.log_operation('INFO', f"[OK] Environment {env_name} terminated successfully")
-                        print(f"      [OK] Environment {env_name} terminated successfully")
+                        self.log_operation('INFO', f"{Symbols.OK} Environment {env_name} terminated successfully")
+                        print(f"      {Symbols.OK} Environment {env_name} terminated successfully")
                         break
                     else:
                         self.log_operation('ERROR', f"Error checking environment status: {e}")
@@ -396,7 +396,7 @@ class UltraCleanupEBSManager:
 
             if retry_count >= max_retries:
                 self.log_operation('WARNING', f"Timed out waiting for environment {env_name} termination")
-                print(f"      [WARN] Timed out waiting for environment {env_name} termination")
+                print(f"      {Symbols.WARN} Timed out waiting for environment {env_name} termination")
 
             # Record the deletion
             self.cleanup_results['deleted_environments'].append({
@@ -415,7 +415,7 @@ class UltraCleanupEBSManager:
         except Exception as e:
             account_name = account_info.get('account_key', 'Unknown')
             self.log_operation('ERROR', f"Failed to terminate environment {env_info['environment_name']}: {e}")
-            print(f"      [ERROR] Failed to terminate environment {env_info['environment_name']}: {e}")
+            print(f"      {Symbols.ERROR} Failed to terminate environment {env_info['environment_name']}: {e}")
 
             self.cleanup_results['failed_deletions'].append({
                 'resource_type': 'environment',
@@ -436,8 +436,8 @@ class UltraCleanupEBSManager:
             account_name = app_info['account_info'].get('account_key', 'Unknown')
             environments = app_info['environments']
 
-            self.log_operation('INFO', f"[DELETE]  Deleting Elastic Beanstalk application {app_name} in {region} ({account_name})")
-            print(f"\n   [DELETE]  Deleting Elastic Beanstalk application {app_name} in {region} ({account_name})...")
+            self.log_operation('INFO', f"{Symbols.DELETE}  Deleting Elastic Beanstalk application {app_name} in {region} ({account_name})")
+            print(f"\n   {Symbols.DELETE}  Deleting Elastic Beanstalk application {app_name} in {region} ({account_name})...")
 
             # Step 1: Terminate all environments first
             if environments:
@@ -456,7 +456,7 @@ class UltraCleanupEBSManager:
             time.sleep(30)
 
             # Step 3: Delete application versions
-            print(f"   [DELETE]  Deleting application versions for {app_name}...")
+            print(f"   {Symbols.DELETE}  Deleting application versions for {app_name}...")
             self.log_operation('INFO', f"Deleting application versions for {app_name}")
 
             try:
@@ -482,28 +482,28 @@ class UltraCleanupEBSManager:
                                 DeleteSourceBundle=True
                             )
                             self.log_operation('INFO', f"Deleted application version {version_label}")
-                            print(f"      [OK] Deleted application version {version_label}")
+                            print(f"      {Symbols.OK} Deleted application version {version_label}")
                         except Exception as version_error:
                             self.log_operation('WARNING', f"Could not delete version {version_label}: {str(version_error)}")
-                            print(f"      [WARN] Could not delete version {version_label}: {str(version_error)}")
+                            print(f"      {Symbols.WARN} Could not delete version {version_label}: {str(version_error)}")
                 else:
                     self.log_operation('INFO', f"No application versions found for {app_name}")
                     print(f"      No application versions found for {app_name}")
             except Exception as versions_error:
                 self.log_operation('WARNING', f"Error deleting application versions: {str(versions_error)}")
-                print(f"      [WARN] Error deleting application versions: {str(versions_error)}")
+                print(f"      {Symbols.WARN} Error deleting application versions: {str(versions_error)}")
 
             # Step 4: Delete the application
             self.log_operation('INFO', f"Deleting the application {app_name}...")
-            print(f"   [DELETE]  Deleting the application {app_name}...")
+            print(f"   {Symbols.DELETE}  Deleting the application {app_name}...")
 
             ebs_client.delete_application(
                 ApplicationName=app_name,
                 TerminateEnvByForce=True
             )
 
-            self.log_operation('INFO', f"[OK] Successfully deleted application {app_name}")
-            print(f"   [OK] Successfully deleted application {app_name}")
+            self.log_operation('INFO', f"{Symbols.OK} Successfully deleted application {app_name}")
+            print(f"   {Symbols.OK} Successfully deleted application {app_name}")
 
             self.cleanup_results['deleted_applications'].append({
                 'application_name': app_name,
@@ -521,7 +521,7 @@ class UltraCleanupEBSManager:
         except Exception as e:
             account_name = app_info['account_info'].get('account_key', 'Unknown')
             self.log_operation('ERROR', f"Failed to delete application {app_info['application_name']}: {e}")
-            print(f"   [ERROR] Failed to delete application {app_info['application_name']}: {e}")
+            print(f"   {Symbols.ERROR} Failed to delete application {app_info['application_name']}: {e}")
 
             self.cleanup_results['failed_deletions'].append({
                 'resource_type': 'application',
@@ -540,15 +540,15 @@ class UltraCleanupEBSManager:
             account_id = account_info['account_id']
             account_key = account_info['account_key']
 
-            self.log_operation('INFO', f"[CLEANUP] Starting EBS cleanup for {account_key} ({account_id}) in {region}")
-            print(f"\n[CLEANUP] Starting EBS cleanup for {account_key} ({account_id}) in {region}")
+            self.log_operation('INFO', f"{Symbols.CLEANUP} Starting EBS cleanup for {account_key} ({account_id}) in {region}")
+            print(f"\n{Symbols.CLEANUP} Starting EBS cleanup for {account_key} ({account_id}) in {region}")
 
             # Create Elastic Beanstalk client
             try:
                 ebs_client = self.create_client('elasticbeanstalk', access_key, secret_key, region)
             except Exception as client_error:
                 self.log_operation('ERROR', f"Could not create Elastic Beanstalk client for {region}: {client_error}")
-                print(f"   [ERROR] Could not create Elastic Beanstalk client for {region}: {client_error}")
+                print(f"   {Symbols.ERROR} Could not create Elastic Beanstalk client for {region}: {client_error}")
                 return False
 
             # Get all Elastic Beanstalk applications
@@ -569,11 +569,11 @@ class UltraCleanupEBSManager:
             }
             self.cleanup_results['regions_processed'].append(region_summary)
 
-            self.log_operation('INFO', f"[STATS] {account_key} ({region}) EBS resources summary:")
+            self.log_operation('INFO', f"{Symbols.STATS} {account_key} ({region}) EBS resources summary:")
             self.log_operation('INFO', f"   [NETWORK] Applications: {len(applications)}")
             self.log_operation('INFO', f"   🌱 Environments: {region_summary['environments_found']}")
 
-            print(f"   [STATS] EBS resources found: {len(applications)} applications, {region_summary['environments_found']} environments")
+            print(f"   {Symbols.STATS} EBS resources found: {len(applications)} applications, {region_summary['environments_found']} environments")
 
             # Delete each application and its environments
             deleted_count = 0
@@ -591,63 +591,24 @@ class UltraCleanupEBSManager:
                 except Exception as e:
                     failed_count += 1
                     self.log_operation('ERROR', f"Error deleting application {app_name}: {e}")
-                    print(f"   [ERROR] Error deleting application {app_name}: {e}")
+                    print(f"   {Symbols.ERROR} Error deleting application {app_name}: {e}")
 
-            print(f"   [OK] Deleted {deleted_count} applications, [ERROR] Failed: {failed_count}")
+            print(f"   {Symbols.OK} Deleted {deleted_count} applications, {Symbols.ERROR} Failed: {failed_count}")
 
-            self.log_operation('INFO', f"[OK] EBS cleanup completed for {account_key} ({region})")
-            print(f"\n   [OK] EBS cleanup completed for {account_key} ({region})")
+            self.log_operation('INFO', f"{Symbols.OK} EBS cleanup completed for {account_key} ({region})")
+            print(f"\n   {Symbols.OK} EBS cleanup completed for {account_key} ({region})")
             return True
 
         except Exception as e:
             account_key = account_info.get('account_key', 'Unknown')
             self.log_operation('ERROR', f"Error cleaning up EBS resources in {account_key} ({region}): {e}")
-            print(f"   [ERROR] Error cleaning up EBS resources in {account_key} ({region}): {e}")
+            print(f"   {Symbols.ERROR} Error cleaning up EBS resources in {account_key} ({region}): {e}")
             self.cleanup_results['errors'].append({
                 'account_info': account_info,
                 'region': region,
                 'error': str(e)
             })
             return False
-
-    def select_regions_interactive(self) -> Optional[List[str]]:
-        """Interactive region selection."""
-        self.print_colored(Colors.YELLOW, "\n[REGION] Available AWS Regions:")
-        self.print_colored(Colors.YELLOW, "=" * 80)
-
-        for i, region in enumerate(self.user_regions, 1):
-            self.print_colored(Colors.CYAN, f"   {i}. {region}")
-
-        self.print_colored(Colors.YELLOW, "=" * 80)
-        self.print_colored(Colors.YELLOW, "[TIP] Selection options:")
-        self.print_colored(Colors.WHITE, "   • Single: 1")
-        self.print_colored(Colors.WHITE, "   • Multiple: 1,3,5")
-        self.print_colored(Colors.WHITE, "   • Range: 1-5")
-        self.print_colored(Colors.WHITE, "   • All: all")
-        self.print_colored(Colors.YELLOW, "=" * 80)
-
-        while True:
-            try:
-                choice = input(f"Select regions (1-{len(self.user_regions)}, comma-separated, range, or 'all') or 'q' to quit: ").strip()
-
-                if choice.lower() == 'q':
-                    return None
-
-                if choice.lower() == "all" or not choice:
-                    self.print_colored(Colors.GREEN, f"[OK] Selected all {len(self.user_regions)} regions")
-                    return self.user_regions
-
-                selected_indices = self.cred_manager._parse_selection(choice, len(self.user_regions))
-                if not selected_indices:
-                    self.print_colored(Colors.RED, "[ERROR] Invalid selection format")
-                    continue
-
-                selected_regions = [self.user_regions[i - 1] for i in selected_indices]
-                self.print_colored(Colors.GREEN, f"[OK] Selected {len(selected_regions)} regions: {', '.join(selected_regions)}")
-                return selected_regions
-
-            except Exception as e:
-                self.print_colored(Colors.RED, f"[ERROR] Error processing selection: {str(e)}")
 
     def save_cleanup_report(self):
         """Save comprehensive cleanup results to JSON report"""
@@ -727,24 +688,24 @@ class UltraCleanupEBSManager:
             with open(report_filename, 'w', encoding='utf-8') as f:
                 json.dump(report_data, f, indent=2, default=str)
 
-            self.log_operation('INFO', f"[OK] Ultra EBS cleanup report saved to: {report_filename}")
+            self.log_operation('INFO', f"{Symbols.OK} Ultra EBS cleanup report saved to: {report_filename}")
             return report_filename
 
         except Exception as e:
-            self.log_operation('ERROR', f"[ERROR] Failed to save ultra EBS cleanup report: {e}")
+            self.log_operation('ERROR', f"{Symbols.ERROR} Failed to save ultra EBS cleanup report: {e}")
             return None
 
     def run(self):
         """Main execution method - sequential (no threading)"""
         try:
-            self.log_operation('INFO', "[ALERT] STARTING ULTRA ELASTIC BEANSTALK CLEANUP SESSION [ALERT]")
+            self.log_operation('INFO', f"{Symbols.ALERT} STARTING ULTRA ELASTIC BEANSTALK CLEANUP SESSION {Symbols.ALERT}")
 
-            self.print_colored(Colors.YELLOW, "[ALERT]" * 30)
-            self.print_colored(Colors.BLUE, "[START] ULTRA ELASTIC BEANSTALK CLEANUP MANAGER")
-            self.print_colored(Colors.YELLOW, "[ALERT]" * 30)
-            self.print_colored(Colors.WHITE, f"[DATE] Execution Date/Time: {self.current_time} UTC")
+            self.print_colored(Colors.YELLOW, f"{Symbols.ALERT}" * 30)
+            self.print_colored(Colors.BLUE, f"{Symbols.START} ULTRA ELASTIC BEANSTALK CLEANUP MANAGER")
+            self.print_colored(Colors.YELLOW, f"{Symbols.ALERT}" * 30)
+            self.print_colored(Colors.WHITE, f"{Symbols.DATE} Execution Date/Time: {self.current_time} UTC")
             self.print_colored(Colors.WHITE, f"[USER] Executed by: {self.current_user}")
-            self.print_colored(Colors.WHITE, f"[LIST] Log File: {self.log_filename}")
+            self.print_colored(Colors.WHITE, f"{Symbols.LIST} Log File: {self.log_filename}")
 
             # STEP 1: Select root accounts
             self.print_colored(Colors.YELLOW, "\n[KEY] Select Root AWS Accounts for Elastic Beanstalk Cleanup:")
@@ -756,7 +717,7 @@ class UltraCleanupEBSManager:
             selected_accounts = root_accounts
 
             # STEP 2: Select regions
-            selected_regions = self.select_regions_interactive()
+            selected_regions = self.cred_manager.select_regions_interactive()
             if not selected_regions:
                 self.print_colored(Colors.RED, "[ERROR] No regions selected, exiting...")
                 return
@@ -764,16 +725,16 @@ class UltraCleanupEBSManager:
             # STEP 3: Calculate total operations and confirm
             total_operations = len(selected_accounts) * len(selected_regions)
 
-            self.print_colored(Colors.YELLOW, f"\n[TARGET] ELASTIC BEANSTALK CLEANUP CONFIGURATION")
+            self.print_colored(Colors.YELLOW, f"\n{Symbols.TARGET} ELASTIC BEANSTALK CLEANUP CONFIGURATION")
             self.print_colored(Colors.YELLOW, "=" * 80)
-            self.print_colored(Colors.WHITE, f"[KEY] Credential source: ROOT ACCOUNTS")
-            self.print_colored(Colors.WHITE, f"[BANK] Selected accounts: {len(selected_accounts)}")
-            self.print_colored(Colors.WHITE, f"[REGION] Regions per account: {len(selected_regions)}")
-            self.print_colored(Colors.WHITE, f"[LIST] Total operations: {total_operations}")
+            self.print_colored(Colors.WHITE, f"{Symbols.KEY} Credential source: ROOT ACCOUNTS")
+            self.print_colored(Colors.WHITE, f"{Symbols.ACCOUNT} Selected accounts: {len(selected_accounts)}")
+            self.print_colored(Colors.WHITE, f"{Symbols.REGION} Regions per account: {len(selected_regions)}")
+            self.print_colored(Colors.WHITE, f"{Symbols.LIST} Total operations: {total_operations}")
             self.print_colored(Colors.YELLOW, "=" * 80)
 
             # Show what will be cleaned up
-            self.print_colored(Colors.RED, f"\n[WARN]  WARNING: This will delete ALL of the following Elastic Beanstalk resources:")
+            self.print_colored(Colors.RED, f"\n{Symbols.WARN}  WARNING: This will delete ALL of the following Elastic Beanstalk resources:")
             self.print_colored(Colors.WHITE, f"    • Elastic Beanstalk Applications")
             self.print_colored(Colors.WHITE, f"    • Elastic Beanstalk Environments")
             self.print_colored(Colors.WHITE, f"    • Application Versions")
@@ -787,7 +748,7 @@ class UltraCleanupEBSManager:
 
             if confirm1 not in ['y', 'yes']:
                 self.log_operation('INFO', "Ultra EBS cleanup cancelled by user")
-                self.print_colored(Colors.RED, "[ERROR] Cleanup cancelled")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Cleanup cancelled")
                 return
 
             # Second confirmation - final check
@@ -796,12 +757,12 @@ class UltraCleanupEBSManager:
 
             if confirm2 != 'yes':
                 self.log_operation('INFO', "Ultra EBS cleanup cancelled at final confirmation")
-                self.print_colored(Colors.RED, "[ERROR] Cleanup cancelled")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Cleanup cancelled")
                 return
 
             # STEP 4: Start the cleanup sequentially
-            self.print_colored(Colors.CYAN, f"\n[START] Starting Elastic Beanstalk cleanup...")
-            self.log_operation('INFO', f"[ALERT] EBS CLEANUP INITIATED - {len(selected_accounts)} accounts, {len(selected_regions)} regions")
+            self.print_colored(Colors.CYAN, f"\n{Symbols.START} Starting Elastic Beanstalk cleanup...")
+            self.log_operation('INFO', f"{Symbols.ALERT} EBS CLEANUP INITIATED - {len(selected_accounts)} accounts, {len(selected_regions)} regions")
 
             start_time = time.time()
 
@@ -828,7 +789,7 @@ class UltraCleanupEBSManager:
                 except Exception as e:
                     failed_tasks += 1
                     self.log_operation('ERROR', f"Task failed for {account_key} ({region}): {e}")
-                    self.print_colored(Colors.RED, f"[ERROR] Task failed for {account_key} ({region}): {e}")
+                    self.print_colored(Colors.RED, f"{Symbols.ERROR} Task failed for {account_key} ({region}): {e}")
 
             end_time = time.time()
             total_time = int(end_time - start_time)
@@ -837,13 +798,13 @@ class UltraCleanupEBSManager:
             self.print_colored(Colors.GREEN, f"\n" + "=" * 100)
             self.print_colored(Colors.GREEN, "[OK] ELASTIC BEANSTALK CLEANUP COMPLETE")
             self.print_colored(Colors.GREEN, "=" * 100)
-            self.print_colored(Colors.WHITE, f"[TIMER]  Total execution time: {total_time} seconds")
-            self.print_colored(Colors.GREEN, f"[OK] Successful operations: {successful_tasks}")
-            self.print_colored(Colors.RED, f"[ERROR] Failed operations: {failed_tasks}")
+            self.print_colored(Colors.WHITE, f"{Symbols.TIMER}  Total execution time: {total_time} seconds")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Successful operations: {successful_tasks}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed operations: {failed_tasks}")
             self.print_colored(Colors.WHITE, f"[NETWORK] Applications deleted: {len(self.cleanup_results['deleted_applications'])}")
             self.print_colored(Colors.WHITE, f"🌱 Environments deleted: {len(self.cleanup_results['deleted_environments'])}")
-            self.print_colored(Colors.WHITE, f"[SKIP]  Resources skipped: {len(self.cleanup_results['skipped_resources'])}")
-            self.print_colored(Colors.RED, f"[ERROR] Failed deletions: {len(self.cleanup_results['failed_deletions'])}")
+            self.print_colored(Colors.WHITE, f"{Symbols.SKIP}  Resources skipped: {len(self.cleanup_results['skipped_resources'])}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed deletions: {len(self.cleanup_results['failed_deletions'])}")
 
             self.log_operation('INFO', f"EBS CLEANUP COMPLETED")
             self.log_operation('INFO', f"Execution time: {total_time} seconds")
@@ -852,7 +813,7 @@ class UltraCleanupEBSManager:
 
             # STEP 6: Show account summary
             if self.cleanup_results['deleted_applications'] or self.cleanup_results['deleted_environments']:
-                self.print_colored(Colors.YELLOW, f"\n[STATS] Deletion Summary by Account:")
+                self.print_colored(Colors.YELLOW, f"\n{Symbols.STATS} Deletion Summary by Account:")
 
                 # Group by account
                 account_summary = {}
@@ -872,14 +833,14 @@ class UltraCleanupEBSManager:
 
                 for account, summary in account_summary.items():
                     regions_list = ', '.join(sorted(summary['regions']))
-                    self.print_colored(Colors.PURPLE, f"   [BANK] {account}:")
+                    self.print_colored(Colors.PURPLE, f"   {Symbols.ACCOUNT} {account}:")
                     self.print_colored(Colors.WHITE, f"      [NETWORK] Applications: {summary['applications']}")
                     self.print_colored(Colors.WHITE, f"      🌱 Environments: {summary['environments']}")
-                    self.print_colored(Colors.WHITE, f"      [REGION] Regions: {regions_list}")
+                    self.print_colored(Colors.WHITE, f"      {Symbols.REGION} Regions: {regions_list}")
 
             # STEP 7: Show failures if any
             if self.cleanup_results['failed_deletions']:
-                self.print_colored(Colors.RED, f"\n[ERROR] Failed Deletions:")
+                self.print_colored(Colors.RED, f"\n{Symbols.ERROR} Failed Deletions:")
                 for failure in self.cleanup_results['failed_deletions'][:10]:  # Show first 10
                     account_key = failure['account_info'].get('account_key', 'Unknown')
                     self.print_colored(Colors.WHITE, f"   • {failure['resource_type']} {failure['resource_id']} in {account_key} ({failure['region']})")
@@ -893,17 +854,16 @@ class UltraCleanupEBSManager:
             self.print_colored(Colors.CYAN, f"\n[FILE] Saving Elastic Beanstalk cleanup report...")
             report_file = self.save_cleanup_report()
             if report_file:
-                self.print_colored(Colors.GREEN, f"[OK] Elastic Beanstalk cleanup report saved to: {report_file}")
+                self.print_colored(Colors.GREEN, f"{Symbols.OK} Elastic Beanstalk cleanup report saved to: {report_file}")
 
-            self.print_colored(Colors.GREEN, f"[OK] Session log saved to: {self.log_filename}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Session log saved to: {self.log_filename}")
 
-            self.print_colored(Colors.GREEN, f"\n[OK] Elastic Beanstalk cleanup completed successfully!")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.OK} Elastic Beanstalk cleanup completed successfully!")
             self.print_colored(Colors.YELLOW, "[ALERT]" * 30)
 
         except Exception as e:
             self.log_operation('ERROR', f"FATAL ERROR in EBS cleanup execution: {str(e)}")
-            self.print_colored(Colors.RED, f"\n[ERROR] FATAL ERROR: {e}")
-            import traceback
+            self.print_colored(Colors.RED, f"\n{Symbols.ERROR} FATAL ERROR: {e}")
             traceback.print_exc()
             raise
 
@@ -917,7 +877,7 @@ def main():
         print("\n\n[ERROR] Elastic Beanstalk cleanup interrupted by user")
         exit(1)
     except Exception as e:
-        print(f"[ERROR] Unexpected error: {e}")
+        print(f"{Symbols.ERROR} Unexpected error: {e}")
         exit(1)
 
 

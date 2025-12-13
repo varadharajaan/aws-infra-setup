@@ -1,3 +1,4 @@
+﻿from text_symbols import Symbols
 # Databricks notebook source
 #!/usr/bin/env python3
 """
@@ -81,11 +82,11 @@ class EKSClusterManager:
         
         if not files:
             logger.error("No iam_users_credentials_*.json file found!")
-            self.print_colored(Colors.RED, "❌ No iam_users_credentials_*.json file found!")
+            self.print_colored(Colors.RED, "[ERROR] No iam_users_credentials_*.json file found!")
             # Fallback to default config file
             return "aws-accounts-config.json"
         
-        self.print_colored(Colors.BLUE, f"🔍 Found {len(files)} iam_users_credentials files:")
+        self.print_colored(Colors.BLUE, f"{Symbols.SCAN} Found {len(files)} iam_users_credentials files:")
         
         # Sort by timestamp in filename
         file_timestamps = []
@@ -105,14 +106,14 @@ class EKSClusterManager:
                     print(f"   📄 {file_path} - {formatted_time} UTC ({file_size_mb:.2f} MB)")
                     
                 except ValueError:
-                    print(f"   ⚠️  Invalid timestamp format in: {file_path}")
+                    print(f"   {Symbols.WARN}  Invalid timestamp format in: {file_path}")
                     continue
             else:
-                print(f"   ⚠️  Invalid filename format: {file_path}")
+                print(f"   {Symbols.WARN}  Invalid filename format: {file_path}")
         
         if not file_timestamps:
             logger.error("No valid iam_users_credentials files found with proper timestamp format!")
-            self.print_colored(Colors.RED, "❌ No valid iam_users_credentials files found with proper timestamp format!")
+            self.print_colored(Colors.RED, "[ERROR] No valid iam_users_credentials files found with proper timestamp format!")
             return "aws-accounts-config.json"
         
         # Sort by timestamp (newest first)
@@ -121,8 +122,8 @@ class EKSClusterManager:
         latest_timestamp = file_timestamps[0][2]
         latest_datetime = file_timestamps[0][1]
         
-        self.print_colored(Colors.GREEN, f"✅ Selected latest file: {latest_file}")
-        print(f"   📅 File timestamp: {latest_datetime.strftime('%Y-%m-%d %H:%M:%S')} UTC")
+        self.print_colored(Colors.GREEN, f"{Symbols.OK} Selected latest file: {latest_file}")
+        print(f"   {Symbols.DATE} File timestamp: {latest_datetime.strftime('%Y-%m-%d %H:%M:%S')} UTC")
         print(f"   🆕 This is the most recent credentials file available")
         
         logger.info(f"Selected latest credentials file: {latest_file} (timestamp: {latest_timestamp})")
@@ -140,7 +141,7 @@ class EKSClusterManager:
             
             total_admin_accounts = len(self.admin_config_data.get('accounts', {}))
             logger.info(f"Successfully loaded admin configuration with {total_admin_accounts} admin accounts")
-            self.print_colored(Colors.GREEN, f"✅ Loaded admin configuration with {total_admin_accounts} admin accounts from {self.admin_config_file}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Loaded admin configuration with {total_admin_accounts} admin accounts from {self.admin_config_file}")
         
         except Exception as e:
             logger.error(f"Failed to load admin configuration: {str(e)}")
@@ -152,7 +153,6 @@ class EKSClusterManager:
             self.log_filename = f"eks_creation_log_{self.execution_timestamp}.log"
             
             # Create a file handler for detailed logging
-            import logging
             
             # Create logger for detailed operations
             self.operation_logger = logging.getLogger('eks_operations')
@@ -233,7 +233,7 @@ class EKSClusterManager:
                 total_users = sum(len(account['users']) for account in self.config_data.get('accounts', {}).values())
             
             logger.info(f"Successfully loaded configuration with {total_users} users")
-            self.print_colored(Colors.GREEN, f"✅ Loaded configuration with {total_users} users from {self.config_file}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Loaded configuration with {total_users} users from {self.config_file}")
         
         except Exception as e:
             logger.error(f"Failed to load configuration: {str(e)}")
@@ -278,7 +278,7 @@ class EKSClusterManager:
         
         self.log_operation('INFO', f"Displaying {len(accounts)} available accounts for selection")
         
-        print(f"\n🏦 Available AWS Accounts ({len(accounts)} total):")
+        print(f"\n{Symbols.ACCOUNT} Available AWS Accounts ({len(accounts)} total):")
         print("=" * 80)
         
         total_users = 0
@@ -292,7 +292,7 @@ class EKSClusterManager:
             
             # Check if admin credentials exist for this account
             admin_available = account_name in self.admin_config_data.get('accounts', {})
-            admin_status = "✅" if admin_available else "❌"
+            admin_status = f"{Symbols.OK}" if admin_available else f"{Symbols.ERROR}"
             
             # Collect regions used in this account
             account_regions = set()
@@ -305,21 +305,21 @@ class EKSClusterManager:
             print(f"      📧 Email: {account_email}")
             print(f"      🆔 Account ID: {account_id}")
             print(f"      👥 Users: {user_count}")
-            print(f"      🌍 Regions: {', '.join(sorted(account_regions))}")
-            print(f"      🔑 Admin Creds: {admin_status}")
+            print(f"      {Symbols.REGION} Regions: {', '.join(sorted(account_regions))}")
+            print(f"      {Symbols.KEY} Admin Creds: {admin_status}")
             
             self.log_operation('INFO', f"Account {i}: {account_name} ({account_id}) - {user_count} users, admin creds: {admin_available}")
             print()
         
         print("=" * 80)
-        print(f"📊 Summary:")
-        print(f"   📈 Total accounts: {len(accounts)}")
+        print(f"{Symbols.STATS} Summary:")
+        print(f"   [UP] Total accounts: {len(accounts)}")
         print(f"   👥 Total users: {total_users}")
-        print(f"   🌍 All regions: {', '.join(sorted(regions_used))}")
+        print(f"   {Symbols.REGION} All regions: {', '.join(sorted(regions_used))}")
         
         self.log_operation('INFO', f"Account summary: {len(accounts)} accounts, {total_users} total users, regions: {', '.join(sorted(regions_used))}")
         
-        print(f"\n📝 Selection Options:")
+        print(f"\n{Symbols.LOG} Selection Options:")
         print(f"   • Single accounts: 1,3,5")
         print(f"   • Ranges: 1-{len(accounts)} (accounts 1 through {len(accounts)})")
         print(f"   • Mixed: 1-2,4 (accounts 1, 2, and 4)")
@@ -327,7 +327,7 @@ class EKSClusterManager:
         print(f"   • Cancel: 'cancel' or 'quit'")
         
         while True:
-            selection = input(f"\n🔢 Select accounts to process: ").strip()
+            selection = input(f"\n[#] Select accounts to process: ").strip()
             
             self.log_operation('INFO', f"User input for account selection: '{selection}'")
             
@@ -354,25 +354,25 @@ class EKSClusterManager:
                             selected_accounts.append((account_name, account_data))
                     
                     if missing_admin_creds:
-                        print(f"\n❌ Missing admin credentials for accounts: {', '.join(missing_admin_creds)}")
+                        print(f"\n{Symbols.ERROR} Missing admin credentials for accounts: {', '.join(missing_admin_creds)}")
                         print("Please ensure admin credentials are available in aws_accounts_config.json")
                         continue
                     
                     # Show confirmation
-                    print(f"\n✅ Selected {len(selected_indices)} accounts with admin credentials available")
-                    confirm = input(f"\n🚀 Proceed with these {len(selected_indices)} accounts? (y/N): ").lower().strip()
+                    print(f"\n{Symbols.OK} Selected {len(selected_indices)} accounts with admin credentials available")
+                    confirm = input(f"\n{Symbols.START} Proceed with these {len(selected_indices)} accounts? (y/N): ").lower().strip()
                     
                     if confirm == 'y':
                         return selected_indices
                     else:
-                        print("❌ Selection cancelled, please choose again.")
+                        print(f"{Symbols.ERROR} Selection cancelled, please choose again.")
                         continue
                 else:
-                    print("❌ No valid accounts selected. Please try again.")
+                    print(f"{Symbols.ERROR} No valid accounts selected. Please try again.")
                     continue
                     
             except ValueError as e:
-                print(f"❌ Invalid selection: {e}")
+                print(f"{Symbols.ERROR} Invalid selection: {e}")
                 print("   Please use format like: 1,3,5 or 1-5 or 1-3,5,7-9")
                 continue
 
@@ -471,7 +471,7 @@ class EKSClusterManager:
         
         for account_name, users in users_by_account.items():
             account_id = users[0]['account_id']
-            print(f"\n🏦 {account_name} ({account_id}) - {len(users)} users:")
+            print(f"\n{Symbols.ACCOUNT} {account_name} ({account_id}) - {len(users)} users:")
             print("-" * 80)
             
             for user_info in users:
@@ -483,22 +483,22 @@ class EKSClusterManager:
                 print(f"  {user_index:3}. {full_name}")
                 print(f"       👤 Username: {user_info['username']}")
                 print(f"       📧 Email: {email}")
-                print(f"       🌍 Region: {region}")
+                print(f"       {Symbols.REGION} Region: {region}")
                 
                 user_mapping[user_index] = user_info
                 user_index += 1
                 print()
         
         print("=" * 100)
-        print(f"📊 Summary: {len(all_users)} users across {len(users_by_account)} accounts")
+        print(f"{Symbols.STATS} Summary: {len(all_users)} users across {len(users_by_account)} accounts")
         
-        print(f"\n📝 Selection Options:")
+        print(f"\n{Symbols.LOG} Selection Options:")
         print(f"   • All users: 'all' or press Enter")
         print(f"   • Ranges: 1-{len(all_users)}")
         print(f"   • Cancel: 'cancel' or 'quit'")
         
         while True:
-            selection = input(f"\n🔢 Select users to process: ").strip()
+            selection = input(f"\n[#] Select users to process: ").strip()
             
             if not selection or selection.lower() == 'all':
                 return list(range(1, len(all_users) + 1)), user_mapping
@@ -509,17 +509,17 @@ class EKSClusterManager:
             try:
                 selected_indices = self.parse_selection(selection, len(all_users))
                 if selected_indices:
-                    confirm = input(f"\n🚀 Proceed with {len(selected_indices)} users? (y/N): ").lower().strip()
+                    confirm = input(f"\n{Symbols.START} Proceed with {len(selected_indices)} users? (y/N): ").lower().strip()
                     if confirm == 'y':
                         return selected_indices, user_mapping
                     else:
                         continue
                 else:
-                    print("❌ No valid users selected. Please try again.")
+                    print(f"{Symbols.ERROR} No valid users selected. Please try again.")
                     continue
                     
             except ValueError as e:
-                print(f"❌ Invalid selection: {e}")
+                print(f"{Symbols.ERROR} Invalid selection: {e}")
                 continue
 
     
@@ -823,7 +823,7 @@ class EKSClusterManager:
             
             if not kubectl_available:
                 self.log_operation('WARNING', f"kubectl not found. ConfigMap file created but not applied: {configmap_file}")
-                self.print_colored(Colors.YELLOW, f"⚠️  kubectl not found. Manual setup required.")
+                self.print_colored(Colors.YELLOW, f"{Symbols.WARN}  kubectl not found. Manual setup required.")
                 
                 # Create manual instruction file
                 instruction_file = os.path.join(temp_dir, f"manual-auth-setup-{cluster_name}-{self.execution_timestamp}.txt")
@@ -867,7 +867,7 @@ class EKSClusterManager:
                         f.write(f"kubectl get pods\n")
                     
                     self.log_operation('INFO', f"Manual setup instructions saved to: {instruction_file}")
-                    self.print_colored(Colors.CYAN, f"📋 Manual setup instructions: {instruction_file}")
+                    self.print_colored(Colors.CYAN, f"{Symbols.LIST} Manual setup instructions: {instruction_file}")
                     
                 except Exception as e:
                     self.log_operation('WARNING', f"Failed to create instruction file: {str(e)}")
@@ -877,7 +877,7 @@ class EKSClusterManager:
             
             # Apply ConfigMap using kubectl with admin credentials
             self.log_operation('INFO', f"Applying ConfigMap using admin credentials")
-            self.print_colored(Colors.YELLOW, f"🚀 Applying ConfigMap with admin credentials...")
+            self.print_colored(Colors.YELLOW, f"{Symbols.START} Applying ConfigMap with admin credentials...")
             
             # Set environment variables for admin access
             env = os.environ.copy()
@@ -910,7 +910,7 @@ class EKSClusterManager:
                 
                 if apply_result.returncode == 0:
                     self.log_operation('INFO', f"Successfully applied aws-auth ConfigMap for {cluster_name}")
-                    self.print_colored(Colors.GREEN, f"✅ ConfigMap applied successfully")
+                    self.print_colored(Colors.GREEN, f"{Symbols.OK} ConfigMap applied successfully")
                     
                     # Verify the ConfigMap was applied
                     verify_cmd = ['kubectl', 'get', 'configmap', 'aws-auth', '-n', 'kube-system', '-o', 'yaml']
@@ -925,16 +925,16 @@ class EKSClusterManager:
                     success = True
                 else:
                     self.log_operation('ERROR', f"Failed to apply aws-auth ConfigMap: {apply_result.stderr}")
-                    self.print_colored(Colors.RED, f"❌ Failed to apply ConfigMap: {apply_result.stderr}")
+                    self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to apply ConfigMap: {apply_result.stderr}")
                     success = False
             
             except subprocess.TimeoutExpired:
                 self.log_operation('ERROR', f"kubectl/aws command timed out for {cluster_name}")
-                self.print_colored(Colors.RED, f"❌ Command timed out")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Command timed out")
                 success = False
             except Exception as e:
                 self.log_operation('ERROR', f"Failed to execute kubectl/aws commands: {str(e)}")
-                self.print_colored(Colors.RED, f"❌ Command execution failed: {str(e)}")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Command execution failed: {str(e)}")
                 success = False
             
             # Clean up temporary files
@@ -946,7 +946,7 @@ class EKSClusterManager:
                 self.log_operation('WARNING', f"Failed to clean up ConfigMap file: {str(e)}")
             
             if success:
-                self.print_colored(Colors.GREEN, f"✅ User {username} configured for cluster access")
+                self.print_colored(Colors.GREEN, f"{Symbols.OK} User {username} configured for cluster access")
                 
                 # Test user access after a brief delay
                 try:
@@ -979,10 +979,10 @@ class EKSClusterManager:
                         
                         if test_result.returncode == 0:
                             self.log_operation('INFO', f"User access test successful for {username}")
-                            self.print_colored(Colors.GREEN, f"✅ User access verified - can access cluster")
+                            self.print_colored(Colors.GREEN, f"{Symbols.OK} User access verified - can access cluster")
                         else:
                             self.log_operation('WARNING', f"User access test failed: {test_result.stderr}")
-                            self.print_colored(Colors.YELLOW, f"⚠️  User access test failed - may need manual verification")
+                            self.print_colored(Colors.YELLOW, f"{Symbols.WARN}  User access test failed - may need manual verification")
                     else:
                         self.log_operation('WARNING', f"Failed to update kubeconfig for user test: {user_update_result.stderr}")
                         
@@ -994,7 +994,7 @@ class EKSClusterManager:
         except Exception as e:
             error_msg = str(e)
             self.log_operation('ERROR', f"Failed to configure aws-auth ConfigMap for {cluster_name}: {error_msg}")
-            self.print_colored(Colors.RED, f"❌ ConfigMap configuration failed: {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} ConfigMap configuration failed: {error_msg}")
             return False
     
     # Add this method to the EKSClusterManager class around line 1186
@@ -1005,7 +1005,7 @@ class EKSClusterManager:
         default_type = 'SPOT'  # Default to SPOT for cost efficiency
         
         user_prefix = f"for {user_name} " if user_name else ""
-        print(f"\n💰 Capacity Type Selection {user_prefix}")
+        print(f"\n{Symbols.COST} Capacity Type Selection {user_prefix}")
         print("=" * 60)
         print("Available capacity types:")
         
@@ -1029,11 +1029,11 @@ class EKSClusterManager:
                     selected_type = capacity_options[choice_num - 1]
                     break
                 else:
-                    print(f"❌ Please enter a number between 1 and {len(capacity_options)}")
+                    print(f"{Symbols.ERROR} Please enter a number between 1 and {len(capacity_options)}")
             except ValueError:
-                print("❌ Please enter a valid number")
+                print("[ERROR] Please enter a valid number")
         
-        print(f"✅ Selected capacity type: {selected_type}")
+        print(f"{Symbols.OK} Selected capacity type: {selected_type}")
         return selected_type
     
     def test_user_access_enhanced(self, cluster_name: str, region: str, username: str, user_access_key: str, user_secret_key: str) -> bool:
@@ -1049,7 +1049,7 @@ class EKSClusterManager:
         
         try:
             # Update kubeconfig with user credentials
-            self.print_colored(Colors.CYAN, f"   🔄 Updating kubeconfig with user credentials...")
+            self.print_colored(Colors.CYAN, f"   {Symbols.SCAN} Updating kubeconfig with user credentials...")
             update_cmd = [
                 'aws', 'eks', 'update-kubeconfig',
                 '--region', region,
@@ -1058,15 +1058,15 @@ class EKSClusterManager:
             
             result = subprocess.run(update_cmd, env=user_env, capture_output=True, text=True, timeout=120)
             if result.returncode == 0:
-                self.print_colored(Colors.GREEN, "   ✅ Updated kubeconfig with user credentials")
+                self.print_colored(Colors.GREEN, f"   {Symbols.OK} Updated kubeconfig with user credentials")
                 self.log_operation('INFO', f"Kubeconfig updated successfully for {username}")
             else:
                 self.log_operation('ERROR', f"Failed to update kubeconfig with user creds: {result.stderr}")
-                self.print_colored(Colors.RED, f"   ❌ Failed to update kubeconfig: {result.stderr}")
+                self.print_colored(Colors.RED, f"   {Symbols.ERROR} Failed to update kubeconfig: {result.stderr}")
                 return False
             
             # Test kubectl get nodes with detailed output
-            self.print_colored(Colors.CYAN, "   🔍 Testing 'kubectl get nodes'...")
+            self.print_colored(Colors.CYAN, "   [SCAN] Testing 'kubectl get nodes'...")
             nodes_cmd = ['kubectl', 'get', 'nodes', '--no-headers']
             nodes_result = subprocess.run(nodes_cmd, env=user_env, capture_output=True, text=True, timeout=60)
             
@@ -1074,7 +1074,7 @@ class EKSClusterManager:
                 node_lines = [line.strip() for line in nodes_result.stdout.strip().split('\n') if line.strip()]
                 node_count = len(node_lines)
                 
-                self.print_colored(Colors.GREEN, f"   ✅ Found {node_count} node(s)")
+                self.print_colored(Colors.GREEN, f"   {Symbols.OK} Found {node_count} node(s)")
                 self.log_operation('INFO', f"kubectl get nodes successful - {node_count} nodes found")
                 
                 # Show detailed node information
@@ -1087,12 +1087,12 @@ class EKSClusterManager:
                         self.log_operation('DEBUG', f"Node {i}: {node_line}")
             else:
                 self.log_operation('ERROR', f"kubectl get nodes failed: {nodes_result.stderr}")
-                self.print_colored(Colors.RED, f"   ❌ kubectl get nodes failed: {nodes_result.stderr}")
+                self.print_colored(Colors.RED, f"   {Symbols.ERROR} kubectl get nodes failed: {nodes_result.stderr}")
                 return False
             
             
-            # ✅ Test kubectl get pods in the 'default' namespace
-            self.print_colored(Colors.CYAN, "   🔍 Testing 'kubectl get pods -n default'...")
+            # [OK] Test kubectl get pods in the 'default' namespace
+            self.print_colored(Colors.CYAN, "   [SCAN] Testing 'kubectl get pods -n default'...")
             default_cmd = ['kubectl', 'get', 'pods', '-n', 'default', '--no-headers']
             default_result = subprocess.run(default_cmd, env=user_env, capture_output=True, text=True, timeout=60)
 
@@ -1100,14 +1100,14 @@ class EKSClusterManager:
                 default_pods = [line.strip() for line in default_result.stdout.strip().split('\n') if line.strip()]
                 default_pod_count = len(default_pods)
 
-                self.print_colored(Colors.GREEN, f"   ✅ Found {default_pod_count} pod(s) in 'default' namespace")
+                self.print_colored(Colors.GREEN, f"   {Symbols.OK} Found {default_pod_count} pod(s) in 'default' namespace")
                 self.log_operation('INFO', f"kubectl get pods -n default successful - {default_pod_count} pods found")
             else:
-                self.print_colored(Colors.RED, f"   ❌ kubectl get pods -n default failed: {default_result.stderr}")
+                self.print_colored(Colors.RED, f"   {Symbols.ERROR} kubectl get pods -n default failed: {default_result.stderr}")
                 self.log_operation('ERROR', f"kubectl get pods -n default failed: {default_result.stderr}")
             
             # Test kubectl get pods with namespace breakdown
-            self.print_colored(Colors.CYAN, "   🔍 Testing 'kubectl get pods --all-namespaces'...")
+            self.print_colored(Colors.CYAN, "   [SCAN] Testing 'kubectl get pods --all-namespaces'...")
             pods_cmd = ['kubectl', 'get', 'pods', '--all-namespaces', '--no-headers']
             pods_result = subprocess.run(pods_cmd, env=user_env, capture_output=True, text=True, timeout=60)
             
@@ -1115,7 +1115,7 @@ class EKSClusterManager:
                 pod_lines = [line.strip() for line in pods_result.stdout.strip().split('\n') if line.strip()]
                 pod_count = len(pod_lines)
                 
-                self.print_colored(Colors.GREEN, f"   ✅ Found {pod_count} pod(s) across all namespaces")
+                self.print_colored(Colors.GREEN, f"   {Symbols.OK} Found {pod_count} pod(s) across all namespaces")
                 self.log_operation('INFO', f"kubectl get pods successful - {pod_count} pods found")
                 
                 # Count pods by namespace
@@ -1131,33 +1131,33 @@ class EKSClusterManager:
                     self.log_operation('DEBUG', f"Namespace {namespace}: {count} pods")
             else:
                 self.log_operation('ERROR', f"kubectl get pods failed: {pods_result.stderr}")
-                self.print_colored(Colors.RED, f"   ❌ kubectl get pods failed: {pods_result.stderr}")
+                self.print_colored(Colors.RED, f"   {Symbols.ERROR} kubectl get pods failed: {pods_result.stderr}")
                 return False
             
             # Test cluster-info
-            self.print_colored(Colors.CYAN, "   🔍 Testing 'kubectl cluster-info'...")
+            self.print_colored(Colors.CYAN, "   [SCAN] Testing 'kubectl cluster-info'...")
             info_cmd = ['kubectl', 'cluster-info']
             info_result = subprocess.run(info_cmd, env=user_env, capture_output=True, text=True, timeout=60)
             
             if info_result.returncode == 0:
-                self.print_colored(Colors.GREEN, f"   ✅ Cluster info retrieved successfully")
+                self.print_colored(Colors.GREEN, f"   {Symbols.OK} Cluster info retrieved successfully")
                 self.log_operation('INFO', f"kubectl cluster-info successful")
                 self.log_operation('DEBUG', f"Cluster info: {info_result.stdout}")
             else:
                 self.log_operation('WARNING', f"kubectl cluster-info failed: {info_result.stderr}")
-                self.print_colored(Colors.YELLOW, f"   ⚠️  kubectl cluster-info failed (non-critical)")
+                self.print_colored(Colors.YELLOW, f"   {Symbols.WARN}  kubectl cluster-info failed (non-critical)")
             
-            self.print_colored(Colors.GREEN, f"🎉 User access verification successful for {username}!")
+            self.print_colored(Colors.GREEN, f"[PARTY] User access verification successful for {username}!")
             self.log_operation('INFO', f"Complete user access verification successful for {username}")
             return True
                 
         except subprocess.TimeoutExpired:
             self.log_operation('ERROR', f"User access test timed out for {username}")
-            self.print_colored(Colors.RED, "   ❌ User access test timed out")
+            self.print_colored(Colors.RED, "   [ERROR] User access test timed out")
             return False
         except Exception as e:
             self.log_operation('ERROR', f"Error testing user access for {username}: {str(e)}")
-            self.print_colored(Colors.RED, f"   ❌ Error testing user access: {str(e)}")
+            self.print_colored(Colors.RED, f"   {Symbols.ERROR} Error testing user access: {str(e)}")
             return False
 
     def load_ec2_config(self) -> Dict:
@@ -1218,11 +1218,11 @@ class EKSClusterManager:
                     selected_type = allowed_types[choice_num - 1]
                     break
                 else:
-                    print(f"❌ Please enter a number between 1 and {len(allowed_types)}")
+                    print(f"{Symbols.ERROR} Please enter a number between 1 and {len(allowed_types)}")
             except ValueError:
-                print("❌ Please enter a valid number")
+                print("[ERROR] Please enter a valid number")
         
-        print(f"✅ Selected instance type: {selected_type}")
+        print(f"{Symbols.OK} Selected instance type: {selected_type}")
         return selected_type
     
     def create_clusters(self, cluster_configs) -> None:
@@ -1232,14 +1232,14 @@ class EKSClusterManager:
             return
         
         self.log_operation('INFO', f"Starting creation of {len(cluster_configs)} clusters")
-        self.print_colored(Colors.GREEN, f"🚀 Starting creation of {len(cluster_configs)} clusters...")
+        self.print_colored(Colors.GREEN, f"{Symbols.START} Starting creation of {len(cluster_configs)} clusters...")
         
         # Create clusters sequentially
         successful_clusters = []
         failed_clusters = []
         
         for i, cluster_info in enumerate(cluster_configs, 1):
-            self.print_colored(Colors.BLUE, f"\n📋 Progress: {i}/{len(cluster_configs)}")
+            self.print_colored(Colors.BLUE, f"\n{Symbols.LIST} Progress: {i}/{len(cluster_configs)}")
             
             if self.create_single_cluster(cluster_info):
                 successful_clusters.append(cluster_info)
@@ -1249,10 +1249,10 @@ class EKSClusterManager:
         # Summary
         self.log_operation('INFO', f"Cluster creation completed - Created: {len(successful_clusters)}, Failed: {len(failed_clusters)}")
         
-        self.print_colored(Colors.GREEN, f"\n🎉 Cluster Creation Summary:")
-        self.print_colored(Colors.GREEN, f"✅ Successful: {len(successful_clusters)}")
+        self.print_colored(Colors.GREEN, f"\n[PARTY] Cluster Creation Summary:")
+        self.print_colored(Colors.GREEN, f"{Symbols.OK} Successful: {len(successful_clusters)}")
         if failed_clusters:
-            self.print_colored(Colors.RED, f"❌ Failed: {len(failed_clusters)}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed: {len(failed_clusters)}")
         
         # Generate final commands and instructions (silently)
         # Save created clusters to JSON file
@@ -1269,11 +1269,11 @@ class EKSClusterManager:
             if not os.path.exists(directory_path):
                 os.makedirs(directory_path, exist_ok=True)
                 self.log_operation('INFO', f"Created directory: {directory_path}")
-                self.print_colored(Colors.CYAN, f"📁 Created directory: {directory_path}")
+                self.print_colored(Colors.CYAN, f"{Symbols.FOLDER} Created directory: {directory_path}")
             return directory_path
         except Exception as e:
             self.log_operation('ERROR', f"Failed to create directory {directory_path}: {str(e)}")
-            self.print_colored(Colors.RED, f"❌ Failed to create directory {directory_path}: {str(e)}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to create directory {directory_path}: {str(e)}")
             return "."  # Fallback to current directory
 
     def create_single_cluster(self, cluster_info: Dict) -> bool:
@@ -1289,7 +1289,7 @@ class EKSClusterManager:
         
         try:
             self.log_operation('INFO', f"Starting cluster creation: {cluster_name} in {region} with {instance_type}")
-            self.print_colored(Colors.YELLOW, f"🔄 Creating cluster: {cluster_name} in {region} with {instance_type}")
+            self.print_colored(Colors.YELLOW, f"{Symbols.SCAN} Creating cluster: {cluster_name} in {region} with {instance_type}")
             
             # Get admin credentials for this account
             admin_access_key, admin_secret_key = self.get_admin_credentials_for_account(account_key)
@@ -1439,10 +1439,10 @@ class EKSClusterManager:
                 )
                 if verification_success:
                     self.log_operation('INFO', f"Cluster access verification successful for {username}")
-                    self.print_colored(Colors.GREEN, f"✅ Cluster access verified for {username}")
+                    self.print_colored(Colors.GREEN, f"{Symbols.OK} Cluster access verified for {username}")
                 else:
                     self.log_operation('WARNING', f"Cluster access verification failed for {username}")
-                    self.print_colored(Colors.YELLOW, f"⚠️  Cluster access verification failed for {username}")
+                    self.print_colored(Colors.YELLOW, f"{Symbols.WARN}  Cluster access verification failed for {username}")
             else:
                 self.log_operation('WARNING', f"Skipping verification due to ConfigMap configuration failure")
 
@@ -1477,27 +1477,27 @@ class EKSClusterManager:
             self.generate_individual_user_instruction(cluster_info, kubectl_info)
             
             self.log_operation('INFO', f"Successfully created cluster {cluster_name} with {instance_type} instances")
-            self.print_colored(Colors.GREEN, f"✅ Successfully created cluster: {cluster_name} ({instance_type}, 1 node)")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Successfully created cluster: {cluster_name} ({instance_type}, 1 node)")
             return True
             
         except Exception as e:
             error_msg = str(e)
             self.log_operation('ERROR', f"Failed to create cluster {cluster_name}: {error_msg}")
-            self.print_colored(Colors.RED, f"❌ Failed to create cluster {cluster_name}: {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to create cluster {cluster_name}: {error_msg}")
             return False
     def run(self) -> None:
         """Main execution flow"""
         try:
-            self.print_colored(Colors.GREEN, "🚀 Welcome to Interactive EKS Cluster Manager")
+            self.print_colored(Colors.GREEN, "[START] Welcome to Interactive EKS Cluster Manager")
             
-            print("🚀 EKS Cluster Creation for IAM Users")
+            print("[START] EKS Cluster Creation for IAM Users")
             print("=" * 80)
-            print(f"📅 Execution Date/Time: {self.current_time} UTC")
+            print(f"{Symbols.DATE} Execution Date/Time: {self.current_time} UTC")
             print(f"👤 Executed by: {self.current_user}")
             print(f"📄 User Credentials: {self.config_file}")
-            print(f"🔑 Admin Credentials: {self.admin_config_file}")
+            print(f"{Symbols.KEY} Admin Credentials: {self.admin_config_file}")
             print(f"💻 Instance Types: Configurable (from ec2-region-ami-mapping.json)")
-            print(f"📊 Default Nodes: 1 node per cluster")
+            print(f"{Symbols.STATS} Default Nodes: 1 node per cluster")
             print("=" * 80)
             
             # Load EC2 configuration to display available instance types
@@ -1506,26 +1506,26 @@ class EKSClusterManager:
             default_type = ec2_config.get("default_instance_type", "c6a.large")
             
             print(f"\n💻 Available Instance Types: {', '.join(allowed_types)}")
-            print(f"🎯 Default Instance Type: {default_type}")
+            print(f"{Symbols.TARGET} Default Instance Type: {default_type}")
             print("=" * 80)
             
             # Step 1: Select accounts to process
             selected_account_indices = self.display_accounts_menu()
             if not selected_account_indices:
-                print("❌ Account selection cancelled")
+                print("[ERROR] Account selection cancelled")
                 return
             
             selected_accounts = self.get_selected_accounts_data(selected_account_indices)
             
             # Step 2: Ask for selection level preference
-            print(f"\n🎯 Selection Level:")
+            print(f"\n{Symbols.TARGET} Selection Level:")
             print("=" * 50)
             print("  1. Process ALL users in selected accounts")
             print("  2. Select specific users from selected accounts")
             print("=" * 50)
             
             while True:
-                selection_level = input("🔢 Choose selection level (1-2): ").strip()
+                selection_level = input("[#] Choose selection level (1-2): ").strip()
                 
                 if selection_level == '1':
                     # Use all users from selected accounts
@@ -1534,9 +1534,9 @@ class EKSClusterManager:
                         for user_data in account_data.get('users', []):
                             print(f"\n🔧 Configuration for {user_data.get('real_user', {}).get('full_name', user_data.get('username', 'unknown'))}:")
                             print(f"   👤 Username: {user_data.get('username', 'unknown')}")
-                            print(f"   🌍 Region: {user_data.get('region', 'unknown')}")
-                            print(f"   🏦 Account: {account_name}")
-                            print(f"   📊 Default Nodes: 1")
+                            print(f"   {Symbols.REGION} Region: {user_data.get('region', 'unknown')}")
+                            print(f"   {Symbols.ACCOUNT} Account: {account_name}")
+                            print(f"   {Symbols.STATS} Default Nodes: 1")
                             
                             # Select instance type for this user
                             instance_type = self.select_instance_type(user_data.get('username', 'unknown'))
@@ -1544,7 +1544,7 @@ class EKSClusterManager:
                             
                             while True:
                                 try:
-                                    max_nodes = input(f"   🔢 Enter maximum nodes for scaling (1-10) [default: 3]: ").strip()
+                                    max_nodes = input(f"   [#] Enter maximum nodes for scaling (1-10) [default: 3]: ").strip()
                                     if not max_nodes:
                                         max_nodes = 3
                                     else:
@@ -1553,9 +1553,9 @@ class EKSClusterManager:
                                     if 1 <= max_nodes <= 10:
                                         break
                                     else:
-                                        print("   ❌ Please enter a number between 1 and 10")
+                                        print("   [ERROR] Please enter a number between 1 and 10")
                                 except ValueError:
-                                    print("   ❌ Please enter a valid number")
+                                    print("   [ERROR] Please enter a valid number")
                             
                             cluster_name = self.generate_cluster_name(user_data.get('username', 'unknown'), user_data.get('region', 'us-east-1'))
                             
@@ -1572,21 +1572,21 @@ class EKSClusterManager:
                             }
                             
                             cluster_configs.append(cluster_config)
-                            print(f"   ✅ Cluster configured: {cluster_name} (max {max_nodes} nodes, {instance_type})")
+                            print(f"   {Symbols.OK} Cluster configured: {cluster_name} (max {max_nodes} nodes, {instance_type})")
                     
                     break
                 elif selection_level == '2':
                     # Allow user-level selection
                     selected_user_indices, user_mapping = self.display_users_menu(selected_accounts)
                     if not selected_user_indices:
-                        print("❌ User selection cancelled")
+                        print(f"{Symbols.ERROR} User selection cancelled")
                         return
                     
                     # Convert selected users to cluster configs
                     cluster_configs = self.convert_selected_users_to_clusters(selected_user_indices, user_mapping)
                     break
                 else:
-                    print("❌ Invalid choice. Please enter 1 or 2.")
+                    print(f"{Symbols.ERROR} Invalid choice. Please enter 1 or 2.")
             
             # Show summary and confirm
             if self.show_cluster_summary(cluster_configs):
@@ -1612,9 +1612,9 @@ class EKSClusterManager:
             # Get max scaling preference and instance type for this user
             print(f"\n🔧 Configuration for {user_info['real_user'].get('full_name', user_info['username'])}:")
             print(f"   👤 Username: {user_info['username']}")
-            print(f"   🌍 Region: {user_info['region']}")
-            print(f"   🏦 Account: {user_info['account_name']}")
-            print(f"   📊 Default Nodes: 1 (minimum recommended)")
+            print(f"   {Symbols.REGION} Region: {user_info['region']}")
+            print(f"   {Symbols.ACCOUNT} Account: {user_info['account_name']}")
+            print(f"   {Symbols.STATS} Default Nodes: 1 (minimum recommended)")
             
             # Select instance type for this user
             instance_type = self.select_instance_type(user_info['username'])
@@ -1622,7 +1622,7 @@ class EKSClusterManager:
 
             while True:
                 try:
-                    max_nodes = input(f"   🔢 Enter maximum nodes for scaling (1-10) [default: 3]: ").strip()
+                    max_nodes = input(f"   [#] Enter maximum nodes for scaling (1-10) [default: 3]: ").strip()
                     if not max_nodes:
                         max_nodes = 3
                     else:
@@ -1631,9 +1631,9 @@ class EKSClusterManager:
                     if 1 <= max_nodes <= 10:
                         break
                     else:
-                        print("   ❌ Please enter a number between 1 and 10")
+                        print("   [ERROR] Please enter a number between 1 and 10")
                 except ValueError:
-                    print("   ❌ Please enter a valid number")
+                    print("   [ERROR] Please enter a valid number")
             
             cluster_name = self.generate_cluster_name(user_info['username'], user_info['region'])
             
@@ -1648,7 +1648,7 @@ class EKSClusterManager:
             }
             
             cluster_configs.append(cluster_config)
-            print(f"   ✅ Cluster configured: {cluster_name} (max {max_nodes} nodes, {instance_type})")
+            print(f"   {Symbols.OK} Cluster configured: {cluster_name} (max {max_nodes} nodes, {instance_type})")
         
         return cluster_configs
     
@@ -1670,13 +1670,13 @@ class EKSClusterManager:
         if capacity_type.lower() in ['spot', 'SPOT']:
             estimated_cost = base_cost * 0.3  # Spot instances are typically 70% cheaper
             savings = base_cost * 0.7
-            print(f"\n💰 Estimated Cost (per hour):")
+            print(f"\n{Symbols.COST} Estimated Cost (per hour):")
             print(f"   On-Demand: ${base_cost:.4f}")
             print(f"   Spot: ${estimated_cost:.4f}")
             print(f"   Savings: ${savings:.4f} ({70}%)")
             print(f"   Monthly (730 hrs): ${estimated_cost * 730 * node_count:.2f}")
         else:
-            print(f"\n💰 Estimated Cost (per hour):")
+            print(f"\n{Symbols.COST} Estimated Cost (per hour):")
             print(f"   On-Demand: ${base_cost:.4f}")
             print(f"   Monthly (730 hrs): ${base_cost * 730 * node_count:.2f}")
 
@@ -1686,7 +1686,7 @@ class EKSClusterManager:
             self.print_colored(Colors.YELLOW, "No clusters configured!")
             return False
         
-        print(f"\n🚀 EKS Cluster Creation Summary")
+        print(f"\n{Symbols.START} EKS Cluster Creation Summary")
         print(f"Selected {len(cluster_configs)} clusters to create:")
         
         print("\n" + "="*100)
@@ -1697,17 +1697,17 @@ class EKSClusterManager:
             instance_type = cluster.get('instance_type', 'c6a.large')
             
             print(f"{i}. Cluster: {cluster['cluster_name']}")
-            print(f"   🏦 Account: {cluster['account_key']} ({cluster['account_id']})")
+            print(f"   {Symbols.ACCOUNT} Account: {cluster['account_key']} ({cluster['account_id']})")
             print(f"   👤 User: {user.get('username', 'unknown')} ({full_name})")
-            print(f"   🌍 Region: {user.get('region', 'unknown')}")
+            print(f"   {Symbols.REGION} Region: {user.get('region', 'unknown')}")
             print(f"   💻 Instance Type: {instance_type}")
-            print(f"   📊 Default Nodes: 1")
-            print(f"   🔢 Max Nodes: {cluster['max_nodes']}")
+            print(f"   {Symbols.STATS} Default Nodes: 1")
+            print(f"   [#] Max Nodes: {cluster['max_nodes']}")
             print("-" * 100)
         
-        print(f"📊 Total clusters: {len(cluster_configs)}")
+        print(f"{Symbols.STATS} Total clusters: {len(cluster_configs)}")
         print(f"💻 Instance types: {', '.join(set(cluster.get('instance_type', 'c6a.large') for cluster in cluster_configs))}")
-        print(f"📊 All clusters starting with: 1 node")
+        print(f"{Symbols.STATS} All clusters starting with: 1 node")
         print("=" * 100)
         
         confirm = input("\nDo you want to proceed with cluster creation? (y/N): ").lower().strip()
@@ -1772,7 +1772,7 @@ class EKSClusterManager:
                 json.dump(clusters_data, f, indent=2, default=str)
             
             self.log_operation('INFO', f"Created clusters data saved to: {clusters_file}")
-            self.print_colored(Colors.CYAN, f"💾 Cluster details saved to: {clusters_file}")
+            self.print_colored(Colors.CYAN, f"{Symbols.INSTANCE} Cluster details saved to: {clusters_file}")
             
             # Also create a simple list format for easy reference
             simple_file = f"eks_clusters_simple_{timestamp}.txt"
@@ -1797,7 +1797,7 @@ class EKSClusterManager:
             
         except Exception as e:
             self.log_operation('ERROR', f"Failed to save cluster details: {str(e)}")
-            self.print_colored(Colors.RED, f"❌ Failed to save cluster details: {str(e)}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to save cluster details: {str(e)}")
 
     def generate_final_commands(self) -> None:
         """Generate final kubectl commands and save to file"""
@@ -1807,7 +1807,7 @@ class EKSClusterManager:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         commands_file = f"kubectl_commands_{timestamp}.txt"
         
-        self.print_colored(Colors.CYAN, f"\n💾 Commands saved to: {commands_file}")
+        self.print_colored(Colors.CYAN, f"\n{Symbols.INSTANCE} Commands saved to: {commands_file}")
         
         with open(commands_file, 'w') as f:
             f.write(f"# EKS Cluster kubectl Commands\n")
@@ -1869,7 +1869,7 @@ class EKSClusterManager:
             import subprocess
             
             # Step 1: Update kubeconfig with user credentials
-            self.print_colored(Colors.CYAN, f"   🔄 Updating kubeconfig with user credentials...")
+            self.print_colored(Colors.CYAN, f"   {Symbols.SCAN} Updating kubeconfig with user credentials...")
             
             update_cmd = [
                 'aws', 'eks', 'update-kubeconfig',
@@ -1881,13 +1881,13 @@ class EKSClusterManager:
             
             if update_result.returncode != 0:
                 self.log_operation('ERROR', f"Failed to update kubeconfig for {username}: {update_result.stderr}")
-                self.print_colored(Colors.RED, f"   ❌ Failed to update kubeconfig")
+                self.print_colored(Colors.RED, f"   {Symbols.ERROR} Failed to update kubeconfig")
                 return False
             
-            self.print_colored(Colors.GREEN, f"   ✅ Kubeconfig updated successfully")
+            self.print_colored(Colors.GREEN, f"   {Symbols.OK} Kubeconfig updated successfully")
             
             # Step 2: Test kubectl get nodes
-            self.print_colored(Colors.CYAN, f"   🔍 Testing 'kubectl get nodes'...")
+            self.print_colored(Colors.CYAN, f"   {Symbols.SCAN} Testing 'kubectl get nodes'...")
             
             nodes_cmd = ['kubectl', 'get', 'nodes', '--no-headers']
             nodes_result = subprocess.run(nodes_cmd, env=user_env, capture_output=True, text=True, timeout=60)
@@ -1896,7 +1896,7 @@ class EKSClusterManager:
                 node_lines = [line.strip() for line in nodes_result.stdout.strip().split('\n') if line.strip()]
                 node_count = len(node_lines)
                 
-                self.print_colored(Colors.GREEN, f"   ✅ Found {node_count} node(s)")
+                self.print_colored(Colors.GREEN, f"   {Symbols.OK} Found {node_count} node(s)")
                 self.log_operation('INFO', f"kubectl get nodes successful - {node_count} nodes found")
                 
                 # Log node details
@@ -1909,11 +1909,11 @@ class EKSClusterManager:
                         self.log_operation('DEBUG', f"Node {i}: {node_line}")
             else:
                 self.log_operation('ERROR', f"kubectl get nodes failed for {username}: {nodes_result.stderr}")
-                self.print_colored(Colors.RED, f"   ❌ kubectl get nodes failed")
+                self.print_colored(Colors.RED, f"   {Symbols.ERROR} kubectl get nodes failed")
                 return False
             
             # Step 3: Test kubectl get pods
-            self.print_colored(Colors.CYAN, f"   🔍 Testing 'kubectl get pods --all-namespaces'...")
+            self.print_colored(Colors.CYAN, f"   {Symbols.SCAN} Testing 'kubectl get pods --all-namespaces'...")
             
             pods_cmd = ['kubectl', 'get', 'pods', '--all-namespaces', '--no-headers']
             pods_result = subprocess.run(pods_cmd, env=user_env, capture_output=True, text=True, timeout=60)
@@ -1922,7 +1922,7 @@ class EKSClusterManager:
                 pod_lines = [line.strip() for line in pods_result.stdout.strip().split('\n') if line.strip()]
                 pod_count = len(pod_lines)
                 
-                self.print_colored(Colors.GREEN, f"   ✅ Found {pod_count} pod(s) across all namespaces")
+                self.print_colored(Colors.GREEN, f"   {Symbols.OK} Found {pod_count} pod(s) across all namespaces")
                 self.log_operation('INFO', f"kubectl get pods successful - {pod_count} pods found")
                 
                 # Count pods by namespace
@@ -1937,35 +1937,35 @@ class EKSClusterManager:
                     self.print_colored(Colors.CYAN, f"      {namespace}: {count} pod(s)")
             else:
                 self.log_operation('ERROR', f"kubectl get pods failed for {username}: {pods_result.stderr}")
-                self.print_colored(Colors.RED, f"   ❌ kubectl get pods failed")
+                self.print_colored(Colors.RED, f"   {Symbols.ERROR} kubectl get pods failed")
                 return False
             
             # Step 4: Test cluster-info
-            self.print_colored(Colors.CYAN, f"   🔍 Testing 'kubectl cluster-info'...")
+            self.print_colored(Colors.CYAN, f"   {Symbols.SCAN} Testing 'kubectl cluster-info'...")
             
             info_cmd = ['kubectl', 'cluster-info']
             info_result = subprocess.run(info_cmd, env=user_env, capture_output=True, text=True, timeout=60)
             
             if info_result.returncode == 0:
-                self.print_colored(Colors.GREEN, f"   ✅ Cluster info retrieved successfully")
+                self.print_colored(Colors.GREEN, f"   {Symbols.OK} Cluster info retrieved successfully")
                 self.log_operation('INFO', f"kubectl cluster-info successful")
                 self.log_operation('DEBUG', f"Cluster info: {info_result.stdout}")
             else:
                 self.log_operation('WARNING', f"kubectl cluster-info failed for {username}: {info_result.stderr}")
-                self.print_colored(Colors.YELLOW, f"   ⚠️  kubectl cluster-info failed (non-critical)")
+                self.print_colored(Colors.YELLOW, f"   {Symbols.WARN}  kubectl cluster-info failed (non-critical)")
             
-            self.print_colored(Colors.GREEN, f"✅ Cluster access verification successful for {username}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Cluster access verification successful for {username}")
             self.log_operation('INFO', f"Cluster access verification completed successfully for {username}")
             
             return True
             
         except subprocess.TimeoutExpired:
             self.log_operation('ERROR', f"Cluster verification timed out for {username}")
-            self.print_colored(Colors.RED, f"   ❌ Verification timed out")
+            self.print_colored(Colors.RED, f"   {Symbols.ERROR} Verification timed out")
             return False
         except Exception as e:
             self.log_operation('ERROR', f"Cluster verification failed for {username}: {str(e)}")
-            self.print_colored(Colors.RED, f"   ❌ Verification failed: {str(e)}")
+            self.print_colored(Colors.RED, f"   {Symbols.ERROR} Verification failed: {str(e)}")
             return False
     
     def generate_individual_user_instruction(self, cluster_info: Dict, kubectl_info: Dict) -> None:
@@ -2033,7 +2033,7 @@ class EKSClusterManager:
             
         except Exception as e:
             self.log_operation('ERROR', f"Failed to create user instruction file for {username}: {str(e)}")
-            self.print_colored(Colors.RED, f"❌ Failed to create user instruction file: {str(e)}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to create user instruction file: {str(e)}")
     
     def generate_user_instructions(self) -> None:
         """Generate user-specific instruction files in eks/user_login directory"""
@@ -2048,16 +2048,16 @@ class EKSClusterManager:
             if not os.path.exists(base_dir):
                 os.makedirs(base_dir, exist_ok=True)
                 self.log_operation('INFO', f"Created directory: {base_dir}")
-                self.print_colored(Colors.CYAN, f"📁 Created directory: {base_dir}")
+                self.print_colored(Colors.CYAN, f"{Symbols.FOLDER} Created directory: {base_dir}")
             
             if not os.path.exists(user_login_dir):
                 os.makedirs(user_login_dir, exist_ok=True)
                 self.log_operation('INFO', f"Created directory: {user_login_dir}")
-                self.print_colored(Colors.CYAN, f"📁 Created directory: {user_login_dir}")
+                self.print_colored(Colors.CYAN, f"{Symbols.FOLDER} Created directory: {user_login_dir}")
                 
         except Exception as e:
             self.log_operation('ERROR', f"Failed to create directories: {str(e)}")
-            self.print_colored(Colors.RED, f"❌ Failed to create directories: {str(e)}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to create directories: {str(e)}")
             # Fallback to current directory
             user_login_dir = "."
         
@@ -2119,9 +2119,9 @@ class EKSClusterManager:
                 
             except Exception as e:
                 self.log_operation('ERROR', f"Failed to create user instruction file for {cmd_info['user']}: {str(e)}")
-                self.print_colored(Colors.RED, f"❌ Failed to create user instruction file for {cmd_info['user']}: {str(e)}")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to create user instruction file for {cmd_info['user']}: {str(e)}")
         
-        self.print_colored(Colors.GREEN, f"✅ Generated {len(self.kubectl_commands)} user instruction files in {user_login_dir}/")
+        self.print_colored(Colors.GREEN, f"{Symbols.OK} Generated {len(self.kubectl_commands)} user instruction files in {user_login_dir}/")
 
 def main():
     """Main entry point"""

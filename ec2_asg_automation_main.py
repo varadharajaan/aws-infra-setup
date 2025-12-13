@@ -1,4 +1,4 @@
-"""
+﻿"""
 EC2 + ASG Automation Main Orchestrator
 Enhanced with Safety Features, Logging, and Rollback Capabilities
 """
@@ -19,6 +19,8 @@ import time
 import boto3
 import threading
 import argparse
+from text_symbols import Symbols
+
 
 class SafetyLogger:
     def __init__(self, log_dir='logs'):
@@ -80,10 +82,10 @@ class EC2ASGAutomation:
         if self.dry_run:
             self.safety_logger.log_action('INFO', "Running in DRY-RUN mode")
 
-        print("[START] EC2 + ASG Multi-User Automation Tool")
+        print(f"{Symbols.START} EC2 + ASG Multi-User Automation Tool")
         print(f"👤 User: {self.current_user}")
         print(f"[TIME] Time: {self.current_time}")
-        print(f"[KEY] Session ID: {self.session_id}")
+        print(f"{Symbols.KEY} Session ID: {self.session_id}")
         if self.dry_run:
             print("[TEST] DRY-RUN MODE: No actual resources will be created")
         print("="*60)
@@ -178,17 +180,17 @@ class EC2ASGAutomation:
         # Check for production indicators
         for cred in credentials:
             if self.is_production_environment(cred.account_name):
-                safety_issues.append(f"[ALERT] PRODUCTION account detected: {cred.account_name}")
+                safety_issues.append(f"{Symbols.ALERT} PRODUCTION account detected: {cred.account_name}")
 
         # Check for existing critical resources
         for cred in credentials:
             if self.has_critical_resources(cred):
-                safety_issues.append(f"[WARN] Critical resources found in {cred.account_name}")
+                safety_issues.append(f"{Symbols.WARN} Critical resources found in {cred.account_name}")
 
         # Check resource limits
         total_expected = self.calculate_expected_resources(credentials, global_config)
         if total_expected > self.max_resources_per_session:
-            safety_issues.append(f"[STATS] Too many resources ({total_expected}) exceeds limit ({self.max_resources_per_session})")
+            safety_issues.append(f"{Symbols.STATS} Too many resources ({total_expected}) exceeds limit ({self.max_resources_per_session})")
 
         if safety_issues:
             print("\n[ALERT] SAFETY WARNINGS:")
@@ -271,20 +273,20 @@ class EC2ASGAutomation:
             try:
                 ec2.describe_key_pairs(KeyNames=[key_name])
                 self.safety_logger.log_action('INFO', f"Key pair '{key_name}' already exists in region {region}")
-                print(f"[KEY] Key pair '{key_name}' already exists in region {region}")
+                print(f"{Symbols.KEY} Key pair '{key_name}' already exists in region {region}")
             except botocore.exceptions.ClientError as e:
                 if e.response['Error']['Code'] == 'InvalidKeyPair.NotFound':
                     if self.dry_run:
                         print(f"[TEST] DRY-RUN: Would import key pair '{key_name}' in region {region}")
                         self.safety_logger.log_action('INFO', f"DRY-RUN: Would import key pair '{key_name}' in region {region}")
                     else:
-                        print(f"[KEY] Key pair '{key_name}' not found in region {region}. Importing public key...")
+                        print(f"{Symbols.KEY} Key pair '{key_name}' not found in region {region}. Importing public key...")
                         if not os.path.exists(public_key_file):
                             raise FileNotFoundError(f"Public key file '{public_key_file}' not found.")
                         with open(public_key_file, 'r') as pubf:
                             public_key_material = pubf.read()
                         ec2.import_key_pair(KeyName=key_name, PublicKeyMaterial=public_key_material)
-                        print(f"[OK] Imported public key as key pair '{key_name}' in region {region}")
+                        print(f"{Symbols.OK} Imported public key as key pair '{key_name}' in region {region}")
                         self.safety_logger.log_action('INFO', f"Imported key pair '{key_name}' in region {region}")
                 else:
                     raise
@@ -293,7 +295,7 @@ class EC2ASGAutomation:
                 raise FileNotFoundError(f"Private key file '{key_file}' not found locally. Please provide it.")
 
             if not self.dry_run:
-                print(f"[KEY] Using local private key file: {key_file}")
+                print(f"{Symbols.KEY} Using local private key file: {key_file}")
 
         return key_name
 
@@ -313,7 +315,7 @@ class EC2ASGAutomation:
 
         if create_ec2:
             # EC2 Strategy
-            print("\n[START] EC2 INSTANCE STRATEGY (for all users)")
+            print(f"\n{Symbols.START} EC2 INSTANCE STRATEGY (for all users)")
             print("-" * 40)
             print("Choose EC2 strategy for all users:")
             print("1. On-Demand (Reliable, Higher Cost)")
@@ -328,14 +330,14 @@ class EC2ASGAutomation:
                     global_config['ec2_strategy'] = 'spot'
                     break
                 else:
-                    print("[ERROR] Invalid choice. Please enter 1 or 2.")
+                    print(f"{Symbols.ERROR} Invalid choice. Please enter 1 or 2.")
 
             # Instance Type Selection (using first user's region for analysis)
             instance_type = self.select_global_instance_type(first_credential, global_config['ec2_strategy'])
             global_config['instance_type'] = instance_type
 
         # ASG Creation preference
-        print("\n[START] AUTO SCALING GROUP CONFIGURATION")
+        print(f"\n{Symbols.START} AUTO SCALING GROUP CONFIGURATION")
         print("-" * 40)
         create_asg = input("Create Auto Scaling Groups for all users? (y/n): ").strip().lower() == 'y'
         global_config['create_asg'] = create_asg
@@ -366,7 +368,7 @@ class EC2ASGAutomation:
 
         if ec2_strategy == 'on-demand':
             # Show quota analysis for reference
-            print("[STATS] Analyzing service quotas for reference...")
+            print(f"{Symbols.STATS} Analyzing service quotas for reference...")
             quota_info = self.spot_analyzer.analyze_service_quotas(credential, allowed_types)
 
             print("\nAvailable Instance Types (with quota info):")
@@ -375,10 +377,10 @@ class EC2ASGAutomation:
                 if family in quota_info:
                     quota = quota_info[family]
                     available = quota.available_capacity
-                    status = "[OK]" if available > 0 else "[ERROR]"
+                    status = f"{Symbols.OK}" if available > 0 else f"{Symbols.ERROR}"
                 else:
                     available = "Unknown"
-                    status = "[WARN]"
+                    status = f"{Symbols.WARN}"
                 print(f"  {i:2}. {instance_type} {status} (Available: {available})")
         else:
             # Show spot analysis for reference
@@ -410,23 +412,23 @@ class EC2ASGAutomation:
 
                 if 1 <= choice_num <= len(allowed_types):
                     selected_type = allowed_types[choice_num - 1]
-                    print(f"[OK] Selected: {selected_type} for all users")
+                    print(f"{Symbols.OK} Selected: {selected_type} for all users")
                     return selected_type
                 elif choice_num == len(allowed_types) + 1:
                     custom_type = input("Enter custom instance type: ").strip()
                     if custom_type:
-                        print(f"[OK] Selected custom type: {custom_type} for all users")
+                        print(f"{Symbols.OK} Selected custom type: {custom_type} for all users")
                         return custom_type
                     else:
                         print("[ERROR] Please enter a valid instance type")
                 else:
-                    print(f"[ERROR] Please enter a number between 1 and {len(allowed_types) + 1}")
+                    print(f"{Symbols.ERROR} Please enter a number between 1 and {len(allowed_types) + 1}")
             except ValueError:
                 print("[ERROR] Please enter a valid number")
 
     def get_global_asg_instance_selections(self, strategy: str, credential: CredentialInfo) -> dict:
         """Get ASG instance selections that will apply to all users"""
-        print(f"\n[STATS] GLOBAL ASG INSTANCE SELECTION ({strategy.upper()} STRATEGY)")
+        print(f"\n{Symbols.STATS} GLOBAL ASG INSTANCE SELECTION ({strategy.upper()} STRATEGY)")
         print("These instance types will be used for ASG across all users")
         print("-" * 60)
 
@@ -486,15 +488,15 @@ class EC2ASGAutomation:
 
                     if custom_input:
                         custom_types = [t.strip() for t in custom_input.split(',')]
-                        print(f"\n[OK] Selected {len(custom_types)} custom instances:")
+                        print(f"\n{Symbols.OK} Selected {len(custom_types)} custom instances:")
                         for i, instance_type in enumerate(custom_types, 1):
                             print(f"   {i}. {instance_type}")
                         return {'on-demand': custom_types}
                     else:
-                        print("[ERROR] Please enter valid instance types")
+                        print(f"{Symbols.ERROR} Please enter valid instance types")
                         continue
                 elif user_input.lower() in ['quit', 'exit', 'q']:
-                    print("[ERROR] Selection cancelled.")
+                    print(f"{Symbols.ERROR} Selection cancelled.")
                     return {'on-demand': []}
                 else:
                     # Parse comma-separated numbers
@@ -505,7 +507,7 @@ class EC2ASGAutomation:
                         selected_indices = [num - 1 for num in selected_numbers]
                         break
                     else:
-                        print(f"[ERROR] Please enter numbers between 1 and {len(sorted_instances)}")
+                        print(f"{Symbols.ERROR} Please enter numbers between 1 and {len(sorted_instances)}")
                         continue
 
             except ValueError:
@@ -518,7 +520,7 @@ class EC2ASGAutomation:
         # Get selected instances
         selected_types = [sorted_instances[i]['type'] for i in selected_indices]
 
-        print(f"\n[OK] Selected {len(selected_types)} instances:")
+        print(f"\n{Symbols.OK} Selected {len(selected_types)} instances:")
         for i, instance_type in enumerate(selected_types, 1):
             available = next(inst['available'] for inst in sorted_instances if inst['type'] == instance_type)
             print(f"   {i}. {instance_type} (Available: {available})")
@@ -558,7 +560,7 @@ class EC2ASGAutomation:
                     selected_indices = list(range(len(sorted_spots)))
                     break
                 elif user_input.lower() in ['quit', 'exit', 'q']:
-                    print("[ERROR] Selection cancelled.")
+                    print(f"{Symbols.ERROR} Selection cancelled.")
                     return {'spot': []}
                 else:
                     # Parse comma-separated numbers
@@ -569,7 +571,7 @@ class EC2ASGAutomation:
                         selected_indices = [num - 1 for num in selected_numbers]
                         break
                     else:
-                        print(f"[ERROR] Please enter numbers between 1 and {len(sorted_spots)}")
+                        print(f"{Symbols.ERROR} Please enter numbers between 1 and {len(sorted_spots)}")
                         continue
 
             except ValueError:
@@ -583,7 +585,7 @@ class EC2ASGAutomation:
         selected_analyses = [sorted_spots[i] for i in selected_indices]
         selected_types = [analysis.instance_type for analysis in selected_analyses]
 
-        print(f"\n[OK] Selected {len(selected_types)} spot instances:")
+        print(f"\n{Symbols.OK} Selected {len(selected_types)} spot instances:")
         for i, analysis in enumerate(selected_analyses, 1):
             print(
                 f"   {i}. {analysis.instance_type} (Score: {analysis.score:.1f}, Price: ${analysis.current_price:.4f})")
@@ -613,7 +615,7 @@ class EC2ASGAutomation:
             account_name = credential.account_name
             username = credential.username if credential.username else "ROOT"
 
-            print(f"\n🔄 Processing User {user_index}/{total_users}: {account_name} - {username}")
+            print(f"\n{Symbols.SCAN} Processing User {user_index}/{total_users}: {account_name} - {username}")
             print("-" * 50)
 
             self.safety_logger.log_action('INFO',
@@ -673,11 +675,11 @@ class EC2ASGAutomation:
 
                         result['ec2_instance'] = instance_details
 
-                    print(f"   [OK] EC2 instance created successfully")
+                    print(f"   {Symbols.OK} EC2 instance created successfully")
 
                 except Exception as e:
                     error_msg = f"EC2 creation failed: {e}"
-                    print(f"   [ERROR] {error_msg}")
+                    print(f"   {Symbols.ERROR} {error_msg}")
                     result['errors'].append(error_msg)
                     self.safety_logger.log_action('ERROR', error_msg, account=account_name)
 
@@ -740,11 +742,11 @@ class EC2ASGAutomation:
 
                         result['asg'] = asg_details
 
-                    print(f"   [OK] ASG created successfully")
+                    print(f"   {Symbols.OK} ASG created successfully")
 
                 except Exception as e:
                     error_msg = f"ASG creation failed: {e}"
-                    print(f"   [ERROR] {error_msg}")
+                    print(f"   {Symbols.ERROR} {error_msg}")
                     result['errors'].append(error_msg)
                     self.safety_logger.log_action('ERROR', error_msg, account=account_name)
 
@@ -759,7 +761,7 @@ class EC2ASGAutomation:
 
         except Exception as e:
             error_msg = f"Error processing {username}: {e}"
-            print(f"[ERROR] {error_msg}")
+            print(f"{Symbols.ERROR} {error_msg}")
             self.safety_logger.log_action('ERROR', error_msg, account=account_name)
             return {
                 'user_index': user_index,
@@ -822,7 +824,7 @@ class EC2ASGAutomation:
     def offer_rollback_on_failure(self):
         """Offer to rollback created resources on failure"""
         if self.created_resources and not self.dry_run:
-            print(f"\n🔄 {len(self.created_resources)} resources were created in this session")
+            print(f"\n{Symbols.SCAN} {len(self.created_resources)} resources were created in this session")
             print("Resources created:")
             for resource in self.created_resources:
                 print(f"   • {resource['resource_type']}: {resource['resource_id']} ({resource['account']})")
@@ -834,7 +836,7 @@ class EC2ASGAutomation:
 
     def rollback_session_resources(self):
         """Rollback all resources created in this session"""
-        print(f"\n🔄 Rolling back {len(self.created_resources)} resources...")
+        print(f"\n{Symbols.SCAN} Rolling back {len(self.created_resources)} resources...")
         self.safety_logger.log_action('INFO', f"Starting rollback of {len(self.created_resources)} resources")
 
         success_count = 0
@@ -855,9 +857,9 @@ class EC2ASGAutomation:
                     resource_id=resource['resource_id'],
                     account=resource['account'])
 
-        print(f"\n[STATS] Rollback Results:")
-        print(f"   [OK] Successfully deleted: {success_count}")
-        print(f"   [ERROR] Failed to delete: {failure_count}")
+        print(f"\n{Symbols.STATS} Rollback Results:")
+        print(f"   {Symbols.OK} Successfully deleted: {success_count}")
+        print(f"   {Symbols.ERROR} Failed to delete: {failure_count}")
 
     def delete_resource_safely(self, resource):
         """Safely delete a resource"""
@@ -873,7 +875,7 @@ class EC2ASGAutomation:
                 region_name=resource['region']
             )
 
-            print(f"   [DELETE] Terminating instance {resource_id}...")
+            print(f"   {Symbols.DELETE} Terminating instance {resource_id}...")
             ec2_client.terminate_instances(InstanceIds=[resource_id])
 
         elif resource_type == 'auto-scaling-group':
@@ -884,7 +886,7 @@ class EC2ASGAutomation:
                 region_name=resource['region']
             )
 
-            print(f"   [DELETE] Deleting ASG {resource_id}...")
+            print(f"   {Symbols.DELETE} Deleting ASG {resource_id}...")
             # First, set desired capacity to 0
             asg_client.update_auto_scaling_group(
                 AutoScalingGroupName=resource_id,
@@ -905,7 +907,7 @@ class EC2ASGAutomation:
                 region_name=resource['region']
             )
 
-            print(f"   [DELETE] Deleting launch template {resource_id}...")
+            print(f"   {Symbols.DELETE} Deleting launch template {resource_id}...")
             ec2_client.delete_launch_template(LaunchTemplateId=resource_id)
 
     def run_automation(self):
@@ -924,14 +926,14 @@ class EC2ASGAutomation:
                 return False
 
             # Validate all credentials
-            print(f"\n[SCAN] VALIDATING {multi_credentials.total_users} CREDENTIAL(S)")
+            print(f"\n{Symbols.SCAN} VALIDATING {multi_credentials.total_users} CREDENTIAL(S)")
             validated_credentials = self.credential_manager.validate_multiple_credentials(multi_credentials)
 
             if validated_credentials.total_users == 0:
                 print("[ERROR] No valid credentials found. Exiting...")
                 return False
 
-            print(f"[OK] {validated_credentials.total_users} valid credential(s) ready for automation")
+            print(f"{Symbols.OK} {validated_credentials.total_users} valid credential(s) ready for automation")
 
             # STEP 2: Get global preferences using first credential for analysis
             first_credential = validated_credentials.users[0]
@@ -947,13 +949,13 @@ class EC2ASGAutomation:
             if not self.dry_run:
                 proceed = input("\n[START] Proceed with automation for all users? (Y/n): ").strip().lower()
                 if proceed not in ['', 'y', 'yes']:
-                    print("[ERROR] Automation cancelled by user")
+                    print(f"{Symbols.ERROR} Automation cancelled by user")
                     return False
             else:
                 print("\n[TEST] DRY-RUN: Proceeding with simulation...")
 
             # STEP 5: Process all users
-            print(f"\n🔄 STEP 3: PROCESSING {validated_credentials.total_users} USER(S)")
+            print(f"\n{Symbols.SCAN} STEP 3: PROCESSING {validated_credentials.total_users} USER(S)")
 
             # Ask for processing mode
             if validated_credentials.total_users > 1 and not self.dry_run:
@@ -977,12 +979,12 @@ class EC2ASGAutomation:
             return True
 
         except KeyboardInterrupt:
-            print("\n\n[STOP] Automation interrupted by user")
+            print(f"\n\n{Symbols.STOP} Automation interrupted by user")
             self.safety_logger.log_action('WARNING', "Automation interrupted by user")
             self.offer_rollback_on_failure()
             return False
         except Exception as e:
-            print(f"\n[ERROR] Automation failed: {e}")
+            print(f"\n{Symbols.ERROR} Automation failed: {e}")
             self.safety_logger.log_action('ERROR', f"Automation failed: {e}")
             self.offer_rollback_on_failure()
             return False
@@ -1007,7 +1009,7 @@ class EC2ASGAutomation:
         results = []
         max_workers = min(len(credentials), 5)  # Limit concurrent operations
 
-        print(f"🔄 Processing {len(credentials)} users with {max_workers} parallel workers...")
+        print(f"{Symbols.SCAN} Processing {len(credentials)} users with {max_workers} parallel workers...")
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_credential = {
@@ -1039,8 +1041,8 @@ class EC2ASGAutomation:
         print("[LIST] AUTOMATION SUMMARY")
         print("="*70)
 
-        print(f"[KEY] Credential Type: {validated_credentials.credential_type.upper()}")
-        print(f"[STATS] Total Users: {validated_credentials.total_users}")
+        print(f"{Symbols.KEY} Credential Type: {validated_credentials.credential_type.upper()}")
+        print(f"{Symbols.STATS} Total Users: {validated_credentials.total_users}")
         if self.dry_run:
             print("[TEST] Mode: DRY-RUN (Simulation only)")
 
@@ -1055,15 +1057,15 @@ class EC2ASGAutomation:
             print(f"   [DESKTOP] EC2 Strategy: {global_config.get('ec2_strategy', 'N/A').upper()}")
             print(f"   [CONFIG] Instance Type: {global_config.get('instance_type', 'N/A')}")
 
-        print(f"   [START] Create ASG: {'Yes' if global_config.get('create_asg') else 'No'}")
+        print(f"   {Symbols.START} Create ASG: {'Yes' if global_config.get('create_asg') else 'No'}")
         if global_config.get('create_asg'):
-            print(f"   [STATS] ASG Strategy: {global_config.get('asg_strategy', 'N/A').upper()}")
+            print(f"   {Symbols.STATS} ASG Strategy: {global_config.get('asg_strategy', 'N/A').upper()}")
             print(f"   [ALARM] Scheduled: {'Yes' if global_config.get('enable_scheduled_scaling') else 'No'}")
 
         # Calculate expected resources
         expected_resources = self.calculate_expected_resources(validated_credentials.users, global_config)
-        print(f"\n[STATS] Expected Resources: {expected_resources}")
-        print(f"[LIST] Session ID: {self.session_id}")
+        print(f"\n{Symbols.STATS} Expected Resources: {expected_resources}")
+        print(f"{Symbols.LIST} Session ID: {self.session_id}")
 
         print("="*70)
 
@@ -1077,25 +1079,25 @@ class EC2ASGAutomation:
         partial = [r for r in results if r['status'] == 'partial']
         failed = [r for r in results if r['status'] == 'failed']
 
-        print(f"[STATS] OVERALL RESULTS:")
-        print(f"   [OK] Fully Successful: {len(successful)}")
-        print(f"   [WARN] Partially Successful: {len(partial)}")
-        print(f"   [ERROR] Failed: {len(failed)}")
-        print(f"   [LIST] Total Processed: {len(results)}")
+        print(f"{Symbols.STATS} OVERALL RESULTS:")
+        print(f"   {Symbols.OK} Fully Successful: {len(successful)}")
+        print(f"   {Symbols.WARN} Partially Successful: {len(partial)}")
+        print(f"   {Symbols.ERROR} Failed: {len(failed)}")
+        print(f"   {Symbols.LIST} Total Processed: {len(results)}")
 
         if self.dry_run:
             print(f"   [TEST] DRY-RUN: No actual resources were created")
         else:
             print(f"   [ORGANIZER] Created Resources: {len(self.created_resources)}")
             print(f"   [FILE] Session File: session_{self.session_id}.json")
-            print(f"   [LIST] Log File: {self.safety_logger.log_file}")
+            print(f"   {Symbols.LIST} Log File: {self.safety_logger.log_file}")
 
         if successful:
-            print(f"\n[OK] FULLY SUCCESSFUL DEPLOYMENTS:")
+            print(f"\n{Symbols.OK} FULLY SUCCESSFUL DEPLOYMENTS:")
             print("-" * 60)
             for result in successful:
                 print(f"[ACCOUNT] {result['account']} - {result['username']}")
-                print(f"   [REGION] Region: {result['region']}")
+                print(f"   {Symbols.REGION} Region: {result['region']}")
 
                 if result.get('ec2_instance'):
                     ec2_info = result['ec2_instance']
@@ -1107,26 +1109,26 @@ class EC2ASGAutomation:
                 if result.get('asg'):
                     asg_info = result['asg']
                     if asg_info.get('dry_run'):
-                        print(f"   [START] ASG: {asg_info['asg_name']} (DRY-RUN)")
+                        print(f"   {Symbols.START} ASG: {asg_info['asg_name']} (DRY-RUN)")
                     else:
-                        print(f"   [START] ASG: {asg_info['asg_name']} ({asg_info.get('strategy', 'Unknown')})")
+                        print(f"   {Symbols.START} ASG: {asg_info['asg_name']} ({asg_info.get('strategy', 'Unknown')})")
                 print()
 
         if partial:
-            print(f"\n[WARN] PARTIALLY SUCCESSFUL DEPLOYMENTS:")
+            print(f"\n{Symbols.WARN} PARTIALLY SUCCESSFUL DEPLOYMENTS:")
             print("-" * 60)
             for result in partial:
                 print(f"[ACCOUNT] {result['account']} - {result['username']}")
                 for error in result.get('errors', []):
-                    print(f"   [ERROR] {error}")
+                    print(f"   {Symbols.ERROR} {error}")
                 print()
 
         if failed:
-            print(f"\n[ERROR] FAILED DEPLOYMENTS:")
+            print(f"\n{Symbols.ERROR} FAILED DEPLOYMENTS:")
             print("-" * 60)
             for result in failed:
                 print(f"[ACCOUNT] {result['account']} - {result['username']}")
-                print(f"   [ERROR] Error: {result.get('error', 'Unknown error')}")
+                print(f"   {Symbols.ERROR} Error: {result.get('error', 'Unknown error')}")
                 print()
 
         print("="*80)
@@ -1164,7 +1166,7 @@ def main():
         if success:
             print("\n[PARTY] All operations completed successfully!")
             if not automation.dry_run:
-                print(f"[LIST] Session logs saved to: {automation.safety_logger.log_file}")
+                print(f"{Symbols.LIST} Session logs saved to: {automation.safety_logger.log_file}")
                 print(f"[ORGANIZER] Session state saved to: session_{automation.session_id}.json")
             sys.exit(0)
         else:

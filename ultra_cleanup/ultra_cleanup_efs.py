@@ -20,6 +20,7 @@ import time
 from datetime import datetime
 from botocore.exceptions import ClientError
 from root_iam_credential_manager import AWSCredentialManager
+from text_symbols import Symbols
 
 
 class Colors:
@@ -39,9 +40,9 @@ class UltraCleanupEFSManager:
     def __init__(self):
         """Initialize the EFS cleanup manager"""
         self.cred_manager = AWSCredentialManager()
-        self.current_time = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+        self.current_time = datetime.now(datetime.UTC).strftime('%Y-%m-%d %H:%M:%S')
         self.current_user = os.getenv('USERNAME') or os.getenv('USER') or 'unknown'
-        self.execution_timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+        self.execution_timestamp = datetime.now(datetime.UTC).strftime('%Y%m%d_%H%M%S')
         
         # Create directories for logs and reports
         self.base_dir = os.path.join(os.getcwd(), 'aws', 'efs')
@@ -74,7 +75,7 @@ class UltraCleanupEFSManager:
 
     def log_action(self, message, level="INFO"):
         """Log action to file"""
-        timestamp = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp = datetime.now(datetime.UTC).strftime('%Y-%m-%d %H:%M:%S')
         log_entry = f"{timestamp} | {level:8} | {message}\n"
         with open(self.log_file, 'a') as f:
             f.write(log_entry)
@@ -82,7 +83,7 @@ class UltraCleanupEFSManager:
     def delete_mount_target(self, efs_client, mount_target_id, region, account_key):
         """Delete an EFS mount target"""
         try:
-            self.print_colored(Colors.CYAN, f"   [DELETE] Deleting mount target: {mount_target_id}")
+            self.print_colored(Colors.CYAN, f"   {Symbols.DELETE} Deleting mount target: {mount_target_id}")
             
             efs_client.delete_mount_target(MountTargetId=mount_target_id)
             
@@ -99,7 +100,7 @@ class UltraCleanupEFSManager:
                         break
                     raise
             
-            self.print_colored(Colors.GREEN, f"   [OK] Deleted mount target: {mount_target_id}")
+            self.print_colored(Colors.GREEN, f"   {Symbols.OK} Deleted mount target: {mount_target_id}")
             self.log_action(f"Deleted mount target: {mount_target_id} in {region}")
             
             self.cleanup_results['deleted_mount_targets'].append({
@@ -111,18 +112,18 @@ class UltraCleanupEFSManager:
             
         except ClientError as e:
             error_msg = f"Failed to delete mount target {mount_target_id}: {e}"
-            self.print_colored(Colors.RED, f"   [ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"   {Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             return False
 
     def delete_access_point(self, efs_client, access_point_id, region, account_key):
         """Delete an EFS access point"""
         try:
-            self.print_colored(Colors.CYAN, f"   [DELETE] Deleting access point: {access_point_id}")
+            self.print_colored(Colors.CYAN, f"   {Symbols.DELETE} Deleting access point: {access_point_id}")
             
             efs_client.delete_access_point(AccessPointId=access_point_id)
             
-            self.print_colored(Colors.GREEN, f"   [OK] Deleted access point: {access_point_id}")
+            self.print_colored(Colors.GREEN, f"   {Symbols.OK} Deleted access point: {access_point_id}")
             self.log_action(f"Deleted access point: {access_point_id} in {region}")
             
             self.cleanup_results['deleted_access_points'].append({
@@ -134,18 +135,18 @@ class UltraCleanupEFSManager:
             
         except ClientError as e:
             error_msg = f"Failed to delete access point {access_point_id}: {e}"
-            self.print_colored(Colors.RED, f"   [ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"   {Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             return False
 
     def delete_replication_configuration(self, efs_client, file_system_id, region, account_key):
         """Delete EFS replication configuration"""
         try:
-            self.print_colored(Colors.CYAN, f"   [DELETE] Deleting replication config for: {file_system_id}")
+            self.print_colored(Colors.CYAN, f"   {Symbols.DELETE} Deleting replication config for: {file_system_id}")
             
             efs_client.delete_replication_configuration(SourceFileSystemId=file_system_id)
             
-            self.print_colored(Colors.GREEN, f"   [OK] Deleted replication config: {file_system_id}")
+            self.print_colored(Colors.GREEN, f"   {Symbols.OK} Deleted replication config: {file_system_id}")
             self.log_action(f"Deleted replication config for: {file_system_id} in {region}")
             
             self.cleanup_results['deleted_replications'].append({
@@ -159,14 +160,14 @@ class UltraCleanupEFSManager:
             if 'ReplicationNotFound' in str(e):
                 return True
             error_msg = f"Failed to delete replication config {file_system_id}: {e}"
-            self.print_colored(Colors.YELLOW, f"   [WARN] {error_msg}")
+            self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} {error_msg}")
             self.log_action(error_msg, "WARNING")
             return False
 
     def delete_file_system(self, efs_client, file_system_id, region, account_key):
         """Delete an EFS file system after removing dependencies"""
         try:
-            self.print_colored(Colors.CYAN, f"[DELETE] Processing file system: {file_system_id}")
+            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Processing file system: {file_system_id}")
             
             # Step 1: Delete replication configuration first
             self.delete_replication_configuration(efs_client, file_system_id, region, account_key)
@@ -178,7 +179,7 @@ class UltraCleanupEFSManager:
                 access_points = access_points_response.get('AccessPoints', [])
                 
                 if access_points:
-                    self.print_colored(Colors.YELLOW, f"   [SCAN] Found {len(access_points)} access points")
+                    self.print_colored(Colors.YELLOW, f"   {Symbols.SCAN} Found {len(access_points)} access points")
                     for ap in access_points:
                         self.delete_access_point(efs_client, ap['AccessPointId'], region, account_key)
                         time.sleep(1)
@@ -191,7 +192,7 @@ class UltraCleanupEFSManager:
                 mount_targets = mount_targets_response.get('MountTargets', [])
                 
                 if mount_targets:
-                    self.print_colored(Colors.YELLOW, f"   [SCAN] Found {len(mount_targets)} mount targets")
+                    self.print_colored(Colors.YELLOW, f"   {Symbols.SCAN} Found {len(mount_targets)} mount targets")
                     for mt in mount_targets:
                         self.delete_mount_target(efs_client, mt['MountTargetId'], region, account_key)
                         time.sleep(2)
@@ -205,7 +206,7 @@ class UltraCleanupEFSManager:
             # Step 4: Delete the file system
             efs_client.delete_file_system(FileSystemId=file_system_id)
             
-            self.print_colored(Colors.GREEN, f"[OK] Deleted file system: {file_system_id}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted file system: {file_system_id}")
             self.log_action(f"Deleted file system: {file_system_id} in {region}")
             
             self.cleanup_results['deleted_file_systems'].append({
@@ -217,7 +218,7 @@ class UltraCleanupEFSManager:
             
         except ClientError as e:
             error_msg = f"Failed to delete file system {file_system_id}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['failed_deletions'].append({
                 'type': 'FileSystem',
@@ -231,7 +232,7 @@ class UltraCleanupEFSManager:
     def cleanup_region_efs(self, account_name, credentials, region):
         """Cleanup all EFS resources in a specific region"""
         try:
-            self.print_colored(Colors.YELLOW, f"\n[SCAN] Scanning region: {region}")
+            self.print_colored(Colors.YELLOW, f"\n{Symbols.SCAN} Scanning region: {region}")
             
             efs_client = boto3.client(
                 'efs',
@@ -255,7 +256,7 @@ class UltraCleanupEFSManager:
             
         except Exception as e:
             error_msg = f"Error processing region {region}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['errors'].append(error_msg)
 
@@ -263,7 +264,7 @@ class UltraCleanupEFSManager:
         """Cleanup all EFS resources in an account across all regions"""
         try:
             self.print_colored(Colors.BLUE, f"\n{'='*100}")
-            self.print_colored(Colors.BLUE, f"[START] Processing Account: {account_name}")
+            self.print_colored(Colors.BLUE, f"{Symbols.START} Processing Account: {account_name}")
             self.print_colored(Colors.BLUE, f"{'='*100}")
             
             self.cleanup_results['accounts_processed'].append(account_name)
@@ -279,17 +280,17 @@ class UltraCleanupEFSManager:
             regions_response = ec2_client.describe_regions()
             regions = [region['RegionName'] for region in regions_response['Regions']]
             
-            self.print_colored(Colors.CYAN, f"[SCAN] Processing {len(regions)} regions")
+            self.print_colored(Colors.CYAN, f"{Symbols.SCAN} Processing {len(regions)} regions")
             
             # Process each region
             for region in regions:
                 self.cleanup_region_efs(account_name, credentials, region)
             
-            self.print_colored(Colors.GREEN, f"\n[OK] Account {account_name} cleanup completed!")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.OK} Account {account_name} cleanup completed!")
             
         except Exception as e:
             error_msg = f"Error processing account {account_name}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['errors'].append(error_msg)
 
@@ -318,22 +319,22 @@ class UltraCleanupEFSManager:
             with open(report_path, 'w') as f:
                 json.dump(summary, f, indent=2)
 
-            self.print_colored(Colors.GREEN, f"\n[STATS] Summary report saved: {report_path}")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.STATS} Summary report saved: {report_path}")
 
             # Print summary to console
             self.print_colored(Colors.BLUE, f"\n{'='*100}")
             self.print_colored(Colors.BLUE, "[STATS] CLEANUP SUMMARY")
             self.print_colored(Colors.BLUE, f"{'='*100}")
-            self.print_colored(Colors.GREEN, f"[OK] File Systems Deleted: {summary['summary']['total_file_systems_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Mount Targets Deleted: {summary['summary']['total_mount_targets_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Access Points Deleted: {summary['summary']['total_access_points_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Replication Configs Deleted: {summary['summary']['total_replications_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} File Systems Deleted: {summary['summary']['total_file_systems_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Mount Targets Deleted: {summary['summary']['total_mount_targets_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Access Points Deleted: {summary['summary']['total_access_points_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Replication Configs Deleted: {summary['summary']['total_replications_deleted']}")
 
             if summary['summary']['total_failed_deletions'] > 0:
-                self.print_colored(Colors.YELLOW, f"[WARN] Failed Deletions: {summary['summary']['total_failed_deletions']}")
+                self.print_colored(Colors.YELLOW, f"{Symbols.WARN} Failed Deletions: {summary['summary']['total_failed_deletions']}")
 
             if summary['summary']['total_errors'] > 0:
-                self.print_colored(Colors.RED, f"[ERROR] Errors: {summary['summary']['total_errors']}")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Errors: {summary['summary']['total_errors']}")
 
             # Display Account Summary
             self.print_colored(Colors.BLUE, f"\n{'='*100}")
@@ -360,16 +361,16 @@ class UltraCleanupEFSManager:
                     account_summary[account]['regions'].add(item.get('region', 'unknown'))
 
             for account, stats in account_summary.items():
-                self.print_colored(Colors.CYAN, f"\n[LIST] Account: {account}")
-                self.print_colored(Colors.GREEN, f"  [OK] File Systems: {stats['file_systems']}")
-                self.print_colored(Colors.GREEN, f"  [OK] Mount Targets: {stats['mount_targets']}")
-                self.print_colored(Colors.GREEN, f"  [OK] Access Points: {stats['access_points']}")
-                self.print_colored(Colors.GREEN, f"  [OK] Replication Configs: {stats['replications']}")
+                self.print_colored(Colors.CYAN, f"\n{Symbols.LIST} Account: {account}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} File Systems: {stats['file_systems']}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Mount Targets: {stats['mount_targets']}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Access Points: {stats['access_points']}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Replication Configs: {stats['replications']}")
                 regions_str = ', '.join(sorted(stats['regions'])) if stats['regions'] else 'N/A'
-                self.print_colored(Colors.YELLOW, f"  [SCAN] Regions: {regions_str}")
+                self.print_colored(Colors.YELLOW, f"  {Symbols.SCAN} Regions: {regions_str}")
 
         except Exception as e:
-            self.print_colored(Colors.RED, f"[ERROR] Failed to generate summary report: {e}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to generate summary report: {e}")
 
     def interactive_cleanup(self):
         """Interactive mode for EFS cleanup"""
@@ -380,15 +381,15 @@ class UltraCleanupEFSManager:
 
             config = self.cred_manager.load_root_accounts_config()
             if not config or 'accounts' not in config:
-                self.print_colored(Colors.RED, "[ERROR] No accounts configuration found!")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} No accounts configuration found!")
                 return
 
             accounts = config['accounts']
             account_list = list(accounts.keys())
 
-            self.print_colored(Colors.CYAN, "[KEY] Select Root AWS Accounts for EFS Cleanup:")
+            self.print_colored(Colors.CYAN, f"{Symbols.KEY} Select Root AWS Accounts for EFS Cleanup:")
             print(f"{Colors.CYAN}[BOOK] Loading root accounts config...{Colors.END}")
-            self.print_colored(Colors.GREEN, f"[OK] Loaded {len(accounts)} root accounts")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Loaded {len(accounts)} root accounts")
             
             self.print_colored(Colors.YELLOW, "\n[KEY] Available Root AWS Accounts:")
             print("=" * 100)
@@ -423,15 +424,15 @@ class UltraCleanupEFSManager:
                     indices = [int(x.strip()) for x in selection.split(',')]
                     selected_accounts = [account_list[i-1] for i in indices if 0 < i <= len(account_list)]
                 except (ValueError, IndexError):
-                    self.print_colored(Colors.RED, "[ERROR] Invalid selection!")
+                    self.print_colored(Colors.RED, f"{Symbols.ERROR} Invalid selection!")
                     return
 
             if not selected_accounts:
-                self.print_colored(Colors.RED, "[ERROR] No accounts selected!")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} No accounts selected!")
                 return
 
-            self.print_colored(Colors.RED, "\n[WARN] WARNING: This will DELETE all EFS resources!")
-            self.print_colored(Colors.YELLOW, "[WARN] Includes: File Systems, Mount Targets, Access Points, Replication Configs")
+            self.print_colored(Colors.RED, f"\n{Symbols.WARN} WARNING: This will DELETE all EFS resources!")
+            self.print_colored(Colors.YELLOW, f"{Symbols.WARN} Includes: File Systems, Mount Targets, Access Points, Replication Configs")
             confirm = input(f"\nType 'yes' to confirm: ").strip().lower()
             if confirm != 'yes':
                 self.print_colored(Colors.YELLOW, "[EXIT] Cleanup cancelled!")
@@ -449,13 +450,13 @@ class UltraCleanupEFSManager:
 
             self.generate_summary_report()
 
-            self.print_colored(Colors.GREEN, f"\n[OK] EFS cleanup completed!")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.OK} EFS cleanup completed!")
             self.print_colored(Colors.CYAN, f"[FILE] Log file: {self.log_file}")
 
         except KeyboardInterrupt:
             self.print_colored(Colors.YELLOW, "\n[WARN] Cleanup interrupted by user!")
         except Exception as e:
-            self.print_colored(Colors.RED, f"\n[ERROR] Error during cleanup: {e}")
+            self.print_colored(Colors.RED, f"\n{Symbols.ERROR} Error during cleanup: {e}")
 
 
 def main():
@@ -466,7 +467,7 @@ def main():
     except KeyboardInterrupt:
         print("\n\n[WARN] Operation cancelled by user!")
     except Exception as e:
-        print(f"\n[ERROR] Fatal error: {e}")
+        print(f"\n{Symbols.ERROR} Fatal error: {e}")
 
 
 if __name__ == "__main__":

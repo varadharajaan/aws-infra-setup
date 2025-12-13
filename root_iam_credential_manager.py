@@ -4,6 +4,7 @@ import glob
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple, Any
 import re
+from text_symbols import Symbols
 
 
 class Colors:
@@ -44,7 +45,7 @@ class AWSCredentialManager:
                 config_dir = os.getcwd()
 
         self.config_dir = config_dir
-        self.print_colored(Colors.CYAN, f"[FOLDER] Using config directory: {self.config_dir}")
+        self.print_colored(Colors.CYAN, f"{Symbols.FOLDER} Using config directory: {self.config_dir}")
 
         # Check directory permissions
         if not os.access(self.config_dir, os.R_OK):
@@ -68,24 +69,24 @@ class AWSCredentialManager:
 
         # Check aws_accounts_config.json
         if not os.path.exists(self.aws_accounts_config_file):
-            self.print_colored(Colors.YELLOW, f"[WARN]  Warning: aws_accounts_config.json not found in {self.config_dir}")
+            self.print_colored(Colors.YELLOW, f"{Symbols.WARN}  Warning: aws_accounts_config.json not found in {self.config_dir}")
         elif not os.access(self.aws_accounts_config_file, os.R_OK):
-            self.print_colored(Colors.YELLOW, f"[WARN]  Warning: Cannot read aws_accounts_config.json")
+            self.print_colored(Colors.YELLOW, f"{Symbols.WARN}  Warning: Cannot read aws_accounts_config.json")
         else:
-            self.print_colored(Colors.GREEN, f"[OK] Found aws_accounts_config.json")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Found aws_accounts_config.json")
 
         # Check aws/iam directory
         if not os.path.exists(self.iam_dir):
-            self.print_colored(Colors.YELLOW, f"[WARN]  Warning: aws/iam directory not found in {self.config_dir}")
+            self.print_colored(Colors.YELLOW, f"{Symbols.WARN}  Warning: aws/iam directory not found in {self.config_dir}")
         elif not os.access(self.iam_dir, os.R_OK):
-            self.print_colored(Colors.YELLOW, f"[WARN]  Warning: Cannot read aws/iam directory")
+            self.print_colored(Colors.YELLOW, f"{Symbols.WARN}  Warning: Cannot read aws/iam directory")
         else:
-            self.print_colored(Colors.GREEN, f"[OK] Found aws/iam directory")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Found aws/iam directory")
             iam_files = glob.glob(self.iam_users_pattern)
             if not iam_files:
-                self.print_colored(Colors.YELLOW, f"[WARN]  Warning: No iam_users_credentials_*.json files found")
+                self.print_colored(Colors.YELLOW, f"{Symbols.WARN}  Warning: No iam_users_credentials_*.json files found")
             else:
-                self.print_colored(Colors.GREEN, f"[OK] Found {len(iam_files)} IAM credential files")
+                self.print_colored(Colors.GREEN, f"{Symbols.OK} Found {len(iam_files)} IAM credential files")
 
     # === ROOT ACCOUNT METHODS ===
 
@@ -93,30 +94,30 @@ class AWSCredentialManager:
         """Load AWS root accounts configuration from aws_accounts_config.json."""
         try:
             if not os.path.exists(self.aws_accounts_config_file):
-                self.print_colored(Colors.RED, f"[ERROR] AWS accounts config file not found: {self.aws_accounts_config_file}")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} AWS accounts config file not found: {self.aws_accounts_config_file}")
                 return None
 
             if not os.access(self.aws_accounts_config_file, os.R_OK):
-                self.print_colored(Colors.RED, f"[ERROR] Cannot read AWS accounts config file")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Cannot read AWS accounts config file")
                 return None
 
-            self.print_colored(Colors.CYAN, f"📖 Loading root accounts config...")
+            self.print_colored(Colors.CYAN, f"{Symbols.LOG} Loading root accounts config...")
             with open(self.aws_accounts_config_file, 'r') as f:
                 config = json.load(f)
 
             if 'accounts' not in config:
-                self.print_colored(Colors.RED, "[ERROR] Invalid config file: missing 'accounts' section")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Invalid config file: missing 'accounts' section")
                 return None
 
             accounts_count = len(config['accounts'])
-            self.print_colored(Colors.GREEN, f"[OK] Loaded {accounts_count} root accounts")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Loaded {accounts_count} root accounts")
             return config
 
         except json.JSONDecodeError as e:
-            self.print_colored(Colors.RED, f"[ERROR] Error parsing root accounts config: {e}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Error parsing root accounts config: {e}")
             return None
         except Exception as e:
-            self.print_colored(Colors.RED, f"[ERROR] Error loading root accounts config: {e}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Error loading root accounts config: {e}")
             return None
 
     def get_root_account_by_key(self, account_key: str) -> Optional[Dict[str, Any]]:
@@ -127,7 +128,7 @@ class AWSCredentialManager:
 
         accounts = config.get('accounts', {})
         if account_key not in accounts:
-            self.print_colored(Colors.RED, f"[ERROR] Root account '{account_key}' not found")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Root account '{account_key}' not found")
             return None
 
         account_data = accounts[account_key]
@@ -135,6 +136,7 @@ class AWSCredentialManager:
 
         return {
             'account_key': account_key,
+            'name': account_data.get('name', account_key),
             'account_id': account_data['account_id'],
             'email': account_data['email'],
             'access_key': account_data['access_key'],
@@ -157,6 +159,7 @@ class AWSCredentialManager:
 
                 return {
                     'account_key': account_key,
+                    'name': account_key,
                     'account_id': account_data['account_id'],
                     'email': account_data['email'],
                     'access_key': account_data['access_key'],
@@ -166,7 +169,7 @@ class AWSCredentialManager:
                     'users_per_account': account_data.get('users_per_account', 0)
                 }
 
-        self.print_colored(Colors.RED, f"[ERROR] No root account found for ID: {account_id}")
+        self.print_colored(Colors.RED, f"{Symbols.ERROR} No root account found for ID: {account_id}")
         return None
 
     def get_all_root_accounts(self) -> List[Dict[str, Any]]:
@@ -182,6 +185,7 @@ class AWSCredentialManager:
         for account_key, account_data in accounts.items():
             root_accounts.append({
                 'account_key': account_key,
+                'name': account_key,
                 'account_id': account_data['account_id'],
                 'email': account_data['email'],
                 'access_key': account_data['access_key'],
@@ -195,14 +199,17 @@ class AWSCredentialManager:
 
     def select_regions_interactive(self) -> Optional[List[str]]:
         """Interactive region selection."""
-        self.print_colored(Colors.YELLOW, "\n[REGION] Available AWS Regions:")
+        # Get user regions dynamically
+        user_regions = self.get_user_regions()
+        
+        self.print_colored(Colors.YELLOW, f"\n{Symbols.REGION} Available AWS Regions:")
         self.print_colored(Colors.YELLOW, "=" * 80)
 
-        for i, region in enumerate(self.user_regions, 1):
+        for i, region in enumerate(user_regions, 1):
             self.print_colored(Colors.CYAN, f"   {i}. {region}")
 
         self.print_colored(Colors.YELLOW, "=" * 80)
-        self.print_colored(Colors.YELLOW, "[TIP] Selection options:")
+        self.print_colored(Colors.YELLOW, f"{Symbols.TIP} Selection options:")
         self.print_colored(Colors.WHITE, "   • Single: 1")
         self.print_colored(Colors.WHITE, "   • Multiple: 1,3,5")
         self.print_colored(Colors.WHITE, "   • Range: 1-5")
@@ -211,26 +218,26 @@ class AWSCredentialManager:
 
         while True:
             try:
-                choice = input(f"Select regions (1-{len(self.user_regions)}, comma-separated, range, or 'all') or 'q' to quit: ").strip()
+                choice = input(f"Select regions (1-{len(user_regions)}, comma-separated, range, or 'all') or 'q' to quit: ").strip()
 
                 if choice.lower() == 'q':
                     return None
 
                 if choice.lower() == "all" or not choice:
-                    self.print_colored(Colors.GREEN, f"[OK] Selected all {len(self.user_regions)} regions")
-                    return self.user_regions
+                    self.print_colored(Colors.GREEN, f"{Symbols.OK} Selected all {len(user_regions)} regions")
+                    return user_regions
 
-                selected_indices = self.cred_manager._parse_selection(choice, len(self.user_regions))
+                selected_indices = self._parse_selection(choice, len(user_regions))
                 if not selected_indices:
-                    self.print_colored(Colors.RED, "[ERROR] Invalid selection format")
+                    self.print_colored(Colors.RED, f"{Symbols.ERROR} Invalid selection format")
                     continue
 
-                selected_regions = [self.user_regions[i - 1] for i in selected_indices]
-                self.print_colored(Colors.GREEN, f"[OK] Selected {len(selected_regions)} regions: {', '.join(selected_regions)}")
+                selected_regions = [user_regions[i - 1] for i in selected_indices]
+                self.print_colored(Colors.GREEN, f"{Symbols.OK} Selected {len(selected_regions)} regions: {', '.join(selected_regions)}")
                 return selected_regions
 
             except Exception as e:
-                self.print_colored(Colors.RED, f"[ERROR] Error processing selection: {str(e)}")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Error processing selection: {str(e)}")
 
     def get_user_regions(self) -> List[str]:
         """Get user regions from root accounts config."""
@@ -241,7 +248,7 @@ class AWSCredentialManager:
                     'us-east-1', 'us-east-2', 'us-west-1', 'us-west-2', 'ap-south-1'
                 ])
         except Exception as e:
-            self.print_colored(Colors.YELLOW, f"[WARN]  Warning: Could not load user regions: {e}")
+            self.print_colored(Colors.YELLOW, f"{Symbols.WARN}  Warning: Could not load user regions: {e}")
 
         return ['us-east-1', 'us-east-2', 'us-west-1', 'us-west-2', 'ap-south-1']
 
@@ -253,10 +260,10 @@ class AWSCredentialManager:
 
         accounts = config.get('accounts', {})
         if not accounts:
-            self.print_colored(Colors.RED, "[ERROR] No root accounts found!")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} No root accounts found!")
             return None
 
-        self.print_colored(Colors.YELLOW, "\n[KEY] Available Root AWS Accounts:")
+        self.print_colored(Colors.YELLOW, f"\n{Symbols.KEY} Available Root AWS Accounts:")
         self.print_colored(Colors.YELLOW, "=" * 100)
 
         account_keys = list(accounts.keys())
@@ -270,7 +277,7 @@ class AWSCredentialManager:
         self.print_colored(Colors.YELLOW, "=" * 100)
 
         if allow_multiple:
-            self.print_colored(Colors.YELLOW, "[TIP] Selection options:")
+            self.print_colored(Colors.YELLOW, f"{Symbols.TIP} Selection options:")
             self.print_colored(Colors.WHITE, "   • Single: 1")
             self.print_colored(Colors.WHITE, "   • Multiple: 1,3,5")
             self.print_colored(Colors.WHITE, "   • Range: 1-5")
@@ -294,7 +301,7 @@ class AWSCredentialManager:
                     else:
                         selected_indices = self._parse_selection(choice, len(account_keys))
                         if not selected_indices:
-                            self.print_colored(Colors.RED, "[ERROR] Invalid selection format")
+                            self.print_colored(Colors.RED, f"{Symbols.ERROR} Invalid selection format")
                             continue
                         selected_keys = [account_keys[i - 1] for i in selected_indices]
                 else:
@@ -302,7 +309,7 @@ class AWSCredentialManager:
                     if 1 <= choice_num <= len(account_keys):
                         selected_keys = [account_keys[choice_num - 1]]
                     else:
-                        self.print_colored(Colors.RED, f"[ERROR] Invalid choice. Please enter 1-{len(account_keys)}")
+                        self.print_colored(Colors.RED, f"{Symbols.ERROR} Invalid choice. Please enter 1-{len(account_keys)}")
                         continue
 
                 # Build result list
@@ -313,6 +320,7 @@ class AWSCredentialManager:
                     account_data = accounts[account_key]
                     selected_accounts.append({
                         'account_key': account_key,
+                        'name': account_key,
                         'account_id': account_data['account_id'],
                         'email': account_data['email'],
                         'access_key': account_data['access_key'],
@@ -322,7 +330,7 @@ class AWSCredentialManager:
                         'users_per_account': account_data.get('users_per_account', 0)
                     })
 
-                self.print_colored(Colors.GREEN, f"[OK] Selected {len(selected_accounts)} account(s)")
+                self.print_colored(Colors.GREEN, f"{Symbols.OK} Selected {len(selected_accounts)} account(s)")
                 return selected_accounts
 
             except ValueError:
@@ -337,7 +345,7 @@ class AWSCredentialManager:
 
             files = glob.glob(self.iam_users_pattern)
             if not files:
-                self.print_colored(Colors.RED, "[ERROR] No IAM credentials files found in aws/iam/")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} No IAM credentials files found in aws/iam/")
                 return []
 
             credentials_files = []
@@ -368,39 +376,39 @@ class AWSCredentialManager:
                     })
 
                 except Exception as e:
-                    self.print_colored(Colors.YELLOW, f"   [WARN]  Error parsing {file_path}: {str(e)}")
+                    self.print_colored(Colors.YELLOW, f"   {Symbols.WARN}  Error parsing {file_path}: {str(e)}")
 
             credentials_files.sort(key=lambda x: x['sort_key'], reverse=True)
-            self.print_colored(Colors.GREEN, f"[OK] Found {len(credentials_files)} IAM credentials files")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Found {len(credentials_files)} IAM credentials files")
             return credentials_files
 
         except Exception as e:
-            self.print_colored(Colors.RED, f"[ERROR] Error scanning IAM credentials files: {str(e)}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Error scanning IAM credentials files: {str(e)}")
             return []
 
     def load_iam_users_from_file(self, file_path: str) -> Optional[Dict]:
         """Load IAM users credentials from specified file."""
         try:
             if not os.access(file_path, os.R_OK):
-                self.print_colored(Colors.RED, f"[ERROR] Cannot read IAM users file: {file_path}")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Cannot read IAM users file: {file_path}")
                 return None
 
-            self.print_colored(Colors.CYAN, f"📖 Loading IAM users from: {os.path.basename(file_path)}")
+            self.print_colored(Colors.CYAN, f"{Symbols.LOG} Loading IAM users from: {os.path.basename(file_path)}")
             with open(file_path, 'r') as f:
                 data = json.load(f)
 
             if 'accounts' not in data:
-                self.print_colored(Colors.RED, "[ERROR] Invalid IAM users file: missing 'accounts' section")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Invalid IAM users file: missing 'accounts' section")
                 return None
 
             total_users = sum(len(account_data.get('users', [])) for account_data in data['accounts'].values())
             accounts_count = len(data['accounts'])
 
-            self.print_colored(Colors.GREEN, f"[OK] Loaded {total_users} users from {accounts_count} accounts")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Loaded {total_users} users from {accounts_count} accounts")
             return data
 
         except Exception as e:
-            self.print_colored(Colors.RED, f"[ERROR] Error loading IAM users file: {e}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Error loading IAM users file: {e}")
             return None
 
     def get_all_iam_users_from_file(self, file_path: str) -> List[Dict[str, Any]]:
@@ -468,10 +476,10 @@ class AWSCredentialManager:
                 choice_num = int(choice)
                 if 1 <= choice_num <= len(iam_files):
                     selected_file = iam_files[choice_num - 1]
-                    self.print_colored(Colors.GREEN, f"[OK] Selected: {selected_file['filename']}")
+                    self.print_colored(Colors.GREEN, f"{Symbols.OK} Selected: {selected_file['filename']}")
                     return selected_file['file_path']
                 else:
-                    self.print_colored(Colors.RED, f"[ERROR] Invalid choice. Please enter 1-{len(iam_files)}")
+                    self.print_colored(Colors.RED, f"{Symbols.ERROR} Invalid choice. Please enter 1-{len(iam_files)}")
 
             except ValueError:
                 self.print_colored(Colors.RED, "[ERROR] Invalid input. Please enter a number")
@@ -490,7 +498,7 @@ class AWSCredentialManager:
         for i, user in enumerate(all_users, 1):
             if user['account_key'] != current_account:
                 current_account = user['account_key']
-                self.print_colored(Colors.PURPLE, f"\n[LIST] Account: {current_account} (ID: {user['account_id']})")
+                self.print_colored(Colors.PURPLE, f"\n{Symbols.LIST} Account: {current_account} (ID: {user['account_id']})")
 
             real_name_display = user['real_name'][:25] + '...' if len(user['real_name']) > 28 else user['real_name']
             email_display = user['email'][:35] + '...' if len(user['email']) > 38 else user['email']
@@ -514,19 +522,19 @@ class AWSCredentialManager:
                 if choice.lower() == 'q':
                     return None
                 elif choice.lower() == "all":
-                    self.print_colored(Colors.GREEN, f"[OK] Selected all {len(all_users)} users")
+                    self.print_colored(Colors.GREEN, f"{Symbols.OK} Selected all {len(all_users)} users")
                     return all_users
                 else:
                     selected_indices = self._parse_selection(choice, len(all_users))
                     if selected_indices:
                         selected_users = [all_users[i - 1] for i in selected_indices]
-                        self.print_colored(Colors.GREEN, f"[OK] Selected {len(selected_users)} users")
+                        self.print_colored(Colors.GREEN, f"{Symbols.OK} Selected {len(selected_users)} users")
                         return selected_users
                     else:
-                        self.print_colored(Colors.RED, "[ERROR] Invalid selection format. Examples: 1, 1,3,5, 1-5, all")
+                        self.print_colored(Colors.RED, f"{Symbols.ERROR} Invalid selection format. Examples: 1, 1,3,5, 1-5, all")
 
             except Exception as e:
-                self.print_colored(Colors.RED, f"[ERROR] Error processing selection: {e}")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Error processing selection: {e}")
 
     # === UTILITY METHODS ===
 

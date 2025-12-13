@@ -1,4 +1,4 @@
-# Databricks notebook source
+﻿# Databricks notebook source
 #!/usr/bin/env python3
 
 import boto3
@@ -14,7 +14,8 @@ from datetime import datetime
 from botocore.exceptions import ClientError, BotoCoreError
 from logger import setup_logger
 from typing import Set
-from spot_analyzer import SpotInstanceAnalyzer, SpotAvailabilityResult, InstanceAlternative
+from text_symbols import Symbols
+from spot_instance_analyzer import SpotInstanceAnalyzer
 from typing import Tuple, Optional, List, Dict
 from datetime import datetime, timedelta
 from instance_config_manager import InstanceConfigManager
@@ -50,7 +51,7 @@ class EC2InstanceManager:
             
             self.log_operation('INFO', "Starting intelligent instance type selection")
             
-            print("\n🧠 Intelligent Instance Selection with Spot Analysis")
+            print("\n[BRAIN] Intelligent Instance Selection with Spot Analysis")
             print("=" * 70)
             print("This will analyze spot availability and suggest optimal choices.")
             print()
@@ -61,12 +62,12 @@ class EC2InstanceManager:
                 marker = " (default)" if instance_type == default_type else ""
                 print(f"  {i}. {instance_type}{marker}")
             
-            print(f"  {len(allowed_types) + 1}. 🔍 Smart Analysis Mode (Recommended)")
+            print(f"  {len(allowed_types) + 1}. {Symbols.SCAN} Smart Analysis Mode (Recommended)")
             print(f"  {len(allowed_types) + 2}. Custom instance type")
             
             while True:
                 try:
-                    choice = input(f"\n🔢 Select option (1-{len(allowed_types) + 2}) or press Enter for smart analysis: ").strip()
+                    choice = input(f"\n[#] Select option (1-{len(allowed_types) + 2}) or press Enter for smart analysis: ").strip()
                     
                     if not choice:
                         # Default to smart analysis
@@ -78,7 +79,7 @@ class EC2InstanceManager:
                         # Regular selection - ask if they want analysis
                         selected_type = allowed_types[choice_num - 1]
                         
-                        analyze = input(f"\n🔍 Run spot analysis for {selected_type}? (Y/n): ").lower().strip()
+                        analyze = input(f"\n{Symbols.SCAN} Run spot analysis for {selected_type}? (Y/n): ").lower().strip()
                         if analyze != 'n':
                             return self._analyze_and_confirm_instance(selected_type)
                         else:
@@ -94,20 +95,20 @@ class EC2InstanceManager:
                         return self._handle_custom_instance_type()
                     
                     else:
-                        print(f"❌ Invalid choice. Please enter a number between 1 and {len(allowed_types) + 2}")
+                        print(f"{Symbols.ERROR} Invalid choice. Please enter a number between 1 and {len(allowed_types) + 2}")
                         
                 except ValueError:
-                    print("❌ Invalid input. Please enter a number.")
+                    print("[ERROR] Invalid input. Please enter a number.")
 
     def _run_smart_analysis_mode(self, default_type: str) -> Tuple[str, str]:
             """Run comprehensive smart analysis across multiple instance types"""
-            print(f"\n🧠 Smart Analysis Mode - Analyzing Multiple Instance Types")
+            print(f"\n[BRAIN] Smart Analysis Mode - Analyzing Multiple Instance Types")
             print("=" * 65)
             
             # Get a sample user's credentials for analysis
             sample_creds = self._get_sample_credentials()
             if not sample_creds:
-                print("❌ No credentials available for analysis. Using default selection.")
+                print(f"{Symbols.ERROR} No credentials available for analysis. Using default selection.")
                 capacity_type = self.select_capacity_type_ec2()
                 return default_type, capacity_type
             
@@ -116,7 +117,7 @@ class EC2InstanceManager:
             # Analyze top instance types
             candidate_types = self.ami_config['allowed_instance_types'][:5]  # Analyze top 5
             
-            print(f"🔍 Analyzing {len(candidate_types)} instance types in {region}...")
+            print(f"{Symbols.SCAN} Analyzing {len(candidate_types)} instance types in {region}...")
             print("This may take 30-60 seconds...\n")
             
             analysis_results = []
@@ -127,7 +128,7 @@ class EC2InstanceManager:
                 # Simple analysis without external dependencies
                 is_available, report = self._simple_spot_analysis(instance_type, region, access_key, secret_key)
                 
-                print("✅" if is_available else "❌")
+                print("[OK]" if is_available else "[ERROR]")
                 
                 analysis_results.append({
                     'instance_type': instance_type,
@@ -136,25 +137,25 @@ class EC2InstanceManager:
                 })
             
             # Present results
-            print(f"\n📊 Analysis Results:")
+            print(f"\n{Symbols.STATS} Analysis Results:")
             print("=" * 50)
             
             recommended = [r for r in analysis_results if r['available']]
             not_recommended = [r for r in analysis_results if not r['available']]
             
             if recommended:
-                print(f"✅ Recommended for Spot ({len(recommended)} types):")
+                print(f"{Symbols.OK} Recommended for Spot ({len(recommended)} types):")
                 for i, result in enumerate(recommended, 1):
                     print(f"   {i}. {result['instance_type']}")
             
             if not_recommended:
-                print(f"\n❌ Not Recommended for Spot ({len(not_recommended)} types):")
+                print(f"\n{Symbols.ERROR} Not Recommended for Spot ({len(not_recommended)} types):")
                 for result in not_recommended:
                     print(f"   • {result['instance_type']}")
             
             # Let user choose
             if recommended:
-                print(f"\n🎯 Recommendations:")
+                print(f"\n{Symbols.TARGET} Recommendations:")
                 for i, result in enumerate(recommended, 1):
                     print(f"  {i}. Use {result['instance_type']} with Spot pricing")
                 
@@ -163,7 +164,7 @@ class EC2InstanceManager:
                 
                 while True:
                     try:
-                        choice = input(f"\n🔢 Select recommendation (1-{len(recommended) + 2}): ").strip()
+                        choice = input(f"\n[#] Select recommendation (1-{len(recommended) + 2}): ").strip()
                         choice_num = int(choice)
                         
                         if 1 <= choice_num <= len(recommended):
@@ -177,12 +178,12 @@ class EC2InstanceManager:
                             return self._manual_selection_with_analysis(analysis_results)
                         
                         else:
-                            print(f"❌ Invalid choice. Please enter 1-{len(recommended) + 2}")
+                            print(f"{Symbols.ERROR} Invalid choice. Please enter 1-{len(recommended) + 2}")
                             
                     except ValueError:
-                        print("❌ Invalid input. Please enter a number.")
+                        print("[ERROR] Invalid input. Please enter a number.")
             else:
-                print(f"\n⚠️  No instance types recommended for Spot pricing.")
+                print(f"\n{Symbols.WARN}  No instance types recommended for Spot pricing.")
                 print(f"   Using {default_type} with On-Demand pricing.")
                 return default_type, 'on-demand'
 
@@ -210,7 +211,7 @@ class EC2InstanceManager:
             # Validate instance type
             is_valid, validation_msg = self.instance_config.validate_instance_type(instance_type)
             if not is_valid:
-                return False, f"❌ {validation_msg}"
+                return False, f"{Symbols.ERROR} {validation_msg}"
             
             ec2_client = boto3.client(
                 'ec2',
@@ -236,7 +237,7 @@ class EC2InstanceManager:
             prices = response.get('SpotPriceHistory', [])
             
             if not prices:
-                return False, f"❌ No spot pricing data available for {instance_type} in {region}"
+                return False, f"{Symbols.ERROR} No spot pricing data available for {instance_type} in {region}"
             
             # Calculate metrics using dynamic configuration
             price_values = [float(p['SpotPrice']) for p in prices]
@@ -303,7 +304,7 @@ class EC2InstanceManager:
             return is_recommended, report
             
         except Exception as e:
-            error_msg = f"❌ Analysis failed for {instance_type}: {str(e)}"
+            error_msg = f"{Symbols.ERROR} Analysis failed for {instance_type}: {str(e)}"
             self.log_operation('ERROR', error_msg)
             return False, error_msg
             
@@ -319,7 +320,7 @@ class EC2InstanceManager:
         instance_specs = self.instance_config.get_instance_specs(instance_type)
         family_specs = self.instance_config.get_family_specs(instance_specs.get('family'))
         
-        status = "✅ RECOMMENDED" if is_recommended else "❌ NOT RECOMMENDED"
+        status = f"{Symbols.OK} RECOMMENDED" if is_recommended else f"{Symbols.ERROR} NOT RECOMMENDED"
         status_color = "🟢" if is_recommended else "🔴"
         
         # Get cost analysis
@@ -338,7 +339,7 @@ class EC2InstanceManager:
     │ Network Performance  │ {instance_specs.get('network_performance', 'Unknown')[:14]:<14}  │ EBS: {str(instance_specs.get('ebs_optimized', False)):<11} │ Size: {instance_specs.get('size', 'N/A'):<10}   │
     └──────────────────────┴──────────────────┴──────────────────┴──────────────────┘
 
-    📊 PRICING ANALYSIS
+    [STATS] PRICING ANALYSIS
     ┌──────────────────────┬──────────────────┬──────────────────┬──────────────────┐
     │ Time Period          │ Spot Cost        │ On-Demand Cost   │ Savings          │
     ├──────────────────────┼──────────────────┼──────────────────┼──────────────────┤
@@ -352,7 +353,7 @@ class EC2InstanceManager:
     │ 7-Day Range          │ ${min_price:.4f}-{max_price:.4f}   │ Fixed Rate       │ Max: {max_savings:<8.1f}% │
     └──────────────────────┴──────────────────┴──────────────────┴──────────────────┘
 
-    🎯 RISK & AVAILABILITY METRICS
+    [TARGET] RISK & AVAILABILITY METRICS
     ┌──────────────────────┬──────────────────┬──────────────────┬──────────────────┐
     │ Metric               │ Current Value    │ Threshold        │ Status           │
     ├──────────────────────┼──────────────────┼──────────────────┼──────────────────┤
@@ -368,7 +369,7 @@ class EC2InstanceManager:
         # Add AZ breakdown if multiple AZs
         if len(az_metrics) > 1:
             report += f"""
-    🌍 AVAILABILITY ZONE BREAKDOWN
+    {Symbols.REGION} AVAILABILITY ZONE BREAKDOWN
     ┌─────────────────┬──────────────────┬──────────────────┬──────────────────┐
     │ Zone            │ Current Price    │ Avg Price (7d)   │ Monthly Savings  │
     ├─────────────────┼──────────────────┼──────────────────┼──────────────────┤"""
@@ -385,43 +386,43 @@ class EC2InstanceManager:
         # Recommendation summary
         report += f"""
 
-    💡 RECOMMENDATION SUMMARY
+    {Symbols.TIP} RECOMMENDATION SUMMARY
     {status}
 
-    📋 Cost Analysis:"""
+    {Symbols.LIST} Cost Analysis:"""
         
         if is_recommended:
             monthly_savings = cost_analysis.get('monthly_cost', on_demand_price * 730) - (current_price * 730)
             annual_savings = cost_analysis.get('annual_cost', on_demand_price * 24 * 365) - (current_price * 24 * 365)
             
             report += f"""
-    ✅ All thresholds met
-    💰 Cost Savings:
+    {Symbols.OK} All thresholds met
+    {Symbols.COST} Cost Savings:
         • Monthly: ${monthly_savings:.2f} ({current_savings:.1f}% reduction)
         • Annual: ${annual_savings:.2f}
-    ✅ Multi-AZ: {len(az_metrics)} zones available
-    ✅ Low risk: {interruption_rate:.1%} interruption rate
-    ✅ Stable: {price_volatility:.1%} price volatility
-    ✅ Confident: {availability_score:.1%} score
+    {Symbols.OK} Multi-AZ: {len(az_metrics)} zones available
+    {Symbols.OK} Low risk: {interruption_rate:.1%} interruption rate
+    {Symbols.OK} Stable: {price_volatility:.1%} price volatility
+    {Symbols.OK} Confident: {availability_score:.1%} score
 
-    🚀 RECOMMENDATION: Use SPOT instances for cost optimization!"""
+    {Symbols.START} RECOMMENDATION: Use SPOT instances for cost optimization!"""
         else:
             failed_checks = []
             if len(az_metrics) < thresholds['min_availability_zones']:
-                failed_checks.append(f"   ❌ AZ coverage: {len(az_metrics)} < {thresholds['min_availability_zones']}")
+                failed_checks.append(f"   {Symbols.ERROR} AZ coverage: {len(az_metrics)} < {thresholds['min_availability_zones']}")
             if current_savings < thresholds['min_savings_percentage']:
-                failed_checks.append(f"   ❌ Savings: {current_savings:.1f}% < {thresholds['min_savings_percentage']}%")
+                failed_checks.append(f"   {Symbols.ERROR} Savings: {current_savings:.1f}% < {thresholds['min_savings_percentage']}%")
             if interruption_rate > thresholds['max_interruption_rate']:
-                failed_checks.append(f"   ❌ Interruption: {interruption_rate:.1%} > {thresholds['max_interruption_rate']:.1%}")
+                failed_checks.append(f"   {Symbols.ERROR} Interruption: {interruption_rate:.1%} > {thresholds['max_interruption_rate']:.1%}")
             if availability_score < thresholds['min_confidence_score']:
-                failed_checks.append(f"   ❌ Confidence: {availability_score:.1%} < {thresholds['min_confidence_score']:.1%}")
+                failed_checks.append(f"   {Symbols.ERROR} Confidence: {availability_score:.1%} < {thresholds['min_confidence_score']:.1%}")
             
             report += "\n".join(failed_checks)
-            report += f"\n\n⚠️  RECOMMENDATION: Use ON-DEMAND instances for reliability."
+            report += f"\n\n{Symbols.WARN}  RECOMMENDATION: Use ON-DEMAND instances for reliability."
 
         report += f"""
 
-    📊 Analysis Info:
+    [STATS] Analysis Info:
     • Version: {self.instance_config.config_data.get('metadata', {}).get('version', 'Unknown')}
     • Data: {data_points} samples over 7 days
     • Region: {region}
@@ -447,17 +448,17 @@ class EC2InstanceManager:
         """Get confidence status for analysis"""
         confidence = self._get_confidence_level(data_points, az_count)
         if confidence in ["Very High", "High"]:
-            return "✅ RELIABLE"
+            return "[OK] RELIABLE"
         elif confidence == "Medium":
-            return "⚠️  MODERATE"
+            return "[WARN]  MODERATE"
         else:
-            return "❌ LIMITED"
+            return "[ERROR] LIMITED"
     def _get_threshold_status(self, value: float, threshold: float, higher_is_better: bool) -> str:
         """Get threshold status indicator"""
         if higher_is_better:
-            return "✅ PASS" if value >= threshold else "❌ FAIL"
+            return "[OK] PASS" if value >= threshold else "[ERROR] FAIL"
         else:
-            return "✅ PASS" if value <= threshold else "❌ FAIL"
+            return "[OK] PASS" if value <= threshold else "[ERROR] FAIL"
 
     def _create_detailed_spot_report(self, instance_type: str, region: str, current_price: float, 
                                     avg_price: float, min_price: float, max_price: float,
@@ -467,14 +468,14 @@ class EC2InstanceManager:
                                     is_recommended: bool) -> str:
         """Create a detailed spot analysis report with formatted tables"""
         
-        status = "✅ RECOMMENDED" if is_recommended else "❌ NOT RECOMMENDED"
+        status = "[OK] RECOMMENDED" if is_recommended else "[ERROR] NOT RECOMMENDED"
         status_color = "🟢" if is_recommended else "🔴"
         
         report = f"""
     {status_color} SPOT ANALYSIS REPORT FOR {instance_type.upper()} IN {region.upper()}
     {'='*80}
 
-    📊 PRICING OVERVIEW
+    [STATS] PRICING OVERVIEW
     ┌─────────────────────────┬─────────────────┬─────────────────┬─────────────────┐
     │ Metric                  │ Current         │ Average (7d)    │ Range (7d)      │
     ├─────────────────────────┼─────────────────┼─────────────────┼─────────────────┤
@@ -484,7 +485,7 @@ class EC2InstanceManager:
     │ Monthly Savings (est.)  │ ${(on_demand_price - current_price) * 730:>10.2f}     │ ${(on_demand_price - avg_price) * 730:>10.2f}     │ Est. 730hrs     │
     └─────────────────────────┴─────────────────┴─────────────────┴─────────────────┘
 
-    🎯 AVAILABILITY & RISK METRICS
+    [TARGET] AVAILABILITY & RISK METRICS
     ┌─────────────────────────┬─────────────────┬─────────────────┬─────────────────┐
     │ Metric                  │ Value           │ Rating          │ Impact          │
     ├─────────────────────────┼─────────────────┼─────────────────┼─────────────────┤
@@ -499,7 +500,7 @@ class EC2InstanceManager:
         # Add AZ-specific breakdown if multiple AZs available
         if len(az_metrics) > 1:
             report += f"""
-    🌍 AVAILABILITY ZONE BREAKDOWN
+    {Symbols.REGION} AVAILABILITY ZONE BREAKDOWN
     ┌─────────────────────┬─────────────────┬─────────────────┬─────────────────┐
     │ Availability Zone   │ Current Price   │ Avg Price (7d)  │ Savings vs OD   │
     ├─────────────────────┼─────────────────┼─────────────────┼─────────────────┤"""
@@ -515,37 +516,37 @@ class EC2InstanceManager:
         # Add recommendation summary
         report += f"""
 
-    💡 RECOMMENDATION SUMMARY
+    {Symbols.TIP} RECOMMENDATION SUMMARY
     {status}
 
-    📋 Key Factors:
+    {Symbols.LIST} Key Factors:
     """
         
         if is_recommended:
-            report += f"""   ✅ Excellent savings potential: {current_savings:.1f}% below on-demand
-    ✅ Available across {len(az_metrics)} availability zones
-    ✅ Low interruption risk: {interruption_rate:.1%}
-    ✅ Good price stability: {price_volatility:.1%} volatility
-    ✅ High availability score: {availability_score:.1%}
+            report += f"""   {Symbols.OK} Excellent savings potential: {current_savings:.1f}% below on-demand
+    {Symbols.OK} Available across {len(az_metrics)} availability zones
+    {Symbols.OK} Low interruption risk: {interruption_rate:.1%}
+    {Symbols.OK} Good price stability: {price_volatility:.1%} volatility
+    {Symbols.OK} High availability score: {availability_score:.1%}
 
-    🚀 RECOMMENDED ACTION: Use SPOT instances for significant cost savings!"""
+    {Symbols.START} RECOMMENDED ACTION: Use SPOT instances for significant cost savings!"""
         else:
             reasons = []
             if current_savings < 15:
-                reasons.append(f"   ❌ Low savings potential: {current_savings:.1f}% (minimum 15% recommended)")
+                reasons.append(f"   {Symbols.ERROR} Low savings potential: {current_savings:.1f}% (minimum 15% recommended)")
             if len(az_metrics) < 2:
-                reasons.append(f"   ❌ Limited AZ availability: {len(az_metrics)} zone(s) (minimum 2 recommended)")
+                reasons.append(f"   {Symbols.ERROR} Limited AZ availability: {len(az_metrics)} zone(s) (minimum 2 recommended)")
             if interruption_rate > 0.12:
-                reasons.append(f"   ❌ High interruption risk: {interruption_rate:.1%} (maximum 12% recommended)")
+                reasons.append(f"   {Symbols.ERROR} High interruption risk: {interruption_rate:.1%} (maximum 12% recommended)")
             if availability_score < 0.6:
-                reasons.append(f"   ❌ Low availability score: {availability_score:.1%} (minimum 60% recommended)")
+                reasons.append(f"   {Symbols.ERROR} Low availability score: {availability_score:.1%} (minimum 60% recommended)")
             
             report += "\n".join(reasons)
-            report += f"\n\n⚠️  RECOMMENDED ACTION: Consider ON-DEMAND instances for better reliability."
+            report += f"\n\n{Symbols.WARN}  RECOMMENDED ACTION: Consider ON-DEMAND instances for better reliability."
 
         report += f"""
 
-    📊 Analysis based on {data_points} data points over 7 days in {region}
+    [STATS] Analysis based on {data_points} data points over 7 days in {region}
     🕒 Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} UTC
     """
 
@@ -635,11 +636,11 @@ class EC2InstanceManager:
                     type_index += 1
             
             print(f"\n{'='*70}")
-            print(f"📊 Total: {len(all_types)} instance types from {len(categories)} categories")
+            print(f"{Symbols.STATS} Total: {len(all_types)} instance types from {len(categories)} categories")
             
             while True:
                 try:
-                    choice = input(f"\n🔢 Select instance type (1-{len(all_types)}) or press Enter for smart analysis: ").strip()
+                    choice = input(f"\n[#] Select instance type (1-{len(all_types)}) or press Enter for smart analysis: ").strip()
                     
                     if not choice:
                         # Use first available type as default for smart analysis
@@ -654,17 +655,17 @@ class EC2InstanceManager:
                         specs = self.instance_config.get_instance_specs(selected_type)
                         cost_analysis = self.instance_config.get_cost_analysis(selected_type, 'us-east-1')  # Default region
                         
-                        print(f"\n✅ Selected: {selected_type}")
+                        print(f"\n{Symbols.OK} Selected: {selected_type}")
                         print(f"   💻 {specs.get('vcpus')} vCPUs, {specs.get('memory_gb')}GB RAM")
-                        print(f"   💰 ~${cost_analysis.get('monthly_cost', 0):.2f}/month (us-east-1)")
+                        print(f"   {Symbols.COST} ~${cost_analysis.get('monthly_cost', 0):.2f}/month (us-east-1)")
                         
                         self.log_operation('INFO', f"User selected instance type: {selected_type}")
                         return selected_type
                     else:
-                        print(f"❌ Invalid choice. Please enter 1-{len(all_types)}")
+                        print(f"{Symbols.ERROR} Invalid choice. Please enter 1-{len(all_types)}")
                         
                 except ValueError:
-                    print("❌ Invalid input. Please enter a number.")
+                    print("[ERROR] Invalid input. Please enter a number.")
                     
         except Exception as e:
             self.log_operation('ERROR', f"Error in dynamic instance menu: {e}")
@@ -836,7 +837,7 @@ class EC2InstanceManager:
                 prices = response.get('SpotPriceHistory', [])
                 
                 if not prices:
-                    return False, f"❌ No spot pricing data available for {instance_type}"
+                    return False, f"{Symbols.ERROR} No spot pricing data available for {instance_type}"
                 
                 current_price = float(prices[0]['SpotPrice'])
                 avg_price = sum(float(p['SpotPrice']) for p in prices) / len(prices)
@@ -846,41 +847,41 @@ class EC2InstanceManager:
                 is_recommended = len(available_azs) >= 2 and current_price > 0
                 
                 report = f"""
-    📊 Spot Analysis for {instance_type}:
+    [STATS] Spot Analysis for {instance_type}:
     Current Price: ${current_price:.4f}/hour
     Average Price: ${avg_price:.4f}/hour
     Available AZs: {len(available_azs)} ({', '.join(available_azs[:3])})
-    Status: {'✅ RECOMMENDED' if is_recommended else '❌ NOT RECOMMENDED'}
+    Status: {f'{Symbols.OK} RECOMMENDED' if is_recommended else f'{Symbols.ERROR} NOT RECOMMENDED'}
     """
                 
                 return is_recommended, report
                 
             except Exception as e:
-                return False, f"❌ Analysis failed for {instance_type}: {str(e)}"
+                return False, f"{Symbols.ERROR} Analysis failed for {instance_type}: {str(e)}"
 
     def _analyze_and_confirm_instance(self, instance_type: str) -> Tuple[str, str]:
             """Analyze a specific instance type and get user confirmation"""
             sample_creds = self._get_sample_credentials()
             if not sample_creds:
-                print("❌ No credentials available for analysis.")
+                print("[ERROR] No credentials available for analysis.")
                 capacity_type = self.select_capacity_type_ec2()
                 return instance_type, capacity_type
             
             access_key, secret_key, region = sample_creds
             
-            print(f"\n🔍 Analyzing {instance_type} in {region}...")
+            print(f"\n{Symbols.SCAN} Analyzing {instance_type} in {region}...")
             
             is_available, report = self._simple_spot_analysis(instance_type, region, access_key, secret_key)
             
             print(report)
             
             if is_available:
-                print(f"\n✅ {instance_type} is recommended for Spot pricing!")
-                use_spot = input("🚀 Use Spot pricing? (Y/n): ").lower().strip()
+                print(f"\n{Symbols.OK} {instance_type} is recommended for Spot pricing!")
+                use_spot = input("[START] Use Spot pricing? (Y/n): ").lower().strip()
                 if use_spot != 'n':
                     return instance_type, 'spot'
             else:
-                print(f"\n⚠️  {instance_type} is not recommended for Spot pricing.")
+                print(f"\n{Symbols.WARN}  {instance_type} is not recommended for Spot pricing.")
             
             capacity_type = self.select_capacity_type_ec2()
             return instance_type, capacity_type
@@ -894,15 +895,15 @@ class EC2InstanceManager:
                 custom_type = input("Enter instance type (e.g., t3.medium): ").strip()
                 
                 if not custom_type:
-                    print("❌ Please enter a valid instance type.")
+                    print("[ERROR] Please enter a valid instance type.")
                     continue
                 
                 # Basic validation
                 if '.' not in custom_type:
-                    print("❌ Invalid format. Use format like 't3.medium'")
+                    print("[ERROR] Invalid format. Use format like 't3.medium'")
                     continue
                 
-                print(f"\n🔍 Analyze {custom_type} for spot availability? (Y/n): ", end="")
+                print(f"\n{Symbols.SCAN} Analyze {custom_type} for spot availability? (Y/n): ", end="")
                 analyze = input().lower().strip()
                 
                 if analyze != 'n':
@@ -917,12 +918,12 @@ class EC2InstanceManager:
             print("=" * 40)
             
             for i, result in enumerate(analysis_results, 1):
-                status = "✅" if result['available'] else "❌"
+                status = "[OK]" if result['available'] else f"{Symbols.ERROR}"
                 print(f"  {i}. {result['instance_type']} {status}")
             
             while True:
                 try:
-                    choice = input(f"\n🔢 Select instance type (1-{len(analysis_results)}): ").strip()
+                    choice = input(f"\n[#] Select instance type (1-{len(analysis_results)}): ").strip()
                     choice_num = int(choice)
                     
                     if 1 <= choice_num <= len(analysis_results):
@@ -930,19 +931,19 @@ class EC2InstanceManager:
                         selected_type = selected_result['instance_type']
                         
                         if selected_result['available']:
-                            print(f"\n✅ {selected_type} is recommended for Spot pricing.")
+                            print(f"\n{Symbols.OK} {selected_type} is recommended for Spot pricing.")
                             capacity_type = 'spot'
                         else:
-                            print(f"\n⚠️  {selected_type} is not recommended for Spot pricing.")
+                            print(f"\n{Symbols.WARN}  {selected_type} is not recommended for Spot pricing.")
                             capacity_type = self.select_capacity_type_ec2()
                         
                         return selected_type, capacity_type
                     
                     else:
-                        print(f"❌ Invalid choice. Please enter 1-{len(analysis_results)}")
+                        print(f"{Symbols.ERROR} Invalid choice. Please enter 1-{len(analysis_results)}")
                         
                 except ValueError:
-                    print("❌ Invalid input. Please enter a number.")
+                    print("[ERROR] Invalid input. Please enter a number.")
 
     def generate_random_suffix(self, length=4):
         """Generate random alphanumeric suffix for unique naming"""
@@ -955,7 +956,6 @@ class EC2InstanceManager:
             self.log_filename = f"ec2_creation_log_{self.execution_timestamp}.log"
             
             # Create a file handler for detailed logging
-            import logging
             
             # Create logger for detailed operations
             self.operation_logger = logging.getLogger('ec2_operations')
@@ -1042,9 +1042,9 @@ class EC2InstanceManager:
                         file_timestamps.append((file_path, timestamp, timestamp_str))
                         self.logger.info(f"  📄 {file_path} (timestamp: {timestamp_str})")
                     except ValueError as e:
-                        self.logger.warning(f"  ⚠️  {file_path} has invalid timestamp format: {e}")
+                        self.logger.warning(f"  {Symbols.WARN}  {file_path} has invalid timestamp format: {e}")
                 else:
-                    self.logger.warning(f"  ⚠️  {file_path} doesn't match expected timestamp pattern")
+                    self.logger.warning(f"  {Symbols.WARN}  {file_path} doesn't match expected timestamp pattern")
             
             if not file_timestamps:
                 raise ValueError("No valid credential files with proper timestamp format found")
@@ -1055,13 +1055,13 @@ class EC2InstanceManager:
             # Get the latest file
             latest_file, latest_timestamp, latest_timestamp_str = file_timestamps[0]
             
-            self.logger.info(f"🎯 Selected latest file: {latest_file}")
-            self.logger.info(f"📅 File timestamp: {latest_timestamp_str}")
-            self.logger.info(f"📅 Parsed timestamp: {latest_timestamp}")
+            self.logger.info(f"{Symbols.TARGET} Selected latest file: {latest_file}")
+            self.logger.info(f"{Symbols.DATE} File timestamp: {latest_timestamp_str}")
+            self.logger.info(f"{Symbols.DATE} Parsed timestamp: {latest_timestamp}")
             
             # Show what files were skipped
             if len(file_timestamps) > 1:
-                self.logger.info("📋 Other files found (older):")
+                self.logger.info("[LIST] Other files found (older):")
                 for file_path, timestamp, timestamp_str in file_timestamps[1:]:
                     self.logger.info(f"  📄 {file_path} (timestamp: {timestamp_str})")
             
@@ -1081,11 +1081,11 @@ class EC2InstanceManager:
             with open(self.credentials_file, 'r', encoding='utf-8') as f:
                 self.credentials_data = json.load(f)
             
-            self.logger.info(f"✅ Credentials loaded from: {self.credentials_file}")
+            self.logger.info(f"{Symbols.OK} Credentials loaded from: {self.credentials_file}")
             
             # Extract and log metadata from credentials file
             if 'created_date' in self.credentials_data:
-                self.logger.info(f"📅 Credentials file created: {self.credentials_data['created_date']} {self.credentials_data.get('created_time', '')}")
+                self.logger.info(f"{Symbols.DATE} Credentials file created: {self.credentials_data['created_date']} {self.credentials_data.get('created_time', '')}")
             if 'created_by' in self.credentials_data:
                 self.logger.info(f"👤 Credentials file created by: {self.credentials_data['created_by']}")
             if 'total_users' in self.credentials_data:
@@ -1098,8 +1098,8 @@ class EC2InstanceManager:
             with open(self.ami_mapping_file, 'r', encoding='utf-8') as f:
                 self.ami_config = json.load(f)
             
-            self.logger.info(f"✅ AMI mappings loaded from: {self.ami_mapping_file}")
-            self.logger.info(f"🌍 Supported regions: {list(self.ami_config['region_ami_mapping'].keys())}")
+            self.logger.info(f"{Symbols.OK} AMI mappings loaded from: {self.ami_mapping_file}")
+            self.logger.info(f"{Symbols.REGION} Supported regions: {list(self.ami_config['region_ami_mapping'].keys())}")
             
         except FileNotFoundError as e:
             self.logger.error(f"Configuration file error: {e}")
@@ -1128,7 +1128,7 @@ class EC2InstanceManager:
                     with open(self.userdata_file, 'r', encoding=encoding) as f:
                         user_data_content = f.read()
                     encoding_used = encoding
-                    self.logger.info(f"✅ Successfully read user data script using {encoding} encoding")
+                    self.logger.info(f"{Symbols.OK} Successfully read user data script using {encoding} encoding")
                     break
                 except UnicodeDecodeError as e:
                     self.logger.debug(f"Failed to read with {encoding} encoding: {e}")
@@ -1178,7 +1178,7 @@ class EC2InstanceManager:
         
         self.log_operation('INFO', f"Displaying {len(accounts)} available accounts for selection")
         
-        print(f"\n🏦 Available AWS Accounts ({len(accounts)} total):")
+        print(f"\n{Symbols.ACCOUNT} Available AWS Accounts ({len(accounts)} total):")
         print("=" * 80)
         
         total_users = 0
@@ -1201,7 +1201,7 @@ class EC2InstanceManager:
             print(f"      📧 Email: {account_email}")
             print(f"      🆔 Account ID: {account_id}")
             print(f"      👥 Users: {user_count}")
-            print(f"      🌍 Regions: {', '.join(sorted(account_regions))}")
+            print(f"      {Symbols.REGION} Regions: {', '.join(sorted(account_regions))}")
             
             # Log account details
             self.log_operation('INFO', f"Account {i}: {account_name} ({account_id}) - {user_count} users in regions: {', '.join(sorted(account_regions))}")
@@ -1219,14 +1219,14 @@ class EC2InstanceManager:
             print()
         
         print("=" * 80)
-        print(f"📊 Summary:")
-        print(f"   📈 Total accounts: {len(accounts)}")
+        print(f"{Symbols.STATS} Summary:")
+        print(f"   [UP] Total accounts: {len(accounts)}")
         print(f"   👥 Total users: {total_users}")
-        print(f"   🌍 All regions: {', '.join(sorted(regions_used))}")
+        print(f"   {Symbols.REGION} All regions: {', '.join(sorted(regions_used))}")
         
         self.log_operation('INFO', f"Account summary: {len(accounts)} accounts, {total_users} total users, regions: {', '.join(sorted(regions_used))}")
         
-        print(f"\n📝 Selection Options:")
+        print(f"\n{Symbols.LOG} Selection Options:")
         print(f"   • Single accounts: 1,3,5")
         print(f"   • Ranges: 1-{len(accounts)} (accounts 1 through {len(accounts)})")
         print(f"   • Mixed: 1-2,4 (accounts 1, 2, and 4)")
@@ -1234,7 +1234,7 @@ class EC2InstanceManager:
         print(f"   • Cancel: 'cancel' or 'quit'")
         
         while True:
-            selection = input(f"\n🔢 Select accounts to process: ").strip()
+            selection = input(f"\n[#] Select accounts to process: ").strip()
             
             self.log_operation('INFO', f"User input for account selection: '{selection}'")
             
@@ -1274,37 +1274,37 @@ class EC2InstanceManager:
                         })
                         selected_users += user_count
                     
-                    print(f"\n✅ Selected {len(selected_indices)} accounts ({selected_users} total users):")
+                    print(f"\n{Symbols.OK} Selected {len(selected_indices)} accounts ({selected_users} total users):")
                     print("-" * 60)
                     for i, account_info in enumerate(selected_accounts, 1):
                         print(f"   {i}. {account_info['name']}")
                         print(f"      🆔 {account_info['id']}")
                         print(f"      👥 {account_info['users']} users")
-                        print(f"      🌍 {', '.join(sorted(account_info['regions']))}")
+                        print(f"      {Symbols.REGION} {', '.join(sorted(account_info['regions']))}")
                     
                     print("-" * 60)
-                    print(f"📊 Total: {len(selected_indices)} accounts, {selected_users} users, {len(selected_regions)} regions")
+                    print(f"{Symbols.STATS} Total: {len(selected_indices)} accounts, {selected_users} users, {len(selected_regions)} regions")
                     
                     # Log selection details
                     self.log_operation('INFO', f"Selected accounts: {[acc['name'] for acc in selected_accounts]}")
                     self.log_operation('INFO', f"Selection summary: {len(selected_indices)} accounts, {selected_users} users, {len(selected_regions)} regions")
                     
-                    confirm = input(f"\n🚀 Proceed with these {len(selected_indices)} accounts? (y/N): ").lower().strip()
+                    confirm = input(f"\n{Symbols.START} Proceed with these {len(selected_indices)} accounts? (y/N): ").lower().strip()
                     self.log_operation('INFO', f"User confirmation for selection: '{confirm}'")
                     
                     if confirm == 'y':
                         return selected_indices
                     else:
-                        print("❌ Selection cancelled, please choose again.")
+                        print(f"{Symbols.ERROR} Selection cancelled, please choose again.")
                         self.log_operation('INFO', "User cancelled selection, requesting new input")
                         continue
                 else:
-                    print("❌ No valid accounts selected. Please try again.")
+                    print(f"{Symbols.ERROR} No valid accounts selected. Please try again.")
                     self.log_operation('WARNING', "No valid accounts selected from user input")
                     continue
                     
             except ValueError as e:
-                print(f"❌ Invalid selection: {e}")
+                print(f"{Symbols.ERROR} Invalid selection: {e}")
                 print("   Please use format like: 1,3,5 or 1-5 or 1-3,5,7-9")
                 self.log_operation('ERROR', f"Invalid account selection format: {e}")
                 continue
@@ -1539,17 +1539,17 @@ class EC2InstanceManager:
 
     def ask_for_spot_analysis(self):
         """Ask user if they want Spot analysis or manual selection"""
-        print(f"\n🔍 Spot Instance Analysis")
+        print(f"\n{Symbols.SCAN} Spot Instance Analysis")
         print("=" * 60)
         print("Would you like to analyze Spot instance availability and pricing?")
         print("")
-        print("📊 Spot Analysis Benefits:")
+        print("[STATS] Spot Analysis Benefits:")
         print("   • Checks current Spot prices vs On-Demand pricing")
         print("   • Analyzes interruption frequency in each region")
         print("   • Provides intelligent recommendations per region")
         print("   • Supports mixed strategy (Spot where safe, On-Demand elsewhere)")
         print("")
-        print("📋 Options:")
+        print("[LIST] Options:")
         print("   1. Yes - Perform Spot analysis and get recommendations")
         print("   2. No - I'll choose capacity type manually")
         print("=" * 60)
@@ -1567,13 +1567,13 @@ class EC2InstanceManager:
                     self.log_operation('INFO', "User chose manual capacity selection")
                     return False
                 else:
-                    print("❌ Please enter 1 or 2")
+                    print(f"{Symbols.ERROR} Please enter 1 or 2")
                     self.log_operation('WARNING', f"Invalid spot analysis choice: {choice}")
             except ValueError:
-                print("❌ Please enter a valid number")
+                print("[ERROR] Please enter a valid number")
     def select_capacity_type_manual(self):
         """Allow user to manually select capacity type without analysis"""
-        print(f"\n⚡ Instance Capacity Type Selection")
+        print(f"\n[LIGHTNING] Instance Capacity Type Selection")
         print("=" * 60)
         print("Available capacity types:")
         print("  1. On-Demand - Standard pricing, guaranteed availability")
@@ -1593,10 +1593,10 @@ class EC2InstanceManager:
                     self.log_operation('INFO', "User selected Spot capacity (manual)")
                     return 'spot'
                 else:
-                    print("❌ Please enter 1 or 2")
+                    print(f"{Symbols.ERROR} Please enter 1 or 2")
                     self.log_operation('WARNING', f"Invalid manual capacity choice: {choice}")
             except ValueError:
-                print("❌ Please enter a valid number")
+                print("[ERROR] Please enter a valid number")
     def get_spot_price_history(self, ec2_client, instance_type, region, days=7):
         """Get Spot price history to analyze price stability"""
         try:
@@ -1774,9 +1774,9 @@ class EC2InstanceManager:
                     # Check price stability (less than 15% volatility is good)
                     if price_analysis['volatility_percent'] < 15:
                         analysis['confidence_score'] += 30
-                        analysis['reasoning'].append(f"✅ Price stable (volatility: {price_analysis['volatility_percent']:.1f}%)")
+                        analysis['reasoning'].append(f"{Symbols.OK} Price stable (volatility: {price_analysis['volatility_percent']:.1f}%)")
                     else:
-                        analysis['reasoning'].append(f"⚠️ Price volatile (volatility: {price_analysis['volatility_percent']:.1f}%)")
+                        analysis['reasoning'].append(f"{Symbols.WARN} Price volatile (volatility: {price_analysis['volatility_percent']:.1f}%)")
             
             # Check capacity availability
             capacity_info = self.check_spot_capacity_availability(ec2_client, instance_type, region)
@@ -1785,12 +1785,12 @@ class EC2InstanceManager:
             available_azs = [az for az, status in capacity_info.items() if status == 'available']
             if len(available_azs) >= 2:  # At least 2 AZs with capacity
                 analysis['confidence_score'] += 25
-                analysis['reasoning'].append(f"✅ Capacity available in {len(available_azs)} AZs")
+                analysis['reasoning'].append(f"{Symbols.OK} Capacity available in {len(available_azs)} AZs")
             elif len(available_azs) == 1:
                 analysis['confidence_score'] += 10
-                analysis['reasoning'].append(f"⚠️ Capacity available in only {len(available_azs)} AZ")
+                analysis['reasoning'].append(f"{Symbols.WARN} Capacity available in only {len(available_azs)} AZ")
             else:
-                analysis['reasoning'].append("❌ No Spot capacity available")
+                analysis['reasoning'].append(f"{Symbols.ERROR} No Spot capacity available")
             
             # Compare with On-Demand pricing
             ondemand_price = self.get_ondemand_price(instance_type, region)
@@ -1806,29 +1806,29 @@ class EC2InstanceManager:
                 
                 if savings_percent > 50:  # More than 50% savings
                     analysis['confidence_score'] += 25
-                    analysis['reasoning'].append(f"✅ Excellent savings: {savings_percent:.1f}%")
+                    analysis['reasoning'].append(f"{Symbols.OK} Excellent savings: {savings_percent:.1f}%")
                 elif savings_percent > 30:  # More than 30% savings
                     analysis['confidence_score'] += 15
-                    analysis['reasoning'].append(f"✅ Good savings: {savings_percent:.1f}%")
+                    analysis['reasoning'].append(f"{Symbols.OK} Good savings: {savings_percent:.1f}%")
                 else:
-                    analysis['reasoning'].append(f"⚠️ Limited savings: {savings_percent:.1f}%")
+                    analysis['reasoning'].append(f"{Symbols.WARN} Limited savings: {savings_percent:.1f}%")
             
             # Make recommendation based on confidence score
             if analysis['confidence_score'] >= 60:
                 analysis['recommendation'] = 'spot'
-                analysis['reasoning'].append(f"🎯 Recommendation: USE SPOT (confidence: {analysis['confidence_score']}/100)")
+                analysis['reasoning'].append(f"{Symbols.TARGET} Recommendation: USE SPOT (confidence: {analysis['confidence_score']}/100)")
             elif analysis['confidence_score'] >= 35:
                 analysis['recommendation'] = 'spot-with-caution'
-                analysis['reasoning'].append(f"⚠️ Recommendation: SPOT WITH CAUTION (confidence: {analysis['confidence_score']}/100)")
+                analysis['reasoning'].append(f"{Symbols.WARN} Recommendation: SPOT WITH CAUTION (confidence: {analysis['confidence_score']}/100)")
             else:
                 analysis['recommendation'] = 'on-demand'
-                analysis['reasoning'].append(f"🛡️ Recommendation: USE ON-DEMAND (confidence: {analysis['confidence_score']}/100)")
+                analysis['reasoning'].append(f"{Symbols.PROTECTED} Recommendation: USE ON-DEMAND (confidence: {analysis['confidence_score']}/100)")
             
             return analysis
             
         except Exception as e:
             self.log_operation('ERROR', f"Error in Spot analysis: {e}")
-            analysis['reasoning'].append(f"❌ Analysis failed: {e}")
+            analysis['reasoning'].append(f"{Symbols.ERROR} Analysis failed: {e}")
             return analysis
         
     def display_spot_analysis_menu(self, selected_accounts, instance_type):
@@ -1840,7 +1840,7 @@ class EC2InstanceManager:
             for user_data in account_data.get('users', []):
                 regions_to_analyze.add(user_data.get('region', 'us-east-1'))
         
-        print(f"\n🔍 Enhanced Spot Instance Analysis")
+        print(f"\n{Symbols.SCAN} Enhanced Spot Instance Analysis")
         print("=" * 80)
         print(f"Requested Instance Type: {instance_type}")
         print(f"Regions to analyze: {', '.join(sorted(regions_to_analyze))}")
@@ -1864,7 +1864,7 @@ class EC2InstanceManager:
         }
         
         for region in regions_to_analyze:
-            print(f"\n🌍 Analyzing {region}...")
+            print(f"\n{Symbols.REGION} Analyzing {region}...")
             
             # Create a temporary client for analysis
             try:
@@ -1879,7 +1879,7 @@ class EC2InstanceManager:
                         break
                 
                 if not sample_user:
-                    print(f"   ❌ No user credentials found for {region}")
+                    print(f"   {Symbols.ERROR} No user credentials found for {region}")
                     continue
                     
                 ec2_client = self.create_ec2_client(
@@ -1894,7 +1894,7 @@ class EC2InstanceManager:
                 # If spot is not recommended, analyze alternatives
                 alternatives_analysis = {}
                 if analysis['recommendation'] in ['on-demand', 'not-available']:
-                    print(f"   🔄 Analyzing alternative instance types...")
+                    print(f"   {Symbols.SCAN} Analyzing alternative instance types...")
                     
                     alternatives = instance_alternatives.get(instance_type, [])
                     for alt_instance in alternatives[:3]:  # Check top 3 alternatives
@@ -1902,9 +1902,9 @@ class EC2InstanceManager:
                             alt_analysis = self.should_use_spot_instance(ec2_client, alt_instance, region)
                             if alt_analysis['recommendation'] == 'spot':
                                 alternatives_analysis[alt_instance] = alt_analysis
-                                print(f"      ✅ {alt_instance}: Good spot availability")
+                                print(f"      {Symbols.OK} {alt_instance}: Good spot availability")
                         except Exception as e:
-                            print(f"      ❌ {alt_instance}: Analysis failed")
+                            print(f"      {Symbols.ERROR} {alt_instance}: Analysis failed")
                             continue
                 
                 region_analyses[region] = {
@@ -1913,24 +1913,24 @@ class EC2InstanceManager:
                 }
                 
                 # Display detailed analysis for this region
-                print(f"   📊 Primary Instance ({instance_type}) Analysis:")
+                print(f"   {Symbols.STATS} Primary Instance ({instance_type}) Analysis:")
                 for reason in analysis['reasoning']:
                     print(f"      {reason}")
                 
                 if analysis['cost_savings']:
                     savings = analysis['cost_savings']
-                    print(f"   💰 Primary Instance Pricing:")
+                    print(f"   {Symbols.COST} Primary Instance Pricing:")
                     print(f"      On-Demand: ${savings['ondemand_price']:.4f}/hour")
                     print(f"      Spot:      ${savings['spot_price']:.4f}/hour")
                     print(f"      Savings:   {savings['savings_percent']:.1f}% (${savings['savings_per_hour']:.4f}/hour)")
                 
                 # Show alternative recommendations
                 if alternatives_analysis:
-                    print(f"   🔄 Recommended Alternatives for Spot:")
+                    print(f"   {Symbols.SCAN} Recommended Alternatives for Spot:")
                     for alt_instance, alt_analysis in alternatives_analysis.items():
                         if alt_analysis['cost_savings']:
                             alt_savings = alt_analysis['cost_savings']
-                            print(f"      ✅ {alt_instance}:")
+                            print(f"      {Symbols.OK} {alt_instance}:")
                             print(f"         Spot: ${alt_savings['spot_price']:.4f}/hour")
                             print(f"         Savings: {alt_savings['savings_percent']:.1f}%")
                             
@@ -1940,7 +1940,7 @@ class EC2InstanceManager:
                                 print(f"         Performance: {perf_comparison}")
                 
             except Exception as e:
-                print(f"   ❌ Analysis failed for {region}: {e}")
+                print(f"   {Symbols.ERROR} Analysis failed for {region}: {e}")
                 continue
         
         # Determine overall recommendation with alternatives
@@ -1965,16 +1965,16 @@ class EC2InstanceManager:
             overall_recommendation = 'on-demand'
         
         # Display enhanced recommendation summary
-        print(f"\n🎯 Enhanced Spot Analysis Summary:")
+        print(f"\n{Symbols.TARGET} Enhanced Spot Analysis Summary:")
         print("=" * 80)
         
         # Show region-by-region breakdown
-        print(f"📋 Region Analysis Breakdown:")
+        print(f"{Symbols.LIST} Region Analysis Breakdown:")
         for region, analyses in region_analyses.items():
             primary_rec = analyses['primary']['recommendation']
             alt_count = len(analyses['alternatives'])
             
-            print(f"   🌍 {region}:")
+            print(f"   {Symbols.REGION} {region}:")
             print(f"      Primary ({instance_type}): {primary_rec}")
             
             if analyses['alternatives']:
@@ -1987,14 +1987,14 @@ class EC2InstanceManager:
         # Calculate potential cost savings
         total_savings = self.calculate_total_savings(selected_accounts, region_analyses, instance_type)
         if total_savings:
-            print(f"\n💰 Potential Monthly Savings (730 hours):")
+            print(f"\n{Symbols.COST} Potential Monthly Savings (730 hours):")
             print(f"   Primary instance savings: ${total_savings['primary_savings']:.2f}")
             if total_savings['alternative_savings'] > 0:
                 print(f"   With alternatives: ${total_savings['alternative_savings']:.2f}")
             print(f"   Best case scenario: ${total_savings['best_case']:.2f}")
         
         # Display enhanced menu options
-        print(f"\n📋 Instance Creation Options:")
+        print(f"\n{Symbols.LIST} Instance Creation Options:")
         print("=" * 60)
         print("  1. Use Spot instances (primary type where recommended)")
         print("  2. Use On-Demand instances (safest, most expensive)")
@@ -2005,18 +2005,18 @@ class EC2InstanceManager:
         print("  7. Cancel")
         
         # Add recommendation based on analysis
-        print(f"\n💡 AI Recommendation: ", end="")
+        print(f"\n{Symbols.TIP} AI Recommendation: ", end="")
         if overall_recommendation == 'spot-primary':
-            print("✅ Use Spot instances - excellent availability across all regions")
+            print(f"{Symbols.OK} Use Spot instances - excellent availability across all regions")
         elif overall_recommendation == 'mixed-with-alternatives':
-            print("🔄 Use Smart Mixed approach - combines savings with reliability")
+            print(f"{Symbols.SCAN} Use Smart Mixed approach - combines savings with reliability")
         elif overall_recommendation == 'alternatives-recommended':
-            print("🔄 Consider alternative instance types for better Spot savings")
+            print(f"{Symbols.SCAN} Consider alternative instance types for better Spot savings")
         else:
-            print("⚠️  Use On-Demand instances - limited Spot availability")
+            print(f"{Symbols.WARN}  Use On-Demand instances - limited Spot availability")
         
         while True:
-            choice = input(f"\n🔢 Choose your approach (1-7): ").strip()
+            choice = input(f"\n[#] Choose your approach (1-7): ").strip()
             
             if choice == '1':
                 return 'spot', region_analyses
@@ -2035,7 +2035,7 @@ class EC2InstanceManager:
             elif choice == '7':
                 return 'cancel', region_analyses
             else:
-                print("❌ Invalid choice. Please enter 1-7.")
+                print(f"{Symbols.ERROR} Invalid choice. Please enter 1-7.")
 
     def compare_instance_performance(self, primary_instance, alternative_instance):
         """Compare performance characteristics between instance types"""
@@ -2111,23 +2111,23 @@ class EC2InstanceManager:
     def show_instance_comparison(self, primary_instance, alternatives):
         """Show detailed comparison of instance types"""
         
-        print(f"\n📊 Instance Type Comparison")
+        print(f"\n{Symbols.STATS} Instance Type Comparison")
         print("=" * 80)
         print(f"Primary: {primary_instance}")
         print(f"Alternatives: {', '.join(alternatives[:5])}")
         print("-" * 80)
         
         # This would ideally call AWS API for real-time pricing and specs
-        print("💡 Comparison factors to consider:")
+        print("[TIP] Comparison factors to consider:")
         print("   • vCPU count and performance")
         print("   • Memory (RAM) allocation") 
         print("   • Network performance")
         print("   • Storage options")
         print("   • Spot instance availability")
         print("   • Hourly pricing (On-Demand vs Spot)")
-        print("\n💡 Tip: t3a instances are often 10% cheaper than t3")
-        print("💡 Tip: t4g instances (ARM-based) offer better price/performance")
-        print("💡 Tip: Consider one size larger if spot availability is better")
+        print("\n[TIP] Tip: t3a instances are often 10% cheaper than t3")
+        print("[TIP] Tip: t4g instances (ARM-based) offer better price/performance")
+        print("[TIP] Tip: Consider one size larger if spot availability is better")
         
         input("\nPress Enter to continue...")
 
@@ -2136,7 +2136,7 @@ class EC2InstanceManager:
         created_instances = []
         failed_instances = []
         
-        self.log_operation('INFO', "🚀 Starting EC2 instance creation process")
+        self.log_operation('INFO', f"{Symbols.START} Starting EC2 instance creation process")
         self.log_operation('INFO', f"Instance type: {instance_type}")
         self.log_operation('INFO', f"Capacity type: {capacity_type}")  # Add this line
         self.log_operation('INFO', f"User data script: {self.userdata_file}")
@@ -2153,7 +2153,7 @@ class EC2InstanceManager:
             account_id = account_data.get('account_id', 'Unknown')
             account_email = account_data.get('account_email', 'Unknown')
             
-            self.log_operation('INFO', f"🏦 Processing account: {account_name} ({account_id})")
+            self.log_operation('INFO', f"{Symbols.ACCOUNT} Processing account: {account_name} ({account_id})")
             
             if 'users' not in account_data:
                 self.log_operation('WARNING', f"No users found in account: {account_name}")
@@ -2173,7 +2173,7 @@ class EC2InstanceManager:
                 
                 if not access_key or not secret_key:
                     error_msg = "Missing AWS credentials"
-                    self.log_operation('ERROR', f"❌ {username}: {error_msg}")
+                    self.log_operation('ERROR', f"{Symbols.ERROR} {username}: {error_msg}")
                     failed_instances.append({
                         'username': username,
                         'real_name': real_name,
@@ -2224,23 +2224,23 @@ class EC2InstanceManager:
                     created_instances.append(instance_info)
                     
                     # Print success message
-                    capacity_emoji = "💰" if capacity_type == 'spot' else "🔒"
-                    print(f"\n🎉 SUCCESS: {capacity_type.upper()} instance created for {real_name}")
+                    capacity_emoji = f"{Symbols.COST}" if capacity_type == 'spot' else f"{Symbols.SECURE}"
+                    print(f"\n[PARTY] SUCCESS: {capacity_type.upper()} instance created for {real_name}")
                     print(f"   👤 Username: {username}")
                     print(f"   📍 Instance ID: {instance_info['instance_id']}")
-                    print(f"   🌍 Region: {region}")
+                    print(f"   {Symbols.REGION} Region: {region}")
                     print(f"   💻 Instance Type: {instance_info['instance_type']}")
                     print(f"   {capacity_emoji} Capacity: {capacity_type.upper()}")
-                    print(f"   🏦 Account: {account_name} ({account_id})")
+                    print(f"   {Symbols.ACCOUNT} Account: {account_name} ({account_id})")
                     if 'public_ip' in instance_info:
                         print(f"   🌐 Public IP: {instance_info['public_ip']}")
                     if 'startup_time_seconds' in instance_info:
-                        print(f"   ⏱️  Startup Time: {instance_info['startup_time_seconds']}s")
+                        print(f"   {Symbols.TIMER}  Startup Time: {instance_info['startup_time_seconds']}s")
                     print("-" * 60)
                     
                 except Exception as e:
                     error_msg = str(e)
-                    self.log_operation('ERROR', f"❌ Failed to create instance for {username}: {error_msg}")
+                    self.log_operation('ERROR', f"{Symbols.ERROR} Failed to create instance for {username}: {error_msg}")
                     failed_instances.append({
                         'username': username,
                         'real_name': real_name,
@@ -2249,9 +2249,9 @@ class EC2InstanceManager:
                         'account_id': account_id,
                         'error': error_msg
                     })
-                    print(f"\n❌ FAILED: Instance creation failed for {real_name}")
+                    print(f"\n{Symbols.ERROR} FAILED: Instance creation failed for {real_name}")
                     print(f"   👤 Username: {username}")
-                    print(f"   🏦 Account: {account_name}")
+                    print(f"   {Symbols.ACCOUNT} Account: {account_name}")
                     print(f"   Error: {error_msg}")
                     print("-" * 60)
                     continue
@@ -2282,7 +2282,7 @@ class EC2InstanceManager:
                     private_ip = instance.get('PrivateIpAddress', 'N/A')
                     
                     elapsed_time = int(time.time() - start_time)
-                    self.log_operation('INFO', f"✅ Instance {instance_id} is running (took {elapsed_time}s) - Public: {public_ip}, Private: {private_ip}")
+                    self.log_operation('INFO', f"{Symbols.OK} Instance {instance_id} is running (took {elapsed_time}s) - Public: {public_ip}, Private: {private_ip}")
                     
                     return {
                         'state': state,
@@ -2291,7 +2291,7 @@ class EC2InstanceManager:
                         'startup_time_seconds': elapsed_time
                     }
                 elif state in ['terminated', 'terminating']:
-                    self.log_operation('ERROR', f"❌ Instance {instance_id} terminated unexpectedly")
+                    self.log_operation('ERROR', f"{Symbols.ERROR} Instance {instance_id} terminated unexpectedly")
                     return None
                 else:
                     time.sleep(10)
@@ -2301,7 +2301,7 @@ class EC2InstanceManager:
                 time.sleep(10)
         
         elapsed_time = int(time.time() - start_time)
-        self.log_operation('ERROR', f"⏰ Timeout waiting for instance {instance_id} after {elapsed_time} seconds")
+        self.log_operation('ERROR', f"{Symbols.TIMER} Timeout waiting for instance {instance_id} after {elapsed_time} seconds")
         return None
     
     def prepare_userdata_with_aws_config(self, base_userdata, access_key, secret_key, region):
@@ -2320,7 +2320,7 @@ class EC2InstanceManager:
         default_type = 'spot'  # Default to spot for cost efficiency
         
         user_prefix = f"for {user_name} " if user_name else ""
-        print(f"\n💰 EC2 Capacity Type Selection {user_prefix}")
+        print(f"\n{Symbols.COST} EC2 Capacity Type Selection {user_prefix}")
         print("=" * 60)
         print("Available capacity types:")
         
@@ -2344,11 +2344,11 @@ class EC2InstanceManager:
                     selected_type = capacity_options[choice_num - 1]
                     break
                 else:
-                    print(f"❌ Please enter a number between 1 and {len(capacity_options)}")
+                    print(f"{Symbols.ERROR} Please enter a number between 1 and {len(capacity_options)}")
             except ValueError:
-                print("❌ Please enter a valid number")
+                print("[ERROR] Please enter a valid number")
         
-        print(f"✅ Selected capacity type: {selected_type}")
+        print(f"{Symbols.OK} Selected capacity type: {selected_type}")
         return selected_type
     
     def create_instance_with_capacity_type(self, ec2_client, user_data, region, username, real_user_info, access_key, secret_key, instance_type='t3.micro', capacity_type='spot'):
@@ -2474,7 +2474,7 @@ class EC2InstanceManager:
                     spot_request_id = response['Instances'][0]['SpotInstanceRequestId']
                     self.log_operation('INFO', f"Spot request ID: {spot_request_id}")
                 
-                self.log_operation('INFO', f"✅ Successfully created Spot instance {instance_id} for user {username} with suffix {random_suffix}")
+                self.log_operation('INFO', f"{Symbols.OK} Successfully created Spot instance {instance_id} for user {username} with suffix {random_suffix}")
                 self.log_operation('INFO', f"Instance state: {instance_state}, Actual type: {instance_type_actual}")
                 
                 # Return enhanced instance information
@@ -2515,11 +2515,11 @@ class EC2InstanceManager:
                 
         except ValueError as ve:
             # Re-raise ValueError with context
-            self.log_operation('ERROR', f"❌ Configuration error for Spot instance {username}: {str(ve)}")
+            self.log_operation('ERROR', f"{Symbols.ERROR} Configuration error for Spot instance {username}: {str(ve)}")
             raise
         except Exception as e:
             error_msg = str(e)
-            self.log_operation('ERROR', f"❌ Failed to create Spot instance for user {username}: {error_msg}")
+            self.log_operation('ERROR', f"{Symbols.ERROR} Failed to create Spot instance for user {username}: {error_msg}")
             
             # Provide helpful error context
             if 'InvalidInstanceType' in error_msg:
@@ -2601,7 +2601,7 @@ class EC2InstanceManager:
             instance_id = response['Instances'][0]['InstanceId']
             instance_type_actual = response['Instances'][0]['InstanceType']
             
-            self.log_operation('INFO', f"✅ Successfully created On-Demand instance {instance_id} for user {username} with suffix {random_suffix}")
+            self.log_operation('INFO', f"{Symbols.OK} Successfully created On-Demand instance {instance_id} for user {username} with suffix {random_suffix}")
             
             return {
                 'instance_id': instance_id,
@@ -2619,7 +2619,7 @@ class EC2InstanceManager:
             }
         
         except Exception as e:
-            self.log_operation('ERROR', f"❌ Failed to create On-Demand instance for user {username}: {str(e)}")
+            self.log_operation('ERROR', f"{Symbols.ERROR} Failed to create On-Demand instance for user {username}: {str(e)}")
             raise
 
     def create_instance_bk(self, ec2_client, user_data, region, username, real_user_info, access_key, secret_key, instance_type='t3.micro'):
@@ -2703,13 +2703,13 @@ class EC2InstanceManager:
                 response = run_instance('spot')
                 instance_type_used = 'spot'
             except RuntimeError as spot_error:
-                self.log_operation('WARNING', f"⚠️ Spot failed: {str(spot_error)}. Retrying as On-Demand.")
+                self.log_operation('WARNING', f"{Symbols.WARN} Spot failed: {str(spot_error)}. Retrying as On-Demand.")
                 response = run_instance('ondemand')
                 instance_type_used = 'ondemand'
 
             instance_id = response['Instances'][0]['InstanceId']
             actual_type = response['Instances'][0]['InstanceType']
-            self.log_operation('INFO', f"✅ Created {instance_type_used} instance {instance_id} for {username} (suffix: {random_suffix})")
+            self.log_operation('INFO', f"{Symbols.OK} Created {instance_type_used} instance {instance_id} for {username} (suffix: {random_suffix})")
 
             return {
                 'instance_id': instance_id,
@@ -2727,7 +2727,7 @@ class EC2InstanceManager:
             }
 
         except Exception as e:
-            self.log_operation('ERROR', f"❌ Instance creation failed for user {username}: {str(e)}")
+            self.log_operation('ERROR', f"{Symbols.ERROR} Instance creation failed for user {username}: {str(e)}")
             raise
 
     def create_instance_ondemand(self, ec2_client, user_data, region, username, real_user_info, access_key, secret_key, instance_type='t3.micro'):
@@ -2802,7 +2802,7 @@ class EC2InstanceManager:
             instance_id = response['Instances'][0]['InstanceId']
             instance_type_actual = response['Instances'][0]['InstanceType']
             
-            self.log_operation('INFO', f"✅ Successfully created instance {instance_id} for user {username} with suffix {random_suffix}")            
+            self.log_operation('INFO', f"{Symbols.OK} Successfully created instance {instance_id} for user {username} with suffix {random_suffix}")            
             
             return {
                 'instance_id': instance_id,
@@ -2819,7 +2819,7 @@ class EC2InstanceManager:
             }
             
         except Exception as e:
-            self.log_operation('ERROR', f"❌ Failed to create instance for user {username}: {str(e)}")
+            self.log_operation('ERROR', f"{Symbols.ERROR} Failed to create instance for user {username}: {str(e)}")
             raise
 
     def save_user_instance_mapping(self, created_instances, failed_instances):
@@ -2895,11 +2895,11 @@ class EC2InstanceManager:
             with open(mapping_filename, 'w', encoding='utf-8') as f:
                 json.dump(mapping_data, f, indent=2, default=str)
             
-            self.log_operation('INFO', f"✅ IAM user to instance mapping saved to: {mapping_filename}")
+            self.log_operation('INFO', f"{Symbols.OK} IAM user to instance mapping saved to: {mapping_filename}")
             return mapping_filename
             
         except Exception as e:
-            self.log_operation('ERROR', f"❌ Failed to save user-instance mapping: {e}")
+            self.log_operation('ERROR', f"{Symbols.ERROR} Failed to save user-instance mapping: {e}")
             return None
 
     def save_instance_report(self, created_instances, failed_instances):
@@ -2975,11 +2975,11 @@ class EC2InstanceManager:
             with open(report_filename, 'w', encoding='utf-8') as f:
                 json.dump(report_data, f, indent=2, default=str)
             
-            self.log_operation('INFO', f"✅ Detailed instance report saved to: {report_filename}")
+            self.log_operation('INFO', f"{Symbols.OK} Detailed instance report saved to: {report_filename}")
             return report_filename
             
         except Exception as e:
-            self.log_operation('ERROR', f"❌ Failed to save instance report: {e}")
+            self.log_operation('ERROR', f"{Symbols.ERROR} Failed to save instance report: {e}")
             return None
         
     def convert_selected_users_to_accounts(self, selected_user_indices, user_mapping):
@@ -3055,7 +3055,7 @@ class EC2InstanceManager:
         
         for account_name, users in users_by_account.items():
             account_id = users[0]['account_id']
-            print(f"\n🏦 {account_name} ({account_id}) - {len(users)} users:")
+            print(f"\n{Symbols.ACCOUNT} {account_name} ({account_id}) - {len(users)} users:")
             print("-" * 80)
             
             for user_info in users:
@@ -3067,16 +3067,16 @@ class EC2InstanceManager:
                 print(f"  {user_index:3}. {full_name}")
                 print(f"       👤 Username: {user_info['username']}")
                 print(f"       📧 Email: {email}")
-                print(f"       🌍 Region: {region}")
-                print(f"       🔑 Has Credentials: {'✅' if user_info['access_key'] and user_info['secret_key'] else '❌'}")
+                print(f"       {Symbols.REGION} Region: {region}")
+                print(f"       {Symbols.KEY} Has Credentials: {'{Symbols.OK}' if user_info['access_key'] and user_info['secret_key'] else '{Symbols.ERROR}'}")
                 
                 user_mapping[user_index] = user_info
                 user_index += 1
                 print()
         
         print("=" * 100)
-        print(f"📊 Summary:")
-        print(f"   📈 Total accounts: {len(users_by_account)}")
+        print(f"{Symbols.STATS} Summary:")
+        print(f"   [UP] Total accounts: {len(users_by_account)}")
         print(f"   👥 Total users: {len(all_users)}")
         
         # Count users by region
@@ -3084,11 +3084,11 @@ class EC2InstanceManager:
         for user_info in all_users:
             region = user_info['region']
             regions[region] = regions.get(region, 0) + 1
-        print(f"   🌍 Regions: {', '.join(f'{region}({count})' for region, count in sorted(regions.items()))}")
+        print(f"   {Symbols.REGION} Regions: {', '.join(f'{region}({count})' for region, count in sorted(regions.items()))}")
         
         self.log_operation('INFO', f"User summary: {len(all_users)} users across {len(users_by_account)} accounts in {len(regions)} regions")
         
-        print(f"\n📝 Selection Options:")
+        print(f"\n{Symbols.LOG} Selection Options:")
         print(f"   • Single users: 1,3,5")
         print(f"   • Ranges: 1-{len(all_users)} (users 1 through {len(all_users)})")
         print(f"   • Mixed: 1-5,8,10-12 (users 1-5, 8, and 10-12)")
@@ -3096,7 +3096,7 @@ class EC2InstanceManager:
         print(f"   • Cancel: 'cancel' or 'quit'")
         
         while True:
-            selection = input(f"\n🔢 Select users to process: ").strip()
+            selection = input(f"\n[#] Select users to process: ").strip()
             
             self.log_operation('INFO', f"User input for user selection: '{selection}'")
             
@@ -3134,7 +3134,7 @@ class EC2InstanceManager:
                         selected_regions.add(user_info['region'])
                         selected_accounts.add(user_info['account_name'])
                     
-                    print(f"\n✅ Selected {len(selected_indices)} users:")
+                    print(f"\n{Symbols.OK} Selected {len(selected_indices)} users:")
                     print("-" * 80)
                     
                     # Group by account for display
@@ -3147,42 +3147,42 @@ class EC2InstanceManager:
                     
                     for account_name, users in by_account.items():
                         account_id = users[0]['account_id']
-                        print(f"\n🏦 {account_name} ({account_id}) - {len(users)} users:")
+                        print(f"\n{Symbols.ACCOUNT} {account_name} ({account_id}) - {len(users)} users:")
                         for user in users:
-                            creds_status = "✅" if user['has_credentials'] else "❌"
+                            creds_status = "[OK]" if user['has_credentials'] else f"{Symbols.ERROR}"
                             print(f"   • {user['full_name']} ({user['username']}) in {user['region']} {creds_status}")
                     
                     print("-" * 80)
-                    print(f"📊 Selection Summary:")
+                    print(f"{Symbols.STATS} Selection Summary:")
                     print(f"   👥 Users: {len(selected_indices)}")
-                    print(f"   🏦 Accounts: {len(selected_accounts)}")
-                    print(f"   🌍 Regions: {len(selected_regions)}")
+                    print(f"   {Symbols.ACCOUNT} Accounts: {len(selected_accounts)}")
+                    print(f"   {Symbols.REGION} Regions: {len(selected_regions)}")
                     
                     # Check for users without credentials
                     users_without_creds = [u for u in selected_user_info if not u['has_credentials']]
                     if users_without_creds:
-                        print(f"   ⚠️  Users without credentials: {len(users_without_creds)}")
+                        print(f"   {Symbols.WARN}  Users without credentials: {len(users_without_creds)}")
                     
                     # Log selection details
                     self.log_operation('INFO', f"Selected users: {[u['username'] for u in selected_user_info]}")
                     self.log_operation('INFO', f"Selection summary: {len(selected_indices)} users, {len(selected_accounts)} accounts, {len(selected_regions)} regions")
                     
-                    confirm = input(f"\n🚀 Proceed with these {len(selected_indices)} users? (y/N): ").lower().strip()
+                    confirm = input(f"\n{Symbols.START} Proceed with these {len(selected_indices)} users? (y/N): ").lower().strip()
                     self.log_operation('INFO', f"User confirmation for user selection: '{confirm}'")
                     
                     if confirm == 'y':
                         return selected_indices, user_mapping
                     else:
-                        print("❌ Selection cancelled, please choose again.")
+                        print(f"{Symbols.ERROR} Selection cancelled, please choose again.")
                         self.log_operation('INFO', "User cancelled user selection, requesting new input")
                         continue
                 else:
-                    print("❌ No valid users selected. Please try again.")
+                    print(f"{Symbols.ERROR} No valid users selected. Please try again.")
                     self.log_operation('WARNING', "No valid users selected from user input")
                     continue
                     
             except ValueError as e:
-                print(f"❌ Invalid selection: {e}")
+                print(f"{Symbols.ERROR} Invalid selection: {e}")
                 print("   Please use format like: 1,3,5 or 1-5 or 1-3,5,7-9")
                 self.log_operation('ERROR', f"Invalid user selection format: {e}")
                 continue
@@ -3244,7 +3244,7 @@ class EC2InstanceManager:
         
         while True:
             try:
-                choice = input(f"\n🔢 Select instance type (1-{len(allowed_types)}) or press Enter for default: ").strip()
+                choice = input(f"\n[#] Select instance type (1-{len(allowed_types)}) or press Enter for default: ").strip()
                 
                 self.log_operation('INFO', f"User input for instance type: '{choice}'")
                 
@@ -3258,17 +3258,17 @@ class EC2InstanceManager:
                     self.log_operation('INFO', f"User selected instance type: {selected_type}")
                     return selected_type
                 else:
-                    print(f"❌ Invalid choice. Please enter a number between 1 and {len(allowed_types)}")
+                    print(f"{Symbols.ERROR} Invalid choice. Please enter a number between 1 and {len(allowed_types)}")
                     self.log_operation('WARNING', f"Invalid instance type choice: {choice}")
             except ValueError:
-                print("❌ Invalid input. Please enter a number or press Enter for default.")
+                print("[ERROR] Invalid input. Please enter a number or press Enter for default.")
                 self.log_operation('WARNING', f"Invalid instance type input format: {choice}")
 
     # Add cost estimation display for both scripts:
 
     def display_approach_menu(self):
         """Display approach selection menu and return user choice"""
-        print(f"\n🎯 EC2 Instance Creation Approaches:")
+        print(f"\n{Symbols.TARGET} EC2 Instance Creation Approaches:")
         print("=" * 60)
         print("  1. Create instances for ALL accounts and users")
         print("  2. Select specific accounts to process")
@@ -3278,7 +3278,7 @@ class EC2InstanceManager:
         print("=" * 60)
         
         while True:
-            choice = input("🔢 Choose your approach (1-5): ").strip()
+            choice = input("[#] Choose your approach (1-5): ").strip()
             self.log_operation('INFO', f"User input for approach selection: '{choice}'")
             
             if choice in ['1', '2', '3', '4', '5']:
@@ -3289,20 +3289,20 @@ class EC2InstanceManager:
                     '4': 'Show detailed analysis only',
                     '5': 'Exit'
                 }
-                print(f"✅ Selected approach: {choice}. {approach_names[choice]}")
+                print(f"{Symbols.OK} Selected approach: {choice}. {approach_names[choice]}")
                 self.log_operation('INFO', f"User selected approach {choice}: {approach_names[choice]}")
                 return int(choice)
             else:
-                print("❌ Invalid choice. Please enter a number between 1 and 5.")
+                print("[ERROR] Invalid choice. Please enter a number between 1 and 5.")
                 self.log_operation('WARNING', f"Invalid approach choice: {choice}")
 
     def show_detailed_analysis(self):
         """Show detailed analysis of accounts, users, and costs without creating instances"""
-        print(f"\n📊 DETAILED ANALYSIS")
+        print(f"\n{Symbols.STATS} DETAILED ANALYSIS")
         print("=" * 80)
         
         if 'accounts' not in self.credentials_data:
-            print("❌ No accounts found in credentials data")
+            print(f"{Symbols.ERROR} No accounts found in credentials data")
             return
         
         accounts = list(self.credentials_data['accounts'].items())
@@ -3310,7 +3310,7 @@ class EC2InstanceManager:
         regions_used = set()
         users_by_region = {}
         
-        print(f"\n🏦 ACCOUNT ANALYSIS ({len(accounts)} accounts):")
+        print(f"\n{Symbols.ACCOUNT} ACCOUNT ANALYSIS ({len(accounts)} accounts):")
         print("-" * 80)
         
         for i, (account_name, account_data) in enumerate(accounts, 1):
@@ -3330,18 +3330,18 @@ class EC2InstanceManager:
             print(f"      🆔 Account ID: {account_id}")
             print(f"      📧 Email: {account_email}")
             print(f"      👥 Users: {user_count}")
-            print(f"      🌍 Regions: {', '.join(sorted(account_regions))}")
+            print(f"      {Symbols.REGION} Regions: {', '.join(sorted(account_regions))}")
             print()
         
         # Regional analysis
-        print(f"\n🌍 REGIONAL DISTRIBUTION:")
+        print(f"\n{Symbols.REGION} REGIONAL DISTRIBUTION:")
         print("-" * 60)
         for region in sorted(regions_used):
             user_count = users_by_region.get(region, 0)
             print(f"  {region}: {user_count} users")
         
         # Cost analysis
-        print(f"\n💰 COST ESTIMATION (if all instances were created):")
+        print(f"\n{Symbols.COST} COST ESTIMATION (if all instances were created):")
         print("-" * 60)
         default_instance_type = self.ami_config.get('default_instance_type', 't3.micro')
         
@@ -3351,11 +3351,11 @@ class EC2InstanceManager:
         self.display_cost_estimation(default_instance_type, 'on-demand', total_users)
         
         # Summary
-        print(f"\n📋 SUMMARY:")
+        print(f"\n{Symbols.LIST} SUMMARY:")
         print("-" * 40)
-        print(f"  📈 Total accounts: {len(accounts)}")
+        print(f"  [UP] Total accounts: {len(accounts)}")
         print(f"  👥 Total users: {total_users}")
-        print(f"  🌍 Total regions: {len(regions_used)}")
+        print(f"  {Symbols.REGION} Total regions: {len(regions_used)}")
         print(f"  📄 Credentials file: {self.credentials_file}")
         print(f"  📜 User data script: {self.userdata_file}")
         
@@ -3377,33 +3377,33 @@ class EC2InstanceManager:
         if capacity_type.lower() in ['spot', 'SPOT']:
             estimated_cost = base_cost * 0.3  # Spot instances are typically 70% cheaper
             savings = base_cost * 0.7
-            print(f"\n💰 Estimated Cost (per hour):")
+            print(f"\n{Symbols.COST} Estimated Cost (per hour):")
             print(f"   On-Demand: ${base_cost:.4f}")
             print(f"   Spot: ${estimated_cost:.4f}")
             print(f"   Savings: ${savings:.4f} ({70}%)")
             print(f"   Monthly (730 hrs): ${estimated_cost * 730 * node_count:.2f}")
         else:
-            print(f"\n💰 Estimated Cost (per hour):")
+            print(f"\n{Symbols.COST} Estimated Cost (per hour):")
             print(f"   On-Demand: ${base_cost:.4f}")
             print(f"   Monthly (730 hrs): ${base_cost * 730 * node_count:.2f}")
 
     def run(self):
         """Main execution method with integrated intelligent spot analysis"""
         try:
-            self.log_operation('INFO', "🚀 Starting EC2 Instance Creation Session")
+            self.log_operation('INFO', f"{Symbols.START} Starting EC2 Instance Creation Session")
             
-            print("🚀 EC2 Instance Creation for IAM Users")
+            print(f"{Symbols.START} EC2 Instance Creation for IAM Users")
             print("=" * 80)
-            print(f"📅 Execution Date/Time: {self.current_time} UTC")
+            print(f"{Symbols.DATE} Execution Date/Time: {self.current_time} UTC")
             print(f"👤 Executed by: {self.current_user}")
             print(f"📄 Credentials Source: {self.credentials_file}")
             print(f"📜 User Data Script: {self.userdata_file}")
-            print(f"📋 Log File: {self.log_filename}")
+            print(f"{Symbols.LIST} Log File: {self.log_filename}")
             
             # Display credential file info
             if 'created_date' in self.credentials_data:
                 cred_time = f"{self.credentials_data['created_date']} {self.credentials_data.get('created_time', '')}"
-                print(f"📅 Credentials created: {cred_time}")
+                print(f"{Symbols.DATE} Credentials created: {cred_time}")
                 self.log_operation('INFO', f"Using credentials created: {cred_time}")
             if 'created_by' in self.credentials_data:
                 print(f"👤 Credentials created by: {self.credentials_data['created_by']}")
@@ -3413,11 +3413,11 @@ class EC2InstanceManager:
             # Verify user data file exists
             if os.path.exists(self.userdata_file):
                 file_size = os.path.getsize(self.userdata_file)
-                print(f"✅ User data script found: {self.userdata_file}")
+                print(f"{Symbols.OK} User data script found: {self.userdata_file}")
                 print(f"📏 Script size: {file_size} bytes")
                 self.log_operation('INFO', f"User data script verified: {self.userdata_file} ({file_size} bytes)")
             else:
-                print(f"❌ User data script not found: {self.userdata_file}")
+                print(f"{Symbols.ERROR} User data script not found: {self.userdata_file}")
                 self.log_operation('ERROR', f"User data script not found: {self.userdata_file}")
                 return
             
@@ -3425,20 +3425,20 @@ class EC2InstanceManager:
             selected_account_indices = self.display_accounts_menu()
             if not selected_account_indices:
                 self.log_operation('INFO', "Session cancelled - no accounts selected")
-                print("❌ Account selection cancelled")
+                print(f"{Symbols.ERROR} Account selection cancelled")
                 return
             
             selected_accounts = self.get_selected_accounts_data(selected_account_indices)
             
             # Step 2: User selection level
-            print(f"\n🎯 Selection Level:")
+            print(f"\n{Symbols.TARGET} Selection Level:")
             print("=" * 50)
             print("  1. Process ALL users in selected accounts")
             print("  2. Select specific users from selected accounts")
             print("=" * 50)
             
             while True:
-                selection_level = input("🔢 Choose selection level (1-2): ").strip()
+                selection_level = input("[#] Choose selection level (1-2): ").strip()
                 self.log_operation('INFO', f"User input for selection level: '{selection_level}'")
                 
                 if selection_level == '1':
@@ -3450,16 +3450,16 @@ class EC2InstanceManager:
                     selected_user_indices, user_mapping = self.display_users_menu(selected_accounts)
                     if not selected_user_indices:
                         self.log_operation('INFO', "Session cancelled - no users selected")
-                        print("❌ User selection cancelled")
+                        print(f"{Symbols.ERROR} User selection cancelled")
                         return
                     final_accounts = self.convert_selected_users_to_accounts(selected_user_indices, user_mapping)
                     break
                 else:
-                    print("❌ Invalid choice. Please enter 1 or 2.")
+                    print(f"{Symbols.ERROR} Invalid choice. Please enter 1 or 2.")
                     self.log_operation('WARNING', f"Invalid selection level choice: {selection_level}")
             
             # Step 3: Intelligent instance selection (includes all analysis)
-            print(f"\n🧠 Intelligent Instance & Capacity Selection")
+            print(f"\n[BRAIN] Intelligent Instance & Capacity Selection")
             print("=" * 55)
             print("This includes automatic spot availability analysis and recommendations.")
             instance_type, capacity_type = self.select_instance_with_smart_analysis()
@@ -3469,19 +3469,19 @@ class EC2InstanceManager:
                             for account_data in final_accounts.values())
             
             # Step 4: Final confirmation and execution
-            print(f"\n📊 Final Execution Summary:")
+            print(f"\n{Symbols.STATS} Final Execution Summary:")
             print("=" * 60)
-            print(f"   📈 Selected accounts: {len(final_accounts)}")
+            print(f"   [UP] Selected accounts: {len(final_accounts)}")
             print(f"   👥 Total users: {total_users}")
             print(f"   💻 Instance type: {instance_type}")
-            print(f"   🏷️  Capacity type: {capacity_type.upper()}")
+            print(f"   [TAG]  Capacity type: {capacity_type.upper()}")
             
             # Show cost estimation
-            print(f"\n💰 Cost Estimation for {total_users} {capacity_type} instances:")
+            print(f"\n{Symbols.COST} Cost Estimation for {total_users} {capacity_type} instances:")
             self.display_cost_estimation(instance_type, capacity_type, total_users)
             
             # Show account/user breakdown
-            print(f"\n🏦 Account/User Breakdown:")
+            print(f"\n{Symbols.ACCOUNT} Account/User Breakdown:")
             for account_name, account_data in final_accounts.items():
                 user_count = len(account_data.get('users', []))
                 account_id = account_data.get('account_id', 'Unknown')
@@ -3501,19 +3501,19 @@ class EC2InstanceManager:
             print(f"\n🔧 Configuration:")
             print(f"   📜 User data: {self.userdata_file}")
             print(f"   📄 Credentials: {self.credentials_file}")
-            print(f"   📋 Log file: {self.log_filename}")
+            print(f"   {Symbols.LIST} Log file: {self.log_filename}")
             
             # Show capacity-specific information
             if capacity_type == 'spot':
-                print(f"\n💡 Spot Instance Information:")
-                print(f"   ✅ Estimated 60-70% cost savings")
-                print(f"   ⚠️  May be interrupted if AWS needs capacity")
-                print(f"   🔄 Automatic termination on interruption")
+                print(f"\n{Symbols.TIP} Spot Instance Information:")
+                print(f"   {Symbols.OK} Estimated 60-70% cost savings")
+                print(f"   {Symbols.WARN}  May be interrupted if AWS needs capacity")
+                print(f"   {Symbols.SCAN} Automatic termination on interruption")
             else:
-                print(f"\n🔒 On-Demand Instance Information:")
-                print(f"   ✅ Guaranteed availability and stability")
-                print(f"   💰 Standard AWS pricing")
-                print(f"   🔒 No interruption risk")
+                print(f"\n{Symbols.SECURE} On-Demand Instance Information:")
+                print(f"   {Symbols.OK} Guaranteed availability and stability")
+                print(f"   {Symbols.COST} Standard AWS pricing")
+                print(f"   {Symbols.SECURE} No interruption risk")
             
             print("=" * 60)
             
@@ -3521,19 +3521,19 @@ class EC2InstanceManager:
             self.log_operation('INFO', f"Final configuration - Accounts: {len(final_accounts)}, Users: {total_users}, Instance: {instance_type}, Capacity: {capacity_type}")
             
             # Final confirmation
-            capacity_emoji = "💰" if capacity_type == 'spot' else "🔒"
-            confirm = input(f"\n🚀 Create {total_users} {capacity_emoji} {capacity_type.upper()} EC2 instances? (y/N): ").lower().strip()
+            capacity_emoji = "[COST]" if capacity_type == 'spot' else f"{Symbols.SECURE}"
+            confirm = input(f"\n{Symbols.START} Create {total_users} {capacity_emoji} {capacity_type.upper()} EC2 instances? (y/N): ").lower().strip()
             self.log_operation('INFO', f"Final confirmation: '{confirm}'")
             
             if confirm != 'y':
                 self.log_operation('INFO', "Session cancelled by user at final confirmation")
-                print("❌ Instance creation cancelled")
+                print(f"{Symbols.ERROR} Instance creation cancelled")
                 return
             
             # Execute instance creation
-            print(f"\n🔄 Starting {capacity_type} instance creation for {total_users} users...")
+            print(f"\n{Symbols.SCAN} Starting {capacity_type} instance creation for {total_users} users...")
             print("This may take several minutes depending on the number of instances...")
-            self.log_operation('INFO', f"🔄 Beginning {capacity_type} instance creation for {total_users} users")
+            self.log_operation('INFO', f"{Symbols.SCAN} Beginning {capacity_type} instance creation for {total_users} users")
             
             created_instances, failed_instances = self.create_instances_for_selected_accounts(
                 final_accounts,
@@ -3543,7 +3543,7 @@ class EC2InstanceManager:
             )
             
             # Display comprehensive results
-            print(f"\n" + "🎯" * 20 + " CREATION RESULTS " + "🎯" * 20)
+            print(f"\n" + "[TARGET]" * 20 + " CREATION RESULTS " + "[TARGET]" * 20)
             print("=" * 80)
             
             success_count = len(created_instances)
@@ -3551,16 +3551,16 @@ class EC2InstanceManager:
             total_processed = success_count + failure_count
             success_rate = (success_count / total_processed * 100) if total_processed > 0 else 0
             
-            print(f"📊 SUMMARY:")
-            print(f"   ✅ Successfully created: {success_count}")
-            print(f"   ❌ Failed: {failure_count}")
-            print(f"   📈 Success rate: {success_rate:.1f}%")
-            print(f"   🏷️  Capacity type: {capacity_type.upper()}")
+            print(f"{Symbols.STATS} SUMMARY:")
+            print(f"   {Symbols.OK} Successfully created: {success_count}")
+            print(f"   {Symbols.ERROR} Failed: {failure_count}")
+            print(f"   [UP] Success rate: {success_rate:.1f}%")
+            print(f"   [TAG]  Capacity type: {capacity_type.upper()}")
             print(f"   💻 Instance type: {instance_type}")
             
             # Show successful instances
             if created_instances:
-                print(f"\n✅ SUCCESSFUL INSTANCES ({success_count}):")
+                print(f"\n{Symbols.OK} SUCCESSFUL INSTANCES ({success_count}):")
                 print("-" * 60)
                 
                 # Group by account for better organization
@@ -3573,58 +3573,58 @@ class EC2InstanceManager:
                 
                 for account_name, instances in by_account.items():
                     account_id = instances[0].get('account_id', 'Unknown')
-                    print(f"\n🏦 {account_name} ({account_id}) - {len(instances)} instances:")
+                    print(f"\n{Symbols.ACCOUNT} {account_name} ({account_id}) - {len(instances)} instances:")
                     
                     for instance in instances:
                         real_name = instance.get('real_user_info', {}).get('full_name', instance['username'])
-                        capacity_symbol = "💰" if instance.get('capacity_type') == 'spot' else "🔒"
+                        capacity_symbol = f"{Symbols.COST}" if instance.get('capacity_type') == 'spot' else f"{Symbols.SECURE}"
                         
                         print(f"   {capacity_symbol} {real_name} ({instance['username']})")
                         print(f"      📍 ID: {instance['instance_id']}")
-                        print(f"      🌍 Region: {instance['region']}")
+                        print(f"      {Symbols.REGION} Region: {instance['region']}")
                         
                         if 'public_ip' in instance and instance['public_ip'] != 'N/A':
                             print(f"      🌐 Public IP: {instance['public_ip']}")
                         
                         if 'startup_time_seconds' in instance:
-                            print(f"      ⏱️  Startup: {instance['startup_time_seconds']}s")
+                            print(f"      {Symbols.TIMER}  Startup: {instance['startup_time_seconds']}s")
                         
                         print()
             
             # Show failed instances
             if failed_instances:
-                print(f"\n❌ FAILED INSTANCES ({failure_count}):")
+                print(f"\n{Symbols.ERROR} FAILED INSTANCES ({failure_count}):")
                 print("-" * 60)
                 
                 for failure in failed_instances:
                     print(f"   • {failure.get('real_name', failure['username'])} ({failure['username']})")
-                    print(f"     🏦 Account: {failure['account_name']}")
-                    print(f"     🌍 Region: {failure['region']}")
-                    print(f"     ❌ Error: {failure['error']}")
+                    print(f"     {Symbols.ACCOUNT} Account: {failure['account_name']}")
+                    print(f"     {Symbols.REGION} Region: {failure['region']}")
+                    print(f"     {Symbols.ERROR} Error: {failure['error']}")
                     print()
             
             # Cost savings summary for spot instances
             spot_instances = [i for i in created_instances if i.get('capacity_type') == 'spot']
             if spot_instances:
-                print(f"\n💰 COST SAVINGS SUMMARY:")
+                print(f"\n{Symbols.COST} COST SAVINGS SUMMARY:")
                 print("-" * 40)
-                print(f"   🏷️  Spot instances: {len(spot_instances)}")
+                print(f"   [TAG]  Spot instances: {len(spot_instances)}")
                 print(f"   💵 Estimated savings: 60-70% vs On-Demand")
-                print(f"   📊 Monthly savings: Significant cost reduction")
-                print(f"   ⚠️  Interruption risk: Monitor for capacity changes")
+                print(f"   {Symbols.STATS} Monthly savings: Significant cost reduction")
+                print(f"   {Symbols.WARN}  Interruption risk: Monitor for capacity changes")
             
             # Save reports
             print(f"\n📄 Saving reports and logs...")
             
             mapping_file = self.save_user_instance_mapping(created_instances, failed_instances)
             if mapping_file:
-                print(f"✅ User-instance mapping: {mapping_file}")
+                print(f"{Symbols.OK} User-instance mapping: {mapping_file}")
             
             report_file = self.save_instance_report(created_instances, failed_instances)
             if report_file:
-                print(f"✅ Detailed report: {report_file}")
+                print(f"{Symbols.OK} Detailed report: {report_file}")
             
-            print(f"✅ Session log: {self.log_filename}")
+            print(f"{Symbols.OK} Session log: {self.log_filename}")
             
             # Final summary log
             self.log_operation('INFO', "=" * 80)
@@ -3647,22 +3647,22 @@ class EC2InstanceManager:
             self.log_operation('INFO', "=" * 80)
             
             # Final success message
-            print(f"\n🎉 EC2 Instance Creation Completed!")
-            print(f"📊 Success Rate: {success_rate:.1f}%")
-            print(f"🏷️  Capacity: {capacity_type.upper()}")
+            print(f"\n[PARTY] EC2 Instance Creation Completed!")
+            print(f"{Symbols.STATS} Success Rate: {success_rate:.1f}%")
+            print(f"[TAG]  Capacity: {capacity_type.upper()}")
             print(f"💻 Type: {instance_type}")
             
             if success_count > 0:
-                print(f"✅ {success_count} instances are now running and ready to use!")
+                print(f"{Symbols.OK} {success_count} instances are now running and ready to use!")
             
             if spot_instances:
-                print(f"💰 You're saving an estimated 60-70% with {len(spot_instances)} spot instances!")
+                print(f"{Symbols.COST} You're saving an estimated 60-70% with {len(spot_instances)} spot instances!")
             
             print("=" * 80)
             
         except Exception as e:
             self.log_operation('ERROR', f"FATAL ERROR in main execution: {str(e)}")
-            print(f"\n❌ FATAL ERROR: {str(e)}")
+            print(f"\n{Symbols.ERROR} FATAL ERROR: {str(e)}")
             print("Check the log file for detailed error information.")
             raise
             
@@ -3672,10 +3672,10 @@ def main():
         manager = EC2InstanceManager()
         manager.run()
     except KeyboardInterrupt:
-        print("\n\n❌ Script interrupted by user")
+        print("\n\n[ERROR] Script interrupted by user")
         sys.exit(1)
     except Exception as e:
-        print(f"❌ Unexpected error: {e}")
+        print(f"{Symbols.ERROR} Unexpected error: {e}")
         sys.exit(1)
 
 if __name__ == "__main__":

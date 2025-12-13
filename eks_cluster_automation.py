@@ -12,6 +12,8 @@ import time
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple, Set
 import boto3
+from text_symbols import Symbols
+
 
 # Import ENHANCED credential manager for Root/IAM support
 from enhanced_aws_credential_manager import EnhancedAWSCredentialManager, MultiUserCredentials, CredentialInfo
@@ -52,7 +54,7 @@ class EKSAutomation:
         os.makedirs("aws/eks", exist_ok=True)
 
         # Print welcome message
-        print("[START] EKS Cluster & Nodegroup Automation - Phase 2")
+        print(f"{Symbols.START} EKS Cluster & Nodegroup Automation - Phase 2")
         print(f"👤 User: {self.current_user}")
         print(f"[TIME] Time: {self.current_time}")
         print("=" * 60)
@@ -61,7 +63,7 @@ class EKSAutomation:
         """Load EC2-AMI-Region mapping configuration"""
         try:
             if not os.path.exists(self.config_file):
-                print(f"[WARN]  Configuration file {self.config_file} not found, using defaults")
+                print(f"{Symbols.WARN}  Configuration file {self.config_file} not found, using defaults")
                 return {
                     "eks_config": {
                         "default_version": "1.27",
@@ -72,11 +74,11 @@ class EKSAutomation:
             with open(self.config_file, 'r') as f:
                 ami_config = json.load(f)
 
-            print(f"[OK] Configuration loaded from: {self.config_file}")
+            print(f"{Symbols.OK} Configuration loaded from: {self.config_file}")
             return ami_config
 
         except Exception as e:
-            print(f"[WARN]  Error loading configuration: {e}, using defaults")
+            print(f"{Symbols.WARN}  Error loading configuration: {e}, using defaults")
             return {
                 "eks_config": {
                     "default_version": "1.27",
@@ -129,20 +131,20 @@ class EKSAutomation:
                 return False
 
             # Validate all credentials
-            print(f"\n[SCAN] VALIDATING {multi_credentials.total_users} CREDENTIAL(S)")
+            print(f"\n{Symbols.SCAN} VALIDATING {multi_credentials.total_users} CREDENTIAL(S)")
             validated_credentials = self.credential_manager.validate_multiple_credentials(multi_credentials)
 
             if validated_credentials.total_users == 0:
                 print("[ERROR] No valid credentials found. Exiting...")
                 return False
 
-            print(f"[OK] {validated_credentials.total_users} valid credential(s) ready for EKS automation")
+            print(f"{Symbols.OK} {validated_credentials.total_users} valid credential(s) ready for EKS automation")
 
             # Convert to legacy format for existing EKS logic
             all_selected_users = self.convert_enhanced_credentials_to_legacy_format(validated_credentials)
             user_type = validated_credentials.credential_type
 
-            print(f"\n[OK] Selected {len(all_selected_users)} users across accounts")
+            print(f"\n{Symbols.OK} Selected {len(all_selected_users)} users across accounts")
 
             # Step 2: Configure EKS Cluster Settings (EXISTING LOGIC)
             print("\n[CONFIG] STEP 2: EKS CLUSTER CONFIGURATION")
@@ -152,7 +154,7 @@ class EKSAutomation:
             default_version = eks_config.get("default_version", "1.33")
             default_ami_type = eks_config.get("ami_type", "AL2_x86_64")
 
-            print(f"[LIST] EKS Default Settings:")
+            print(f"{Symbols.LIST} EKS Default Settings:")
             print(f"   🔸 Default Version: {default_version}")
             print(f"   🔸 Default AMI Type: {default_ami_type}")
 
@@ -177,9 +179,9 @@ class EKSAutomation:
                         eks_version = custom_version
                         break
                     else:
-                        print("[ERROR] Please enter a valid version")
+                        print(f"{Symbols.ERROR} Please enter a valid version")
                 else:
-                    print("[ERROR] Invalid choice. Please select 1, 2, or 3")
+                    print(f"{Symbols.ERROR} Invalid choice. Please select 1, 2, or 3")
 
             # Ask for AMI type
             print("\nAMI Type Selection:")
@@ -202,12 +204,12 @@ class EKSAutomation:
                         selected_ami_type = custom_ami
                         break
                     else:
-                        print("[ERROR] Please enter a valid AMI type")
+                        print(f"{Symbols.ERROR} Please enter a valid AMI type")
                 else:
-                    print("[ERROR] Invalid choice. Please select 1, 2, or 3")
+                    print(f"{Symbols.ERROR} Invalid choice. Please select 1, 2, or 3")
 
-            print(f"\n[OK] Selected EKS Version: {eks_version}")
-            print(f"[OK] Selected AMI Type: {selected_ami_type}")
+            print(f"\n{Symbols.OK} Selected EKS Version: {eks_version}")
+            print(f"{Symbols.OK} Selected AMI Type: {selected_ami_type}")
 
             # Step 3: Configure add-ons and features (EXISTING LOGIC)
             install_addons = input("Install essential EKS add-ons (EBS/EFS/VPC CNI)? (y/N): ").strip().lower() in ['y',
@@ -251,7 +253,7 @@ class EKSAutomation:
             # Confirmation
             confirmation = input("\nProceed with cluster creation using these configurations? (Y/n): ").strip().lower()
             if confirmation == 'n':
-                print("[ERROR] Operation cancelled by user")
+                print(f"{Symbols.ERROR} Operation cancelled by user")
                 return False
 
             # Display overall creation summary with selected values (EXISTING LOGIC)
@@ -270,15 +272,14 @@ class EKSAutomation:
             result = self.eks_manager.process_multiple_user_selection(all_selected_users, automation_options)
 
             if result:
-                print("\n[OK] EKS Clusters created successfully!")
+                print(f"\n{Symbols.OK} EKS Clusters created successfully!")
                 return True
             else:
-                print("\n[WARN] Some EKS Cluster creations may have failed")
+                print(f"\n{Symbols.WARN} Some EKS Cluster creations may have failed")
                 return False
 
         except Exception as e:
-            print(f"\n[ERROR] Error during automation: {e}")
-            import traceback
+            print(f"\n{Symbols.ERROR} Error during automation: {e}")
             traceback.print_exc()
             return False
 
@@ -298,7 +299,7 @@ class EKSAutomation:
 
     def configure_multiple_nodegroups(self, credentials: CredentialInfo) -> List[Dict]:
         """Configure multiple nodegroups with individual settings"""
-        print("\n🏗️  NODEGROUP CONFIGURATION")
+        print("\n[BUILD]  NODEGROUP CONFIGURATION")
         print("=" * 60)
 
         # Ask for number of nodegroups
@@ -317,7 +318,7 @@ class EKSAutomation:
             except ValueError:
                 print("[ERROR] Please enter a valid number")
 
-        print(f"\n[OK] Creating {num_nodegroups} nodegroup(s)")
+        print(f"\n{Symbols.OK} Creating {num_nodegroups} nodegroup(s)")
 
         # Get allowed instance types
         allowed_instance_types = self.ami_config.get('allowed_instance_types',
@@ -339,7 +340,7 @@ class EKSAutomation:
                 nodegroup_name = default_name
 
             # Strategy selection for this nodegroup
-            print(f"\n[STATS] Strategy Selection for {nodegroup_name}:")
+            print(f"\n{Symbols.STATS} Strategy Selection for {nodegroup_name}:")
             print("1. On-Demand Only (Reliable, Higher Cost)")
             print("2. Spot Only (Cost-Effective, Higher Risk)")
             print("3. Mixed Strategy (On-Demand + Spot)")
@@ -357,9 +358,9 @@ class EKSAutomation:
                     strategy = "mixed"
                     break
                 else:
-                    print("[ERROR] Invalid choice. Please select 1, 2, or 3")
+                    print(f"{Symbols.ERROR} Invalid choice. Please select 1, 2, or 3")
 
-            print(f"[OK] Strategy: {strategy.upper()}")
+            print(f"{Symbols.OK} Strategy: {strategy.upper()}")
 
             # Instance type selection based on strategy
             instance_selections = {}
@@ -399,7 +400,7 @@ class EKSAutomation:
 
             nodegroup_configs.append(nodegroup_config)
 
-            print(f"\n[OK] Nodegroup {nodegroup_num} ({nodegroup_name}) configured successfully!")
+            print(f"\n{Symbols.OK} Nodegroup {nodegroup_num} ({nodegroup_name}) configured successfully!")
             print(f"   Strategy: {strategy.upper()}")
             print(f"   Scaling: Min={min_nodes}, Desired={desired_nodes}, Max={max_nodes}")
             print(f"   Instance Types: {self.format_instance_types_summary(instance_selections)}")
@@ -426,7 +427,7 @@ class EKSAutomation:
             elif choice == '3':
                 return "private"
             else:
-                print("[ERROR] Invalid choice. Please select 1, 2, or 3")
+                print(f"{Symbols.ERROR} Invalid choice. Please select 1, 2, or 3")
 
     def format_instance_types_summary(self, instance_selections: Dict) -> str:
         """Format instance types for summary display"""
@@ -473,7 +474,7 @@ class EKSAutomation:
     def select_mixed_instance_types_for_nodegroup(self, credentials: CredentialInfo, allowed_types: List[str],
                                                   nodegroup_name: str) -> Dict[str, List[str]]:
         """Select instance types for specific Mixed nodegroup"""
-        print(f"\n🔄 MIXED STRATEGY SELECTION for {nodegroup_name}")
+        print(f"\n{Symbols.SCAN} MIXED STRATEGY SELECTION for {nodegroup_name}")
         print("-" * 60)
 
         # Get On-Demand types
@@ -517,7 +518,7 @@ class EKSAutomation:
     def select_ondemand_instance_types_for_nodegroup(self, credentials: CredentialInfo, allowed_types: List[str],
                                                      nodegroup_name: str) -> Dict[str, List[str]]:
         """Select instance types for specific On-Demand nodegroup"""
-        print(f"\n[COST] ON-DEMAND INSTANCE SELECTION for {nodegroup_name}")
+        print(f"\n{Symbols.COST} ON-DEMAND INSTANCE SELECTION for {nodegroup_name}")
         print("-" * 60)
 
         # Ask for cache preference
@@ -525,7 +526,7 @@ class EKSAutomation:
         force_refresh = refresh_choice == 'n'
 
         if force_refresh:
-            print("🔄 Invalidating cache and fetching fresh data...")
+            print(f"{Symbols.SCAN} Invalidating cache and fetching fresh data...")
             self.invalidate_quota_cache()
 
         print("Analyzing service quotas for On-Demand instances...")
@@ -534,7 +535,7 @@ class EKSAutomation:
         quota_info = self.analyze_service_quotas_with_cache(credentials, allowed_types, force_refresh)
 
         # Display quota information
-        print(f"\n[STATS] Service Quota Analysis for {nodegroup_name}:")
+        print(f"\n{Symbols.STATS} Service Quota Analysis for {nodegroup_name}:")
         print("-" * 50)
 
         # Sort instance types by available quota
@@ -581,7 +582,7 @@ class EKSAutomation:
     def select_spot_instance_types_for_nodegroup(self, credentials: CredentialInfo, allowed_types: List[str],
                                                  nodegroup_name: str) -> Dict[str, List[str]]:
         """Select instance types for specific Spot nodegroup"""
-        print(f"\n📈 SPOT INSTANCE SELECTION for {nodegroup_name}")
+        print(f"\n[UP] SPOT INSTANCE SELECTION for {nodegroup_name}")
         print("-" * 60)
 
         # Ask for refresh preference
@@ -589,7 +590,7 @@ class EKSAutomation:
         force_refresh = refresh_choice == 'n'
 
         if force_refresh:
-            print("🔄 Invalidating spot cache and fetching fresh data...")
+            print(f"{Symbols.SCAN} Invalidating spot cache and fetching fresh data...")
             self.spot_analyzer.invalidate_cache()
 
         print("Analyzing spot instances and service quotas...")
@@ -609,7 +610,7 @@ class EKSAutomation:
         sorted_spots = sorted(best_spots.values(), key=lambda x: x.score, reverse=True)
 
         # Display spot analysis results
-        print(f"\n[STATS] SPOT ANALYSIS RESULTS for {nodegroup_name}")
+        print(f"\n{Symbols.STATS} SPOT ANALYSIS RESULTS for {nodegroup_name}")
         print("-" * 80)
 
         print(f"{'#':<3} {'Type':<10} {'Zone':<15} {'Price':<8} {'Score':<6} {'Interrupt':<15}")
@@ -630,7 +631,7 @@ class EKSAutomation:
 
     def prompt_nodegroup_scaling_individual(self, nodegroup_name: str, strategy: str) -> Tuple[int, int, int]:
         """Prompt user for individual nodegroup scaling configuration"""
-        print(f"\n[STATS] SCALING CONFIGURATION for {nodegroup_name}")
+        print(f"\n{Symbols.STATS} SCALING CONFIGURATION for {nodegroup_name}")
         print("-" * 60)
 
         # Default values based on strategy
@@ -669,7 +670,7 @@ class EKSAutomation:
                 desired_nodes = int(input(
                     f"Desired nodes for {nodegroup_name} (default {default_desired}): ").strip() or default_desired)
                 if desired_nodes < min_nodes:
-                    print(f"[ERROR] Desired nodes must be >= minimum nodes ({min_nodes})")
+                    print(f"{Symbols.ERROR} Desired nodes must be >= minimum nodes ({min_nodes})")
                     continue
                 break
             except ValueError:
@@ -680,7 +681,7 @@ class EKSAutomation:
                 max_nodes = int(
                     input(f"Maximum nodes for {nodegroup_name} (default {default_max}): ").strip() or default_max)
                 if max_nodes < desired_nodes:
-                    print(f"[ERROR] Maximum nodes must be >= desired nodes ({desired_nodes})")
+                    print(f"{Symbols.ERROR} Maximum nodes must be >= desired nodes ({desired_nodes})")
                     continue
                 break
             except ValueError:
@@ -708,10 +709,10 @@ class EKSAutomation:
 
                 cache_time = cache_data.get('timestamp')
                 if cache_time and datetime.now() - cache_time < cache_duration:
-                    print(f"[FOLDER] Using cached quota data from {cache_time.strftime('%Y-%m-%d %H:%M:%S')}")
+                    print(f"{Symbols.FOLDER} Using cached quota data from {cache_time.strftime('%Y-%m-%d %H:%M:%S')}")
                     return cache_data.get('quota_info', {})
             except Exception as e:
-                print(f"[WARN] Cache read error: {e}")
+                print(f"{Symbols.WARN} Cache read error: {e}")
 
         # Fetch fresh data
         print("[SCAN] Fetching fresh service quota data...")
@@ -730,9 +731,9 @@ class EKSAutomation:
             }
             with open(cache_file, 'wb') as f:
                 pickle.dump(cache_data, f)
-            print(f"[INSTANCE] Quota data cached for future use")
+            print(f"{Symbols.INSTANCE} Quota data cached for future use")
         except Exception as e:
-            print(f"[WARN] Cache write error: {e}")
+            print(f"{Symbols.WARN} Cache write error: {e}")
 
         return quota_info
 
@@ -770,7 +771,7 @@ class EKSAutomation:
 
         # Get current usage
         try:
-            print("[SCAN] Analyzing current instance usage...")
+            print(f"{Symbols.SCAN} Analyzing current instance usage...")
             instances = []
 
             # Use paginator to handle larger number of instances
@@ -810,17 +811,17 @@ class EKSAutomation:
 
             # Store usage info
             usage = family_usage
-            print(f"[STATS] Current vCPU usage: {usage}")
+            print(f"{Symbols.STATS} Current vCPU usage: {usage}")
 
         except Exception as e:
-            print(f"[WARN] Error analyzing instance usage: {str(e)}")
+            print(f"{Symbols.WARN} Error analyzing instance usage: {str(e)}")
             usage = {'standard': 0}  # Default to zero usage if we can't fetch it
 
         # Fetch quotas for each family
         quota_results = {}
         for instance_family, quota_code in quota_code_mappings.items():
             try:
-                print(f"[SCAN] Fetching quota for {instance_family} family...")
+                print(f"{Symbols.SCAN} Fetching quota for {instance_family} family...")
                 response = client.get_service_quota(
                     ServiceCode=service_code,
                     QuotaCode=quota_code
@@ -836,10 +837,10 @@ class EKSAutomation:
                     'available_capacity': available_capacity
                 }
 
-                print(f"[OK] {instance_family}: Limit={quota_limit}, Used={current_usage}, Available={available_capacity}")
+                print(f"{Symbols.OK} {instance_family}: Limit={quota_limit}, Used={current_usage}, Available={available_capacity}")
 
             except client.exceptions.NoSuchResourceException:
-                print(f"[WARN] No quota found for {instance_family} with code {quota_code}")
+                print(f"{Symbols.WARN} No quota found for {instance_family} with code {quota_code}")
                 # Use a default value as fallback (66 vCPUs is common default)
                 DEFAULT_QUOTA = 66.0
                 quota_results[instance_family] = {
@@ -849,7 +850,7 @@ class EKSAutomation:
                 }
 
             except Exception as e:
-                print(f"[WARN] Error fetching quota for {instance_family}: {str(e)}")
+                print(f"{Symbols.WARN} Error fetching quota for {instance_family}: {str(e)}")
                 # Use a default value as fallback (66 vCPUs is common default)
                 DEFAULT_QUOTA = 66.0
                 quota_results[instance_family] = {
@@ -859,7 +860,7 @@ class EKSAutomation:
                 }
 
         # Debug: Print all quota results
-        print("\n[OK] Quota information fetched for all families:")
+        print(f"\n{Symbols.OK} Quota information fetched for all families:")
         for family, values in quota_results.items():
             print(
                 f"   {family}: Limit={values['quota_limit']}, Used={values['current_usage']}, Available={values['available_capacity']}")
@@ -906,17 +907,17 @@ class EKSAutomation:
         for cache_file in cache_files:
             try:
                 os.remove(cache_file)
-                print(f"[DELETE] Removed cache file: {cache_file}")
+                print(f"{Symbols.DELETE} Removed cache file: {cache_file}")
             except Exception as e:
-                print(f"[WARN] Error removing cache file {cache_file}: {e}")
+                print(f"{Symbols.WARN} Error removing cache file {cache_file}: {e}")
 
     def multi_select_instance_types(self, available_types: List[str], strategy_name: str) -> List[str]:
         """Allow user to select multiple instance types"""
         if not available_types:
-            print(f"[WARN] No {strategy_name} instance types available")
+            print(f"{Symbols.WARN} No {strategy_name} instance types available")
             return []
 
-        print(f"\n[LOG] Select {strategy_name} Instance Types:")
+        print(f"\n{Symbols.LOG} Select {strategy_name} Instance Types:")
         print("You can select multiple types for better availability")
         print("-" * 50)
 
@@ -936,19 +937,19 @@ class EKSAutomation:
 
                 if selection.lower() == 'all':
                     selected_types = available_types
-                    print(f"[OK] Selected all {len(selected_types)} {strategy_name} types")
+                    print(f"{Symbols.OK} Selected all {len(selected_types)} {strategy_name} types")
                     return selected_types
 
                 selected_indices = self.parse_selection(selection, len(available_types))
 
                 if selected_indices:
                     selected_types = [available_types[i - 1] for i in selected_indices]
-                    print(f"[OK] Selected {strategy_name} types: {', '.join(selected_types)}")
+                    print(f"{Symbols.OK} Selected {strategy_name} types: {', '.join(selected_types)}")
                     return selected_types
                 else:
                     print("[ERROR] No valid selection made")
             except ValueError as e:
-                print(f"[ERROR] {e}")
+                print(f"{Symbols.ERROR} {e}")
 
     def parse_selection(self, selection: str, max_count: int) -> List[int]:
         """Parse user selection string into list of indices"""

@@ -6,10 +6,12 @@ import time
 import statistics
 import os
 import sys
+import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Tuple, Optional, Set
 from dataclasses import dataclass
 from botocore.exceptions import ClientError
+from text_symbols import Symbols
 
 
 # Import logger from your existing setup
@@ -17,7 +19,6 @@ try:
     from logger import setup_logger
 except ImportError:
     # Fallback logger if logger module not available
-    import logging
     def setup_logger(name, log_file):
         logger = logging.getLogger(name)
         logger.setLevel(logging.INFO)
@@ -157,7 +158,7 @@ class SpotInstanceAnalyzer:
     def get_spot_price_history(self, instance_type: str, days: int = 7) -> Dict:
         """Get spot price history for analysis"""
         try:
-            end_time = datetime.utcnow()
+            end_time = datetime.now(datetime.UTC)
             start_time = end_time - timedelta(days=days)
             
             response = self.ec2_client.describe_spot_price_history(
@@ -400,19 +401,19 @@ class SpotInstanceAnalyzer:
             
             # Add detailed reasoning
             if is_available:
-                reasons.append(f"✅ RECOMMENDED: {savings_percentage:.1f}% savings, {recommendation_score:.1%} confidence")
+                reasons.append(f"{Symbols.OK} RECOMMENDED: {savings_percentage:.1f}% savings, {recommendation_score:.1%} confidence")
                 reasons.append(f"Available in {len(spot_azs)} AZs with {interruption_rate:.1%} interruption rate")
             else:
                 if len(spot_azs) < min_az_count:
-                    reasons.append(f"❌ Insufficient AZ coverage: {len(spot_azs)} < {min_az_count}")
+                    reasons.append(f"{Symbols.ERROR} Insufficient AZ coverage: {len(spot_azs)} < {min_az_count}")
                 if current_price <= 0:
-                    reasons.append("❌ No current spot pricing available")
+                    reasons.append("[ERROR] No current spot pricing available")
                 if savings_percentage < min_savings_threshold:
-                    reasons.append(f"❌ Low savings potential: {savings_percentage:.1f}% < {min_savings_threshold}%")
+                    reasons.append(f"{Symbols.ERROR} Low savings potential: {savings_percentage:.1f}% < {min_savings_threshold}%")
                 if interruption_rate > max_interruption_rate:
-                    reasons.append(f"❌ High interruption risk: {interruption_rate:.1%} > {max_interruption_rate:.1%}")
+                    reasons.append(f"{Symbols.ERROR} High interruption risk: {interruption_rate:.1%} > {max_interruption_rate:.1%}")
                 if recommendation_score < min_confidence_score:
-                    reasons.append(f"❌ Low confidence score: {recommendation_score:.1%} < {min_confidence_score:.1%}")
+                    reasons.append(f"{Symbols.ERROR} Low confidence score: {recommendation_score:.1%} < {min_confidence_score:.1%}")
             
             result = SpotAvailabilityResult(
                 instance_type=instance_type,

@@ -5,6 +5,7 @@ Script to update import statements in ultra_cleanup files after folder reorganiz
 
 import os
 from pathlib import Path
+from text_symbols import Symbols
 
 def update_imports_in_file(file_path):
     """Update import statements in a single file."""
@@ -35,13 +36,13 @@ def update_imports_in_file(file_path):
         if content != original_content:
             with open(file_path, 'w', encoding='utf-8') as f:
                 f.write(content)
-            print(f"[OK] {file_path.name}: Updated imports")
+            print(f"{Symbols.OK} {file_path.name}: Updated imports")
             return 1
         
         return 0
         
     except Exception as e:
-        print(f"[ERROR] Failed to process {file_path}: {e}")
+        print(f"{Symbols.ERROR} Failed to process {file_path}: {e}")
         return 0
 
 def main():
@@ -67,7 +68,7 @@ def main():
         total_updated += updated
     
     print("="*80)
-    print(f"[STATS] Updated {total_updated} files")
+    print(f"{Symbols.STATS} Updated {total_updated} files")
     print("[OK] Import update completed!")
 
 if __name__ == "__main__":

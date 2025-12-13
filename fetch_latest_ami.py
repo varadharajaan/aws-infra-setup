@@ -1,10 +1,11 @@
 import boto3
 import json
 import os
+from text_symbols import Symbols
 
 def load_accounts_config(config_file="aws_accounts_config.json"):
     if not os.path.exists(config_file):
-        print(f"[ERROR] Config file {config_file} not found.")
+        print(f"{Symbols.ERROR} Config file {config_file} not found.")
         return None
     with open(config_file, "r") as f:
         return json.load(f)
@@ -29,10 +30,10 @@ def get_boto3_session(account_key):
         try:
             session = boto3.Session(profile_name=profile)
             session.client("sts").get_caller_identity()
-            print(f"[OK] Using profile: {profile}")
+            print(f"{Symbols.OK} Using profile: {profile}")
             return session
         except Exception as e:
-            print(f"[WARN] Failed with profile '{profile}': {e}")
+            print(f"{Symbols.WARN} Failed with profile '{profile}': {e}")
     print("[ERROR] No working profile found.")
     return None
 
@@ -60,7 +61,7 @@ def get_latest_amazon_linux_3_ami(region, session):
         images = sorted(images, key=lambda x: x["CreationDate"], reverse=True)
         return images[0]["ImageId"] if images else None
     except Exception as e:
-        print(f"[{region}] [ERROR] Failed to fetch AL2023 AMI: {e}")
+        print(f"[{region}] {Symbols.ERROR} Failed to fetch AL2023 AMI: {e}")
         return None
 
 def get_latest_amazon_linux_2_ami(region, session):
@@ -80,7 +81,7 @@ def get_latest_amazon_linux_2_ami(region, session):
         images = sorted(images, key=lambda x: x["CreationDate"], reverse=True)
         return images[0]["ImageId"] if images else None
     except Exception as e:
-        print(f"[{region}] [ERROR] Failed to fetch AL2 AMI: {e}")
+        print(f"[{region}] {Symbols.ERROR} Failed to fetch AL2 AMI: {e}")
         return None
 
 def main():
@@ -104,7 +105,7 @@ def main():
 
     al2023_ami_mapping = {}
     al2_ami_mapping = {}
-    print("\n🔄 Fetching latest Amazon Linux 2023 and Amazon Linux 2 AMIs:")
+    print("\n[SCAN] Fetching latest Amazon Linux 2023 and Amazon Linux 2 AMIs:")
     for region in regions:
         al2023_ami = get_latest_amazon_linux_3_ami(region, session)
         al2_ami = get_latest_amazon_linux_2_ami(region, session)
@@ -117,7 +118,7 @@ def main():
     for region, ami in al2023_ami_mapping.items():
         print(f'    "{region}": "{ami}",')
 
-    print("\n[OK] Latest Amazon Linux 2 AMI Mapping:")
+    print(f"\n{Symbols.OK} Latest Amazon Linux 2 AMI Mapping:")
     for region, ami in al2_ami_mapping.items():
         print(f'    "{region}": "{ami}",')
 

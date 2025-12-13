@@ -1,3 +1,4 @@
+﻿from text_symbols import Symbols
 import json
 import os
 import sys
@@ -13,7 +14,7 @@ class SessionRollback:
     def list_available_sessions(self):
         session_files = glob.glob("session_*.json")
         if not session_files:
-            print("[ERROR] No session files found")
+            print(f"{Symbols.ERROR} No session files found")
             return []
         sessions = []
         for session_file in session_files:
@@ -29,12 +30,12 @@ class SessionRollback:
                         'dry_run': session_data.get('dry_run', False)
                     })
             except Exception as e:
-                print(f"[WARN] Could not read session file {session_file}: {e}")
+                print(f"{Symbols.WARN} Could not read session file {session_file}: {e}")
         sessions.sort(key=lambda x: x['created_at'], reverse=True)
         return sessions
 
     def display_sessions(self, sessions):
-        print("\n[LIST] Available Sessions:")
+        print(f"\n{Symbols.LIST} Available Sessions:")
         print("="*80)
         print(f"{'#':<3} {'Session ID':<25} {'Created':<20} {'User':<15} {'Resources':<10} {'Type':<8}")
         print("-"*80)
@@ -53,7 +54,7 @@ class SessionRollback:
                 if 1 <= choice_num <= len(sessions):
                     return sessions[choice_num - 1]
                 else:
-                    print(f"[ERROR] Please enter a number between 1 and {len(sessions)}")
+                    print(f"{Symbols.ERROR} Please enter a number between 1 and {len(sessions)}")
             except ValueError:
                 print("[ERROR] Please enter a valid number or 'q' to quit")
 
@@ -63,11 +64,11 @@ class SessionRollback:
                 session_data = json.load(f)
                 return session_data.get('created_resources', [])
         except Exception as e:
-            print(f"[ERROR] Error loading session file: {e}")
+            print(f"{Symbols.ERROR} Error loading session file: {e}")
             return []
 
     def display_session_resources(self, resources):
-        print(f"\n[STATS] Resources in Session ({len(resources)} total):")
+        print(f"\n{Symbols.STATS} Resources in Session ({len(resources)} total):")
         print("-"*60)
         resource_types = {}
         for resource in resources:
@@ -81,7 +82,7 @@ class SessionRollback:
                 print(f"   • {resource['resource_id']} ({resource['account']} - {resource['region']})")
 
     def confirm_rollback(self, resources):
-        print(f"\n[WARN] WARNING: This will DELETE {len(resources)} resources!")
+        print(f"\n{Symbols.WARN} WARNING: This will DELETE {len(resources)} resources!")
         print("This action cannot be undone.")
         confirm1 = input("\nAre you sure you want to proceed? (yes/no): ").strip().lower()
         if confirm1 != 'yes':
@@ -100,7 +101,7 @@ class SessionRollback:
                     aws_secret_access_key=resource['secret_key'],
                     region_name=resource['region']
                 )
-                print(f"   [DELETE] Terminating instance {resource_id}...")
+                print(f"   {Symbols.DELETE} Terminating instance {resource_id}...")
                 ec2_client.terminate_instances(InstanceIds=[resource_id])
                 return True
             elif resource_type == 'auto-scaling-group':
@@ -110,7 +111,7 @@ class SessionRollback:
                     aws_secret_access_key=resource['secret_key'],
                     region_name=resource['region']
                 )
-                print(f"   [DELETE] Deleting ASG {resource_id}...")
+                print(f"   {Symbols.DELETE} Deleting ASG {resource_id}...")
                 asg_client.update_auto_scaling_group(
                     AutoScalingGroupName=resource_id,
                     DesiredCapacity=0,
@@ -130,14 +131,14 @@ class SessionRollback:
                     aws_secret_access_key=resource['secret_key'],
                     region_name=resource['region']
                 )
-                print(f"   [DELETE] Deleting launch template {resource_id}...")
+                print(f"   {Symbols.DELETE} Deleting launch template {resource_id}...")
                 ec2_client.delete_launch_template(LaunchTemplateId=resource_id)
                 return True
             else:
-                print(f"   [WARN] Unknown resource type: {resource_type}")
+                print(f"   {Symbols.WARN} Unknown resource type: {resource_type}")
                 return False
         except Exception as e:
-            print(f"   [ERROR] Failed to delete {resource_type} {resource_id}: {e}")
+            print(f"   {Symbols.ERROR} Failed to delete {resource_type} {resource_id}: {e}")
             return False
 
     def rollback_session(self, session_file):
@@ -149,15 +150,15 @@ class SessionRollback:
             with open(session_file, 'r') as f:
                 session_data = json.load(f)
                 if session_data.get('dry_run', False):
-                    print("[ERROR] This was a DRY-RUN session - no actual resources to delete")
+                    print(f"{Symbols.ERROR} This was a DRY-RUN session - no actual resources to delete")
                     return False
         except:
             pass
         self.display_session_resources(resources)
         if not self.confirm_rollback(resources):
-            print("[ERROR] Rollback cancelled")
+            print(f"{Symbols.ERROR} Rollback cancelled")
             return False
-        print(f"\n🔄 Starting rollback of {len(resources)} resources...")
+        print(f"\n{Symbols.SCAN} Starting rollback of {len(resources)} resources...")
         success_count = 0
         failure_count = 0
         for resource in reversed(resources):
@@ -167,11 +168,11 @@ class SessionRollback:
                 else:
                     failure_count += 1
             except Exception as e:
-                print(f"   [ERROR] Error deleting {resource['resource_id']}: {e}")
+                print(f"   {Symbols.ERROR} Error deleting {resource['resource_id']}: {e}")
                 failure_count += 1
-        print(f"\n[STATS] Rollback Results:")
-        print(f"   [OK] Successfully deleted: {success_count}")
-        print(f"   [ERROR] Failed to delete: {failure_count}")
+        print(f"\n{Symbols.STATS} Rollback Results:")
+        print(f"   {Symbols.OK} Successfully deleted: {success_count}")
+        print(f"   {Symbols.ERROR} Failed to delete: {failure_count}")
         if success_count > 0:
             archive_name = f"rolled_back_{session_file}"
             os.rename(session_file, archive_name)

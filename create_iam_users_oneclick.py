@@ -6,6 +6,7 @@ import sys
 import os
 from datetime import datetime
 from botocore.exceptions import ClientError, BotoCoreError
+from text_symbols import Symbols
 
 class IAMUserManager:
     def __init__(self, config_file='aws_accounts_config.json', mapping_file='user_mapping.json'):
@@ -28,25 +29,25 @@ class IAMUserManager:
             self.aws_accounts = config['accounts']
             self.user_settings = config['user_settings']
             
-            print(f"✅ Configuration loaded from: {self.config_file}")
-            print(f"📊 Found {len(self.aws_accounts)} AWS accounts")
+            print(f"{Symbols.OK} Configuration loaded from: {self.config_file}")
+            print(f"{Symbols.STATS} Found {len(self.aws_accounts)} AWS accounts")
             
         except FileNotFoundError as e:
-            print(f"❌ {e}")
+            print(f"{Symbols.ERROR} {e}")
             print("Please ensure the configuration file exists in the same directory.")
             sys.exit(1)
         except json.JSONDecodeError as e:
-            print(f"❌ Invalid JSON in configuration file: {e}")
+            print(f"{Symbols.ERROR} Invalid JSON in configuration file: {e}")
             sys.exit(1)
         except Exception as e:
-            print(f"❌ Error loading configuration: {e}")
+            print(f"{Symbols.ERROR} Error loading configuration: {e}")
             sys.exit(1)
 
     def load_user_mapping(self):
         """Load user mapping from JSON file"""
         try:
             if not os.path.exists(self.mapping_file):
-                print(f"⚠️  User mapping file '{self.mapping_file}' not found")
+                print(f"{Symbols.WARN}  User mapping file '{self.mapping_file}' not found")
                 print("User creation will continue without real user mapping")
                 self.user_mappings = {}
                 return
@@ -56,14 +57,14 @@ class IAMUserManager:
             
             self.user_mappings = mapping_data['user_mappings']
             
-            print(f"✅ User mapping loaded from: {self.mapping_file}")
+            print(f"{Symbols.OK} User mapping loaded from: {self.mapping_file}")
             print(f"👥 Found mappings for {len(self.user_mappings)} users")
             
         except json.JSONDecodeError as e:
-            print(f"❌ Invalid JSON in user mapping file: {e}")
+            print(f"{Symbols.ERROR} Invalid JSON in user mapping file: {e}")
             self.user_mappings = {}
         except Exception as e:
-            print(f"⚠️  Warning: Error loading user mapping: {e}")
+            print(f"{Symbols.WARN}  Warning: Error loading user mapping: {e}")
             self.user_mappings = {}
 
     def get_user_info(self, username):
@@ -105,12 +106,12 @@ class IAMUserManager:
             
         except ClientError as e:
             if e.response['Error']['Code'] == 'AccessDenied':
-                print(f"❌ Access denied for {account_name}. Please check credentials.")
+                print(f"{Symbols.ERROR} Access denied for {account_name}. Please check credentials.")
             else:
-                print(f"❌ AWS Error for {account_name}: {e}")
+                print(f"{Symbols.ERROR} AWS Error for {account_name}: {e}")
             raise
         except Exception as e:
-            print(f"❌ Failed to create IAM client for {account_name}: {e}")
+            print(f"{Symbols.ERROR} Failed to create IAM client for {account_name}: {e}")
             raise
 
     def check_user_exists(self, iam_client, username):
@@ -178,9 +179,9 @@ class IAMUserManager:
         """Create a single IAM user with all necessary configurations"""
         try:
             # 1. Create IAM User
-            print("  📝 Creating IAM user...")
+            print("  [LOG] Creating IAM user...")
             iam_client.create_user(UserName=username)
-            print(f"  ✅ User {username} created successfully")
+            print(f"  {Symbols.OK} User {username} created successfully")
             
             # 2. Enable Console Access
             print("  🔐 Setting up console access...")
@@ -189,15 +190,15 @@ class IAMUserManager:
                 Password=self.user_settings['password'],
                 PasswordResetRequired=False
             )
-            print("  ✅ Console access configured")
+            print(f"  {Symbols.OK} Console access configured")
             
             # 3. Attach AdministratorAccess Policy
-            print("  🔑 Attaching AdministratorAccess policy...")
+            print(f"  {Symbols.KEY} Attaching AdministratorAccess policy...")
             iam_client.attach_user_policy(
                 UserName=username,
                 PolicyArn="arn:aws:iam::aws:policy/AdministratorAccess"
             )
-            print("  ✅ AdministratorAccess policy attached")
+            print(f"  {Symbols.OK} AdministratorAccess policy attached")
             
             # 4. Create Restriction Policy
             print("  🚫 Creating region and instance type restriction policy...")
@@ -208,14 +209,14 @@ class IAMUserManager:
                 PolicyName="Restrict-Region-And-EC2Types",
                 PolicyDocument=json.dumps(restriction_policy)
             )
-            print("  ✅ Restriction policy applied")
+            print(f"  {Symbols.OK} Restriction policy applied")
             
             # 5. Create Access Key
-            print("  🔑 Creating access keys...")
+            print(f"  {Symbols.KEY} Creating access keys...")
             response = iam_client.create_access_key(UserName=username)
             access_key = response['AccessKey']['AccessKeyId']
             secret_key = response['AccessKey']['SecretAccessKey']
-            print("  ✅ Access keys created")
+            print(f"  {Symbols.OK} Access keys created")
             
             return {
                 'username': username,
@@ -226,22 +227,22 @@ class IAMUserManager:
             }
             
         except Exception as e:
-            print(f"  ❌ Error creating user {username}: {e}")
+            print(f"  {Symbols.ERROR} Error creating user {username}: {e}")
             raise
 
     def create_users_in_account(self, account_name):
         """Create users in a specific AWS account"""
-        print(f"\n🏦 Working on Account: {account_name.upper()}")
+        print(f"\n{Symbols.ACCOUNT} Working on Account: {account_name.upper()}")
         print("=" * 60)
         
         try:
             # Initialize IAM client for this account
             iam_client, account_config = self.create_iam_client(account_name)
-            print(f"✅ Connected to AWS Account: {account_config['account_id']}")
+            print(f"{Symbols.OK} Connected to AWS Account: {account_config['account_id']}")
             print(f"📧 Email: {account_config['email']}")
             
         except Exception as e:
-            print(f"❌ Failed to connect to {account_name}: {e}")
+            print(f"{Symbols.ERROR} Failed to connect to {account_name}: {e}")
             return [], [], []
         
         # Get users for this account
@@ -252,12 +253,12 @@ class IAMUserManager:
         failed_users = []
         
         # Check existing users first
-        print(f"\n🔍 Checking for existing users...")
+        print(f"\n{Symbols.SCAN} Checking for existing users...")
         for username, region in users_regions.items():
             try:
                 if self.check_user_exists(iam_client, username):
                     user_info = self.get_user_info(username)
-                    print(f"  ⚠️  User {username} ({user_info['full_name']}) already exists - SKIPPING")
+                    print(f"  {Symbols.WARN}  User {username} ({user_info['full_name']}) already exists - SKIPPING")
                     skipped_users.append({
                         'username': username,
                         'region': region,
@@ -267,9 +268,9 @@ class IAMUserManager:
                     continue
                 else:
                     user_info = self.get_user_info(username)
-                    print(f"  ✅ User {username} ({user_info['full_name']}) does not exist - will create")
+                    print(f"  {Symbols.OK} User {username} ({user_info['full_name']}) does not exist - will create")
             except Exception as e:
-                print(f"  ❌ Error checking user {username}: {e}")
+                print(f"  {Symbols.ERROR} Error checking user {username}: {e}")
                 failed_users.append(username)
                 continue
         
@@ -279,7 +280,7 @@ class IAMUserManager:
                           and k not in failed_users}
         
         if not users_to_create:
-            print(f"\n⚠️  No new users to create in {account_name}")
+            print(f"\n{Symbols.WARN}  No new users to create in {account_name}")
             return created_users, skipped_users, failed_users
         
         print(f"\n🔨 Creating {len(users_to_create)} new users...")
@@ -288,7 +289,7 @@ class IAMUserManager:
             user_info = self.get_user_info(username)
             print(f"\n🔧 Creating user: {username}")
             print(f"   👤 Real User: {user_info['full_name']} ({user_info['email']})")
-            print(f"   🌍 Restricted to Region: {region}")
+            print(f"   {Symbols.REGION} Restricted to Region: {region}")
             
             try:
                 user_data = self.create_single_user(iam_client, username, region, account_config)
@@ -304,13 +305,13 @@ class IAMUserManager:
                 created_users.append(user_data)
                 
                 # Print credentials with real user info
-                print("\n" + "🎉" * 30)
-                print(f"✅ User Created Successfully: {username}")
+                print("\n" + "[PARTY]" * 30)
+                print(f"{Symbols.OK} User Created Successfully: {username}")
                 print(f"👤 Real User: {user_info['full_name']}")
                 print(f"📧 Real Email: {user_info['email']}")
-                print(f"🏦 AWS Account: {account_name} ({account_config['account_id']})")
+                print(f"{Symbols.ACCOUNT} AWS Account: {account_name} ({account_config['account_id']})")
                 print(f"📧 Account Email: {account_config['email']}")
-                print(f"🔑 Access Key ID:     {user_data['access_key']}")
+                print(f"{Symbols.KEY} Access Key ID:     {user_data['access_key']}")
                 print(f"🔐 Secret Access Key: {user_data['secret_key']}")
                 print(f"🌐 Console Login URL: {user_data['console_url']}")
                 print(f"🗝️  Password: {self.user_settings['password']}")
@@ -319,7 +320,7 @@ class IAMUserManager:
                 print("=" * 60)
                 
             except Exception as e:
-                print(f"❌ Failed to create user {username}: {e}")
+                print(f"{Symbols.ERROR} Failed to create user {username}: {e}")
                 failed_users.append(username)
                 continue
         
@@ -327,7 +328,7 @@ class IAMUserManager:
 
     def display_account_menu(self):
         """Display account selection menu"""
-        print("\n📋 Available AWS Accounts:")
+        print("\n[LIST] Available AWS Accounts:")
         for i, (account_name, config) in enumerate(self.aws_accounts.items(), 1):
             print(f"  {i}. {account_name} ({config['account_id']}) - {config['email']}")
         
@@ -335,7 +336,7 @@ class IAMUserManager:
         
         while True:
             try:
-                choice = input(f"\n🔢 Select account(s) to process (1-{len(self.aws_accounts) + 1}) or range (e.g., 1-3): ").strip()
+                choice = input(f"\n[#] Select account(s) to process (1-{len(self.aws_accounts) + 1}) or range (e.g., 1-3): ").strip()
                 
                 # Handle range input like "1-2"
                 if '-' in choice:
@@ -345,7 +346,7 @@ class IAMUserManager:
                         end_num = int(end.strip())
                         
                         if start_num < 1 or end_num > len(self.aws_accounts) or start_num > end_num:
-                            print(f"❌ Invalid range. Please enter a range between 1 and {len(self.aws_accounts)}")
+                            print(f"{Symbols.ERROR} Invalid range. Please enter a range between 1 and {len(self.aws_accounts)}")
                             continue
                         
                         # Return list of account names for the range
@@ -353,7 +354,7 @@ class IAMUserManager:
                         return account_names[start_num-1:end_num]
                         
                     except ValueError:
-                        print("❌ Invalid range format. Use format like '1-3'")
+                        print("[ERROR] Invalid range format. Use format like '1-3'")
                         continue
                 
                 # Handle single number input
@@ -364,9 +365,9 @@ class IAMUserManager:
                 elif 1 <= choice_num <= len(self.aws_accounts):
                     return [list(self.aws_accounts.keys())[choice_num - 1]]
                 else:
-                    print(f"❌ Invalid choice. Please enter a number between 1 and {len(self.aws_accounts) + 1}")
+                    print(f"{Symbols.ERROR} Invalid choice. Please enter a number between 1 and {len(self.aws_accounts) + 1}")
             except ValueError:
-                print("❌ Invalid input. Please enter a number or range (e.g., 1-3).") 
+                print("[ERROR] Invalid input. Please enter a number or range (e.g., 1-3).") 
                   
     def save_credentials_to_file(self, all_created_users):
         """Save user credentials to a JSON file"""
@@ -410,18 +411,18 @@ class IAMUserManager:
             with open(filename, 'w') as f:
                 json.dump(credentials_data, f, indent=2)
             
-            print(f"💾 Credentials saved to: {filename}")
-            print("⚠️  SECURITY WARNING: This file contains sensitive information. Store it securely!")
-            print("🔒 Consider encrypting this file and deleting it after use.")
+            print(f"{Symbols.INSTANCE} Credentials saved to: {filename}")
+            print("[WARN]  SECURITY WARNING: This file contains sensitive information. Store it securely!")
+            print("[SECURE] Consider encrypting this file and deleting it after use.")
             
         except Exception as e:
-            print(f"❌ Failed to save credentials to file: {e}")
+            print(f"{Symbols.ERROR} Failed to save credentials to file: {e}")
 
     def run(self):
         """Main execution method"""
-        print("🚀 AWS IAM User Creation Script with Real User Mapping")
+        print("[START] AWS IAM User Creation Script with Real User Mapping")
         print("=" * 70)
-        print(f"📅 Execution Date/Time: {self.current_time} UTC")
+        print(f"{Symbols.DATE} Execution Date/Time: {self.current_time} UTC")
         print(f"👤 Executed by: {self.current_user}")
         print("=" * 70)
         
@@ -440,41 +441,41 @@ class IAMUserManager:
             all_failed_users.extend(failed_users)
         
         # Overall Summary
-        print("\n" + "🎯" * 20 + " OVERALL SUMMARY " + "🎯" * 20)
+        print("\n" + "[TARGET]" * 20 + " OVERALL SUMMARY " + "[TARGET]" * 20)
         print("=" * 80)
-        print(f"✅ Total users successfully created: {len(all_created_users)}")
-        print(f"⚠️  Total users skipped (already exist): {len(all_skipped_users)}")
-        print(f"❌ Total users failed: {len(all_failed_users)}")
+        print(f"{Symbols.OK} Total users successfully created: {len(all_created_users)}")
+        print(f"{Symbols.WARN}  Total users skipped (already exist): {len(all_skipped_users)}")
+        print(f"{Symbols.ERROR} Total users failed: {len(all_failed_users)}")
         
         if all_created_users:
-            print("\n📋 Successfully Created Users:")
+            print("\n[LIST] Successfully Created Users:")
             current_account = None
             for user in all_created_users:
                 if current_account != user['account_name']:
                     current_account = user['account_name']
-                    print(f"\n  🏦 {user['account_name']} ({user['account_id']}):")
+                    print(f"\n  {Symbols.ACCOUNT} {user['account_name']} ({user['account_id']}):")
                 print(f"    • {user['username']} → {user['user_info']['full_name']} ({user['user_info']['email']}) [Region: {user['region']}]")
         
         if all_skipped_users:
-            print("\n⚠️  Skipped Users (Already Exist):")
+            print("\n[WARN]  Skipped Users (Already Exist):")
             current_account = None
             for user in all_skipped_users:
                 account_name = user['username'].split('_')[0]
                 if current_account != account_name:
                     current_account = account_name
-                    print(f"\n  🏦 {account_name}:")
+                    print(f"\n  {Symbols.ACCOUNT} {account_name}:")
                 print(f"    • {user['username']} → {user['user_info']['full_name']} ({user['user_info']['email']}) [Region: {user['region']}]")
         
         if all_failed_users:
-            print("\n❌ Failed Users:")
+            print("\n[ERROR] Failed Users:")
             for username in all_failed_users:
                 print(f"  • {username}")
         
-        print("\n🎉 Script execution completed!")
+        print("\n[PARTY] Script execution completed!")
         
         # Optional: Save credentials to file
         if all_created_users:
-            save_to_file = input("\n💾 Save credentials to file? (y/N): ").lower().strip()
+            save_to_file = input("\n[INSTANCE] Save credentials to file? (y/N): ").lower().strip()
             if save_to_file == 'y':
                 self.save_credentials_to_file(all_created_users)
 
@@ -484,10 +485,10 @@ def main():
         manager = IAMUserManager()
         manager.run()
     except KeyboardInterrupt:
-        print("\n\n❌ Script interrupted by user")
+        print("\n\n[ERROR] Script interrupted by user")
         sys.exit(1)
     except Exception as e:
-        print(f"❌ Unexpected error: {e}")
+        print(f"{Symbols.ERROR} Unexpected error: {e}")
         sys.exit(1)
 
 if __name__ == "__main__":

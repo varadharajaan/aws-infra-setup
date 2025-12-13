@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 AWS Account Resource Manager - EC2 + EKS Creator for Root Users
@@ -19,6 +19,7 @@ import string
 from datetime import datetime
 from botocore.exceptions import ClientError, BotoCoreError
 from logger import setup_logger
+from text_symbols import Symbols
 
 # UTF-8 Encoding Support
 os.environ['PYTHONIOENCODING'] = 'utf-8'
@@ -80,7 +81,6 @@ class AWSAccountResourceManager:
         try:
             self.log_filename = f"aws_resource_creation_log_{self.execution_timestamp}.log"
             
-            import logging
             
             self.operation_logger = logging.getLogger('aws_resource_operations')
             self.operation_logger.setLevel(logging.INFO)
@@ -167,7 +167,7 @@ class AWSAccountResourceManager:
             return latest_file
             
         except Exception as e:
-            self.print_colored(Colors.RED, f"[ERROR] Error finding credentials file: {e}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Error finding credentials file: {e}")
             raise
 
     def load_configurations(self):
@@ -207,7 +207,7 @@ class AWSAccountResourceManager:
                 self.print_colored(Colors.YELLOW, f"[WARNING] Using default EKS configuration")
             
         except Exception as e:
-            self.print_colored(Colors.RED, f"[ERROR] Error loading configuration: {e}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Error loading configuration: {e}")
             sys.exit(1)
 
     def load_user_data_script(self):
@@ -336,12 +336,12 @@ echo "AWS CLI configured successfully!"
     def display_accounts_menu(self):
         """Display available accounts and return account selection"""
         if 'accounts' not in self.credentials_data:
-            self.print_colored(Colors.RED, "[ERROR] No accounts found in credentials data")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} No accounts found in credentials data")
             return []
         
         accounts = list(self.credentials_data['accounts'].items())
         
-        self.print_colored(Colors.CYAN, f"\n[INFO] Available AWS Accounts ({len(accounts)} total):")
+        self.print_colored(Colors.CYAN, f"\n{Symbols.INFO} Available AWS Accounts ({len(accounts)} total):")
         print("=" * 90)
         
         for i, (account_name, account_data) in enumerate(accounts, 1):
@@ -353,12 +353,12 @@ echo "AWS CLI configured successfully!"
             
             # Check if account has root user credentials
             root_user = self.get_root_user_from_account(account_data)
-            root_status = "[SUCCESS] Root credentials found" if root_user else "[ERROR] No root credentials"
+            root_status = "[SUCCESS] Root credentials found" if root_user else f"{Symbols.ERROR} No root credentials"
             
             print(f"  {i:2}. {account_name}")
             print(f"      [ACCOUNT] Email: {account_email}")
             print(f"      [ACCOUNT] Account ID: {account_id}")
-            print(f"      [REGION] {region}")
+            print(f"      {Symbols.REGION} {region}")
             print(f"      [CREDENTIALS] {root_status}")
             if root_user:
                 username = root_user.get('username', 'Unknown')
@@ -368,7 +368,7 @@ echo "AWS CLI configured successfully!"
         
         print("=" * 90)
         
-        self.print_colored(Colors.YELLOW, f"[INFO] Selection Options:")
+        self.print_colored(Colors.YELLOW, f"{Symbols.INFO} Selection Options:")
         print(f"   • Single accounts: 1,3,5")
         print(f"   • Ranges: 1-{len(accounts)} (accounts 1 through {len(accounts)})")
         print(f"   • Mixed: 1-2,4 (accounts 1, 2, and 4)")
@@ -404,12 +404,12 @@ echo "AWS CLI configured successfully!"
                     if confirm == 'y':
                         return selected_indices
                     else:
-                        self.print_colored(Colors.YELLOW, "[INFO] Selection cancelled, please choose again.")
+                        self.print_colored(Colors.YELLOW, f"{Symbols.INFO} Selection cancelled, please choose again.")
                         continue
                 else:
-                    self.print_colored(Colors.RED, "[ERROR] No valid accounts selected. Please try again.")
+                    self.print_colored(Colors.RED, f"{Symbols.ERROR} No valid accounts selected. Please try again.")
             except ValueError as e:
-                self.print_colored(Colors.RED, f"[ERROR] Invalid selection: {e}")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Invalid selection: {e}")
                 print("   Please use format like: 1,3,5 or 1-5 or 1-3,5,7-9")
 
     def parse_selection(self, selection, max_items):
@@ -443,7 +443,7 @@ echo "AWS CLI configured successfully!"
 
     def display_resource_menu(self):
         """Display resource creation options - separate EC2 and EKS options"""
-        self.print_colored(Colors.CYAN, f"\n[INFO] Resource Creation Options:")
+        self.print_colored(Colors.CYAN, f"\n{Symbols.INFO} Resource Creation Options:")
         print("=" * 60)
         print("  1. Create EC2 Instance only")
         print("  2. Create EKS Cluster only")  
@@ -469,7 +469,7 @@ echo "AWS CLI configured successfully!"
             elif choice == '6':
                 return 'cancel'
             else:
-                self.print_colored(Colors.RED, "[ERROR] Invalid choice. Please enter 1, 2, 3, 4, 5, or 6.")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Invalid choice. Please enter 1, 2, 3, 4, 5, or 6.")
 
     def create_ec2_instance(self, account_name, account_data, root_user, region):
         """Create EC2 instance for root user"""
@@ -617,7 +617,7 @@ echo "AWS CLI configured successfully!"
             
         except Exception as e:
             error_msg = str(e)
-            self.print_colored(Colors.RED, f"[ERROR] Failed to create EC2 instance: {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to create EC2 instance: {error_msg}")
             self.log_operation('ERROR', f"EC2 instance creation failed: {error_msg}")
             return {'status': 'failed', 'error': error_msg}
 
@@ -657,9 +657,9 @@ echo "AWS CLI configured successfully!"
             # 3. Security groups
             # 4. Node groups (for worker nodes)
             
-            self.print_colored(Colors.YELLOW, f"[INFO] EKS cluster name planned: {cluster_name}")
-            self.print_colored(Colors.YELLOW, f"[INFO] EKS creation requires additional IAM roles and VPC setup")
-            self.print_colored(Colors.YELLOW, f"[INFO] This is a simplified implementation - extend as needed")
+            self.print_colored(Colors.YELLOW, f"{Symbols.INFO} EKS cluster name planned: {cluster_name}")
+            self.print_colored(Colors.YELLOW, f"{Symbols.INFO} EKS creation requires additional IAM roles and VPC setup")
+            self.print_colored(Colors.YELLOW, f"{Symbols.INFO} This is a simplified implementation - extend as needed")
             
             # For demonstration, we'll create a placeholder response
             # In a full implementation, you would:
@@ -684,7 +684,7 @@ echo "AWS CLI configured successfully!"
             
         except Exception as e:
             error_msg = str(e)
-            self.print_colored(Colors.RED, f"[ERROR] Failed to create EKS cluster: {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to create EKS cluster: {error_msg}")
             self.log_operation('ERROR', f"EKS cluster creation failed: {error_msg}")
             return {'status': 'failed', 'error': error_msg}
 
@@ -721,7 +721,7 @@ echo "AWS CLI configured successfully!"
             return results_filename
             
         except Exception as e:
-            self.print_colored(Colors.RED, f"[ERROR] Failed to save results: {e}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to save results: {e}")
             return None
 
     def run(self):
@@ -729,11 +729,11 @@ echo "AWS CLI configured successfully!"
         try:
             self.print_colored(Colors.BOLD, "AWS Account Resource Manager for Root Users")
             print("=" * 90)
-            print(f"[INFO] Execution Date/Time: {self.current_time} UTC")
-            print(f"[INFO] Executed by: {self.current_user}")
-            print(f"[INFO] Default Region: {self.default_region}")
-            print(f"[INFO] Credentials Source: {self.credentials_file}")
-            print(f"[INFO] Log File: {self.log_filename}")
+            print(f"{Symbols.INFO} Execution Date/Time: {self.current_time} UTC")
+            print(f"{Symbols.INFO} Executed by: {self.current_user}")
+            print(f"{Symbols.INFO} Default Region: {self.default_region}")
+            print(f"{Symbols.INFO} Credentials Source: {self.credentials_file}")
+            print(f"{Symbols.INFO} Log File: {self.log_filename}")
             print("=" * 90)
             
             # Step 1: Select accounts
@@ -745,14 +745,14 @@ echo "AWS CLI configured successfully!"
             # Step 2: Select resource type with separate options
             resource_type = self.display_resource_menu()
             if resource_type == 'cancel':
-                self.print_colored(Colors.YELLOW, "[INFO] Operation cancelled")
+                self.print_colored(Colors.YELLOW, f"{Symbols.INFO} Operation cancelled")
                 return
             
             # Step 3: Process selected accounts
             accounts = list(self.credentials_data['accounts'].items())
             results = []
             
-            self.print_colored(Colors.CYAN, f"\n[INFO] Processing {len(selected_account_indices)} accounts with option: {resource_type}")
+            self.print_colored(Colors.CYAN, f"\n{Symbols.INFO} Processing {len(selected_account_indices)} accounts with option: {resource_type}")
             
             for i, idx in enumerate(selected_account_indices, 1):
                 account_name, account_data = accounts[idx - 1]
@@ -763,7 +763,7 @@ echo "AWS CLI configured successfully!"
                 # Get root user
                 root_user = self.get_root_user_from_account(account_data)
                 if not root_user:
-                    self.print_colored(Colors.RED, f"[ERROR] No root user credentials found for account: {account_name}")
+                    self.print_colored(Colors.RED, f"{Symbols.ERROR} No root user credentials found for account: {account_name}")
                     results.append({
                         'account_name': account_name,
                         'account_id': account_data.get('account_id', 'Unknown'),
@@ -798,7 +798,7 @@ echo "AWS CLI configured successfully!"
                     account_result['resources_created']['ec2'] = ec2_result
                     
                     if ec2_result.get('status') == 'created':
-                        self.print_colored(Colors.YELLOW, f"[INFO] EC2 created successfully, now creating EKS...")
+                        self.print_colored(Colors.YELLOW, f"{Symbols.INFO} EC2 created successfully, now creating EKS...")
                         time.sleep(3)  # Brief pause
                         eks_result = self.create_eks_cluster(account_name, account_data, root_user, region)
                         account_result['resources_created']['eks'] = eks_result
@@ -811,7 +811,7 @@ echo "AWS CLI configured successfully!"
                     account_result['resources_created']['eks'] = eks_result
                     
                     if eks_result.get('status') in ['created', 'planned']:
-                        self.print_colored(Colors.YELLOW, f"[INFO] EKS planned successfully, now creating EC2...")
+                        self.print_colored(Colors.YELLOW, f"{Symbols.INFO} EKS planned successfully, now creating EC2...")
                         time.sleep(3)  # Brief pause
                         ec2_result = self.create_ec2_instance(account_name, account_data, root_user, region)
                         account_result['resources_created']['ec2'] = ec2_result
@@ -842,13 +842,13 @@ echo "AWS CLI configured successfully!"
             self.log_operation('INFO', "Resource creation session completed successfully")
             
         except Exception as e:
-            self.print_colored(Colors.RED, f"[ERROR] Fatal error: {str(e)}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Fatal error: {str(e)}")
             self.log_operation('ERROR', f"Fatal error in main execution: {str(e)}")
             raise
 
     def display_summary(self, results, resource_type):
         """Display creation summary"""
-        self.print_colored(Colors.CYAN, f"\n[INFO] Creation Summary - {resource_type}")
+        self.print_colored(Colors.CYAN, f"\n{Symbols.INFO} Creation Summary - {resource_type}")
         print("=" * 80)
         
         total_accounts = len(results)
@@ -915,7 +915,7 @@ def main():
         print("\n\n[INFO] Operation interrupted by user")
         sys.exit(1)
     except Exception as e:
-        print(f"[ERROR] Unexpected error: {e}")
+        print(f"{Symbols.ERROR} Unexpected error: {e}")
         sys.exit(1)
 
 if __name__ == "__main__":

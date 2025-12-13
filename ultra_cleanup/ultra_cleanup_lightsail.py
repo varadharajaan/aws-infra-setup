@@ -22,6 +22,7 @@ import time
 from datetime import datetime
 from botocore.exceptions import ClientError
 from root_iam_credential_manager import AWSCredentialManager
+from text_symbols import Symbols
 
 
 class Colors:
@@ -36,9 +37,9 @@ class Colors:
 class UltraCleanupLightsailManager:
     def __init__(self):
         self.cred_manager = AWSCredentialManager()
-        self.current_time = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+        self.current_time = datetime.now(datetime.UTC).strftime('%Y-%m-%d %H:%M:%S')
         self.current_user = os.getenv('USERNAME') or os.getenv('USER') or 'unknown'
-        self.execution_timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+        self.execution_timestamp = datetime.now(datetime.UTC).strftime('%Y%m%d_%H%M%S')
         
         self.base_dir = os.path.join(os.getcwd(), 'aws', 'lightsail')
         self.logs_dir = os.path.join(self.base_dir, 'logs')
@@ -67,13 +68,13 @@ class UltraCleanupLightsailManager:
         print(f"{color}{message}{Colors.END}")
 
     def log_action(self, message, level="INFO"):
-        timestamp = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp = datetime.now(datetime.UTC).strftime('%Y-%m-%d %H:%M:%S')
         with open(self.log_file, 'a') as f:
             f.write(f"{timestamp} | {level:8} | {message}\n")
 
     def cleanup_region_lightsail(self, account_name, credentials, region):
         try:
-            self.print_colored(Colors.YELLOW, f"\n[SCAN] Scanning region: {region}")
+            self.print_colored(Colors.YELLOW, f"\n{Symbols.SCAN} Scanning region: {region}")
             
             lightsail_client = boto3.client(
                 'lightsail',
@@ -91,7 +92,7 @@ class UltraCleanupLightsailManager:
                     self.print_colored(Colors.CYAN, f"[CONTAINER] Found {len(container_services)} container services")
                     for container in container_services:
                         try:
-                            self.print_colored(Colors.CYAN, f"[DELETE] Deleting container service: {container['containerServiceName']}")
+                            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting container service: {container['containerServiceName']}")
                             lightsail_client.delete_container_service(serviceName=container['containerServiceName'])
                             self.cleanup_results['deleted_container_services'].append({
                                 'service_name': container['containerServiceName'],
@@ -113,7 +114,7 @@ class UltraCleanupLightsailManager:
                     self.print_colored(Colors.CYAN, f"[CDN] Found {len(dist_list)} distributions")
                     for dist in dist_list:
                         try:
-                            self.print_colored(Colors.CYAN, f"[DELETE] Deleting distribution: {dist['name']}")
+                            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting distribution: {dist['name']}")
                             lightsail_client.delete_distribution(distributionName=dist['name'])
                             self.cleanup_results['deleted_distributions'].append({
                                 'distribution_name': dist['name'],
@@ -135,7 +136,7 @@ class UltraCleanupLightsailManager:
                     self.print_colored(Colors.CYAN, f"[LB] Found {len(load_balancers)} load balancers")
                     for lb in load_balancers:
                         try:
-                            self.print_colored(Colors.CYAN, f"[DELETE] Deleting load balancer: {lb['name']}")
+                            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting load balancer: {lb['name']}")
                             lightsail_client.delete_load_balancer(loadBalancerName=lb['name'])
                             self.cleanup_results['deleted_load_balancers'].append({
                                 'lb_name': lb['name'],
@@ -157,7 +158,7 @@ class UltraCleanupLightsailManager:
                     self.print_colored(Colors.CYAN, f"[DB] Found {len(databases)} databases")
                     for db in databases:
                         try:
-                            self.print_colored(Colors.CYAN, f"[DELETE] Deleting database: {db['name']}")
+                            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting database: {db['name']}")
                             lightsail_client.delete_relational_database(
                                 relationalDatabaseName=db['name'],
                                 skipFinalSnapshot=True
@@ -179,10 +180,10 @@ class UltraCleanupLightsailManager:
                 instance_list = instances.get('instances', [])
                 
                 if instance_list:
-                    self.print_colored(Colors.CYAN, f"[INSTANCE] Found {len(instance_list)} instances")
+                    self.print_colored(Colors.CYAN, f"{Symbols.INSTANCE} Found {len(instance_list)} instances")
                     for instance in instance_list:
                         try:
-                            self.print_colored(Colors.CYAN, f"[DELETE] Deleting instance: {instance['name']}")
+                            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting instance: {instance['name']}")
                             lightsail_client.delete_instance(instanceName=instance['name'])
                             self.cleanup_results['deleted_instances'].append({
                                 'instance_name': instance['name'],
@@ -229,7 +230,7 @@ class UltraCleanupLightsailManager:
                     self.print_colored(Colors.CYAN, f"[DISK] Found {len(disk_list)} disks")
                     for disk in disk_list:
                         try:
-                            self.print_colored(Colors.CYAN, f"[DELETE] Deleting disk: {disk['name']}")
+                            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting disk: {disk['name']}")
                             lightsail_client.delete_disk(diskName=disk['name'])
                             self.cleanup_results['deleted_disks'].append({
                                 'disk_name': disk['name'],
@@ -251,7 +252,7 @@ class UltraCleanupLightsailManager:
                     self.print_colored(Colors.CYAN, f"[SNAPSHOT] Found {len(snapshot_list)} snapshots")
                     for snapshot in snapshot_list:
                         try:
-                            self.print_colored(Colors.CYAN, f"[DELETE] Deleting snapshot: {snapshot['name']}")
+                            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting snapshot: {snapshot['name']}")
                             lightsail_client.delete_instance_snapshot(instanceSnapshotName=snapshot['name'])
                             self.cleanup_results['deleted_snapshots'].append({
                                 'snapshot_name': snapshot['name'],
@@ -266,14 +267,14 @@ class UltraCleanupLightsailManager:
             
         except Exception as e:
             error_msg = f"Error processing region {region}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['errors'].append(error_msg)
 
     def cleanup_account_lightsail(self, account_name, credentials):
         try:
             self.print_colored(Colors.BLUE, f"\n{'='*100}")
-            self.print_colored(Colors.BLUE, f"[START] Processing Account: {account_name}")
+            self.print_colored(Colors.BLUE, f"{Symbols.START} Processing Account: {account_name}")
             self.print_colored(Colors.BLUE, f"{'='*100}")
             
             self.cleanup_results['accounts_processed'].append(account_name)
@@ -288,16 +289,16 @@ class UltraCleanupLightsailManager:
             regions_response = ec2_client.describe_regions()
             regions = [region['RegionName'] for region in regions_response['Regions']]
             
-            self.print_colored(Colors.CYAN, f"[SCAN] Processing {len(regions)} regions")
+            self.print_colored(Colors.CYAN, f"{Symbols.SCAN} Processing {len(regions)} regions")
             
             for region in regions:
                 self.cleanup_region_lightsail(account_name, credentials, region)
             
-            self.print_colored(Colors.GREEN, f"\n[OK] Account {account_name} cleanup completed!")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.OK} Account {account_name} cleanup completed!")
             
         except Exception as e:
             error_msg = f"Error processing account {account_name}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['errors'].append(error_msg)
 
@@ -329,19 +330,19 @@ class UltraCleanupLightsailManager:
             with open(report_path, 'w') as f:
                 json.dump(summary, f, indent=2)
 
-            self.print_colored(Colors.GREEN, f"\n[STATS] Summary report saved: {report_path}")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.STATS} Summary report saved: {report_path}")
             self.print_colored(Colors.BLUE, f"\n{'='*100}")
             self.print_colored(Colors.BLUE, "[STATS] CLEANUP SUMMARY")
             self.print_colored(Colors.BLUE, f"{'='*100}")
-            self.print_colored(Colors.GREEN, f"[OK] Instances Deleted: {summary['summary']['total_instances_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Databases Deleted: {summary['summary']['total_databases_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Load Balancers Deleted: {summary['summary']['total_load_balancers_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Container Services Deleted: {summary['summary']['total_container_services_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Distributions Deleted: {summary['summary']['total_distributions_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Static IPs Released: {summary['summary']['total_static_ips_released']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Instances Deleted: {summary['summary']['total_instances_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Databases Deleted: {summary['summary']['total_databases_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Load Balancers Deleted: {summary['summary']['total_load_balancers_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Container Services Deleted: {summary['summary']['total_container_services_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Distributions Deleted: {summary['summary']['total_distributions_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Static IPs Released: {summary['summary']['total_static_ips_released']}")
 
         except Exception as e:
-            self.print_colored(Colors.RED, f"[ERROR] Failed to generate summary report: {e}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to generate summary report: {e}")
 
     def interactive_cleanup(self):
         try:
@@ -351,15 +352,15 @@ class UltraCleanupLightsailManager:
 
             config = self.cred_manager.load_root_accounts_config()
             if not config or 'accounts' not in config:
-                self.print_colored(Colors.RED, "[ERROR] No accounts configuration found!")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} No accounts configuration found!")
                 return
 
             accounts = config['accounts']
             account_list = list(accounts.keys())
 
-            self.print_colored(Colors.CYAN, "[KEY] Select Root AWS Accounts for Lightsail Cleanup:")
+            self.print_colored(Colors.CYAN, f"{Symbols.KEY} Select Root AWS Accounts for Lightsail Cleanup:")
             print(f"{Colors.CYAN}[BOOK] Loading root accounts config...{Colors.END}")
-            self.print_colored(Colors.GREEN, f"[OK] Loaded {len(accounts)} root accounts")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Loaded {len(accounts)} root accounts")
             
             self.print_colored(Colors.YELLOW, "\n[KEY] Available Root AWS Accounts:")
             print("=" * 100)
@@ -394,15 +395,15 @@ class UltraCleanupLightsailManager:
                     indices = [int(x.strip()) for x in selection.split(',')]
                     selected_accounts = [account_list[i-1] for i in indices if 0 < i <= len(account_list)]
                 except (ValueError, IndexError):
-                    self.print_colored(Colors.RED, "[ERROR] Invalid selection!")
+                    self.print_colored(Colors.RED, f"{Symbols.ERROR} Invalid selection!")
                     return
 
             if not selected_accounts:
-                self.print_colored(Colors.RED, "[ERROR] No accounts selected!")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} No accounts selected!")
                 return
 
-            self.print_colored(Colors.RED, "\n[WARN] WARNING: This will DELETE all Lightsail resources!")
-            self.print_colored(Colors.YELLOW, "[WARN] Includes: Instances, Databases, Load Balancers, Container Services, Distributions, Static IPs")
+            self.print_colored(Colors.RED, f"\n{Symbols.WARN} WARNING: This will DELETE all Lightsail resources!")
+            self.print_colored(Colors.YELLOW, f"{Symbols.WARN} Includes: Instances, Databases, Load Balancers, Container Services, Distributions, Static IPs")
             confirm = input(f"\nType 'yes' to confirm: ").strip().lower()
             if confirm != 'yes':
                 self.print_colored(Colors.YELLOW, "[EXIT] Cleanup cancelled!")
@@ -420,13 +421,13 @@ class UltraCleanupLightsailManager:
 
             self.generate_summary_report()
 
-            self.print_colored(Colors.GREEN, f"\n[OK] Lightsail cleanup completed!")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.OK} Lightsail cleanup completed!")
             self.print_colored(Colors.CYAN, f"[FILE] Log file: {self.log_file}")
 
         except KeyboardInterrupt:
             self.print_colored(Colors.YELLOW, "\n[WARN] Cleanup interrupted by user!")
         except Exception as e:
-            self.print_colored(Colors.RED, f"\n[ERROR] Error during cleanup: {e}")
+            self.print_colored(Colors.RED, f"\n{Symbols.ERROR} Error during cleanup: {e}")
 
 
 def main():
@@ -436,7 +437,7 @@ def main():
     except KeyboardInterrupt:
         print("\n\n[WARN] Operation cancelled by user!")
     except Exception as e:
-        print(f"\n[ERROR] Fatal error: {e}")
+        print(f"\n{Symbols.ERROR} Fatal error: {e}")
 
 
 if __name__ == "__main__":

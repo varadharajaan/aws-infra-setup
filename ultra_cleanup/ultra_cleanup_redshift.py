@@ -23,6 +23,7 @@ import time
 from datetime import datetime
 from botocore.exceptions import ClientError
 from root_iam_credential_manager import AWSCredentialManager
+from text_symbols import Symbols
 
 
 class Colors:
@@ -42,9 +43,9 @@ class UltraCleanupRedshiftManager:
     def __init__(self):
         """Initialize the Redshift cleanup manager"""
         self.cred_manager = AWSCredentialManager()
-        self.current_time = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+        self.current_time = datetime.now(datetime.UTC).strftime('%Y-%m-%d %H:%M:%S')
         self.current_user = os.getenv('USERNAME') or os.getenv('USER') or 'unknown'
-        self.execution_timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+        self.execution_timestamp = datetime.now(datetime.UTC).strftime('%Y%m%d_%H%M%S')
         
         # Create directories for logs and reports
         self.base_dir = os.path.join(os.getcwd(), 'aws', 'redshift')
@@ -82,7 +83,7 @@ class UltraCleanupRedshiftManager:
 
     def log_action(self, message, level="INFO"):
         """Log action to file"""
-        timestamp = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp = datetime.now(datetime.UTC).strftime('%Y-%m-%d %H:%M:%S')
         log_entry = f"{timestamp} | {level:8} | {message}\n"
         with open(self.log_file, 'a') as f:
             f.write(log_entry)
@@ -90,7 +91,7 @@ class UltraCleanupRedshiftManager:
     def delete_cluster(self, redshift_client, cluster_id, region, account_key):
         """Delete a Redshift cluster"""
         try:
-            self.print_colored(Colors.CYAN, f"[DELETE] Deleting cluster: {cluster_id}")
+            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting cluster: {cluster_id}")
             
             # Get cluster info
             try:
@@ -100,7 +101,7 @@ class UltraCleanupRedshiftManager:
                 
                 # Skip if already deleting
                 if cluster_status == 'deleting':
-                    self.print_colored(Colors.YELLOW, f"[SKIP] Cluster already deleting: {cluster_id}")
+                    self.print_colored(Colors.YELLOW, f"{Symbols.SKIP} Cluster already deleting: {cluster_id}")
                     return True
             except ClientError:
                 pass
@@ -118,7 +119,7 @@ class UltraCleanupRedshiftManager:
             
             redshift_client.delete_cluster(**delete_params)
             
-            self.print_colored(Colors.GREEN, f"[OK] Deleted cluster: {cluster_id}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted cluster: {cluster_id}")
             self.log_action(f"Deleted cluster: {cluster_id} in {region}")
             
             self.cleanup_results['deleted_clusters'].append({
@@ -131,7 +132,7 @@ class UltraCleanupRedshiftManager:
             
         except ClientError as e:
             error_msg = f"Failed to delete cluster {cluster_id}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['failed_deletions'].append({
                 'type': 'RedshiftCluster',
@@ -145,13 +146,13 @@ class UltraCleanupRedshiftManager:
     def delete_snapshot(self, redshift_client, snapshot_id, region, account_key):
         """Delete a manual Redshift snapshot"""
         try:
-            self.print_colored(Colors.CYAN, f"[DELETE] Deleting snapshot: {snapshot_id}")
+            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting snapshot: {snapshot_id}")
             
             redshift_client.delete_cluster_snapshot(
                 SnapshotIdentifier=snapshot_id
             )
             
-            self.print_colored(Colors.GREEN, f"[OK] Deleted snapshot: {snapshot_id}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted snapshot: {snapshot_id}")
             self.log_action(f"Deleted snapshot: {snapshot_id} in {region}")
             
             self.cleanup_results['deleted_snapshots'].append({
@@ -163,7 +164,7 @@ class UltraCleanupRedshiftManager:
             
         except ClientError as e:
             error_msg = f"Failed to delete snapshot {snapshot_id}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['failed_deletions'].append({
                 'type': 'RedshiftSnapshot',
@@ -177,13 +178,13 @@ class UltraCleanupRedshiftManager:
     def delete_subnet_group(self, redshift_client, group_name, region, account_key):
         """Delete a cluster subnet group"""
         try:
-            self.print_colored(Colors.CYAN, f"[DELETE] Deleting subnet group: {group_name}")
+            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting subnet group: {group_name}")
             
             redshift_client.delete_cluster_subnet_group(
                 ClusterSubnetGroupName=group_name
             )
             
-            self.print_colored(Colors.GREEN, f"[OK] Deleted subnet group: {group_name}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted subnet group: {group_name}")
             self.log_action(f"Deleted subnet group: {group_name} in {region}")
             
             self.cleanup_results['deleted_subnet_groups'].append({
@@ -195,7 +196,7 @@ class UltraCleanupRedshiftManager:
             
         except ClientError as e:
             error_msg = f"Failed to delete subnet group {group_name}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['failed_deletions'].append({
                 'type': 'SubnetGroup',
@@ -211,16 +212,16 @@ class UltraCleanupRedshiftManager:
         try:
             # Skip default parameter groups
             if group_name.startswith('default.'):
-                self.print_colored(Colors.YELLOW, f"[SKIP] Skipping default parameter group: {group_name}")
+                self.print_colored(Colors.YELLOW, f"{Symbols.SKIP} Skipping default parameter group: {group_name}")
                 return True
             
-            self.print_colored(Colors.CYAN, f"[DELETE] Deleting parameter group: {group_name}")
+            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting parameter group: {group_name}")
             
             redshift_client.delete_cluster_parameter_group(
                 ParameterGroupName=group_name
             )
             
-            self.print_colored(Colors.GREEN, f"[OK] Deleted parameter group: {group_name}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted parameter group: {group_name}")
             self.log_action(f"Deleted parameter group: {group_name} in {region}")
             
             self.cleanup_results['deleted_parameter_groups'].append({
@@ -232,7 +233,7 @@ class UltraCleanupRedshiftManager:
             
         except ClientError as e:
             error_msg = f"Failed to delete parameter group {group_name}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['failed_deletions'].append({
                 'type': 'ParameterGroup',
@@ -246,13 +247,13 @@ class UltraCleanupRedshiftManager:
     def delete_event_subscription(self, redshift_client, subscription_name, region, account_key):
         """Delete an event subscription"""
         try:
-            self.print_colored(Colors.CYAN, f"[DELETE] Deleting event subscription: {subscription_name}")
+            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting event subscription: {subscription_name}")
             
             redshift_client.delete_event_subscription(
                 SubscriptionName=subscription_name
             )
             
-            self.print_colored(Colors.GREEN, f"[OK] Deleted event subscription: {subscription_name}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted event subscription: {subscription_name}")
             self.log_action(f"Deleted event subscription: {subscription_name} in {region}")
             
             self.cleanup_results['deleted_event_subscriptions'].append({
@@ -264,7 +265,7 @@ class UltraCleanupRedshiftManager:
             
         except ClientError as e:
             error_msg = f"Failed to delete event subscription {subscription_name}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['failed_deletions'].append({
                 'type': 'EventSubscription',
@@ -278,13 +279,13 @@ class UltraCleanupRedshiftManager:
     def delete_endpoint_access(self, redshift_client, endpoint_name, region, account_key):
         """Delete a Redshift-managed VPC endpoint"""
         try:
-            self.print_colored(Colors.CYAN, f"[DELETE] Deleting endpoint access: {endpoint_name}")
+            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting endpoint access: {endpoint_name}")
             
             redshift_client.delete_endpoint_access(
                 EndpointName=endpoint_name
             )
             
-            self.print_colored(Colors.GREEN, f"[OK] Deleted endpoint access: {endpoint_name}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted endpoint access: {endpoint_name}")
             self.log_action(f"Deleted endpoint access: {endpoint_name} in {region}")
             
             self.cleanup_results['deleted_endpoint_access'].append({
@@ -296,7 +297,7 @@ class UltraCleanupRedshiftManager:
             
         except ClientError as e:
             error_msg = f"Failed to delete endpoint access {endpoint_name}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['failed_deletions'].append({
                 'type': 'EndpointAccess',
@@ -310,7 +311,7 @@ class UltraCleanupRedshiftManager:
     def cleanup_region_redshift(self, account_name, credentials, region):
         """Cleanup all Redshift resources in a specific region"""
         try:
-            self.print_colored(Colors.YELLOW, f"\n[SCAN] Scanning region: {region}")
+            self.print_colored(Colors.YELLOW, f"\n{Symbols.SCAN} Scanning region: {region}")
             
             redshift_client = boto3.client(
                 'redshift',
@@ -343,7 +344,7 @@ class UltraCleanupRedshiftManager:
                 clusters = clusters_response.get('Clusters', [])
                 
                 if clusters:
-                    self.print_colored(Colors.CYAN, f"[CLUSTER] Found {len(clusters)} clusters")
+                    self.print_colored(Colors.CYAN, f"{Symbols.CLUSTER} Found {len(clusters)} clusters")
                     for cluster in clusters:
                         self.delete_cluster(
                             redshift_client,
@@ -436,7 +437,7 @@ class UltraCleanupRedshiftManager:
             
         except Exception as e:
             error_msg = f"Error processing region {region}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['errors'].append(error_msg)
 
@@ -444,7 +445,7 @@ class UltraCleanupRedshiftManager:
         """Cleanup all Redshift resources in an account across all regions"""
         try:
             self.print_colored(Colors.BLUE, f"\n{'='*100}")
-            self.print_colored(Colors.BLUE, f"[START] Processing Account: {account_name}")
+            self.print_colored(Colors.BLUE, f"{Symbols.START} Processing Account: {account_name}")
             self.print_colored(Colors.BLUE, f"{'='*100}")
             
             self.cleanup_results['accounts_processed'].append(account_name)
@@ -460,17 +461,17 @@ class UltraCleanupRedshiftManager:
             regions_response = ec2_client.describe_regions()
             regions = [region['RegionName'] for region in regions_response['Regions']]
             
-            self.print_colored(Colors.CYAN, f"[SCAN] Processing {len(regions)} regions")
+            self.print_colored(Colors.CYAN, f"{Symbols.SCAN} Processing {len(regions)} regions")
             
             # Process each region
             for region in regions:
                 self.cleanup_region_redshift(account_name, credentials, region)
             
-            self.print_colored(Colors.GREEN, f"\n[OK] Account {account_name} cleanup completed!")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.OK} Account {account_name} cleanup completed!")
             
         except Exception as e:
             error_msg = f"Error processing account {account_name}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['errors'].append(error_msg)
 
@@ -501,24 +502,24 @@ class UltraCleanupRedshiftManager:
             with open(report_path, 'w') as f:
                 json.dump(summary, f, indent=2)
 
-            self.print_colored(Colors.GREEN, f"\n[STATS] Summary report saved: {report_path}")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.STATS} Summary report saved: {report_path}")
 
             # Print summary to console
             self.print_colored(Colors.BLUE, f"\n{'='*100}")
             self.print_colored(Colors.BLUE, "[STATS] CLEANUP SUMMARY")
             self.print_colored(Colors.BLUE, f"{'='*100}")
-            self.print_colored(Colors.GREEN, f"[OK] Clusters Deleted: {summary['summary']['total_clusters_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Snapshots Deleted: {summary['summary']['total_snapshots_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Subnet Groups Deleted: {summary['summary']['total_subnet_groups_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Parameter Groups Deleted: {summary['summary']['total_parameter_groups_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Event Subscriptions Deleted: {summary['summary']['total_event_subscriptions_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Endpoint Access Deleted: {summary['summary']['total_endpoint_access_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Clusters Deleted: {summary['summary']['total_clusters_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Snapshots Deleted: {summary['summary']['total_snapshots_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Subnet Groups Deleted: {summary['summary']['total_subnet_groups_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Parameter Groups Deleted: {summary['summary']['total_parameter_groups_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Event Subscriptions Deleted: {summary['summary']['total_event_subscriptions_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Endpoint Access Deleted: {summary['summary']['total_endpoint_access_deleted']}")
 
             if summary['summary']['total_failed_deletions'] > 0:
-                self.print_colored(Colors.YELLOW, f"[WARN] Failed Deletions: {summary['summary']['total_failed_deletions']}")
+                self.print_colored(Colors.YELLOW, f"{Symbols.WARN} Failed Deletions: {summary['summary']['total_failed_deletions']}")
 
             if summary['summary']['total_errors'] > 0:
-                self.print_colored(Colors.RED, f"[ERROR] Errors: {summary['summary']['total_errors']}")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Errors: {summary['summary']['total_errors']}")
 
             # Display Account Summary
             self.print_colored(Colors.BLUE, f"\n{'='*100}")
@@ -551,18 +552,18 @@ class UltraCleanupRedshiftManager:
                     account_summary[account]['regions'].add(item.get('region', 'unknown'))
 
             for account, stats in account_summary.items():
-                self.print_colored(Colors.CYAN, f"\n[LIST] Account: {account}")
-                self.print_colored(Colors.GREEN, f"  [OK] Clusters: {stats['clusters']}")
-                self.print_colored(Colors.GREEN, f"  [OK] Snapshots: {stats['snapshots']}")
-                self.print_colored(Colors.GREEN, f"  [OK] Subnet Groups: {stats['subnet_groups']}")
-                self.print_colored(Colors.GREEN, f"  [OK] Parameter Groups: {stats['parameter_groups']}")
-                self.print_colored(Colors.GREEN, f"  [OK] Event Subscriptions: {stats['event_subscriptions']}")
-                self.print_colored(Colors.GREEN, f"  [OK] Endpoint Access: {stats['endpoint_access']}")
+                self.print_colored(Colors.CYAN, f"\n{Symbols.LIST} Account: {account}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Clusters: {stats['clusters']}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Snapshots: {stats['snapshots']}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Subnet Groups: {stats['subnet_groups']}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Parameter Groups: {stats['parameter_groups']}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Event Subscriptions: {stats['event_subscriptions']}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Endpoint Access: {stats['endpoint_access']}")
                 regions_str = ', '.join(sorted(stats['regions'])) if stats['regions'] else 'N/A'
-                self.print_colored(Colors.YELLOW, f"  [SCAN] Regions: {regions_str}")
+                self.print_colored(Colors.YELLOW, f"  {Symbols.SCAN} Regions: {regions_str}")
 
         except Exception as e:
-            self.print_colored(Colors.RED, f"[ERROR] Failed to generate summary report: {e}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to generate summary report: {e}")
 
     def interactive_cleanup(self):
         """Interactive mode for Redshift cleanup"""
@@ -573,15 +574,15 @@ class UltraCleanupRedshiftManager:
 
             config = self.cred_manager.load_root_accounts_config()
             if not config or 'accounts' not in config:
-                self.print_colored(Colors.RED, "[ERROR] No accounts configuration found!")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} No accounts configuration found!")
                 return
 
             accounts = config['accounts']
             account_list = list(accounts.keys())
 
-            self.print_colored(Colors.CYAN, "[KEY] Select Root AWS Accounts for Redshift Cleanup:")
+            self.print_colored(Colors.CYAN, f"{Symbols.KEY} Select Root AWS Accounts for Redshift Cleanup:")
             print(f"{Colors.CYAN}[BOOK] Loading root accounts config...{Colors.END}")
-            self.print_colored(Colors.GREEN, f"[OK] Loaded {len(accounts)} root accounts")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Loaded {len(accounts)} root accounts")
             
             self.print_colored(Colors.YELLOW, "\n[KEY] Available Root AWS Accounts:")
             print("=" * 100)
@@ -616,26 +617,26 @@ class UltraCleanupRedshiftManager:
                     indices = [int(x.strip()) for x in selection.split(',')]
                     selected_accounts = [account_list[i-1] for i in indices if 0 < i <= len(account_list)]
                 except (ValueError, IndexError):
-                    self.print_colored(Colors.RED, "[ERROR] Invalid selection!")
+                    self.print_colored(Colors.RED, f"{Symbols.ERROR} Invalid selection!")
                     return
 
             if not selected_accounts:
-                self.print_colored(Colors.RED, "[ERROR] No accounts selected!")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} No accounts selected!")
                 return
 
             # Ask about final snapshots
-            self.print_colored(Colors.YELLOW, "\n[KEY] Final Snapshot Options:")
+            self.print_colored(Colors.YELLOW, f"\n{Symbols.KEY} Final Snapshot Options:")
             snapshot_choice = input("Create final snapshots before deleting clusters? (yes/no) [default: no]: ").strip().lower()
             self.create_final_snapshot = snapshot_choice == 'yes'
             
             if self.create_final_snapshot:
-                self.print_colored(Colors.GREEN, "[INFO] Final snapshots will be created before cluster deletion")
+                self.print_colored(Colors.GREEN, f"{Symbols.INFO} Final snapshots will be created before cluster deletion")
             else:
-                self.print_colored(Colors.YELLOW, "[INFO] Clusters will be deleted without final snapshots")
+                self.print_colored(Colors.YELLOW, f"{Symbols.INFO} Clusters will be deleted without final snapshots")
 
-            self.print_colored(Colors.RED, "\n[WARN] WARNING: This will DELETE all Redshift resources!")
-            self.print_colored(Colors.YELLOW, "[WARN] Includes: Clusters, Snapshots, Subnet Groups, Parameter Groups, Event Subscriptions")
-            self.print_colored(Colors.YELLOW, "[INFO] Default parameter groups will be skipped")
+            self.print_colored(Colors.RED, f"\n{Symbols.WARN} WARNING: This will DELETE all Redshift resources!")
+            self.print_colored(Colors.YELLOW, f"{Symbols.WARN} Includes: Clusters, Snapshots, Subnet Groups, Parameter Groups, Event Subscriptions")
+            self.print_colored(Colors.YELLOW, f"{Symbols.INFO} Default parameter groups will be skipped")
             confirm = input(f"\nType 'yes' to confirm: ").strip().lower()
             if confirm != 'yes':
                 self.print_colored(Colors.YELLOW, "[EXIT] Cleanup cancelled!")
@@ -653,13 +654,13 @@ class UltraCleanupRedshiftManager:
 
             self.generate_summary_report()
 
-            self.print_colored(Colors.GREEN, f"\n[OK] Redshift cleanup completed!")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.OK} Redshift cleanup completed!")
             self.print_colored(Colors.CYAN, f"[FILE] Log file: {self.log_file}")
 
         except KeyboardInterrupt:
             self.print_colored(Colors.YELLOW, "\n[WARN] Cleanup interrupted by user!")
         except Exception as e:
-            self.print_colored(Colors.RED, f"\n[ERROR] Error during cleanup: {e}")
+            self.print_colored(Colors.RED, f"\n{Symbols.ERROR} Error during cleanup: {e}")
 
 
 def main():
@@ -670,7 +671,7 @@ def main():
     except KeyboardInterrupt:
         print("\n\n[WARN] Operation cancelled by user!")
     except Exception as e:
-        print(f"\n[ERROR] Fatal error: {e}")
+        print(f"\n{Symbols.ERROR} Fatal error: {e}")
 
 
 if __name__ == "__main__":

@@ -4,6 +4,7 @@ import json
 import os
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime
+from text_symbols import Symbols
 
 class InstanceConfigManager:
     def __init__(self, config_file: str = 'instance_specs.json'):
@@ -20,12 +21,12 @@ class InstanceConfigManager:
             with open(self.config_file, 'r', encoding='utf-8') as f:
                 self.config_data = json.load(f)
             
-            print(f"✅ Instance configuration loaded from: {self.config_file}")
-            print(f"📅 Config version: {self.config_data.get('metadata', {}).get('version', 'Unknown')}")
-            print(f"🔄 Last updated: {self.config_data.get('metadata', {}).get('last_updated', 'Unknown')}")
+            print(f"{Symbols.OK} Instance configuration loaded from: {self.config_file}")
+            print(f"{Symbols.DATE} Config version: {self.config_data.get('metadata', {}).get('version', 'Unknown')}")
+            print(f"{Symbols.SCAN} Last updated: {self.config_data.get('metadata', {}).get('last_updated', 'Unknown')}")
             
         except Exception as e:
-            print(f"❌ Error loading instance config: {e}")
+            print(f"{Symbols.ERROR} Error loading instance config: {e}")
             raise
     
     def get_instance_specs(self, instance_type: str) -> Optional[Dict]:
@@ -229,4 +230,4 @@ class InstanceConfigManager:
     def refresh_config(self):
         """Reload configuration from file"""
         self.load_config()
-        print("🔄 Configuration refreshed successfully")
+        print("[SCAN] Configuration refreshed successfully")

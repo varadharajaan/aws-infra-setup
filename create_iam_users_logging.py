@@ -8,6 +8,7 @@ from datetime import datetime
 from botocore.exceptions import ClientError, BotoCoreError
 from logger import setup_logger
 from excel_helper import ExcelCredentialsExporter
+from text_symbols import Symbols
 
 class IAMUserManager:
     def __init__(self, config_file='aws_accounts_config.json', mapping_file='user_mapping.json'):
@@ -610,19 +611,19 @@ class IAMUserManager:
                 print(f"  {i}. {account_name} ({config['account_id']}) - {config['email']} [{user_count} users mapped]")
                 accounts_with_mappings.append(account_name)
             else:
-                print(f"  {i}. {account_name} ({config['account_id']}) - {config['email']} [[WARN]  NO USERS MAPPED]")
+                print(f"  {i}. {account_name} ({config['account_id']}) - {config['email']} [{Symbols.WARN}  NO USERS MAPPED]")
                 accounts_without_mappings.append(account_name)
 
         print(f"  {len(self.aws_accounts) + 1}. All accounts with mappings ({len(accounts_with_mappings)} accounts)")
         print(f"  {len(self.aws_accounts) + 2}. All accounts (including unmapped)")
 
         if accounts_without_mappings:
-            print(f"\n[WARN]  Warning: {len(accounts_without_mappings)} accounts have no user mappings:")
+            print(f"\n{Symbols.WARN}  Warning: {len(accounts_without_mappings)} accounts have no user mappings:")
             for account in accounts_without_mappings:
                 print(f"     - {account}")
             print("   These accounts will be skipped unless you explicitly select them.")
 
-        print(f"\n[TIP] Selection Options:")
+        print(f"\n{Symbols.TIP} Selection Options:")
         print(f"   • Single account: 1")
         print(f"   • Multiple accounts: 1,3,5")
         print(f"   • Range: 1-3")
@@ -632,7 +633,7 @@ class IAMUserManager:
 
         while True:
             try:
-                choice = input(f"\n🔢 Select account(s) to process: ").strip()
+                choice = input(f"\n[#] Select account(s) to process: ").strip()
 
                 # Handle special cases first
                 if choice == str(len(self.aws_accounts) + 1):
@@ -642,7 +643,7 @@ class IAMUserManager:
                     # All accounts
                     if accounts_without_mappings:
                         confirm = input(
-                            f"[WARN]  This includes {len(accounts_without_mappings)} accounts with no mappings. Continue? (y/N): ").lower().strip()
+                            f"{Symbols.WARN}  This includes {len(accounts_without_mappings)} accounts with no mappings. Continue? (y/N): ").lower().strip()
                         if confirm != 'y':
                             continue
                     return list(self.aws_accounts.keys())
@@ -651,7 +652,7 @@ class IAMUserManager:
                 selected_accounts = self.parse_account_selection(choice)
 
                 if not selected_accounts:
-                    print(f"[ERROR] Invalid selection. Please try again.")
+                    print(f"{Symbols.ERROR} Invalid selection. Please try again.")
                     continue
 
                 # Validate all selections are within range
@@ -660,7 +661,7 @@ class IAMUserManager:
 
                 if invalid_selections:
                     print(
-                        f"[ERROR] Invalid account numbers: {invalid_selections}. Please enter numbers between 1 and {len(self.aws_accounts)}")
+                        f"{Symbols.ERROR} Invalid account numbers: {invalid_selections}. Please enter numbers between 1 and {len(self.aws_accounts)}")
                     continue
 
                 # Convert numbers to account names
@@ -673,16 +674,16 @@ class IAMUserManager:
                 unmapped_in_selection = [acc for acc in selected_account_names if acc in accounts_without_mappings]
                 if unmapped_in_selection:
                     print(
-                        f"[WARN]  Selected accounts include {len(unmapped_in_selection)} with no mappings: {unmapped_in_selection}")
+                        f"{Symbols.WARN}  Selected accounts include {len(unmapped_in_selection)} with no mappings: {unmapped_in_selection}")
                     confirm = input(f"Continue? (y/N): ").lower().strip()
                     if confirm != 'y':
                         continue
 
-                print(f"[OK] Selected accounts: {selected_account_names}")
+                print(f"{Symbols.OK} Selected accounts: {selected_account_names}")
                 return selected_account_names
 
             except ValueError as e:
-                print(f"[ERROR] Invalid input format: {e}")
+                print(f"{Symbols.ERROR} Invalid input format: {e}")
                 continue
 
     def parse_account_selection(self, selection):
@@ -723,7 +724,7 @@ class IAMUserManager:
             return selected_numbers
 
         except Exception as e:
-            print(f"[ERROR] Error parsing selection: {e}")
+            print(f"{Symbols.ERROR} Error parsing selection: {e}")
             return []
 
     def save_credentials_to_file(self, all_created_users):
@@ -777,17 +778,17 @@ class IAMUserManager:
                 exporter = ExcelCredentialsExporter()
                 excel_path = exporter.export_from_json(filename)
                 self.logger.info(f"Excel file created with correct column order: {excel_path}")
-                print(f"[STATS] Excel file created: {excel_path}")
-                print(f"[LIST] Columns: firstname, lastname, mail id, username, password, loginurl, homeregion, accesskey, secretkey")
+                print(f"{Symbols.STATS} Excel file created: {excel_path}")
+                print(f"{Symbols.LIST} Columns: firstname, lastname, mail id, username, password, loginurl, homeregion, accesskey, secretkey")
                 
                 # Optionally create summary Excel with multiple sheets
                 summary_path = exporter.create_summary_sheet(filename)
                 self.logger.info(f"Summary Excel created: {summary_path}")
-                print(f"📈 Summary Excel created: {summary_path}")
+                print(f"[UP] Summary Excel created: {summary_path}")
                 
             except Exception as e:
                 self.logger.error(f"Failed to create Excel files: {e}")
-                print(f"[ERROR] Failed to create Excel files: {e}")
+                print(f"{Symbols.ERROR} Failed to create Excel files: {e}")
             
             return filename
             
@@ -802,7 +803,7 @@ class IAMUserManager:
         self.logger.info(f"Executed by: {self.current_user}")
         
         # Display mapping analysis
-        print(f"\n[STATS] User Mapping Analysis:")
+        print(f"\n{Symbols.STATS} User Mapping Analysis:")
         print(f"   Total AWS accounts: {len(self.aws_accounts)}")
         print(f"   Accounts with mappings: {len(self.accounts_with_mappings)}")
         print(f"   Accounts without mappings: {len(self.accounts_without_mappings)}")
@@ -828,7 +829,7 @@ class IAMUserManager:
         self.logger.log_summary(total_processed, len(all_created_users), len(all_failed_users), len(all_skipped_users))
         
         # Display summary
-        print(f"\n📈 Execution Summary:")
+        print(f"\n[UP] Execution Summary:")
         print(f"   Users created: {len(all_created_users)}")
         print(f"   Users skipped: {len(all_skipped_users)}")
         print(f"   Users failed: {len(all_failed_users)}")
@@ -840,7 +841,7 @@ class IAMUserManager:
             if save_to_file == 'y':
                 saved_file = self.save_credentials_to_file(all_created_users)
                 if saved_file:
-                    print(f"[OK] Credentials saved to: {saved_file}")
+                    print(f"{Symbols.OK} Credentials saved to: {saved_file}")
                     print("[STATS] Excel files also generated in output/ directory")
         else:
             print("\n[WARN]  No users were created. Nothing to save.")
@@ -856,7 +857,7 @@ def main():
         print("\n\n[ERROR] Script interrupted by user")
         sys.exit(1)
     except Exception as e:
-        print(f"[ERROR] Unexpected error: {e}")
+        print(f"{Symbols.ERROR} Unexpected error: {e}")
         sys.exit(1)
 
 if __name__ == "__main__":

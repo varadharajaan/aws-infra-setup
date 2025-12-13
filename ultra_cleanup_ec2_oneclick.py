@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 
 import boto3
 import json
@@ -9,6 +9,7 @@ import threading
 from datetime import datetime
 from botocore.exceptions import ClientError, BotoCoreError
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from text_symbols import Symbols
 
 class UltraEC2CleanupManager:
     def __init__(self, config_file='aws_accounts_config.json'):
@@ -45,7 +46,6 @@ class UltraEC2CleanupManager:
             self.log_filename = f"ultra_ec2_cleanup_log_{self.execution_timestamp}.log"
             
             # Create a file handler for detailed logging
-            import logging
             
             # Create logger for detailed operations
             self.operation_logger = logging.getLogger('ultra_ec2_cleanup')
@@ -113,7 +113,7 @@ class UltraEC2CleanupManager:
             with open(self.config_file, 'r', encoding='utf-8') as f:
                 self.config_data = json.load(f)
             
-            self.log_operation('INFO', f"✅ Configuration loaded from: {self.config_file}")
+            self.log_operation('INFO', f"{Symbols.OK} Configuration loaded from: {self.config_file}")
             
             # Validate accounts
             if 'accounts' not in self.config_data:
@@ -132,7 +132,7 @@ class UltraEC2CleanupManager:
             
             self.config_data['accounts'] = valid_accounts
             
-            self.log_operation('INFO', f"📊 Valid accounts loaded: {len(valid_accounts)}")
+            self.log_operation('INFO', f"{Symbols.STATS} Valid accounts loaded: {len(valid_accounts)}")
             for account_name, account_data in valid_accounts.items():
                 account_id = account_data.get('account_id', 'Unknown')
                 email = account_data.get('email', 'Unknown')
@@ -143,7 +143,7 @@ class UltraEC2CleanupManager:
                 'us-east-1', 'us-east-2', 'us-west-1', 'us-west-2', 'ap-south-1'
             ])
             
-            self.log_operation('INFO', f"🌍 Regions to process: {self.user_regions}")
+            self.log_operation('INFO', f"{Symbols.REGION} Regions to process: {self.user_regions}")
             
         except FileNotFoundError as e:
             self.log_operation('ERROR', f"Configuration file error: {e}")
@@ -178,7 +178,7 @@ class UltraEC2CleanupManager:
         try:
             instances = []
             
-            self.log_operation('INFO', f"🔍 Scanning for instances in {region} ({account_name})")
+            self.log_operation('INFO', f"{Symbols.SCAN} Scanning for instances in {region} ({account_name})")
             
             paginator = ec2_client.get_paginator('describe_instances')
             
@@ -221,7 +221,7 @@ class UltraEC2CleanupManager:
                         
                         instances.append(instance_info)
             
-            self.log_operation('INFO', f"📦 Found {len(instances)} instances in {region} ({account_name})")
+            self.log_operation('INFO', f"[PACKAGE] Found {len(instances)} instances in {region} ({account_name})")
             
             return instances
             
@@ -234,7 +234,7 @@ class UltraEC2CleanupManager:
         try:
             security_groups = []
             
-            self.log_operation('INFO', f"🔍 Scanning for security groups in {region} ({account_name})")
+            self.log_operation('INFO', f"{Symbols.SCAN} Scanning for security groups in {region} ({account_name})")
             
             paginator = ec2_client.get_paginator('describe_security_groups')
             
@@ -262,7 +262,7 @@ class UltraEC2CleanupManager:
                     
                     security_groups.append(sg_info)
             
-            self.log_operation('INFO', f"🛡️  Found {len(security_groups)} security groups in {region} ({account_name})")
+            self.log_operation('INFO', f"{Symbols.PROTECTED}  Found {len(security_groups)} security groups in {region} ({account_name})")
             
             return security_groups
             
@@ -322,14 +322,14 @@ class UltraEC2CleanupManager:
                 })
                 return True
             
-            self.log_operation('INFO', f"🗑️  Terminating instance {instance_id} in {region} ({account_name})")
+            self.log_operation('INFO', f"{Symbols.DELETE}  Terminating instance {instance_id} in {region} ({account_name})")
             
             response = ec2_client.terminate_instances(InstanceIds=[instance_id])
             
             current_state = response['TerminatingInstances'][0]['CurrentState']['Name']
             previous_state = response['TerminatingInstances'][0]['PreviousState']['Name']
             
-            self.log_operation('INFO', f"✅ Instance {instance_id} termination initiated: {previous_state} → {current_state}")
+            self.log_operation('INFO', f"{Symbols.OK} Instance {instance_id} termination initiated: {previous_state} → {current_state}")
             
             self.cleanup_results['deleted_instances'].append({
                 'instance_id': instance_id,
@@ -380,7 +380,7 @@ class UltraEC2CleanupManager:
             rules_cleared = 0
             rules_failed = 0
             
-            # 🔥 Clear ingress rules (including cross-references)
+            # [FIRE] Clear ingress rules (including cross-references)
             if ingress_rules:
                 self.log_operation('INFO', f"Removing {len(ingress_rules)} ingress rules from {sg_id} ({sg_name})")
                 
@@ -408,7 +408,7 @@ class UltraEC2CleanupManager:
                             IpPermissions=[rule]
                         )
                         rules_cleared += 1
-                        self.log_operation('INFO', f"  ✅ Successfully removed ingress rule {rule_index + 1}")
+                        self.log_operation('INFO', f"  {Symbols.OK} Successfully removed ingress rule {rule_index + 1}")
                         
                     except ClientError as e:
                         error_code = e.response['Error']['Code']
@@ -419,13 +419,13 @@ class UltraEC2CleanupManager:
                             self.log_operation('INFO', f"  Ingress rule {rule_index + 1} already removed")
                             rules_cleared += 1
                         else:
-                            self.log_operation('ERROR', f"  ❌ Failed to remove ingress rule {rule_index + 1}: {e}")
+                            self.log_operation('ERROR', f"  {Symbols.ERROR} Failed to remove ingress rule {rule_index + 1}: {e}")
                             rules_failed += 1
                     except Exception as e:
-                        self.log_operation('ERROR', f"  ❌ Unexpected error removing ingress rule {rule_index + 1}: {e}")
+                        self.log_operation('ERROR', f"  {Symbols.ERROR} Unexpected error removing ingress rule {rule_index + 1}: {e}")
                         rules_failed += 1
             
-            # 🔥 Clear egress rules (but keep the default allow-all rule)
+            # [FIRE] Clear egress rules (but keep the default allow-all rule)
             if egress_rules:
                 # Filter out the default egress rule (0.0.0.0/0 for all traffic)
                 non_default_egress = []
@@ -469,7 +469,7 @@ class UltraEC2CleanupManager:
                                 IpPermissions=[rule]
                             )
                             rules_cleared += 1
-                            self.log_operation('INFO', f"  ✅ Successfully removed egress rule {rule_index + 1}")
+                            self.log_operation('INFO', f"  {Symbols.OK} Successfully removed egress rule {rule_index + 1}")
                             
                         except ClientError as e:
                             error_code = e.response['Error']['Code']
@@ -480,10 +480,10 @@ class UltraEC2CleanupManager:
                                 self.log_operation('INFO', f"  Egress rule {rule_index + 1} already removed")
                                 rules_cleared += 1
                             else:
-                                self.log_operation('ERROR', f"  ❌ Failed to remove egress rule {rule_index + 1}: {e}")
+                                self.log_operation('ERROR', f"  {Symbols.ERROR} Failed to remove egress rule {rule_index + 1}: {e}")
                                 rules_failed += 1
                         except Exception as e:
-                            self.log_operation('ERROR', f"  ❌ Unexpected error removing egress rule {rule_index + 1}: {e}")
+                            self.log_operation('ERROR', f"  {Symbols.ERROR} Unexpected error removing egress rule {rule_index + 1}: {e}")
                             rules_failed += 1
                 else:
                     self.log_operation('INFO', f"No non-default egress rules to remove from {sg_id}")
@@ -513,7 +513,7 @@ class UltraEC2CleanupManager:
             region = sg_info['region']
             account_name = sg_info['account_name']
             
-            self.log_operation('INFO', f"🗑️  Deleting security group {sg_id} ({sg_name}) in {region} ({account_name})")
+            self.log_operation('INFO', f"{Symbols.DELETE}  Deleting security group {sg_id} ({sg_name}) in {region} ({account_name})")
             
             # If it's attached to instances and force_delete is True, wait a bit
             if sg_info['is_attached'] and force_delete:
@@ -531,7 +531,7 @@ class UltraEC2CleanupManager:
             self.log_operation('INFO', f"Step 2: Attempting to delete security group {sg_id}")
             ec2_client.delete_security_group(GroupId=sg_id)
             
-            self.log_operation('INFO', f"✅ Successfully deleted security group {sg_id} ({sg_name})")
+            self.log_operation('INFO', f"{Symbols.OK} Successfully deleted security group {sg_id} ({sg_name})")
             
             self.cleanup_results['deleted_security_groups'].append({
                 'group_id': sg_id,
@@ -596,7 +596,7 @@ class UltraEC2CleanupManager:
             # Create EC2 client
             ec2_client = self.create_ec2_client(access_key, secret_key, region)
             
-            # 🔥 Initialize variables first to avoid scope issues
+            # [FIRE] Initialize variables first to avoid scope issues
             instances = []
             security_groups = []
             attached_sgs = []
@@ -628,9 +628,9 @@ class UltraEC2CleanupManager:
             
             self.cleanup_results['regions_processed'].append(region_summary)
             
-            self.log_operation('INFO', f"📊 {account_name} ({region}) summary:")
+            self.log_operation('INFO', f"{Symbols.STATS} {account_name} ({region}) summary:")
             self.log_operation('INFO', f"   💻 Instances: {len(instances)}")
-            self.log_operation('INFO', f"   🛡️  Total Security Groups: {len(security_groups)}")
+            self.log_operation('INFO', f"   {Symbols.PROTECTED}  Total Security Groups: {len(security_groups)}")
             self.log_operation('INFO', f"   📎 Attached SGs: {len(attached_sgs)}")
             self.log_operation('INFO', f"   🔓 Unattached SGs: {len(unattached_sgs)}")
             
@@ -640,7 +640,7 @@ class UltraEC2CleanupManager:
             
             # Step 1: Terminate all instances
             if instances:
-                self.log_operation('INFO', f"🗑️  Terminating {len(instances)} instances in {account_name} ({region})")
+                self.log_operation('INFO', f"{Symbols.DELETE}  Terminating {len(instances)} instances in {account_name} ({region})")
                 
                 for instance in instances:
                     try:
@@ -655,7 +655,7 @@ class UltraEC2CleanupManager:
             
             # Step 2: Delete unattached security groups first
             if unattached_sgs:
-                self.log_operation('INFO', f"🗑️  Deleting {len(unattached_sgs)} unattached security groups in {account_name} ({region})")
+                self.log_operation('INFO', f"{Symbols.DELETE}  Deleting {len(unattached_sgs)} unattached security groups in {account_name} ({region})")
                 
                 for sg in unattached_sgs:
                     try:
@@ -663,9 +663,9 @@ class UltraEC2CleanupManager:
                     except Exception as e:
                         self.log_operation('ERROR', f"Error deleting unattached security group {sg['group_id']}: {e}")
             
-            # Step 3: 🔥 ENHANCED - Delete attached security groups with multiple passes for cross-references
+            # Step 3: [FIRE] ENHANCED - Delete attached security groups with multiple passes for cross-references
             if attached_sgs:
-                self.log_operation('INFO', f"🗑️  Deleting {len(attached_sgs)} attached security groups in {account_name} ({region})")
+                self.log_operation('INFO', f"{Symbols.DELETE}  Deleting {len(attached_sgs)} attached security groups in {account_name} ({region})")
                 
                 max_retries = 5  # Increased retries for cross-references
                 retry_delay = 30  # Reduced delay between retries
@@ -673,7 +673,7 @@ class UltraEC2CleanupManager:
                 remaining_sgs = attached_sgs.copy()
                 
                 for retry in range(max_retries):
-                    self.log_operation('INFO', f"🔄 Security group deletion attempt {retry + 1}/{max_retries}")
+                    self.log_operation('INFO', f"{Symbols.SCAN} Security group deletion attempt {retry + 1}/{max_retries}")
                     
                     # Track progress in this iteration
                     sgs_deleted_this_round = 0
@@ -684,7 +684,7 @@ class UltraEC2CleanupManager:
                             success = self.delete_security_group(ec2_client, sg, force_delete=True)
                             if success:
                                 sgs_deleted_this_round += 1
-                                self.log_operation('INFO', f"✅ Deleted {sg['group_id']} in attempt {retry + 1}")
+                                self.log_operation('INFO', f"{Symbols.OK} Deleted {sg['group_id']} in attempt {retry + 1}")
                             else:
                                 still_remaining.append(sg)
                                 self.log_operation('WARNING', f"⏳ {sg['group_id']} still has dependencies, will retry")
@@ -698,7 +698,7 @@ class UltraEC2CleanupManager:
                     remaining_sgs = still_remaining
                     
                     if not remaining_sgs:
-                        self.log_operation('INFO', f"✅ All attached security groups deleted in {account_name} ({region})")
+                        self.log_operation('INFO', f"{Symbols.OK} All attached security groups deleted in {account_name} ({region})")
                         break
                     
                     # If no progress was made and we have remaining groups, try clearing rules again
@@ -715,7 +715,7 @@ class UltraEC2CleanupManager:
                         time.sleep(retry_delay)
                 
                 if remaining_sgs:
-                    self.log_operation('WARNING', f"⚠️  {len(remaining_sgs)} security groups could not be deleted after {max_retries} retries")
+                    self.log_operation('WARNING', f"{Symbols.WARN}  {len(remaining_sgs)} security groups could not be deleted after {max_retries} retries")
                     self.log_operation('WARNING', f"Remaining security groups: {[sg['group_id'] for sg in remaining_sgs]}")
                     
                     # Log detailed information about remaining security groups
@@ -729,7 +729,7 @@ class UltraEC2CleanupManager:
                         except Exception as e:
                             self.log_operation('ERROR', f"  Could not get details for {sg['group_id']}: {e}")
             
-            self.log_operation('INFO', f"✅ Cleanup completed for {account_name} ({region})")
+            self.log_operation('INFO', f"{Symbols.OK} Cleanup completed for {account_name} ({region})")
             return True
             
         except Exception as e:
@@ -753,8 +753,8 @@ class UltraEC2CleanupManager:
                 for region in regions:
                     tasks.append((account_name, account_data, region))
             
-            self.log_operation('INFO', f"🚀 Starting parallel cleanup across {len(accounts)} accounts and {len(regions)} regions")
-            self.log_operation('INFO', f"📋 Total tasks: {len(tasks)} (max workers: {max_workers})")
+            self.log_operation('INFO', f"{Symbols.START} Starting parallel cleanup across {len(accounts)} accounts and {len(regions)} regions")
+            self.log_operation('INFO', f"{Symbols.LIST} Total tasks: {len(tasks)} (max workers: {max_workers})")
             
             successful_tasks = 0
             failed_tasks = 0
@@ -779,9 +779,9 @@ class UltraEC2CleanupManager:
                         self.log_operation('ERROR', f"Task failed for {account_name} ({region}): {e}")
                         failed_tasks += 1
             
-            self.log_operation('INFO', f"🎯 Parallel cleanup completed:")
-            self.log_operation('INFO', f"   ✅ Successful tasks: {successful_tasks}")
-            self.log_operation('INFO', f"   ❌ Failed tasks: {failed_tasks}")
+            self.log_operation('INFO', f"{Symbols.TARGET} Parallel cleanup completed:")
+            self.log_operation('INFO', f"   {Symbols.OK} Successful tasks: {successful_tasks}")
+            self.log_operation('INFO', f"   {Symbols.ERROR} Failed tasks: {failed_tasks}")
             
             return successful_tasks, failed_tasks
             
@@ -863,11 +863,11 @@ class UltraEC2CleanupManager:
             with open(report_filename, 'w', encoding='utf-8') as f:
                 json.dump(report_data, f, indent=2, default=str)
             
-            self.log_operation('INFO', f"✅ Ultra cleanup report saved to: {report_filename}")
+            self.log_operation('INFO', f"{Symbols.OK} Ultra cleanup report saved to: {report_filename}")
             return report_filename
             
         except Exception as e:
-            self.log_operation('ERROR', f"❌ Failed to save ultra cleanup report: {e}")
+            self.log_operation('ERROR', f"{Symbols.ERROR} Failed to save ultra cleanup report: {e}")
             return None
 
     def display_configuration_summary(self):
@@ -875,21 +875,21 @@ class UltraEC2CleanupManager:
         accounts = self.config_data['accounts']
         regions = self.user_regions
         
-        print(f"\n🎯 ULTRA CLEANUP CONFIGURATION")
+        print(f"\n{Symbols.TARGET} ULTRA CLEANUP CONFIGURATION")
         print("=" * 80)
         print(f"📄 Config file: {self.config_file}")
-        print(f"🏦 Accounts to process: {len(accounts)}")
-        print(f"🌍 Regions per account: {len(regions)}")
-        print(f"📋 Total operations: {len(accounts) * len(regions)}")
+        print(f"{Symbols.ACCOUNT} Accounts to process: {len(accounts)}")
+        print(f"{Symbols.REGION} Regions per account: {len(regions)}")
+        print(f"{Symbols.LIST} Total operations: {len(accounts) * len(regions)}")
         print("=" * 80)
         
-        print(f"\n🏦 AWS Accounts:")
+        print(f"\n{Symbols.ACCOUNT} AWS Accounts:")
         for account_name, account_data in accounts.items():
             account_id = account_data.get('account_id', 'Unknown')
             email = account_data.get('email', 'Unknown')
             print(f"   • {account_name}: {account_id} ({email})")
         
-        print(f"\n🌍 Regions:")
+        print(f"\n{Symbols.REGION} Regions:")
         for i, region in enumerate(regions, 1):
             print(f"   {i}. {region}")
         
@@ -903,15 +903,15 @@ class UltraEC2CleanupManager:
             print("🚨" * 30)
             print("💥 ULTRA EC2 CLEANUP - WITH ACCOUNT SELECTION 💥")
             print("🚨" * 30)
-            print(f"📅 Execution Date/Time: {self.current_time} UTC")
+            print(f"{Symbols.DATE} Execution Date/Time: {self.current_time} UTC")
             print(f"👤 Executed by: {self.current_user}")
-            print(f"📋 Log File: {self.log_filename}")
+            print(f"{Symbols.LIST} Log File: {self.log_filename}")
         
             # Display available accounts first
             accounts = self.config_data['accounts']
             regions = self.user_regions
         
-            print(f"\n🏦 AVAILABLE AWS ACCOUNTS:")
+            print(f"\n{Symbols.ACCOUNT} AVAILABLE AWS ACCOUNTS:")
             print("=" * 80)
         
             account_list = []
@@ -937,11 +937,11 @@ class UltraEC2CleanupManager:
             print("  • All accounts: 'all' or press Enter")
             print("  • Cancel: 'cancel' or 'quit'")
         
-            selection = input("\n🔢 Select accounts to process: ").strip().lower()
+            selection = input("\n[#] Select accounts to process: ").strip().lower()
         
             if selection in ['cancel', 'quit']:
                 self.log_operation('INFO', "EC2 cleanup cancelled by user")
-                print("❌ Cleanup cancelled")
+                print(f"{Symbols.ERROR} Cleanup cancelled")
                 return
             
             # Process selection
@@ -949,7 +949,7 @@ class UltraEC2CleanupManager:
             if not selection or selection == 'all':
                 selected_accounts = accounts
                 self.log_operation('INFO', f"All accounts selected: {len(accounts)}")
-                print(f"✅ Selected all {len(accounts)} accounts")
+                print(f"{Symbols.OK} Selected all {len(accounts)} accounts")
             else:
                 try:
                     # Parse selection
@@ -975,11 +975,11 @@ class UltraEC2CleanupManager:
                         raise ValueError("No valid accounts selected")
                 
                     self.log_operation('INFO', f"Selected accounts: {list(selected_accounts.keys())}")
-                    print(f"✅ Selected {len(selected_accounts)} accounts: {', '.join(selected_accounts.keys())}")
+                    print(f"{Symbols.OK} Selected {len(selected_accounts)} accounts: {', '.join(selected_accounts.keys())}")
                 
                 except ValueError as e:
                     self.log_operation('ERROR', f"Invalid account selection: {e}")
-                    print(f"❌ Invalid selection: {e}")
+                    print(f"{Symbols.ERROR} Invalid selection: {e}")
                     return
         
             # Update the config_data with only selected accounts
@@ -994,7 +994,7 @@ class UltraEC2CleanupManager:
             total_operations = account_count * region_count
         
             # Simplified confirmation process
-            print(f"\n⚠️  WARNING: This will delete ALL EC2 instances and security groups")
+            print(f"\n{Symbols.WARN}  WARNING: This will delete ALL EC2 instances and security groups")
             print(f"    across {account_count} accounts in {region_count} regions ({total_operations} operations)")
             print(f"    This action CANNOT be undone!")
         
@@ -1004,7 +1004,7 @@ class UltraEC2CleanupManager:
         
             if confirm1 not in ['y', 'yes']:
                 self.log_operation('INFO', "Ultra cleanup cancelled by user")
-                print("❌ Cleanup cancelled")
+                print(f"{Symbols.ERROR} Cleanup cancelled")
                 return
         
             # Second confirmation - final check
@@ -1013,7 +1013,7 @@ class UltraEC2CleanupManager:
         
             if confirm2 != 'yes':
                 self.log_operation('INFO', "Ultra cleanup cancelled at final confirmation")
-                print("❌ Cleanup cancelled")
+                print(f"{Symbols.ERROR} Cleanup cancelled")
                 return
         
             # Start the cleanup
@@ -1030,13 +1030,13 @@ class UltraEC2CleanupManager:
         
             # Display final results
             print(f"\n💥" + "="*25 + " CLEANUP COMPLETE " + "="*25)
-            print(f"⏱️  Total execution time: {total_time} seconds")
-            print(f"✅ Successful operations: {successful_tasks}")
-            print(f"❌ Failed operations: {failed_tasks}")
+            print(f"{Symbols.TIMER}  Total execution time: {total_time} seconds")
+            print(f"{Symbols.OK} Successful operations: {successful_tasks}")
+            print(f"{Symbols.ERROR} Failed operations: {failed_tasks}")
             print(f"💻 Instances deleted: {len(self.cleanup_results['deleted_instances'])}")
-            print(f"🛡️  Security groups deleted: {len(self.cleanup_results['deleted_security_groups'])}")
+            print(f"{Symbols.PROTECTED}  Security groups deleted: {len(self.cleanup_results['deleted_security_groups'])}")
             print(f"⏭️  Resources skipped: {len(self.cleanup_results['skipped_resources'])}")
-            print(f"❌ Failed deletions: {len(self.cleanup_results['failed_deletions'])}")
+            print(f"{Symbols.ERROR} Failed deletions: {len(self.cleanup_results['failed_deletions'])}")
         
             self.log_operation('INFO', f"CLEANUP COMPLETED")
             self.log_operation('INFO', f"Execution time: {total_time} seconds")
@@ -1045,7 +1045,7 @@ class UltraEC2CleanupManager:
         
             # Show account summary
             if self.cleanup_results['deleted_instances'] or self.cleanup_results['deleted_security_groups']:
-                print(f"\n📊 Deletion Summary by Account:")
+                print(f"\n{Symbols.STATS} Deletion Summary by Account:")
             
                 # Group by account
                 account_summary = {}
@@ -1065,14 +1065,14 @@ class UltraEC2CleanupManager:
             
                 for account, summary in account_summary.items():
                     regions_list = ', '.join(sorted(summary['regions']))
-                    print(f"   🏦 {account}:")
+                    print(f"   {Symbols.ACCOUNT} {account}:")
                     print(f"      💻 Instances: {summary['instances']}")
-                    print(f"      🛡️  Security Groups: {summary['security_groups']}")
-                    print(f"      🌍 Regions: {regions_list}")
+                    print(f"      {Symbols.PROTECTED}  Security Groups: {summary['security_groups']}")
+                    print(f"      {Symbols.REGION} Regions: {regions_list}")
         
             # Show failures if any
             if self.cleanup_results['failed_deletions']:
-                print(f"\n❌ Failed Deletions:")
+                print(f"\n{Symbols.ERROR} Failed Deletions:")
                 for failure in self.cleanup_results['failed_deletions'][:10]:  # Show first 10
                     print(f"   • {failure['resource_type']} {failure['resource_id']} in {failure['account_name']} ({failure['region']})")
                     print(f"     Error: {failure['error']}")
@@ -1085,16 +1085,15 @@ class UltraEC2CleanupManager:
             print(f"\n📄 Saving cleanup report...")
             report_file = self.save_cleanup_report()
             if report_file:
-                print(f"✅ Cleanup report saved to: {report_file}")
+                print(f"{Symbols.OK} Cleanup report saved to: {report_file}")
         
-            print(f"✅ Session log saved to: {self.log_filename}")
+            print(f"{Symbols.OK} Session log saved to: {self.log_filename}")
         
             print(f"\n💥 CLEANUP COMPLETE! 💥")
             print("🚨" * 50)
         
         except Exception as e:
             self.log_operation('ERROR', f"FATAL ERROR in cleanup execution: {str(e)}")
-            import traceback
             traceback.print_exc()
             raise
 def main():
@@ -1103,10 +1102,10 @@ def main():
         manager = UltraEC2CleanupManager()
         manager.run()
     except KeyboardInterrupt:
-        print("\n\n❌ Cleanup interrupted by user")
+        print("\n\n[ERROR] Cleanup interrupted by user")
         sys.exit(1)
     except Exception as e:
-        print(f"❌ Unexpected error: {e}")
+        print(f"{Symbols.ERROR} Unexpected error: {e}")
         sys.exit(1)
 
 if __name__ == "__main__":

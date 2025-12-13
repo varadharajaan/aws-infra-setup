@@ -23,6 +23,7 @@ if sys.platform.startswith('win'):
     
 # Force UTF-8 encoding
 import codecs
+from text_symbols import Symbols
 sys.stdout = codecs.getwriter('utf-8')(sys.stdout.detach())
 sys.stderr = codecs.getwriter('utf-8')(sys.stderr.detach())
 
@@ -176,7 +177,7 @@ class AWSCostCalculator:
             return parsed_time.replace(tzinfo=timezone.utc)
         
         except Exception as e:
-            print(f"[WARN] Warning: Could not parse time '{time_string}': {e}")
+            print(f"{Symbols.WARN} Warning: Could not parse time '{time_string}': {e}")
             print(f"   Using current time as fallback")
             return datetime.now(timezone.utc)
     
@@ -516,10 +517,10 @@ class AWSResourceManager:
             with open(self.config_file, 'r') as f:
                 return json.load(f)
         except FileNotFoundError:
-            print(f"[ERROR] AWS config file '{self.config_file}' not found!")
+            print(f"{Symbols.ERROR} AWS config file '{self.config_file}' not found!")
             return {}
         except json.JSONDecodeError:
-            print(f"[ERROR] Invalid JSON in '{self.config_file}'!")
+            print(f"{Symbols.ERROR} Invalid JSON in '{self.config_file}'!")
             return {}
 
     def detect_resource_type(self, resource_id: str) -> str:
@@ -602,14 +603,14 @@ class AWSResourceManager:
         json_files = self.find_state_files(patterns)
         
         if not json_files:
-            print(f"[ERROR] No {file_type} state files found!")
+            print(f"{Symbols.ERROR} No {file_type} state files found!")
             print(f"   Looking for patterns: {', '.join(patterns)}")
             return []
         
         # Group files by date
         date_groups = self.group_files_by_date(json_files)
         
-        print(f"\n[FOLDER] Found {len(json_files)} {file_type.upper()} state file(s) across {len(date_groups)} date(s):")
+        print(f"\n{Symbols.FOLDER} Found {len(json_files)} {file_type.upper()} state file(s) across {len(date_groups)} date(s):")
         print("-" * 70)
         
         selected_files = []
@@ -617,7 +618,7 @@ class AWSResourceManager:
         # Ask for each date group, starting from newest
         for date_str, file_timestamp_pairs in date_groups.items():
             readable_date = self.format_date_display(date_str)
-            print(f"\n[DATE] {readable_date} ({date_str}): {len(file_timestamp_pairs)} file(s)")
+            print(f"\n{Symbols.DATE} {readable_date} ({date_str}): {len(file_timestamp_pairs)} file(s)")
             
             # Sort files within the date by timestamp (latest first)
             file_timestamp_pairs.sort(key=lambda x: x[1], reverse=True)
@@ -626,7 +627,7 @@ class AWSResourceManager:
                 file_size = os.path.getsize(file) if os.path.exists(file) else 0
                 readable_timestamp = self.format_timestamp_to_ist_readable(timestamp)
                 print(f"   {i}. {file}")
-                print(f"      [DATE] Created: {readable_timestamp}")
+                print(f"      {Symbols.DATE} Created: {readable_timestamp}")
                 print(f"      [PACKAGE] Size: {file_size:,} bytes")
             
             # Ask user confirmation for this date
@@ -635,24 +636,24 @@ class AWSResourceManager:
                 if response in ['yes', 'y']:
                     # Add just the file names to selected_files
                     selected_files.extend([file for file, _ in file_timestamp_pairs])
-                    print(f"[OK] Added {len(file_timestamp_pairs)} file(s) from {readable_date}")
+                    print(f"{Symbols.OK} Added {len(file_timestamp_pairs)} file(s) from {readable_date}")
                     break
                 elif response in ['no', 'n']:
-                    print(f"[SKIP] Skipping {readable_date} and all older files")
+                    print(f"{Symbols.SKIP} Skipping {readable_date} and all older files")
                     # If user says no to this date, stop asking for older dates
                     if selected_files:
-                        print(f"\n[LIST] Final selection: {len(selected_files)} file(s) from newer dates")
+                        print(f"\n{Symbols.LIST} Final selection: {len(selected_files)} file(s) from newer dates")
                         return selected_files
                     else:
-                        print(f"\n[ERROR] No files selected")
+                        print(f"\n{Symbols.ERROR} No files selected")
                         return []
                 else:
                     print("[ERROR] Please enter 'yes' or 'no'")
         
         if selected_files:
-            print(f"\n[LIST] Final selection: {len(selected_files)} file(s) from all selected dates")
+            print(f"\n{Symbols.LIST} Final selection: {len(selected_files)} file(s) from all selected dates")
         else:
-            print(f"\n[ERROR] No files selected")
+            print(f"\n{Symbols.ERROR} No files selected")
         
         return selected_files
 
@@ -675,7 +676,7 @@ class AWSResourceManager:
                     start, end = map(int, part.split('-'))
                     selected_items.extend(range(start, end + 1))
                 except ValueError:
-                    print(f"[WARN] Invalid range format: {part}")
+                    print(f"{Symbols.WARN} Invalid range format: {part}")
                     continue
             else:
                 # Handle single number
@@ -684,9 +685,9 @@ class AWSResourceManager:
                     if 1 <= num <= max_items:
                         selected_items.append(num)
                     else:
-                        print(f"[WARN] Number {num} is out of range (1-{max_items})")
+                        print(f"{Symbols.WARN} Number {num} is out of range (1-{max_items})")
                 except ValueError:
-                    print(f"[WARN] Invalid number: {part}")
+                    print(f"{Symbols.WARN} Invalid number: {part}")
                     continue
         
         # Remove duplicates and sort
@@ -699,7 +700,7 @@ class AWSResourceManager:
         
         account_info = self.aws_config['accounts'][account_key]
         
-        print(f"[KEY] Using ROOT credentials for account '{account_key}': {account_info.get('email', 'Unknown')}")
+        print(f"{Symbols.KEY} Using ROOT credentials for account '{account_key}': {account_info.get('email', 'Unknown')}")
         
         return boto3.client(
             service,
@@ -714,7 +715,7 @@ class AWSResourceManager:
             with open(file_path, 'r') as f:
                 return json.load(f)
         except Exception as e:
-            print(f"[ERROR] Error parsing {file_path}: {e}")
+            print(f"{Symbols.ERROR} Error parsing {file_path}: {e}")
             return {}
 
     def parse_ec2_file(self, file_path: str) -> Dict:
@@ -723,7 +724,7 @@ class AWSResourceManager:
             with open(file_path, 'r') as f:
                 return json.load(f)
         except Exception as e:
-            print(f"[ERROR] Error parsing {file_path}: {e}")
+            print(f"{Symbols.ERROR} Error parsing {file_path}: {e}")
             return {}
 
     def check_eks_cluster_status(self, cluster_name: str, region: str, account_key: str) -> Dict:
@@ -790,7 +791,7 @@ class AWSResourceManager:
             
             try:
                 cloudwatch_client = self.get_aws_client('cloudwatch', region, account_key)
-                print(f"[STATS] Fetching CloudWatch metrics...")
+                print(f"{Symbols.STATS} Fetching CloudWatch metrics...")
                 cpu_response = cloudwatch_client.get_metric_statistics(
                     Namespace='AWS/EC2',
                     MetricName='CPUUtilization',
@@ -802,7 +803,7 @@ class AWSResourceManager:
                 )
                 cpu_utilization = cpu_response.get('Datapoints', [])
             except Exception as e:
-                print(f"[WARN] Could not fetch CloudWatch metrics: {e}")
+                print(f"{Symbols.WARN} Could not fetch CloudWatch metrics: {e}")
                 cpu_utilization = []
             
             return {
@@ -879,7 +880,7 @@ class AWSResourceManager:
                 return dt.strftime('%b %d, %Y at %I:%M %p IST')
             
         except Exception as e:
-            print(f"[WARN] Warning: Could not parse timestamp '{timestamp_str}': {e}")
+            print(f"{Symbols.WARN} Warning: Could not parse timestamp '{timestamp_str}': {e}")
         return "Unknown time"
         
     def display_eks_summary(self, data: Dict, file_path: str = "", show_cost: bool = False, start_number: int = 1) -> List[Tuple]:
@@ -889,12 +890,12 @@ class AWSResourceManager:
         print("="*80)
         
         if file_path:
-            print(f"[FOLDER] Source file: {file_path}")
+            print(f"{Symbols.FOLDER} Source file: {file_path}")
         
         metadata = data.get('metadata', {})
-        print(f"[DATE] Created: {metadata.get('created_on', 'Unknown')}")
+        print(f"{Symbols.DATE} Created: {metadata.get('created_on', 'Unknown')}")
         print(f"👤 Created by: {metadata.get('created_by', 'Unknown')}")
-        print(f"[STATS] Total clusters: {metadata.get('total_clusters', 0)}")
+        print(f"{Symbols.STATS} Total clusters: {metadata.get('total_clusters', 0)}")
         
         clusters = data.get('clusters', [])
         cluster_list = []
@@ -911,17 +912,17 @@ class AWSResourceManager:
             formatted_time = self.format_creation_time_readable(creation_time)
             
             print(f"\n[TAG]  Cluster {global_number}: {cluster_name}")
-            print(f"   [REGION] Region: {region}")
+            print(f"   {Symbols.REGION} Region: {region}")
             print(f"   [ACCOUNT] Account: {account_key} ({cluster.get('account_id', 'Unknown')})")
             print(f"   [MEASURE] Instance Type: {cluster.get('instance_type', 'Unknown')}")
-            print(f"   📈 Max Nodes: {cluster.get('max_nodes', 'Unknown')}")
-            print(f"   🔢 Default Nodes: {cluster.get('default_nodes', 'Unknown')}")
-            print(f"   [INSTANCE] Disk Size: {cluster.get('disk_size', 'Unknown')} GB")
-            print(f"   [DATE] Created: {formatted_time}")  # Shows: 12:01 PM IST
+            print(f"   [UP] Max Nodes: {cluster.get('max_nodes', 'Unknown')}")
+            print(f"   [#] Default Nodes: {cluster.get('default_nodes', 'Unknown')}")
+            print(f"   {Symbols.INSTANCE} Disk Size: {cluster.get('disk_size', 'Unknown')} GB")
+            print(f"   {Symbols.DATE} Created: {formatted_time}")  # Shows: 12:01 PM IST
             
             if show_cost:
                 cost_data = self.cost_calculator.calculate_eks_cost(cluster)
-                print(f"   [COST] Estimated Cost: ${cost_data['total_cost']:.2f} (for {cost_data['hours_running']:.1f} hours)")
+                print(f"   {Symbols.COST} Estimated Cost: ${cost_data['total_cost']:.2f} (for {cost_data['hours_running']:.1f} hours)")
                 print(f"      └─ Control Plane: ${cost_data['control_plane_cost']:.2f}")
                 print(f"      └─ Node Compute: ${cost_data['node_compute_cost']:.2f}")
                 print(f"      └─ Node Storage: ${cost_data['node_storage_cost']:.2f}")
@@ -931,7 +932,7 @@ class AWSResourceManager:
             cluster_list.append((global_number, cluster_name, account_key, region, cluster))
         
         if show_cost:
-            print(f"\n[COST] TOTAL EKS COST: ${total_cost:.2f}")
+            print(f"\n{Symbols.COST} TOTAL EKS COST: ${total_cost:.2f}")
             print(f"[ALARM] Cost calculated at (UTC): {self.get_current_time_formatted()}")
         
         return cluster_list
@@ -943,21 +944,21 @@ class AWSResourceManager:
         print("="*80)
         
         if file_path:
-            print(f"[FOLDER] Source file: {file_path}")
+            print(f"{Symbols.FOLDER} Source file: {file_path}")
         
         metadata = data.get('metadata', {})
-        print(f"[DATE] Created: {metadata.get('creation_date', 'Unknown')} {metadata.get('creation_time', '')}")
+        print(f"{Symbols.DATE} Created: {metadata.get('creation_date', 'Unknown')} {metadata.get('creation_time', '')}")
         print(f"👤 Created by: {metadata.get('created_by', 'Unknown')}")
         
         summary = data.get('summary', {})
-        print(f"[STATS] Total processed: {summary.get('total_processed', 0)}")
-        print(f"[OK] Total created: {summary.get('total_created', 0)}")
+        print(f"{Symbols.STATS} Total processed: {summary.get('total_processed', 0)}")
+        print(f"{Symbols.OK} Total created: {summary.get('total_created', 0)}")
         
         instances = data.get('created_instances', [])
         instance_list = []
         total_cost = 0
         
-        print(f"\n[LIST] Instance Details ({len(instances)} instances):")
+        print(f"\n{Symbols.LIST} Instance Details ({len(instances)} instances):")
         
         # Use continuous numbering starting from start_number
         for idx, instance in enumerate(instances):
@@ -968,14 +969,14 @@ class AWSResourceManager:
             
             print(f"\n{global_number}. [DESKTOP]  {instance_id}")
             print(f"   [TAG]  Type: {instance.get('instance_type', 'Unknown')}")
-            print(f"   [REGION] Region: {region}")
+            print(f"   {Symbols.REGION} Region: {region}")
             print(f"   [ACCOUNT] Account: {account_name} ({instance.get('account_id', 'Unknown')})")
             print(f"   [NETWORK] Public IP: {instance.get('public_ip', 'None')}")
-            print(f"   [STATS] State: {instance.get('state', 'Unknown')}")
+            print(f"   {Symbols.STATS} State: {instance.get('state', 'Unknown')}")
             
             if show_cost:
                 cost_data = self.cost_calculator.calculate_ec2_cost(instance)
-                print(f"   [COST] Estimated Cost: ${cost_data['total_cost']:.2f} (for {cost_data['hours_running']:.1f} hours)")
+                print(f"   {Symbols.COST} Estimated Cost: ${cost_data['total_cost']:.2f} (for {cost_data['hours_running']:.1f} hours)")
                 print(f"      └─ Compute: ${cost_data['compute_cost']:.2f} ({cost_data['hourly_rate']:.4f}/hr)")
                 print(f"      └─ Storage: ${cost_data['storage_cost']:.2f} ({cost_data['disk_size_gb']}GB)")
                 total_cost += cost_data['total_cost']
@@ -984,7 +985,7 @@ class AWSResourceManager:
             instance_list.append((global_number, instance_id, account_name, region, instance))
         
         if show_cost:
-            print(f"\n[COST] TOTAL EC2 COST: ${total_cost:.2f}")
+            print(f"\n{Symbols.COST} TOTAL EC2 COST: ${total_cost:.2f}")
             print(f"[ALARM] Cost calculated at (UTC): {self.get_current_time_formatted()}")
         
         return instance_list
@@ -1018,17 +1019,17 @@ class AWSResourceManager:
                     current_number += len(data.get('created_instances', []))
         
         if not all_resources:
-            print(f"[ERROR] No {resource_type} resources found in selected files")
+            print(f"{Symbols.ERROR} No {resource_type} resources found in selected files")
             return
         
         # Show summary of all resources with their global numbers
-        print(f"\n[STATS] SUMMARY: Found {len(all_resources)} {resource_type.upper()} resources across {len(files)} file(s)")
+        print(f"\n{Symbols.STATS} SUMMARY: Found {len(all_resources)} {resource_type.upper()} resources across {len(files)} file(s)")
         print("="*80)
         
         # Interactive selection
-        print(f"\n[SCAN] Select {resource_type.upper()} resource(s) for LIVE lookup:")
+        print(f"\n{Symbols.SCAN} Select {resource_type.upper()} resource(s) for LIVE lookup:")
         print("[TIP] Options: single number (5), range (1-3), multiple (1,3,5), or 'all' (default)")
-        print(f"[TIP] Available numbers: 1-{len(all_resources)}")
+        print(f"{Symbols.TIP} Available numbers: 1-{len(all_resources)}")
         print("-" * 70)
         
         selection_input = input(f"Select {resource_type.upper()} for live lookup (default=all): ").strip()
@@ -1039,7 +1040,7 @@ class AWSResourceManager:
             return
         
         current_time = self.get_current_time_formatted()
-        print(f"\n[SCAN] LIVE LOOKUP FOR {len(selected_indices)} {resource_type.upper()} RESOURCE(S)")
+        print(f"\n{Symbols.SCAN} LIVE LOOKUP FOR {len(selected_indices)} {resource_type.upper()} RESOURCE(S)")
         print(f"[ALARM] Lookup time (IST): {current_time}")
         print("="*80)
         
@@ -1058,23 +1059,23 @@ class AWSResourceManager:
                     break
             
             if not selected_resource:
-                print(f"[ERROR] Resource number {global_num} not found")
+                print(f"{Symbols.ERROR} Resource number {global_num} not found")
                 continue
             
             try:
                 if resource_type == 'eks':
                     global_number, cluster_name, account_key, region, cluster_data = selected_resource
                     
-                    print(f"\n[START] EKS Cluster {global_number}: {cluster_name}")
-                    print(f"[ACCOUNT] Account: {account_key} | [REGION] Region: {region}")
+                    print(f"\n{Symbols.START} EKS Cluster {global_number}: {cluster_name}")
+                    print(f"[ACCOUNT] Account: {account_key} | {Symbols.REGION} Region: {region}")
                     
                     # Perform live lookup
                     status_data = self.check_eks_cluster_status(cluster_name, region, account_key)
                     
                     if status_data['status'] == 'error':
-                        print(f"[ERROR] LIVE LOOKUP FAILED")
+                        print(f"{Symbols.ERROR} LIVE LOOKUP FAILED")
                         print(f"   Error: {status_data['error']}")
-                        print(f"   [LOG] Reason: Cluster found in JSON but not found in live AWS")
+                        print(f"   {Symbols.LOG} Reason: Cluster found in JSON but not found in live AWS")
                         failed_lookups += 1
                         not_found_resources.append({
                             'type': 'EKS Cluster',
@@ -1084,11 +1085,11 @@ class AWSResourceManager:
                             'number': global_number
                         })
                     else:
-                        print(f"[OK] LIVE LOOKUP SUCCESSFUL")
+                        print(f"{Symbols.OK} LIVE LOOKUP SUCCESSFUL")
                         cluster = status_data['cluster']
-                        print(f"   [STATS] Status: {cluster['status']}")
-                        print(f"   [TARGET] Version: {cluster['version']}")
-                        print(f"   [DATE] Created: {self.utc_to_ist(str(cluster['createdAt']))} IST")
+                        print(f"   {Symbols.STATS} Status: {cluster['status']}")
+                        print(f"   {Symbols.TARGET} Version: {cluster['version']}")
+                        print(f"   {Symbols.DATE} Created: {self.utc_to_ist(str(cluster['createdAt']))} IST")
                         
                         nodegroups = status_data.get('nodegroups', [])
                         if nodegroups:
@@ -1111,15 +1112,15 @@ class AWSResourceManager:
                     global_number, instance_id, account_name, region, instance_data = selected_resource
                     
                     print(f"\n[COMPUTE] EC2 Instance {global_number}: {instance_id}")
-                    print(f"[ACCOUNT] Account: {account_name} | [REGION] Region: {region}")
+                    print(f"[ACCOUNT] Account: {account_name} | {Symbols.REGION} Region: {region}")
                     
                     # Perform live lookup
                     status_data = self.check_ec2_instance_status(instance_id, region, account_name)
                     
                     if status_data['status'] in ['error', 'not_found']:
-                        print(f"[ERROR] LIVE LOOKUP FAILED")
+                        print(f"{Symbols.ERROR} LIVE LOOKUP FAILED")
                         print(f"   Error: {status_data['error']}")
-                        print(f"   [LOG] Reason: Instance found in JSON but not found in live AWS")
+                        print(f"   {Symbols.LOG} Reason: Instance found in JSON but not found in live AWS")
                         failed_lookups += 1
                         not_found_resources.append({
                             'type': 'EC2 Instance',
@@ -1129,12 +1130,12 @@ class AWSResourceManager:
                             'number': global_number
                         })
                     else:
-                        print(f"[OK] LIVE LOOKUP SUCCESSFUL")
+                        print(f"{Symbols.OK} LIVE LOOKUP SUCCESSFUL")
                         instance = status_data['instance']
                         print(f"   [TAG] Type: {instance['InstanceType']}")
-                        print(f"   [STATS] State: {instance['State']['Name']}")
+                        print(f"   {Symbols.STATS} State: {instance['State']['Name']}")
                         print(f"   [NETWORK] Public IP: {instance.get('PublicIpAddress', 'None')}")
-                        print(f"   [DATE] Launch Time: {self.utc_to_ist(str(instance['LaunchTime']))} IST")
+                        print(f"   {Symbols.DATE} Launch Time: {self.utc_to_ist(str(instance['LaunchTime']))} IST")
                         
                         cpu_metrics = status_data.get('cpu_metrics', [])
                         if cpu_metrics:
@@ -1153,28 +1154,28 @@ class AWSResourceManager:
                     })
                     
             except Exception as e:
-                print(f"[ERROR] UNEXPECTED ERROR during lookup of resource {global_num}")
+                print(f"{Symbols.ERROR} UNEXPECTED ERROR during lookup of resource {global_num}")
                 print(f"   Error: {str(e)}")
-                print(f"   [LOG] Continuing with next resource...")
+                print(f"   {Symbols.LOG} Continuing with next resource...")
                 failed_lookups += 1
                 continue
         
         # Final summary
         print(f"\n" + "="*80)
-        print(f"[STATS] LIVE LOOKUP SUMMARY")
+        print(f"{Symbols.STATS} LIVE LOOKUP SUMMARY")
         print(f"[ALARM] Completed at (IST): {current_time}")
-        print(f"[OK] Successful lookups: {successful_lookups}")
-        print(f"[ERROR] Failed lookups: {failed_lookups}")
-        print(f"[STATS] Total processed: {len(selected_indices)}")
+        print(f"{Symbols.OK} Successful lookups: {successful_lookups}")
+        print(f"{Symbols.ERROR} Failed lookups: {failed_lookups}")
+        print(f"{Symbols.STATS} Total processed: {len(selected_indices)}")
         
         # Show resources not found in live AWS with their numbers
         if not_found_resources:
-            print(f"\n[WARN] RESOURCES NOT FOUND IN LIVE AWS:")
+            print(f"\n{Symbols.WARN} RESOURCES NOT FOUND IN LIVE AWS:")
             print("-" * 50)
             for resource in not_found_resources:
-                print(f"[LOG] #{resource['number']} {resource['type']}: {resource['id']} (Account: {resource['account']}, Region: {resource['region']})")
+                print(f"{Symbols.LOG} #{resource['number']} {resource['type']}: {resource['id']} (Account: {resource['account']}, Region: {resource['region']})")
         else:
-            print(f"\n[OK] All resources successfully found in live AWS")
+            print(f"\n{Symbols.OK} All resources successfully found in live AWS")
         
         # Save consolidated report
         saved_file = self.save_consolidated_execution_report('live_lookup', resource_type)
@@ -1186,9 +1187,9 @@ class AWSResourceManager:
 
     def display_live_eks_status(self, cluster_name: str, region: str, account_key: str):
         """Display live EKS cluster status using AWS API calls - IMPROVED with node details"""
-        print(f"\n[SCAN] LIVE EKS CLUSTER STATUS (AWS API)")
-        print(f"[TARGET] Cluster: {cluster_name}")
-        print(f"[REGION] Region: {region}")
+        print(f"\n{Symbols.SCAN} LIVE EKS CLUSTER STATUS (AWS API)")
+        print(f"{Symbols.TARGET} Cluster: {cluster_name}")
+        print(f"{Symbols.REGION} Region: {region}")
         print(f"[ACCOUNT] Account: {account_key}")
         print("-" * 60)
         
@@ -1196,7 +1197,7 @@ class AWSResourceManager:
         status_data = self.check_eks_cluster_status(cluster_name, region, account_key)
         
         if status_data['status'] == 'error':
-            print(f"[ERROR] Error: {status_data['error']}")
+            print(f"{Symbols.ERROR} Error: {status_data['error']}")
             print(f"[ALARM] Check completed at (IST): {status_data['check_time']}")
             
             # Add to execution reports for consolidated saving
@@ -1210,18 +1211,18 @@ class AWSResourceManager:
             return
         
         cluster = status_data['cluster']
-        print(f"[OK] Successfully retrieved live cluster data!")
+        print(f"{Symbols.OK} Successfully retrieved live cluster data!")
         print(f"[ALARM] Data retrieved at (IST): {status_data['check_time']}")
         print(f"[TAG]  Cluster Name: {cluster['name']}")
-        print(f"[STATS] Status: {cluster['status']}")
-        print(f"[TARGET] Version: {cluster['version']}")
+        print(f"{Symbols.STATS} Status: {cluster['status']}")
+        print(f"{Symbols.TARGET} Version: {cluster['version']}")
         print(f"[LINK] Endpoint: {cluster['endpoint']}")
-        print(f"[DATE] Created: {self.utc_to_ist(str(cluster['createdAt']))} IST")
+        print(f"{Symbols.DATE} Created: {self.utc_to_ist(str(cluster['createdAt']))} IST")
         
         nodegroups = status_data.get('nodegroups', [])
         if nodegroups:
             total_nodes = 0
-            print(f"\n[LIST] Node Groups ({len(nodegroups)}):")
+            print(f"\n{Symbols.LIST} Node Groups ({len(nodegroups)}):")
             for ng in nodegroups:
                 scaling = ng.get('scalingConfig', {})
                 desired_nodes = scaling.get('desiredSize', 0)
@@ -1235,9 +1236,9 @@ class AWSResourceManager:
                 if 'createdAt' in ng:
                     print(f"    - Created: {self.utc_to_ist(str(ng['createdAt']))} IST")
             
-            print(f"\n🔢 Total Active Nodes: {total_nodes}")
+            print(f"\n[#] Total Active Nodes: {total_nodes}")
         else:
-            print(f"\n[LIST] No node groups found")
+            print(f"\n{Symbols.LIST} No node groups found")
         
         # Add to execution reports for consolidated saving
         self.execution_reports.append({
@@ -1251,9 +1252,9 @@ class AWSResourceManager:
 
     def display_live_ec2_status(self, instance_id: str, region: str, account_key: str):
         """Display live EC2 instance status using AWS API calls"""
-        print(f"\n[SCAN] LIVE EC2 INSTANCE STATUS (AWS API)")
-        print(f"[TARGET] Instance: {instance_id}")
-        print(f"[REGION] Region: {region}")
+        print(f"\n{Symbols.SCAN} LIVE EC2 INSTANCE STATUS (AWS API)")
+        print(f"{Symbols.TARGET} Instance: {instance_id}")
+        print(f"{Symbols.REGION} Region: {region}")
         print(f"[ACCOUNT] Account: {account_key}")
         print("-" * 60)
         
@@ -1261,7 +1262,7 @@ class AWSResourceManager:
         status_data = self.check_ec2_instance_status(instance_id, region, account_key)
         
         if status_data['status'] in ['error', 'not_found']:
-            print(f"[ERROR] Error: {status_data['error']}")
+            print(f"{Symbols.ERROR} Error: {status_data['error']}")
             print(f"[ALARM] Check completed at (IST): {status_data['check_time']}")
             
             # Add to execution reports for consolidated saving
@@ -1275,14 +1276,14 @@ class AWSResourceManager:
             return
         
         instance = status_data['instance']
-        print(f"[OK] Successfully retrieved live instance data!")
+        print(f"{Symbols.OK} Successfully retrieved live instance data!")
         print(f"[ALARM] Data retrieved at (IST): {status_data['check_time']}")
         print(f"[DESKTOP]  Instance ID: {instance['InstanceId']}")
         print(f"[TAG]  Instance Type: {instance['InstanceType']}")
-        print(f"[STATS] State: {instance['State']['Name']} (CURRENT)")
+        print(f"{Symbols.STATS} State: {instance['State']['Name']} (CURRENT)")
         print(f"[NETWORK] Public IP: {instance.get('PublicIpAddress', 'None')}")
-        print(f"[SECURE] Private IP: {instance.get('PrivateIpAddress', 'None')}")
-        print(f"[DATE] Launch Time: {self.utc_to_ist(str(instance['LaunchTime']))} IST")
+        print(f"{Symbols.SECURE} Private IP: {instance.get('PrivateIpAddress', 'None')}")
+        print(f"{Symbols.DATE} Launch Time: {self.utc_to_ist(str(instance['LaunchTime']))} IST")
         
         cpu_metrics = status_data.get('cpu_metrics', [])
         if cpu_metrics:
@@ -1331,14 +1332,14 @@ class AWSResourceManager:
         """Perform direct lookup for a resource with LIVE AWS API calls"""
         resource_type = self.detect_resource_type(resource_id)
         
-        print(f"[SCAN] Detected resource type: {resource_type.upper()}")
-        print(f"[TARGET] Looking up resource: {resource_id}")
+        print(f"{Symbols.SCAN} Detected resource type: {resource_type.upper()}")
+        print(f"{Symbols.TARGET} Looking up resource: {resource_id}")
         
         result = self.find_resource_in_files(resource_id, resource_type)
         
         if result:
             account_key, region, file_path = result
-            print(f"[OK] Found {resource_type} resource in: {file_path}")
+            print(f"{Symbols.OK} Found {resource_type} resource in: {file_path}")
             
             if resource_type == 'eks':
                 self.display_live_eks_status(resource_id, region, account_key)
@@ -1348,7 +1349,7 @@ class AWSResourceManager:
             # Save consolidated report
             self.save_consolidated_execution_report('direct_lookup', resource_type)
         else:
-            print(f"[ERROR] {resource_type.upper()} resource '{resource_id}' not found in state files")
+            print(f"{Symbols.ERROR} {resource_type.upper()} resource '{resource_id}' not found in state files")
             
     def create_output_folders(self, folder_type: str) -> str:
         """Create folder structure for saving files"""
@@ -1365,8 +1366,8 @@ class AWSResourceManager:
             return folder_path
             
         except Exception as e:
-            print(f"[WARN] Warning: Could not create folder structure: {e}")
-            print(f"[FOLDER] Files will be saved in current directory")
+            print(f"{Symbols.WARN} Warning: Could not create folder structure: {e}")
+            print(f"{Symbols.FOLDER} Files will be saved in current directory")
             return "."
 
     def save_consolidated_execution_report(self, operation_type: str, resource_type: str):
@@ -1404,9 +1405,9 @@ class AWSResourceManager:
                 
                 f.write("EXECUTION SUMMARY:\n")
                 f.write("-"*30 + "\n")
-                f.write(f"[OK] Successful: {successful_count}\n")
-                f.write(f"[ERROR] Errors/Not Found: {error_count}\n")
-                f.write(f"[STATS] Total: {len(self.execution_reports)}\n\n")
+                f.write(f"{Symbols.OK} Successful: {successful_count}\n")
+                f.write(f"{Symbols.ERROR} Errors/Not Found: {error_count}\n")
+                f.write(f"{Symbols.STATS} Total: {len(self.execution_reports)}\n\n")
                 
                 # Detailed results
                 f.write("DETAILED RESULTS:\n")
@@ -1414,7 +1415,7 @@ class AWSResourceManager:
                 
                 for i, report in enumerate(self.execution_reports, 1):
                     f.write(f"\n{i}. Resource: {report['resource_id']}\n")
-                    f.write(f"   Status: {'[OK] SUCCESS' if report['status'] == 'success' else '[ERROR] ERROR'}\n")
+                    f.write(f"   Status: {'{Symbols.OK} SUCCESS' if report['status'] == 'success' else '{Symbols.ERROR} ERROR'}\n")
                     f.write(f"   Timestamp: {report['timestamp']}\n")
                     
                     if report['status'] == 'success':
@@ -1441,7 +1442,7 @@ class AWSResourceManager:
                 
                 f.write(f"\nReport generated at (IST): {current_time}\n")
             
-            print(f"\n[INSTANCE] Consolidated execution report saved to: {full_path}")
+            print(f"\n{Symbols.INSTANCE} Consolidated execution report saved to: {full_path}")
             
             # Clear reports for next execution
             self.execution_reports = []
@@ -1449,7 +1450,7 @@ class AWSResourceManager:
             return full_path
             
         except Exception as e:
-            print(f"[ERROR] Error saving consolidated report: {e}")
+            print(f"{Symbols.ERROR} Error saving consolidated report: {e}")
             return None
         
     def calculate_resource_costs(self, resource_type: str):
@@ -1484,13 +1485,13 @@ class AWSResourceManager:
             return
         
         # Show summary of all resources with their global numbers
-        print(f"\n[STATS] SUMMARY: Found {len(all_resources)} {resource_type.upper()} resources across {len(files)} file(s)")
+        print(f"\n{Symbols.STATS} SUMMARY: Found {len(all_resources)} {resource_type.upper()} resources across {len(files)} file(s)")
         print("="*80)
         
-        print(f"\n[COST] Select {resource_type.upper()} resource(s) for LIVE COST calculation:")
+        print(f"\n{Symbols.COST} Select {resource_type.upper()} resource(s) for LIVE COST calculation:")
         print("[TIP] Options: single number (5), range (1-3), multiple (1,3,5), or 'all' (default)")
         print("[STATS] This will fetch LIVE AWS data for accurate cost calculation")
-        print(f"[TIP] Available numbers: 1-{len(all_resources)}")
+        print(f"{Symbols.TIP} Available numbers: 1-{len(all_resources)}")
         print("-" * 70)
         
         selection_input = input(f"Select {resource_type.upper()} for live cost calculation (default=all): ").strip()
@@ -1501,7 +1502,7 @@ class AWSResourceManager:
             return
         
         current_time = self.get_current_time_formatted()
-        print(f"\n[COST] LIVE COST CALCULATION FOR {len(selected_indices)} {resource_type.upper()} RESOURCE(S)")
+        print(f"\n{Symbols.COST} LIVE COST CALCULATION FOR {len(selected_indices)} {resource_type.upper()} RESOURCE(S)")
         print(f"[ALARM] Calculation time (IST): {current_time}")
         print("="*80)
         
@@ -1522,7 +1523,7 @@ class AWSResourceManager:
                     break
             
             if not selected_resource:
-                print(f"[ERROR] Resource number {global_num} not found")
+                print(f"{Symbols.ERROR} Resource number {global_num} not found")
                 continue
             
             if resource_type == 'eks':
@@ -1556,13 +1557,13 @@ class AWSResourceManager:
                     
                     try:
                         # Get live cluster data
-                        print(f"\n[SCAN] Fetching live data for EKS cluster: {cluster_name}")
+                        print(f"\n{Symbols.SCAN} Fetching live data for EKS cluster: {cluster_name}")
                         live_status = self.check_eks_cluster_status(cluster_name, region, account_key)
                         
                         if live_status['status'] == 'error':
-                            print(f"[WARN] SKIPPED - EKS Cluster {global_number}: {cluster_name}")
-                            print(f"   [ERROR] Error: {live_status['error']}")
-                            print(f"   [LOG] Reason: Cluster not found in live AWS or access denied")
+                            print(f"{Symbols.WARN} SKIPPED - EKS Cluster {global_number}: {cluster_name}")
+                            print(f"   {Symbols.ERROR} Error: {live_status['error']}")
+                            print(f"   {Symbols.LOG} Reason: Cluster not found in live AWS or access denied")
                             skipped_resources += 1
                             account_skipped += 1
                             
@@ -1588,16 +1589,16 @@ class AWSResourceManager:
                         # Calculate total nodes for display
                         total_nodes = cost_data['actual_nodes']
                         
-                        print(f"\n[START] EKS Cluster {global_number}: {cluster_name}")
-                        print(f"   [REGION] Region: {region}")
-                        print(f"   [STATS] Status: {cost_data.get('current_status', 'unknown')}")
-                        print(f"   [DATE] Created: {self.utc_to_ist(str(live_cluster_data.get('createdAt', 'Unknown') if live_cluster_data else 'Unknown'))} IST")
+                        print(f"\n{Symbols.START} EKS Cluster {global_number}: {cluster_name}")
+                        print(f"   {Symbols.REGION} Region: {region}")
+                        print(f"   {Symbols.STATS} Status: {cost_data.get('current_status', 'unknown')}")
+                        print(f"   {Symbols.DATE} Created: {self.utc_to_ist(str(live_cluster_data.get('createdAt', 'Unknown') if live_cluster_data else 'Unknown'))} IST")
                         print(f"   [ALARM] Running Hours: {cost_data['hours_running']:.2f}")
-                        print(f"   🔢 Total Nodes: {total_nodes}")
+                        print(f"   [#] Total Nodes: {total_nodes}")
                         print(f"   🎛️ Control Plane: ${cost_data['control_plane_cost']:.2f} (${self.cost_calculator.EKS_CLUSTER_HOURLY_COST:.2f}/hr)")
                         print(f"   [DESKTOP] Node Compute: ${cost_data['node_compute_cost']:.2f} ({total_nodes} × {cost_data['instance_type']})")
-                        print(f"   [INSTANCE] Node Storage: ${cost_data['node_storage_cost']:.2f} ({cost_data['disk_size_gb']}GB per node)")
-                        print(f"   [COST] Total Cost: ${cost_data['total_cost']:.2f}")
+                        print(f"   {Symbols.INSTANCE} Node Storage: ${cost_data['node_storage_cost']:.2f} ({cost_data['disk_size_gb']}GB per node)")
+                        print(f"   {Symbols.COST} Total Cost: ${cost_data['total_cost']:.2f}")
                         print(f"   [ALARM] Calculated at: {cost_data['calculation_time'].astimezone(timezone(timedelta(hours=5, minutes=30))).strftime('%Y-%m-%d %H:%M:%S')} IST")
                         
                         account_cost += cost_data['total_cost']
@@ -1617,9 +1618,9 @@ class AWSResourceManager:
                         })
                         
                     except Exception as e:
-                        print(f"[WARN] SKIPPED - EKS Cluster {global_number}: {cluster_name}")
-                        print(f"   [ERROR] Unexpected error: {str(e)}")
-                        print(f"   [LOG] Continuing with next resource...")
+                        print(f"{Symbols.WARN} SKIPPED - EKS Cluster {global_number}: {cluster_name}")
+                        print(f"   {Symbols.ERROR} Unexpected error: {str(e)}")
+                        print(f"   {Symbols.LOG} Continuing with next resource...")
                         skipped_resources += 1
                         account_skipped += 1
                         
@@ -1640,13 +1641,13 @@ class AWSResourceManager:
                     
                     try:
                         # Get live instance data
-                        print(f"\n[SCAN] Fetching live data for EC2 instance: {instance_id}")
+                        print(f"\n{Symbols.SCAN} Fetching live data for EC2 instance: {instance_id}")
                         live_status = self.check_ec2_instance_status(instance_id, region, account_name_inner)
                         
                         if live_status['status'] in ['error', 'not_found']:
-                            print(f"[WARN] SKIPPED - EC2 Instance {global_number}: {instance_id}")
-                            print(f"   [ERROR] Error: {live_status['error']}")
-                            print(f"   [LOG] Reason: Instance not found in live AWS or access denied")
+                            print(f"{Symbols.WARN} SKIPPED - EC2 Instance {global_number}: {instance_id}")
+                            print(f"   {Symbols.ERROR} Error: {live_status['error']}")
+                            print(f"   {Symbols.LOG} Reason: Instance not found in live AWS or access denied")
                             skipped_resources += 1
                             account_skipped += 1
                             
@@ -1669,13 +1670,13 @@ class AWSResourceManager:
                         cost_data = self.cost_calculator.calculate_live_ec2_cost(instance_data, live_instance_data)
                         
                         print(f"\n[COMPUTE] EC2 Instance {global_number}: {instance_id}")
-                        print(f"   [REGION] Region: {region}")
-                        print(f"   [TAG] Type: {cost_data['instance_type']} | [STATS] State: {cost_data.get('current_state', 'unknown')}")
-                        print(f"   [DATE] Launch Time: {self.utc_to_ist(str(live_instance_data.get('LaunchTime', 'Unknown') if live_instance_data else 'Unknown'))} IST")
+                        print(f"   {Symbols.REGION} Region: {region}")
+                        print(f"   [TAG] Type: {cost_data['instance_type']} | {Symbols.STATS} State: {cost_data.get('current_state', 'unknown')}")
+                        print(f"   {Symbols.DATE} Launch Time: {self.utc_to_ist(str(live_instance_data.get('LaunchTime', 'Unknown') if live_instance_data else 'Unknown'))} IST")
                         print(f"   [ALARM] Running Hours: {cost_data['hours_running']:.2f}")
                         print(f"   [DESKTOP] Compute: ${cost_data['compute_cost']:.2f} (${cost_data['hourly_rate']:.4f}/hr)")
-                        print(f"   [INSTANCE] Storage: ${cost_data['storage_cost']:.2f} ({cost_data['disk_size_gb']}GB)")
-                        print(f"   [COST] Total Cost: ${cost_data['total_cost']:.2f}")
+                        print(f"   {Symbols.INSTANCE} Storage: ${cost_data['storage_cost']:.2f} ({cost_data['disk_size_gb']}GB)")
+                        print(f"   {Symbols.COST} Total Cost: ${cost_data['total_cost']:.2f}")
                         print(f"   [ALARM] Calculated at: {cost_data['calculation_time'].astimezone(timezone(timedelta(hours=5, minutes=30))).strftime('%Y-%m-%d %H:%M:%S')} IST")
                         
                         account_cost += cost_data['total_cost']
@@ -1694,9 +1695,9 @@ class AWSResourceManager:
                         })
                         
                     except Exception as e:
-                        print(f"[WARN] SKIPPED - EC2 Instance {global_number}: {instance_id}")
-                        print(f"   [ERROR] Unexpected error: {str(e)}")
-                        print(f"   [LOG] Continuing with next resource...")
+                        print(f"{Symbols.WARN} SKIPPED - EC2 Instance {global_number}: {instance_id}")
+                        print(f"   {Symbols.ERROR} Unexpected error: {str(e)}")
+                        print(f"   {Symbols.LOG} Continuing with next resource...")
                         skipped_resources += 1
                         account_skipped += 1
                         
@@ -1716,23 +1717,23 @@ class AWSResourceManager:
             account_costs[account_name] = account_cost
             
             # Account summary with success/skip counts
-            print(f"\n[COST] ACCOUNT {account_name} TOTAL: ${account_cost:.2f}")
-            print(f"[STATS] Resources in this account: {group_data['count']} {resource_type.upper()} ([OK] {account_successful} successful, [WARN] {account_skipped} skipped)")
+            print(f"\n{Symbols.COST} ACCOUNT {account_name} TOTAL: ${account_cost:.2f}")
+            print(f"{Symbols.STATS} Resources in this account: {group_data['count']} {resource_type.upper()} ({Symbols.OK} {account_successful} successful, {Symbols.WARN} {account_skipped} skipped)")
             print("-"*60)
             
             total_cost += account_cost
         
         # Grand total summary with error statistics
         print(f"\n" + "="*80)
-        print(f"[COST] GRAND TOTAL COST (ALL ACCOUNTS): ${total_cost:.2f}")
+        print(f"{Symbols.COST} GRAND TOTAL COST (ALL ACCOUNTS): ${total_cost:.2f}")
         print(f"[ACCOUNT] Number of accounts: {len(account_groups)}")
-        print(f"[STATS] Total {resource_type.upper()} resources: {len(selected_indices)}")
-        print(f"[OK] Successfully processed: {successful_resources}")
-        print(f"[WARN] Skipped (not found/error): {skipped_resources}")
+        print(f"{Symbols.STATS} Total {resource_type.upper()} resources: {len(selected_indices)}")
+        print(f"{Symbols.OK} Successfully processed: {successful_resources}")
+        print(f"{Symbols.WARN} Skipped (not found/error): {skipped_resources}")
         print(f"[ALARM] Calculation completed at (IST): {current_time}")
         
         # Account breakdown summary using actual calculated costs
-        print(f"\n[LIST] COST BREAKDOWN BY ACCOUNT:")
+        print(f"\n{Symbols.LIST} COST BREAKDOWN BY ACCOUNT:")
         for account_name in account_groups.keys():
             account_total = account_costs[account_name]  # Use stored actual costs
             percentage = (account_total / total_cost * 100) if total_cost > 0 else 0
@@ -1750,8 +1751,8 @@ class AWSResourceManager:
         
     def ask_resource_type(self):
         """Main interactive menu"""
-        print(f"\n[START] AWS Resource Manager")
-        print(f"Current Date and Time (UTC): {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"\n{Symbols.START} AWS Resource Manager")
+        print(f"Current Date and Time (UTC): {datetime.now(datetime.UTC).strftime('%Y-%m-%d %H:%M:%S')}")
         print(f"👤 Current User: varadharajaan")
         print("=" * 60)
         
@@ -1767,7 +1768,7 @@ class AWSResourceManager:
             choice = input("\nSelect option (1-6): ").strip()
             
             if choice == '1':
-                print("\n[START] Processing EKS state files...")
+                print(f"\n{Symbols.START} Processing EKS state files...")
                 self.interactive_live_lookup('eks')
                 break
                         
@@ -1777,14 +1778,14 @@ class AWSResourceManager:
                 break
             
             elif choice == '3':
-                print("\n[COST] EKS Live Cost Calculator...")
-                print("[STATS] This will fetch live AWS data for accurate cost calculation")
+                print(f"\n{Symbols.COST} EKS Live Cost Calculator...")
+                print(f"{Symbols.STATS} This will fetch live AWS data for accurate cost calculation")
                 self.calculate_resource_costs('eks')
                 break
                 
             elif choice == '4':
-                print("\n[COST] EC2 Live Cost Calculator...")
-                print("[STATS] This will fetch live AWS data for accurate cost calculation")
+                print(f"\n{Symbols.COST} EC2 Live Cost Calculator...")
+                print(f"{Symbols.STATS} This will fetch live AWS data for accurate cost calculation")
                 self.calculate_resource_costs('ec2')
                 break
             
@@ -1793,14 +1794,14 @@ class AWSResourceManager:
                 if resource_id:
                     self.direct_resource_lookup(resource_id)
                 else:
-                    print("[ERROR] No resource ID provided")
+                    print(f"{Symbols.ERROR} No resource ID provided")
                 break
                         
             elif choice == '6':
                 print("👋 Goodbye!")
                 sys.exit(0)
             else:
-                print("[ERROR] Invalid option, please try again")
+                print(f"{Symbols.ERROR} Invalid option, please try again")
 
 def main():
     parser = argparse.ArgumentParser(

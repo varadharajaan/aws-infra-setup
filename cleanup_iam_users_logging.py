@@ -7,6 +7,7 @@ import os
 from datetime import datetime
 from botocore.exceptions import ClientError, BotoCoreError
 from logger import setup_logger
+from text_symbols import Symbols
 
 class IAMUserCleanup:
     def __init__(self, config_file='aws_accounts_config.json', mapping_file='user_mapping.json'):
@@ -160,7 +161,7 @@ class IAMUserCleanup:
                 iam_client.get_login_profile(UserName=username)
                 if not dry_run:
                     iam_client.delete_login_profile(UserName=username)
-                actions_taken.append("✅ Deleted login profile")
+                actions_taken.append("[OK] Deleted login profile")
                 self.logger.log_resource_cleanup(username, "LOGIN_PROFILE", "console_access", "DELETED")
             except ClientError as e:
                 if e.response['Error']['Code'] == 'NoSuchEntity':
@@ -188,7 +189,7 @@ class IAMUserCleanup:
                                         Status='Inactive'
                                     )
                                 self.logger.log_resource_cleanup(username, "ACCESS_KEY", access_key_id, "DEACTIVATED")
-                                actions_taken.append(f"✅ Deactivated access key: {access_key_id}")
+                                actions_taken.append(f"{Symbols.OK} Deactivated access key: {access_key_id}")
                             except ClientError as e:
                                 self.logger.error(f"Warning deactivating access key {access_key_id}: {e}")
                         
@@ -200,7 +201,7 @@ class IAMUserCleanup:
                                     AccessKeyId=access_key_id
                                 )
                             self.logger.log_resource_cleanup(username, "ACCESS_KEY", access_key_id, "DELETED")
-                            actions_taken.append(f"✅ Deleted access key: {access_key_id}")
+                            actions_taken.append(f"{Symbols.OK} Deleted access key: {access_key_id}")
                         except ClientError as e:
                             self.logger.error(f"Error deleting access key {access_key_id}: {e}")
                 else:
@@ -224,7 +225,7 @@ class IAMUserCleanup:
                                     PolicyArn=policy['PolicyArn']
                                 )
                             self.logger.log_resource_cleanup(username, "ATTACHED_POLICY", policy['PolicyName'], "DETACHED")
-                            actions_taken.append(f"✅ Detached policy: {policy['PolicyName']}")
+                            actions_taken.append(f"{Symbols.OK} Detached policy: {policy['PolicyName']}")
                         except ClientError as e:
                             self.logger.error(f"Error detaching policy {policy['PolicyName']}: {e}")
                 else:
@@ -248,7 +249,7 @@ class IAMUserCleanup:
                                     PolicyName=policy_name
                                 )
                             self.logger.log_resource_cleanup(username, "INLINE_POLICY", policy_name, "DELETED")
-                            actions_taken.append(f"✅ Deleted inline policy: {policy_name}")
+                            actions_taken.append(f"{Symbols.OK} Deleted inline policy: {policy_name}")
                         except ClientError as e:
                             self.logger.error(f"Error deleting inline policy {policy_name}: {e}")
                 else:
@@ -272,7 +273,7 @@ class IAMUserCleanup:
                                     UserName=username
                                 )
                             self.logger.log_resource_cleanup(username, "GROUP_MEMBERSHIP", group['GroupName'], "REMOVED")
-                            actions_taken.append(f"✅ Removed from group: {group['GroupName']}")
+                            actions_taken.append(f"{Symbols.OK} Removed from group: {group['GroupName']}")
                         except ClientError as e:
                             self.logger.error(f"Error removing from group {group['GroupName']}: {e}")
                 else:
@@ -304,7 +305,7 @@ class IAMUserCleanup:
                                         SerialNumber=mfa_device['SerialNumber']
                                     )
                             self.logger.log_resource_cleanup(username, "MFA_DEVICE", mfa_device['SerialNumber'], "REMOVED")
-                            actions_taken.append(f"✅ Removed MFA device: {mfa_device['SerialNumber']}")
+                            actions_taken.append(f"{Symbols.OK} Removed MFA device: {mfa_device['SerialNumber']}")
                         except ClientError as e:
                             self.logger.error(f"Error removing MFA device: {e}")
                 else:
@@ -328,7 +329,7 @@ class IAMUserCleanup:
                                     CertificateId=cert['CertificateId']
                                 )
                             self.logger.log_resource_cleanup(username, "SIGNING_CERT", cert['CertificateId'], "DELETED")
-                            actions_taken.append(f"✅ Deleted certificate: {cert['CertificateId']}")
+                            actions_taken.append(f"{Symbols.OK} Deleted certificate: {cert['CertificateId']}")
                         except ClientError as e:
                             self.logger.error(f"Error deleting certificate: {e}")
                 else:
@@ -352,7 +353,7 @@ class IAMUserCleanup:
                                     SSHPublicKeyId=ssh_key['SSHPublicKeyId']
                                 )
                             self.logger.log_resource_cleanup(username, "SSH_KEY", ssh_key['SSHPublicKeyId'], "DELETED")
-                            actions_taken.append(f"✅ Deleted SSH key: {ssh_key['SSHPublicKeyId']}")
+                            actions_taken.append(f"{Symbols.OK} Deleted SSH key: {ssh_key['SSHPublicKeyId']}")
                         except ClientError as e:
                             self.logger.error(f"Error deleting SSH key: {e}")
                 else:
@@ -427,7 +428,7 @@ class IAMUserCleanup:
 
     def cleanup_users_in_account(self, account_name, dry_run=False):
         """Cleanup users in a specific AWS account"""
-        action_prefix = "🧪 [DRY RUN]" if dry_run else "🗑️  [DELETING]"
+        action_prefix = "🧪 [DRY RUN]" if dry_run else "[DELETE]  [DELETING]"
         self.logger.info(f"{action_prefix} Processing account: {account_name.upper()}")
         
         # Get users for this account from mapping file
@@ -491,39 +492,39 @@ class IAMUserCleanup:
 
     def display_cleanup_options(self):
         """Display cleanup options menu"""
-        print("\n🗑️  Cleanup Options:")
+        print("\n[DELETE]  Cleanup Options:")
         print("  1. Cleanup all cloud users in all accounts")
         print("  2. Cleanup all cloud users in specific account")
         print("  3. Dry run - Show what would be deleted (recommended first)")
         
         while True:
             try:
-                choice = input("\n🔢 Select cleanup option (1-3): ").strip()
+                choice = input("\n[#] Select cleanup option (1-3): ").strip()
                 choice_num = int(choice)
                 
                 if 1 <= choice_num <= 3:
                     return choice_num
                 else:
-                    print("❌ Invalid choice. Please enter a number between 1 and 3")
+                    print("[ERROR] Invalid choice. Please enter a number between 1 and 3")
             except ValueError:
-                print("❌ Invalid input. Please enter a number.")
+                print("[ERROR] Invalid input. Please enter a number.")
 
     def select_accounts(self):
         """Select which accounts to process with user count information"""
-        print("\n📋 Available AWS Accounts:")
+        print("\n[LIST] Available AWS Accounts:")
         
         for i, (account_name, config) in enumerate(self.aws_accounts.items(), 1):
             user_count = self.account_user_count.get(account_name, 0)
             if user_count > 0:
                 print(f"  {i}. {account_name} ({config['account_id']}) - {config['email']} [{user_count} users mapped]")
             else:
-                print(f"  {i}. {account_name} ({config['account_id']}) - {config['email']} [⚠️  NO USERS MAPPED]")
+                print(f"  {i}. {account_name} ({config['account_id']}) - {config['email']} [{Symbols.WARN}  NO USERS MAPPED]")
         
         print(f"  {len(self.aws_accounts) + 1}. All accounts with mapped users")
         
         while True:
             try:
-                choice = input(f"\n🔢 Select account(s) to process (1-{len(self.aws_accounts) + 1}): ").strip()
+                choice = input(f"\n[#] Select account(s) to process (1-{len(self.aws_accounts) + 1}): ").strip()
                 choice_num = int(choice)
                 
                 if choice_num == len(self.aws_accounts) + 1:
@@ -533,15 +534,15 @@ class IAMUserCleanup:
                     selected_account = list(self.aws_accounts.keys())[choice_num - 1]
                     user_count = self.account_user_count.get(selected_account, 0)
                     if user_count == 0:
-                        print(f"⚠️  Warning: Account '{selected_account}' has no mapped users to delete.")
+                        print(f"{Symbols.WARN}  Warning: Account '{selected_account}' has no mapped users to delete.")
                         confirm = input("Continue anyway? (y/N): ").lower().strip()
                         if confirm != 'y':
                             continue
                     return [selected_account]
                 else:
-                    print(f"❌ Invalid choice. Please enter a number between 1 and {len(self.aws_accounts) + 1}")
+                    print(f"{Symbols.ERROR} Invalid choice. Please enter a number between 1 and {len(self.aws_accounts) + 1}")
             except ValueError:
-                print("❌ Invalid input. Please enter a number.")
+                print("[ERROR] Invalid input. Please enter a number.")
 
     def save_cleanup_report(self, all_deleted_users, all_not_found_users, all_failed_users):
         """Save cleanup report to JSON file"""
@@ -581,7 +582,7 @@ class IAMUserCleanup:
         self.logger.warning("This script will DELETE IAM users and all associated resources!")
         
         # Display mapping analysis
-        print(f"\n📊 User Mapping Analysis:")
+        print(f"\n{Symbols.STATS} User Mapping Analysis:")
         print(f"   Total mapped users: {len(self.user_mappings)}")
         print(f"   Distribution: {self.account_user_count}")
         
@@ -597,7 +598,7 @@ class IAMUserCleanup:
             # Only process accounts that have users in the mapping
             accounts_to_process = [acc for acc in self.aws_accounts.keys() if self.account_user_count.get(acc, 0) > 0]
             if not accounts_to_process:
-                print("❌ No accounts have mapped users to delete!")
+                print("[ERROR] No accounts have mapped users to delete!")
                 return
         else:
             accounts_to_process = self.select_accounts()
@@ -607,13 +608,13 @@ class IAMUserCleanup:
         if not dry_run:
             # Final confirmation
             total_users_to_delete = sum(self.account_user_count.get(acc, 0) for acc in accounts_to_process)
-            print(f"\n⚠️  FINAL WARNING: You are about to DELETE {total_users_to_delete} IAM users in {len(accounts_to_process)} account(s)!")
+            print(f"\n{Symbols.WARN}  FINAL WARNING: You are about to DELETE {total_users_to_delete} IAM users in {len(accounts_to_process)} account(s)!")
             print("This action CANNOT be undone!")
             confirm = input("\nType 'DELETE' to confirm: ").strip()
             
             if confirm != 'DELETE':
                 self.logger.info("Cleanup cancelled by user")
-                print("❌ Cleanup cancelled")
+                print(f"{Symbols.ERROR} Cleanup cancelled")
                 return
             else:
                 self.logger.info("User confirmed deletion - proceeding with cleanup")
@@ -635,29 +636,29 @@ class IAMUserCleanup:
         
         # Display results
         action_word = "Would be deleted" if dry_run else "Deleted"
-        print(f"\n{'🧪' if dry_run else '🎯'}" * 20 + " CLEANUP SUMMARY " + f"{'🧪' if dry_run else '🎯'}" * 20)
+        print(f"\n{'🧪' if dry_run else '{Symbols.TARGET}'}" * 20 + " CLEANUP SUMMARY " + f"{'🧪' if dry_run else '{Symbols.TARGET}'}" * 20)
         print("=" * 80)
-        print(f"✅ Total users {action_word.lower()}: {len(all_deleted_users)}")
-        print(f"ℹ️  Total users not found: {len(all_not_found_users)}")
-        print(f"❌ Total users failed: {len(all_failed_users)}")
+        print(f"{Symbols.OK} Total users {action_word.lower()}: {len(all_deleted_users)}")
+        print(f"{Symbols.INFO}  Total users not found: {len(all_not_found_users)}")
+        print(f"{Symbols.ERROR} Total users failed: {len(all_failed_users)}")
         
         if all_deleted_users:
-            print(f"\n{'🧪' if dry_run else '✅'} Users {action_word}:")
+            print(f"\n{'🧪' if dry_run else '{Symbols.OK}'} Users {action_word}:")
             current_account = None
             for user in all_deleted_users:
                 account_name = user['username'].split('_')[0]
                 if current_account != account_name:
                     current_account = account_name
-                    print(f"\n  🏦 {account_name}:")
+                    print(f"\n  {Symbols.ACCOUNT} {account_name}:")
                 print(f"    • {user['username']} → {user['user_info']} ({user['actions_taken']} actions, created: {user['created_date']})")
         
         if all_not_found_users:
-            print("\nℹ️  Users Not Found (already deleted or never existed):")
+            print("\n[INFO]  Users Not Found (already deleted or never existed):")
             for username in all_not_found_users:
                 print(f"  • {username}")
         
         if all_failed_users:
-            print("\n❌ Failed to Delete:")
+            print("\n[ERROR] Failed to Delete:")
             for username in all_failed_users:
                 print(f"  • {username}")
         
@@ -667,7 +668,7 @@ class IAMUserCleanup:
             if save_report == 'y':
                 report_file = self.save_cleanup_report(all_deleted_users, all_not_found_users, all_failed_users)
                 if report_file:
-                    print(f"✅ Cleanup report saved to: {report_file}")
+                    print(f"{Symbols.OK} Cleanup report saved to: {report_file}")
         
         if dry_run:
             self.logger.info("DRY RUN completed - no actual changes were made")
@@ -675,7 +676,7 @@ class IAMUserCleanup:
             print("Run the script again without dry run option to perform actual cleanup")
         else:
             self.logger.info("Cleanup operation completed")
-            print(f"\n🎉 Cleanup completed!")
+            print(f"\n[PARTY] Cleanup completed!")
 
 def main():
     """Main function"""
@@ -683,10 +684,10 @@ def main():
         cleanup = IAMUserCleanup()
         cleanup.run()
     except KeyboardInterrupt:
-        print("\n\n❌ Script interrupted by user")
+        print("\n\n[ERROR] Script interrupted by user")
         sys.exit(1)
     except Exception as e:
-        print(f"❌ Unexpected error: {e}")
+        print(f"{Symbols.ERROR} Unexpected error: {e}")
         sys.exit(1)
 
 if __name__ == "__main__":

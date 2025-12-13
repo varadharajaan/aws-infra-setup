@@ -1,4 +1,4 @@
-"""
+﻿"""
 Enhanced AWS Credential Manager - Multi Account Multi User Selection
 Supports comma-separated, range, single, and 'all' selection for both accounts and users
 """
@@ -38,7 +38,7 @@ class EnhancedAWSCredentialManager:
         self.config_data = None
         self.user_mappings = {}
         self.current_user = 'varadharajaan'
-        self.current_time = int(datetime.utcnow().timestamp())
+        self.current_time = int(datetime.now(datetime.UTC).timestamp())
         self.load_configuration()
         self.load_user_mapping()
 
@@ -55,25 +55,25 @@ class EnhancedAWSCredentialManager:
             self.user_settings = config['user_settings']
             self.config_data = config
 
-            print(f"[OK] Configuration loaded from: {self.config_file}")
-            print(f"[STATS] Found {len(self.aws_accounts)} AWS accounts")
+            print(f"{Symbols.OK} Configuration loaded from: {self.config_file}")
+            print(f"{Symbols.STATS} Found {len(self.aws_accounts)} AWS accounts")
 
         except FileNotFoundError as e:
-            print(f"[ERROR] {e}")
+            print(f"{Symbols.ERROR} {e}")
             print("Please ensure the configuration file exists in the same directory.")
             raise
         except json.JSONDecodeError as e:
-            print(f"[ERROR] Invalid JSON in configuration file: {e}")
+            print(f"{Symbols.ERROR} Invalid JSON in configuration file: {e}")
             raise
         except Exception as e:
-            print(f"[ERROR] Error loading configuration: {e}")
+            print(f"{Symbols.ERROR} Error loading configuration: {e}")
             raise
 
     def load_user_mapping(self):
         """Load user mapping from JSON file"""
         try:
             if not os.path.exists(self.mapping_file):
-                print(f"[WARN]  User mapping file '{self.mapping_file}' not found")
+                print(f"{Symbols.WARN}  User mapping file '{self.mapping_file}' not found")
                 self.user_mappings = {}
                 return
 
@@ -81,11 +81,11 @@ class EnhancedAWSCredentialManager:
                 mapping_data = json.load(f)
 
             self.user_mappings = mapping_data['user_mappings']
-            print(f"[OK] User mapping loaded from: {self.mapping_file}")
+            print(f"{Symbols.OK} User mapping loaded from: {self.mapping_file}")
             print(f"👥 Found mappings for {len(self.user_mappings)} users")
 
         except Exception as e:
-            print(f"[WARN]  Warning: Error loading user mapping: {e}")
+            print(f"{Symbols.WARN}  Warning: Error loading user mapping: {e}")
             self.user_mappings = {}
 
     def get_user_info(self, username):
@@ -146,11 +146,11 @@ class EnhancedAWSCredentialManager:
                 try:
                     start, end = map(int, part.split('-'))
                     if start < 1 or end > max_items or start > end:
-                        print(f"[WARN] Invalid range: {part} (valid range: 1-{max_items})")
+                        print(f"{Symbols.WARN} Invalid range: {part} (valid range: 1-{max_items})")
                         continue
                     selected_items.extend(range(start, end + 1))
                 except ValueError:
-                    print(f"[WARN] Invalid range format: {part}")
+                    print(f"{Symbols.WARN} Invalid range format: {part}")
                     continue
             else:
                 # Handle single number
@@ -159,9 +159,9 @@ class EnhancedAWSCredentialManager:
                     if 1 <= num <= max_items:
                         selected_items.append(num)
                     else:
-                        print(f"[WARN] Number {num} is out of range (1-{max_items})")
+                        print(f"{Symbols.WARN} Number {num} is out of range (1-{max_items})")
                 except ValueError:
-                    print(f"[WARN] Invalid number: {part}")
+                    print(f"{Symbols.WARN} Invalid number: {part}")
                     continue
 
         # Remove duplicates and sort
@@ -208,7 +208,7 @@ class EnhancedAWSCredentialManager:
             user_input = input(f"\nEnter region selection (1-{len(all_regions)}): ").strip()
 
             if not user_input or user_input.lower() == 'all':
-                print(f"[OK] Selected all {len(all_regions)} regions")
+                print(f"{Symbols.OK} Selected all {len(all_regions)} regions")
                 return all_regions
 
             try:
@@ -219,7 +219,7 @@ class EnhancedAWSCredentialManager:
                     continue
 
                 selected_regions = [all_regions[i-1] for i in selected_indices]
-                print(f"[OK] Selected {len(selected_regions)} region(s): {', '.join(selected_regions)}")
+                print(f"{Symbols.OK} Selected {len(selected_regions)} region(s): {', '.join(selected_regions)}")
 
                 # Confirm selection
                 confirm = input("Confirm region selection? (Y/n): ").strip().lower()
@@ -230,12 +230,12 @@ class EnhancedAWSCredentialManager:
                     continue
 
             except Exception as e:
-                print(f"[ERROR] Error in region selection: {e}")
+                print(f"{Symbols.ERROR} Error in region selection: {e}")
                 continue
 
     def display_final_credential_summary(self, validated_credentials: MultiUserCredentials):
         """Display final summary with multi-region support"""
-        print(f"\n[LIST] FINAL CREDENTIAL SUMMARY:")
+        print(f"\n{Symbols.LIST} FINAL CREDENTIAL SUMMARY:")
         print("="*80)
         print(f"Credential Type: {validated_credentials.credential_type.upper()}")
         print(f"Total Accounts: {validated_credentials.total_users}")
@@ -269,7 +269,7 @@ class EnhancedAWSCredentialManager:
             elif choice == '2':
                 return 'iam'
             else:
-                print("[ERROR] Invalid choice. Please enter 1 or 2.")
+                print(f"{Symbols.ERROR} Invalid choice. Please enter 1 or 2.")
 
     def display_accounts_for_selection(self) -> List[Dict]:
         """Display available accounts for selection"""
@@ -288,7 +288,7 @@ class EnhancedAWSCredentialManager:
             print(f"  {i:2}. {account_name}")
             print(f"      📧 Email: {email}")
             print(f"      🆔 Account ID: {account_id}")
-            print(f"      [REGION] Available Regions: {', '.join(user_regions)}")
+            print(f"      {Symbols.REGION} Available Regions: {', '.join(user_regions)}")
             print()
 
             account_list.append({
@@ -312,7 +312,7 @@ class EnhancedAWSCredentialManager:
 
         while True:
             try:
-                selection = input(f"\n🔢 Select account(s) (1-{len(account_list)}): ").strip()
+                selection = input(f"\n[#] Select account(s) (1-{len(account_list)}): ").strip()
 
                 if not selection:
                     selection = 'all'
@@ -320,13 +320,13 @@ class EnhancedAWSCredentialManager:
                 selected_indices = self.parse_selection_input(selection, len(account_list))
 
                 if not selected_indices:
-                    print("[ERROR] No valid accounts selected. Please try again.")
+                    print(f"{Symbols.ERROR} No valid accounts selected. Please try again.")
                     continue
 
                 selected_accounts = [account_list[i-1] for i in selected_indices]
 
                 # Show selected accounts for confirmation
-                print(f"\n[OK] Selected {len(selected_accounts)} account(s):")
+                print(f"\n{Symbols.OK} Selected {len(selected_accounts)} account(s):")
                 for account in selected_accounts:
                     print(f"   • {account['account_name']} ({account['account_data'].get('account_id', 'Unknown')})")
 
@@ -337,7 +337,7 @@ class EnhancedAWSCredentialManager:
                     print("Selection cancelled. Please choose again.")
 
             except Exception as e:
-                print(f"[ERROR] Error in account selection: {e}")
+                print(f"{Symbols.ERROR} Error in account selection: {e}")
                 continue
 
     def select_multiple_root_credentials(self) -> MultiUserCredentials:
@@ -358,7 +358,7 @@ class EnhancedAWSCredentialManager:
             method_choice = input("Enter choice (1 or 2): ").strip()
             if method_choice in ['1', '2']:
                 break
-            print("[ERROR] Invalid choice. Please enter 1 or 2.")
+            print(f"{Symbols.ERROR} Invalid choice. Please enter 1 or 2.")
 
         if method_choice == '1':
             # Same regions for all accounts
@@ -381,7 +381,7 @@ class EnhancedAWSCredentialManager:
                 )
 
                 root_credentials.append(cred_info)
-                print(f"[OK] Added root credentials for {account_name} in {len(selected_regions)} region(s)")
+                print(f"{Symbols.OK} Added root credentials for {account_name} in {len(selected_regions)} region(s)")
 
         else:
             # Different regions per account
@@ -404,11 +404,11 @@ class EnhancedAWSCredentialManager:
                 )
 
                 root_credentials.append(cred_info)
-                print(f"[OK] Added root credentials for {account_name} in {len(selected_regions)} region(s): {', '.join(selected_regions)}")
+                print(f"{Symbols.OK} Added root credentials for {account_name} in {len(selected_regions)} region(s): {', '.join(selected_regions)}")
 
         print(f"\n[PARTY] Total root credentials configured: {len(root_credentials)}")
         total_regions = sum(len(cred.regions) for cred in root_credentials)
-        print(f"[STATS] Total account-region combinations: {total_regions}")
+        print(f"{Symbols.STATS} Total account-region combinations: {total_regions}")
 
         # Create the result
         result = MultiUserCredentials(
@@ -430,7 +430,7 @@ class EnhancedAWSCredentialManager:
             iam_files = glob.glob(pattern)
 
             if not iam_files:
-                print("[ERROR] No IAM credential files found in ./aws/iam/")
+                print(f"{Symbols.ERROR} No IAM credential files found in ./aws/iam/")
                 print("Please run the IAM user creation script first")
                 return None
 
@@ -478,30 +478,30 @@ class EnhancedAWSCredentialManager:
 
             while True:
                 try:
-                    choice = input(f"\n🔢 Select IAM credential file (1-{len(sorted_files)}, Enter for latest): ").strip()
+                    choice = input(f"\n[#] Select IAM credential file (1-{len(sorted_files)}, Enter for latest): ").strip()
 
                     if choice == 'q':
-                        print("[ERROR] File selection cancelled")
+                        print(f"{Symbols.ERROR} File selection cancelled")
                         return None
                     elif not choice:
                         # Use latest file (first in sorted list)
                         selected_file = sorted_files[0]
-                        print(f"[OK] Using latest file: {selected_file['filename']}")
-                        print(f"   [DATE] Modified: {datetime.fromtimestamp(selected_file['timestamp']).strftime('%Y-%m-%d %H:%M:%S')}")
+                        print(f"{Symbols.OK} Using latest file: {selected_file['filename']}")
+                        print(f"   {Symbols.DATE} Modified: {datetime.fromtimestamp(selected_file['timestamp']).strftime('%Y-%m-%d %H:%M:%S')}")
                         return selected_file['path']
                     else:
                         file_index = int(choice) - 1
                         if 0 <= file_index < len(sorted_files):
                             selected_file = sorted_files[file_index]
                             timestamp_str = datetime.fromtimestamp(selected_file['timestamp']).strftime('%Y-%m-%d %H:%M:%S')
-                            print(f"[OK] Selected file: {selected_file['filename']}")
-                            print(f"   [DATE] Modified: {timestamp_str}")
+                            print(f"{Symbols.OK} Selected file: {selected_file['filename']}")
+                            print(f"   {Symbols.DATE} Modified: {timestamp_str}")
 
                             # Show file preview
                             self.show_credential_file_preview(selected_file['path'])
                             return selected_file['path']
                         else:
-                            print(f"[ERROR] Invalid choice. Please enter a number between 1 and {len(sorted_files)}")
+                            print(f"{Symbols.ERROR} Invalid choice. Please enter a number between 1 and {len(sorted_files)}")
 
                 except ValueError:
                     print("[ERROR] Please enter a valid number")
@@ -510,7 +510,7 @@ class EnhancedAWSCredentialManager:
                     return None
 
         except Exception as e:
-            print(f"[ERROR] Error finding IAM credential files: {e}")
+            print(f"{Symbols.ERROR} Error finding IAM credential files: {e}")
             return None
 
     def show_credential_file_preview(self, file_path: str):
@@ -519,7 +519,7 @@ class EnhancedAWSCredentialManager:
             with open(file_path, 'r') as f:
                 data = json.load(f)
 
-            print(f"\n[LIST] File Preview:")
+            print(f"\n{Symbols.LIST} File Preview:")
             print("-"*40)
             print(f"Created Date: {data.get('created_date', 'Unknown')}")
             print(f"Created Time: {data.get('created_time', 'Unknown')}")
@@ -536,7 +536,7 @@ class EnhancedAWSCredentialManager:
                     print(f"  ... and {len(data['accounts']) - 3} more accounts")
 
         except Exception as e:
-            print(f"[WARN] Could not preview file: {e}")
+            print(f"{Symbols.WARN} Could not preview file: {e}")
 
     def display_iam_accounts_with_users(self, iam_file_path: str) -> List[Dict]:
         """Display available accounts with their IAM users from credential file"""
@@ -545,7 +545,7 @@ class EnhancedAWSCredentialManager:
                 iam_data = json.load(f)
 
             if 'accounts' not in iam_data:
-                print("[ERROR] Invalid IAM credential file format")
+                print(f"{Symbols.ERROR} Invalid IAM credential file format")
                 return []
 
             iam_accounts = []
@@ -584,7 +584,7 @@ class EnhancedAWSCredentialManager:
             return iam_accounts
 
         except Exception as e:
-            print(f"[ERROR] Error reading IAM credential file: {e}")
+            print(f"{Symbols.ERROR} Error reading IAM credential file: {e}")
             return []
 
     def select_multiple_iam_credentials(self) -> MultiUserCredentials:
@@ -611,7 +611,7 @@ class EnhancedAWSCredentialManager:
 
         while True:
             try:
-                selection = input(f"\n🔢 Select account(s) (1-{len(iam_accounts)}): ").strip()
+                selection = input(f"\n[#] Select account(s) (1-{len(iam_accounts)}): ").strip()
 
                 if not selection:
                     selection = 'all'
@@ -619,13 +619,13 @@ class EnhancedAWSCredentialManager:
                 selected_indices = self.parse_selection_input(selection, len(iam_accounts))
 
                 if not selected_indices:
-                    print("[ERROR] No valid accounts selected. Please try again.")
+                    print(f"{Symbols.ERROR} No valid accounts selected. Please try again.")
                     continue
 
                 selected_accounts = [iam_accounts[i-1] for i in selected_indices]
 
                 # Show selected accounts for confirmation
-                print(f"\n[OK] Selected {len(selected_accounts)} account(s):")
+                print(f"\n{Symbols.OK} Selected {len(selected_accounts)} account(s):")
                 for account in selected_accounts:
                     users_count = len(account['users'])
                     print(f"   • {account['account_name']} ({users_count} users)")
@@ -633,7 +633,7 @@ class EnhancedAWSCredentialManager:
                 break
 
             except Exception as e:
-                print(f"[ERROR] Error in account selection: {e}")
+                print(f"{Symbols.ERROR} Error in account selection: {e}")
                 continue
 
         # Step 4: For each selected account, select users
@@ -662,7 +662,7 @@ class EnhancedAWSCredentialManager:
 
             while True:
                 try:
-                    user_selection = input(f"\n🔢 Select user(s) for {account_name} (1-{len(users)}): ").strip()
+                    user_selection = input(f"\n[#] Select user(s) for {account_name} (1-{len(users)}): ").strip()
 
                     if not user_selection:
                         user_selection = 'all'
@@ -670,13 +670,13 @@ class EnhancedAWSCredentialManager:
                     selected_user_indices = self.parse_selection_input(user_selection, len(users))
 
                     if not selected_user_indices:
-                        print("[ERROR] No valid users selected. Please try again.")
+                        print(f"{Symbols.ERROR} No valid users selected. Please try again.")
                         continue
 
                     selected_users = [users[i-1] for i in selected_user_indices]
 
                     # Show selected users for confirmation
-                    print(f"\n[OK] Selected {len(selected_users)} user(s) from {account_name}:")
+                    print(f"\n{Symbols.OK} Selected {len(selected_users)} user(s) from {account_name}:")
                     for user in selected_users:
                         username = user.get('username', 'Unknown')
                         real_user = user.get('real_user', {})
@@ -687,7 +687,7 @@ class EnhancedAWSCredentialManager:
                     break
 
                 except Exception as e:
-                    print(f"[ERROR] Error in user selection: {e}")
+                    print(f"{Symbols.ERROR} Error in user selection: {e}")
                     continue
 
             # Create credential info for each selected user
@@ -704,7 +704,7 @@ class EnhancedAWSCredentialManager:
                 )
 
                 all_iam_credentials.append(cred_info)
-                print(f"[OK] Added IAM credentials for {user.get('username')} in {account_name}")
+                print(f"{Symbols.OK} Added IAM credentials for {user.get('username')} in {account_name}")
 
         print(f"\n[PARTY] Total IAM credentials configured: {len(all_iam_credentials)}")
 
@@ -732,7 +732,7 @@ class EnhancedAWSCredentialManager:
     def validate_credentials(self, cred_info: CredentialInfo) -> bool:
         """Validate credentials by making a test AWS call"""
         try:
-            print(f"[SCAN] Validating {cred_info.credential_type} credentials for {cred_info.account_name}...")
+            print(f"{Symbols.SCAN} Validating {cred_info.credential_type} credentials for {cred_info.account_name}...")
 
             sts_client = boto3.client(
                 'sts',
@@ -745,23 +745,23 @@ class EnhancedAWSCredentialManager:
             actual_account_id = identity.get('Account')
 
             if actual_account_id == cred_info.account_id:
-                print(f"[OK] Credentials validated successfully for {cred_info.account_name}")
+                print(f"{Symbols.OK} Credentials validated successfully for {cred_info.account_name}")
                 if cred_info.username:
                     print(f"   👥 IAM User: {cred_info.username}")
                 return True
             else:
-                print(f"[ERROR] Account ID mismatch for {cred_info.account_name}!")
+                print(f"{Symbols.ERROR} Account ID mismatch for {cred_info.account_name}!")
                 print(f"   Expected: {cred_info.account_id}")
                 print(f"   Actual: {actual_account_id}")
                 return False
 
         except Exception as e:
-            print(f"[ERROR] Credential validation failed for {cred_info.account_name}: {e}")
+            print(f"{Symbols.ERROR} Credential validation failed for {cred_info.account_name}: {e}")
             return False
 
     def validate_multiple_credentials(self, multi_creds: MultiUserCredentials) -> MultiUserCredentials:
         """Validate multiple credentials and return only valid ones"""
-        print(f"\n[SCAN] Validating {multi_creds.total_users} credential(s)...")
+        print(f"\n{Symbols.SCAN} Validating {multi_creds.total_users} credential(s)...")
 
         valid_credentials = []
 
@@ -769,9 +769,9 @@ class EnhancedAWSCredentialManager:
             if self.validate_credentials(cred_info):
                 valid_credentials.append(cred_info)
 
-        print(f"\n[STATS] Validation Results:")
-        print(f"   [OK] Valid: {len(valid_credentials)}")
-        print(f"   [ERROR] Invalid: {multi_creds.total_users - len(valid_credentials)}")
+        print(f"\n{Symbols.STATS} Validation Results:")
+        print(f"   {Symbols.OK} Valid: {len(valid_credentials)}")
+        print(f"   {Symbols.ERROR} Invalid: {multi_creds.total_users - len(valid_credentials)}")
 
         return MultiUserCredentials(
             users=valid_credentials,
@@ -815,7 +815,7 @@ def main():
         return validated_credentials
 
     except Exception as e:
-        print(f"[ERROR] Error in credential selection: {e}")
+        print(f"{Symbols.ERROR} Error in credential selection: {e}")
         return False
 
 if __name__ == "__main__":

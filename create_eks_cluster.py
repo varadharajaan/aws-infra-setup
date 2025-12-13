@@ -12,17 +12,18 @@ import sys
 import time
 import boto3
 import glob
+import logging
 from datetime import datetime
 from typing import Dict, List, Tuple, Optional
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from text_symbols import Symbols
 
 # Import your existing logging module
 try:
     from logger import setup_logger
     logger = setup_logger('eks_manager', 'cluster_management')
 except ImportError:
-    import logging
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -95,7 +96,7 @@ class EKSClusterManager:
                 total_users = sum(len(account['users']) for account in self.config_data.get('accounts', {}).values())
             
             logger.info(f"Successfully loaded configuration with {total_users} users")
-            self.print_colored(Colors.GREEN, f"✅ Loaded configuration with {total_users} users from {self.config_file}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Loaded configuration with {total_users} users from {self.config_file}")
         
         except Exception as e:
             logger.error(f"Failed to load configuration: {str(e)}")
@@ -157,7 +158,7 @@ class EKSClusterManager:
         
         while True:
             os.system('clear' if os.name == 'posix' else 'cls')
-            self.print_colored(Colors.GREEN, "🚀 EKS Cluster Manager - Account Selection")
+            self.print_colored(Colors.GREEN, f"{Symbols.START} EKS Cluster Manager - Account Selection")
             logger.info("Starting account selection interface")
             
             # Show accounts
@@ -186,7 +187,7 @@ class EKSClusterManager:
         
         while True:
             os.system('clear' if os.name == 'posix' else 'cls')
-            self.print_colored(Colors.GREEN, f"🚀 EKS Cluster Manager - User Selection")
+            self.print_colored(Colors.GREEN, f"{Symbols.START} EKS Cluster Manager - User Selection")
             self.print_colored(Colors.BLUE, f"Account: {account_info['key']} (ID: {account_info['id']})")
             
             # Show users
@@ -227,7 +228,7 @@ class EKSClusterManager:
                 "SUCCESS", 
                 f"Cluster {cluster_info['cluster_name']} queued for creation with max nodes: {max_nodes}"
             )
-            self.print_colored(Colors.GREEN, f"✅ Added cluster for {selected_user['username']} in {selected_user['region']} (max nodes: {max_nodes})")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Added cluster for {selected_user['username']} in {selected_user['region']} (max nodes: {max_nodes})")
             
             input("\nPress Enter to continue...")
     
@@ -239,7 +240,7 @@ class EKSClusterManager:
             return False
         
         os.system('clear' if os.name == 'posix' else 'cls')
-        self.print_colored(Colors.GREEN, "🚀 Cluster Creation Summary")
+        self.print_colored(Colors.GREEN, f"{Symbols.START} Cluster Creation Summary")
         self.print_colored(Colors.BLUE, f"Selected {len(self.selected_clusters)} clusters to create:")
         
         logger.info(f"Displaying summary for {len(self.selected_clusters)} selected clusters")
@@ -416,7 +417,7 @@ class EKSClusterManager:
         
         try:
             logger.log_user_action(username, "CLUSTER_CREATE_START", "IN_PROGRESS", f"Starting cluster creation: {cluster_name}")
-            self.print_colored(Colors.YELLOW, f"🔄 Creating cluster: {cluster_name} in {region}")
+            self.print_colored(Colors.YELLOW, f"{Symbols.SCAN} Creating cluster: {cluster_name} in {region}")
             
             # Create AWS clients
             session = boto3.Session(
@@ -509,13 +510,13 @@ class EKSClusterManager:
             })
             
             logger.log_user_action(username, "CLUSTER_CREATE_COMPLETE", "SUCCESS", f"Cluster {cluster_name} fully created and configured")
-            self.print_colored(Colors.GREEN, f"✅ Successfully created cluster: {cluster_name}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Successfully created cluster: {cluster_name}")
             return True
             
         except Exception as e:
             error_msg = str(e)
             logger.log_user_action(username, "CLUSTER_CREATE_FAILED", "ERROR", f"Cluster {cluster_name} creation failed: {error_msg}")
-            self.print_colored(Colors.RED, f"❌ Failed to create cluster {cluster_name}: {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to create cluster {cluster_name}: {error_msg}")
             return False
     
     def create_clusters(self) -> None:
@@ -526,14 +527,14 @@ class EKSClusterManager:
             return
         
         logger.info(f"Starting creation of {len(self.selected_clusters)} clusters")
-        self.print_colored(Colors.GREEN, f"🚀 Starting creation of {len(self.selected_clusters)} clusters...")
+        self.print_colored(Colors.GREEN, f"{Symbols.START} Starting creation of {len(self.selected_clusters)} clusters...")
         
         # Create clusters sequentially for now (can be made parallel if needed)
         successful_clusters = []
         failed_clusters = []
         
         for i, cluster_info in enumerate(self.selected_clusters, 1):
-            self.print_colored(Colors.BLUE, f"\n📋 Progress: {i}/{len(self.selected_clusters)}")
+            self.print_colored(Colors.BLUE, f"\n{Symbols.LIST} Progress: {i}/{len(self.selected_clusters)}")
             
             if self.create_single_cluster(cluster_info):
                 successful_clusters.append(cluster_info)
@@ -547,10 +548,10 @@ class EKSClusterManager:
             failed=len(failed_clusters)
         )
         
-        self.print_colored(Colors.GREEN, f"\n🎉 Cluster Creation Summary:")
-        self.print_colored(Colors.GREEN, f"✅ Successful: {len(successful_clusters)}")
+        self.print_colored(Colors.GREEN, f"\n[PARTY] Cluster Creation Summary:")
+        self.print_colored(Colors.GREEN, f"{Symbols.OK} Successful: {len(successful_clusters)}")
         if failed_clusters:
-            self.print_colored(Colors.RED, f"❌ Failed: {len(failed_clusters)}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed: {len(failed_clusters)}")
         
         # Generate final commands
         self.generate_final_commands()
@@ -565,7 +566,7 @@ class EKSClusterManager:
         commands_file = f"kubectl_commands_{timestamp}.txt"
         
         logger.info(f"Generating kubectl commands file: {commands_file}")
-        self.print_colored(Colors.GREEN, f"\n📝 Generated kubectl commands:")
+        self.print_colored(Colors.GREEN, f"\n{Symbols.LOG} Generated kubectl commands:")
         
         with open(commands_file, 'w') as f:
             f.write(f"# EKS Cluster kubectl Commands\n")
@@ -599,10 +600,10 @@ aws eks update-nodegroup-config --cluster-name {cmd_info['cluster_name']} --node
                 print(f"{i}. {cmd_info['command']}")
         
         logger.log_credentials_saved(commands_file, len(self.kubectl_commands))
-        self.print_colored(Colors.CYAN, f"\n💾 All commands saved to: {commands_file}")
+        self.print_colored(Colors.CYAN, f"\n{Symbols.INSTANCE} All commands saved to: {commands_file}")
         
         # Show example usage
-        self.print_colored(Colors.YELLOW, f"\n🚀 To access your clusters, run:")
+        self.print_colored(Colors.YELLOW, f"\n{Symbols.START} To access your clusters, run:")
         print(f"1. Ensure AWS CLI is configured with appropriate credentials")
         print(f"2. Run the update-kubeconfig commands from {commands_file}")
         print(f"3. Test with: kubectl get nodes")
@@ -611,7 +612,7 @@ aws eks update-nodegroup-config --cluster-name {cmd_info['cluster_name']} --node
     def run(self) -> None:
         """Main execution flow"""
         try:
-            self.print_colored(Colors.GREEN, "🚀 Welcome to Interactive EKS Cluster Manager")
+            self.print_colored(Colors.GREEN, "[START] Welcome to Interactive EKS Cluster Manager")
             self.print_colored(Colors.BLUE, f"Loaded configuration for {len(self.get_accounts())} accounts")
             
             logger.info("Starting EKS Cluster Manager")

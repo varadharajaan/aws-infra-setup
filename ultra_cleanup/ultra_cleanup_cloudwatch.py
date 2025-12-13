@@ -8,6 +8,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from root_iam_credential_manager import AWSCredentialManager, Colors
+from text_symbols import Symbols
 
 class UltraCleanupCloudWatchManager:
     def __init__(self, config_dir: str = None):
@@ -63,7 +64,7 @@ class UltraCleanupCloudWatchManager:
                 })
         
         if deleted > 0:
-            self.print_colored(Colors.GREEN, f"   [OK] Deleted {deleted} alarms")
+            self.print_colored(Colors.GREEN, f"   {Symbols.OK} Deleted {deleted} alarms")
 
     def delete_log_groups(self, logs_client, region, account):
         deleted = 0
@@ -84,7 +85,7 @@ class UltraCleanupCloudWatchManager:
                     })
         
         if deleted > 0:
-            self.print_colored(Colors.GREEN, f"   [OK] Deleted {deleted} log groups")
+            self.print_colored(Colors.GREEN, f"   {Symbols.OK} Deleted {deleted} log groups")
 
     def delete_dashboards(self, cw_client, region, account):
         deleted = 0
@@ -109,12 +110,12 @@ class UltraCleanupCloudWatchManager:
                 })
         
         if deleted > 0:
-            self.print_colored(Colors.GREEN, f"   [OK] Deleted {deleted} dashboards")
+            self.print_colored(Colors.GREEN, f"   {Symbols.OK} Deleted {deleted} dashboards")
 
     def cleanup_account_region(self, account_info: dict, region: str):
         try:
             account_name = account_info.get('name')
-            self.print_colored(Colors.CYAN, f"\n[CLEANUP] {account_name} - {region}")
+            self.print_colored(Colors.CYAN, f"\n{Symbols.CLEANUP} {account_name} - {region}")
             
             cw_client = boto3.client('cloudwatch',
                 aws_access_key_id=account_info.get('access_key'),
@@ -135,7 +136,7 @@ class UltraCleanupCloudWatchManager:
             
             return True
         except Exception as e:
-            self.print_colored(Colors.RED, f"   [ERROR] {e}")
+            self.print_colored(Colors.RED, f"   {Symbols.ERROR} {e}")
             return False
 
     def save_report(self):
@@ -149,26 +150,29 @@ class UltraCleanupCloudWatchManager:
         return report_file
 
     def run(self):
-        self.print_colored(Colors.BLUE, "\n[START] ULTRA CLOUDWATCH CLEANUP MANAGER")
+        self.print_colored(Colors.BLUE, f"\n{Symbols.START} ULTRA CLOUDWATCH CLEANUP MANAGER")
         
         accounts = self.cred_manager.select_root_accounts_interactive()
         if not accounts:
             return
         
-        regions = self._get_regions()
+        regions = self.cred_manager.select_regions_interactive()
+        if not regions:
+            self.print_colored(Colors.YELLOW, f"{Symbols.ERROR} No regions selected. Exiting.")
+            return
         
-        self.print_colored(Colors.RED, "\n[WARN]  WARNING: This deletes ALL CloudWatch resources!")
-        if input("\nType 'DELETE': ").strip().upper() != 'DELETE':
+        self.print_colored(Colors.RED, f"\n{Symbols.WARN}  WARNING: This deletes ALL CloudWatch resources!")
+        if input("\nType 'yes': ").strip().lower() != 'yes':
             return
         
         for acc in accounts:
             for reg in regions:
                 self.cleanup_account_region(acc, reg)
         
-        self.print_colored(Colors.WHITE, f"\n[STATS] Alarms: {len(self.cleanup_results['deleted_alarms'])}")
-        self.print_colored(Colors.WHITE, f"[STATS] Log Groups: {len(self.cleanup_results['deleted_log_groups'])}")
-        self.print_colored(Colors.WHITE, f"[STATS] Dashboards: {len(self.cleanup_results['deleted_dashboards'])}")
-        self.print_colored(Colors.GREEN, f"[OK] Report: {self.save_report()}")
+        self.print_colored(Colors.WHITE, f"\n{Symbols.STATS} Alarms: {len(self.cleanup_results['deleted_alarms'])}")
+        self.print_colored(Colors.WHITE, f"{Symbols.STATS} Log Groups: {len(self.cleanup_results['deleted_log_groups'])}")
+        self.print_colored(Colors.WHITE, f"{Symbols.STATS} Dashboards: {len(self.cleanup_results['deleted_dashboards'])}")
+        self.print_colored(Colors.GREEN, f"{Symbols.OK} Report: {self.save_report()}")
 
 def main():
     try:

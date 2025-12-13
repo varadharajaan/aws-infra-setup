@@ -5,6 +5,7 @@ from random_word import RandomWords
 from faker import Faker
 import json
 import time
+from text_symbols import Symbols
 
 # Initialize libraries
 faker = Faker()
@@ -38,10 +39,10 @@ class DynamicNameGenerator:
                     if owner and len(owner) >= 4 and owner.isalpha():
                         self.brand_names.append(owner)
 
-            print(f"[OK] Fetched {len(self.brand_names)} brand names from GitHub API")
+            print(f"{Symbols.OK} Fetched {len(self.brand_names)} brand names from GitHub API")
 
         except Exception as e:
-            print(f"[WARN] GitHub API failed: {e}")
+            print(f"{Symbols.WARN} GitHub API failed: {e}")
 
         # Try alternative APIs
         try:
@@ -68,10 +69,10 @@ class DynamicNameGenerator:
                     if name and len(name) >= 4 and name.isalpha():
                         self.brand_names.append(name)
 
-            print(f"[OK] Fetched crypto names from CoinGecko API")
+            print(f"{Symbols.OK} Fetched crypto names from CoinGecko API")
 
         except Exception as e:
-            print(f"[WARN] CoinGecko API failed: {e}")
+            print(f"{Symbols.WARN} CoinGecko API failed: {e}")
 
     def fetch_tech_keywords_from_api(self):
         """Fetch tech keywords from programming APIs"""
@@ -98,10 +99,10 @@ class DynamicNameGenerator:
 
                 time.sleep(0.5)  # Rate limiting
 
-            print(f"[OK] Fetched {len(self.tech_keywords)} tech keywords from GitHub")
+            print(f"{Symbols.OK} Fetched {len(self.tech_keywords)} tech keywords from GitHub")
 
         except Exception as e:
-            print(f"[WARN] GitHub tech keywords API failed: {e}")
+            print(f"{Symbols.WARN} GitHub tech keywords API failed: {e}")
 
         # Try Stack Overflow API for popular tags
         try:
@@ -122,14 +123,14 @@ class DynamicNameGenerator:
                     if name and 4 <= len(name) <= 12 and name.isalpha():
                         self.tech_keywords.append(name)
 
-            print(f"[OK] Fetched tech tags from Stack Overflow API")
+            print(f"{Symbols.OK} Fetched tech tags from Stack Overflow API")
 
         except Exception as e:
-            print(f"[WARN] Stack Overflow API failed: {e}")
+            print(f"{Symbols.WARN} Stack Overflow API failed: {e}")
 
     def load_api_data(self):
         """Load data from all APIs"""
-        print("🔄 Fetching data from public APIs...")
+        print("[SCAN] Fetching data from public APIs...")
 
         self.fetch_companies_from_api()
         self.fetch_tech_keywords_from_api()
@@ -154,8 +155,8 @@ class DynamicNameGenerator:
             self.tech_keywords = self.fallback_tech
             print("[WARN] Using fallback tech keywords")
 
-        print(f"[STATS] Total brands: {len(self.brand_names)}")
-        print(f"[STATS] Total tech keywords: {len(self.tech_keywords)}")
+        print(f"{Symbols.STATS} Total brands: {len(self.brand_names)}")
+        print(f"{Symbols.STATS} Total tech keywords: {len(self.tech_keywords)}")
 
     def is_valid(self, word):
         return word and word.isalpha() and 4 <= len(word) <= 12

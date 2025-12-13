@@ -20,6 +20,7 @@ import time
 from datetime import datetime
 from botocore.exceptions import ClientError
 from root_iam_credential_manager import AWSCredentialManager
+from text_symbols import Symbols
 
 
 class Colors:
@@ -39,9 +40,9 @@ class UltraCleanupS3Manager:
     def __init__(self):
         """Initialize the S3 cleanup manager"""
         self.cred_manager = AWSCredentialManager()
-        self.current_time = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+        self.current_time = datetime.now(datetime.UTC).strftime('%Y-%m-%d %H:%M:%S')
         self.current_user = os.getenv('USERNAME') or os.getenv('USER') or 'unknown'
-        self.execution_timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+        self.execution_timestamp = datetime.now(datetime.UTC).strftime('%Y%m%d_%H%M%S')
         
         # Create directories for logs and reports
         self.base_dir = os.path.join(os.getcwd(), 'aws', 's3')
@@ -87,7 +88,7 @@ class UltraCleanupS3Manager:
 
     def log_action(self, message, level="INFO"):
         """Log action to file"""
-        timestamp = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp = datetime.now(datetime.UTC).strftime('%Y-%m-%d %H:%M:%S')
         log_entry = f"{timestamp} | {level:8} | {message}\n"
         with open(self.log_file, 'a') as f:
             f.write(log_entry)
@@ -95,7 +96,7 @@ class UltraCleanupS3Manager:
     def delete_all_objects(self, s3_client, bucket_name, region):
         """Delete all objects and versions from a bucket"""
         try:
-            self.print_colored(Colors.CYAN, f"   [DELETE] Deleting all objects and versions...")
+            self.print_colored(Colors.CYAN, f"   {Symbols.DELETE} Deleting all objects and versions...")
             
             # List and delete all object versions
             paginator = s3_client.get_paginator('list_object_versions')
@@ -129,7 +130,7 @@ class UltraCleanupS3Manager:
                     delete_count += len(objects_to_delete)
             
             if delete_count > 0:
-                self.print_colored(Colors.GREEN, f"   [OK] Deleted {delete_count} objects/versions")
+                self.print_colored(Colors.GREEN, f"   {Symbols.OK} Deleted {delete_count} objects/versions")
                 self.log_action(f"Deleted {delete_count} objects/versions from {bucket_name}")
                 self.cleanup_results['objects_deleted'].append({
                     'bucket': bucket_name,
@@ -137,13 +138,13 @@ class UltraCleanupS3Manager:
                     'count': delete_count
                 })
             else:
-                self.print_colored(Colors.YELLOW, f"   [SKIP] No objects found")
+                self.print_colored(Colors.YELLOW, f"   {Symbols.SKIP} No objects found")
                 
             return True
             
         except ClientError as e:
             error_msg = f"Failed to delete objects from {bucket_name}: {e}"
-            self.print_colored(Colors.RED, f"   [ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"   {Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             return False
 
@@ -154,7 +155,7 @@ class UltraCleanupS3Manager:
                 Bucket=bucket_name,
                 VersioningConfiguration={'Status': 'Suspended'}
             )
-            self.print_colored(Colors.GREEN, f"   [OK] Versioning disabled")
+            self.print_colored(Colors.GREEN, f"   {Symbols.OK} Versioning disabled")
             self.log_action(f"Disabled versioning for {bucket_name}")
             self.cleanup_results['versioning_disabled'].append({
                 'bucket': bucket_name,
@@ -164,7 +165,7 @@ class UltraCleanupS3Manager:
         except ClientError as e:
             if e.response['Error']['Code'] != 'NoSuchBucketVersioning':
                 error_msg = f"Failed to disable versioning for {bucket_name}: {e}"
-                self.print_colored(Colors.YELLOW, f"   [WARN] {error_msg}")
+                self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} {error_msg}")
                 self.log_action(error_msg, "WARNING")
             return False
 
@@ -172,7 +173,7 @@ class UltraCleanupS3Manager:
         """Remove bucket policy"""
         try:
             s3_client.delete_bucket_policy(Bucket=bucket_name)
-            self.print_colored(Colors.GREEN, f"   [OK] Bucket policy removed")
+            self.print_colored(Colors.GREEN, f"   {Symbols.OK} Bucket policy removed")
             self.log_action(f"Removed bucket policy from {bucket_name}")
             self.cleanup_results['policies_removed'].append({
                 'bucket': bucket_name,
@@ -181,7 +182,7 @@ class UltraCleanupS3Manager:
             return True
         except ClientError as e:
             if e.response['Error']['Code'] != 'NoSuchBucketPolicy':
-                self.print_colored(Colors.YELLOW, f"   [WARN] Failed to remove policy: {e.response['Error']['Code']}")
+                self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} Failed to remove policy: {e.response['Error']['Code']}")
             return False
 
     def remove_bucket_notifications(self, s3_client, bucket_name, region):
@@ -191,7 +192,7 @@ class UltraCleanupS3Manager:
                 Bucket=bucket_name,
                 NotificationConfiguration={}
             )
-            self.print_colored(Colors.GREEN, f"   [OK] Notifications removed")
+            self.print_colored(Colors.GREEN, f"   {Symbols.OK} Notifications removed")
             self.log_action(f"Removed notifications from {bucket_name}")
             self.cleanup_results['notifications_removed'].append({
                 'bucket': bucket_name,
@@ -199,14 +200,14 @@ class UltraCleanupS3Manager:
             })
             return True
         except ClientError as e:
-            self.print_colored(Colors.YELLOW, f"   [WARN] Failed to remove notifications: {e.response['Error']['Code']}")
+            self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} Failed to remove notifications: {e.response['Error']['Code']}")
             return False
 
     def remove_bucket_lifecycle(self, s3_client, bucket_name, region):
         """Remove lifecycle configuration"""
         try:
             s3_client.delete_bucket_lifecycle(Bucket=bucket_name)
-            self.print_colored(Colors.GREEN, f"   [OK] Lifecycle rules removed")
+            self.print_colored(Colors.GREEN, f"   {Symbols.OK} Lifecycle rules removed")
             self.log_action(f"Removed lifecycle rules from {bucket_name}")
             self.cleanup_results['lifecycle_removed'].append({
                 'bucket': bucket_name,
@@ -215,14 +216,14 @@ class UltraCleanupS3Manager:
             return True
         except ClientError as e:
             if e.response['Error']['Code'] != 'NoSuchLifecycleConfiguration':
-                self.print_colored(Colors.YELLOW, f"   [WARN] Failed to remove lifecycle: {e.response['Error']['Code']}")
+                self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} Failed to remove lifecycle: {e.response['Error']['Code']}")
             return False
 
     def remove_bucket_cors(self, s3_client, bucket_name, region):
         """Remove CORS configuration"""
         try:
             s3_client.delete_bucket_cors(Bucket=bucket_name)
-            self.print_colored(Colors.GREEN, f"   [OK] CORS configuration removed")
+            self.print_colored(Colors.GREEN, f"   {Symbols.OK} CORS configuration removed")
             self.log_action(f"Removed CORS from {bucket_name}")
             self.cleanup_results['cors_removed'].append({
                 'bucket': bucket_name,
@@ -231,14 +232,14 @@ class UltraCleanupS3Manager:
             return True
         except ClientError as e:
             if e.response['Error']['Code'] != 'NoSuchCORSConfiguration':
-                self.print_colored(Colors.YELLOW, f"   [WARN] Failed to remove CORS: {e.response['Error']['Code']}")
+                self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} Failed to remove CORS: {e.response['Error']['Code']}")
             return False
 
     def remove_bucket_website(self, s3_client, bucket_name, region):
         """Remove website configuration"""
         try:
             s3_client.delete_bucket_website(Bucket=bucket_name)
-            self.print_colored(Colors.GREEN, f"   [OK] Website configuration removed")
+            self.print_colored(Colors.GREEN, f"   {Symbols.OK} Website configuration removed")
             self.log_action(f"Removed website config from {bucket_name}")
             self.cleanup_results['website_removed'].append({
                 'bucket': bucket_name,
@@ -247,14 +248,14 @@ class UltraCleanupS3Manager:
             return True
         except ClientError as e:
             if e.response['Error']['Code'] != 'NoSuchWebsiteConfiguration':
-                self.print_colored(Colors.YELLOW, f"   [WARN] Failed to remove website: {e.response['Error']['Code']}")
+                self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} Failed to remove website: {e.response['Error']['Code']}")
             return False
 
     def remove_bucket_encryption(self, s3_client, bucket_name, region):
         """Remove encryption configuration"""
         try:
             s3_client.delete_bucket_encryption(Bucket=bucket_name)
-            self.print_colored(Colors.GREEN, f"   [OK] Encryption configuration removed")
+            self.print_colored(Colors.GREEN, f"   {Symbols.OK} Encryption configuration removed")
             self.log_action(f"Removed encryption from {bucket_name}")
             self.cleanup_results['encryption_removed'].append({
                 'bucket': bucket_name,
@@ -263,7 +264,7 @@ class UltraCleanupS3Manager:
             return True
         except ClientError as e:
             if e.response['Error']['Code'] != 'ServerSideEncryptionConfigurationNotFoundError':
-                self.print_colored(Colors.YELLOW, f"   [WARN] Failed to remove encryption: {e.response['Error']['Code']}")
+                self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} Failed to remove encryption: {e.response['Error']['Code']}")
             return False
 
     def remove_bucket_logging(self, s3_client, bucket_name, region):
@@ -273,7 +274,7 @@ class UltraCleanupS3Manager:
                 Bucket=bucket_name,
                 BucketLoggingStatus={}
             )
-            self.print_colored(Colors.GREEN, f"   [OK] Logging configuration removed")
+            self.print_colored(Colors.GREEN, f"   {Symbols.OK} Logging configuration removed")
             self.log_action(f"Removed logging from {bucket_name}")
             self.cleanup_results['logging_removed'].append({
                 'bucket': bucket_name,
@@ -281,7 +282,7 @@ class UltraCleanupS3Manager:
             })
             return True
         except ClientError as e:
-            self.print_colored(Colors.YELLOW, f"   [WARN] Failed to remove logging: {e.response['Error']['Code']}")
+            self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} Failed to remove logging: {e.response['Error']['Code']}")
             return False
 
     def remove_bucket_accelerate(self, s3_client, bucket_name, region):
@@ -291,7 +292,7 @@ class UltraCleanupS3Manager:
                 Bucket=bucket_name,
                 AccelerateConfiguration={'Status': 'Suspended'}
             )
-            self.print_colored(Colors.GREEN, f"   [OK] Transfer acceleration disabled")
+            self.print_colored(Colors.GREEN, f"   {Symbols.OK} Transfer acceleration disabled")
             self.log_action(f"Disabled acceleration for {bucket_name}")
             self.cleanup_results['accelerate_removed'].append({
                 'bucket': bucket_name,
@@ -299,14 +300,14 @@ class UltraCleanupS3Manager:
             })
             return True
         except ClientError as e:
-            self.print_colored(Colors.YELLOW, f"   [WARN] Failed to disable acceleration: {e.response['Error']['Code']}")
+            self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} Failed to disable acceleration: {e.response['Error']['Code']}")
             return False
 
     def remove_bucket_replication(self, s3_client, bucket_name, region):
         """Remove replication configuration"""
         try:
             s3_client.delete_bucket_replication(Bucket=bucket_name)
-            self.print_colored(Colors.GREEN, f"   [OK] Replication configuration removed")
+            self.print_colored(Colors.GREEN, f"   {Symbols.OK} Replication configuration removed")
             self.log_action(f"Removed replication from {bucket_name}")
             self.cleanup_results['replication_removed'].append({
                 'bucket': bucket_name,
@@ -315,14 +316,14 @@ class UltraCleanupS3Manager:
             return True
         except ClientError as e:
             if e.response['Error']['Code'] != 'ReplicationConfigurationNotFoundError':
-                self.print_colored(Colors.YELLOW, f"   [WARN] Failed to remove replication: {e.response['Error']['Code']}")
+                self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} Failed to remove replication: {e.response['Error']['Code']}")
             return False
 
     def remove_bucket_tagging(self, s3_client, bucket_name, region):
         """Remove bucket tagging"""
         try:
             s3_client.delete_bucket_tagging(Bucket=bucket_name)
-            self.print_colored(Colors.GREEN, f"   [OK] Bucket tagging removed")
+            self.print_colored(Colors.GREEN, f"   {Symbols.OK} Bucket tagging removed")
             self.log_action(f"Removed tagging from {bucket_name}")
             self.cleanup_results['tagging_removed'].append({
                 'bucket': bucket_name,
@@ -331,17 +332,17 @@ class UltraCleanupS3Manager:
             return True
         except ClientError as e:
             if e.response['Error']['Code'] != 'NoSuchTagSet':
-                self.print_colored(Colors.YELLOW, f"   [WARN] Failed to remove tagging: {e.response['Error']['Code']}")
+                self.print_colored(Colors.YELLOW, f"   {Symbols.WARN} Failed to remove tagging: {e.response['Error']['Code']}")
             return False
 
     def cleanup_bucket(self, s3_client, bucket_name, region, account_key):
         """Complete cleanup of a single bucket"""
         try:
-            self.print_colored(Colors.CYAN, f"\n[SCAN] Processing bucket: {bucket_name} (Region: {region})")
+            self.print_colored(Colors.CYAN, f"\n{Symbols.SCAN} Processing bucket: {bucket_name} (Region: {region})")
             
             # Check if bucket is in exclusion list
             if bucket_name in self.excluded_buckets:
-                self.print_colored(Colors.YELLOW, f"   [SKIP] Bucket is in exclusion list")
+                self.print_colored(Colors.YELLOW, f"   {Symbols.SKIP} Bucket is in exclusion list")
                 self.log_action(f"Skipped excluded bucket: {bucket_name}")
                 self.cleanup_results['excluded_buckets'].append({
                     'bucket': bucket_name,
@@ -379,7 +380,7 @@ class UltraCleanupS3Manager:
             
             # Step 4: Delete the bucket
             s3_client.delete_bucket(Bucket=bucket_name)
-            self.print_colored(Colors.GREEN, f"[OK] Deleted bucket: {bucket_name}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted bucket: {bucket_name}")
             self.log_action(f"Deleted bucket: {bucket_name} in region {region}")
             
             self.cleanup_results['deleted_buckets'].append({
@@ -390,7 +391,7 @@ class UltraCleanupS3Manager:
             
         except ClientError as e:
             error_msg = f"Failed to delete bucket {bucket_name}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['failed_deletions'].append({
                 'bucket': bucket_name,
@@ -403,7 +404,7 @@ class UltraCleanupS3Manager:
         """Cleanup all S3 buckets in an account"""
         try:
             self.print_colored(Colors.BLUE, f"\n{'='*80}")
-            self.print_colored(Colors.BLUE, f"[START] Processing Account: {account_name}")
+            self.print_colored(Colors.BLUE, f"{Symbols.START} Processing Account: {account_name}")
             self.print_colored(Colors.BLUE, f"{'='*80}")
             
             self.cleanup_results['accounts_processed'].append(account_name)
@@ -420,10 +421,10 @@ class UltraCleanupS3Manager:
             buckets = response.get('Buckets', [])
             
             if not buckets:
-                self.print_colored(Colors.YELLOW, "[SKIP] No buckets found in account")
+                self.print_colored(Colors.YELLOW, f"{Symbols.SKIP} No buckets found in account")
                 return
             
-            self.print_colored(Colors.CYAN, f"[SCAN] Found {len(buckets)} buckets")
+            self.print_colored(Colors.CYAN, f"{Symbols.SCAN} Found {len(buckets)} buckets")
             
             # Process each bucket
             for bucket in buckets:
@@ -446,15 +447,15 @@ class UltraCleanupS3Manager:
                     
                 except Exception as e:
                     error_msg = f"Error processing bucket {bucket_name}: {e}"
-                    self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+                    self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
                     self.log_action(error_msg, "ERROR")
                     self.cleanup_results['errors'].append(error_msg)
             
-            self.print_colored(Colors.GREEN, f"\n[OK] Account {account_name} cleanup completed!")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.OK} Account {account_name} cleanup completed!")
             
         except Exception as e:
             error_msg = f"Error processing account {account_name}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['errors'].append(error_msg)
 
@@ -486,25 +487,25 @@ class UltraCleanupS3Manager:
             with open(report_path, 'w') as f:
                 json.dump(summary, f, indent=2)
 
-            self.print_colored(Colors.GREEN, f"\n[STATS] Summary report saved: {report_path}")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.STATS} Summary report saved: {report_path}")
             self.log_action(f"Summary report saved: {report_path}")
 
             # Print summary to console
             self.print_colored(Colors.BLUE, f"\n{'='*80}")
             self.print_colored(Colors.BLUE, "[STATS] CLEANUP SUMMARY")
             self.print_colored(Colors.BLUE, f"{'='*80}")
-            self.print_colored(Colors.GREEN, f"[OK] Buckets Deleted: {summary['summary']['total_buckets_deleted']}")
-            self.print_colored(Colors.YELLOW, f"[SKIP] Buckets Excluded: {summary['summary']['total_buckets_excluded']}")
-            self.print_colored(Colors.GREEN, f"[OK] Objects Deleted: {summary['summary']['total_objects_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Versioning Disabled: {summary['summary']['total_versioning_disabled']}")
-            self.print_colored(Colors.GREEN, f"[OK] Policies Removed: {summary['summary']['total_policies_removed']}")
-            self.print_colored(Colors.GREEN, f"[OK] Notifications Removed: {summary['summary']['total_notifications_removed']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Buckets Deleted: {summary['summary']['total_buckets_deleted']}")
+            self.print_colored(Colors.YELLOW, f"{Symbols.SKIP} Buckets Excluded: {summary['summary']['total_buckets_excluded']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Objects Deleted: {summary['summary']['total_objects_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Versioning Disabled: {summary['summary']['total_versioning_disabled']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Policies Removed: {summary['summary']['total_policies_removed']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Notifications Removed: {summary['summary']['total_notifications_removed']}")
 
             if summary['summary']['total_failed_deletions'] > 0:
-                self.print_colored(Colors.YELLOW, f"[WARN] Failed Deletions: {summary['summary']['total_failed_deletions']}")
+                self.print_colored(Colors.YELLOW, f"{Symbols.WARN} Failed Deletions: {summary['summary']['total_failed_deletions']}")
 
             if summary['summary']['total_errors'] > 0:
-                self.print_colored(Colors.RED, f"[ERROR] Errors: {summary['summary']['total_errors']}")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Errors: {summary['summary']['total_errors']}")
 
             # Display Account Summary
             self.print_colored(Colors.BLUE, f"\n{'='*80}")
@@ -539,14 +540,14 @@ class UltraCleanupS3Manager:
 
             # Display account summary
             for account, stats in account_summary.items():
-                self.print_colored(Colors.CYAN, f"\n[LIST] Account: {account}")
-                self.print_colored(Colors.GREEN, f"  [OK] Buckets Deleted: {stats['buckets_deleted']}")
-                self.print_colored(Colors.YELLOW, f"  [SKIP] Buckets Excluded: {stats['buckets_excluded']}")
+                self.print_colored(Colors.CYAN, f"\n{Symbols.LIST} Account: {account}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Buckets Deleted: {stats['buckets_deleted']}")
+                self.print_colored(Colors.YELLOW, f"  {Symbols.SKIP} Buckets Excluded: {stats['buckets_excluded']}")
                 regions_str = ', '.join(sorted(stats['regions'])) if stats['regions'] else 'N/A'
-                self.print_colored(Colors.YELLOW, f"  [SCAN] Regions: {regions_str}")
+                self.print_colored(Colors.YELLOW, f"  {Symbols.SCAN} Regions: {regions_str}")
 
         except Exception as e:
-            self.print_colored(Colors.RED, f"[ERROR] Failed to generate summary report: {e}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to generate summary report: {e}")
             self.log_action(f"Failed to generate summary report: {e}", "ERROR")
 
     def interactive_cleanup(self):
@@ -559,15 +560,15 @@ class UltraCleanupS3Manager:
             # Load accounts
             config = self.cred_manager.load_root_accounts_config()
             if not config or 'accounts' not in config:
-                self.print_colored(Colors.RED, "[ERROR] No accounts configuration found!")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} No accounts configuration found!")
                 return
 
             accounts = config['accounts']
 
             # Display accounts with detailed info
-            self.print_colored(Colors.CYAN, "[KEY] Select Root AWS Accounts for S3 Cleanup:")
+            self.print_colored(Colors.CYAN, f"{Symbols.KEY} Select Root AWS Accounts for S3 Cleanup:")
             print(f"{Colors.CYAN}[BOOK] Loading root accounts config...{Colors.END}")
-            self.print_colored(Colors.GREEN, f"[OK] Loaded {len(accounts)} root accounts")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Loaded {len(accounts)} root accounts")
             
             self.print_colored(Colors.YELLOW, "\n[KEY] Available Root AWS Accounts:")
             print("=" * 100)
@@ -609,11 +610,11 @@ class UltraCleanupS3Manager:
                     indices = [int(x.strip()) for x in selection.split(',')]
                     selected_accounts = [account_list[i-1] for i in indices if 0 < i <= len(account_list)]
                 except (ValueError, IndexError):
-                    self.print_colored(Colors.RED, "[ERROR] Invalid selection!")
+                    self.print_colored(Colors.RED, f"{Symbols.ERROR} Invalid selection!")
                     return
 
             if not selected_accounts:
-                self.print_colored(Colors.RED, "[ERROR] No accounts selected!")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} No accounts selected!")
                 return
 
             # Bucket exclusion list
@@ -630,8 +631,8 @@ class UltraCleanupS3Manager:
             # Confirm deletion
             self.print_colored(Colors.RED, "\n[WARN] WARNING: This will DELETE all S3 buckets and their contents!")
             self.print_colored(Colors.RED, "[WARN] This action is IRREVERSIBLE!")
-            self.print_colored(Colors.YELLOW, f"[INFO] Accounts: {len(selected_accounts)}")
-            self.print_colored(Colors.YELLOW, f"[INFO] Excluded buckets: {len(self.excluded_buckets)}")
+            self.print_colored(Colors.YELLOW, f"{Symbols.INFO} Accounts: {len(selected_accounts)}")
+            self.print_colored(Colors.YELLOW, f"{Symbols.INFO} Excluded buckets: {len(self.excluded_buckets)}")
             
             confirm = input(f"\nType 'yes' to confirm: ").strip().lower()
             if confirm != 'yes':
@@ -655,14 +656,14 @@ class UltraCleanupS3Manager:
             # Generate summary
             self.generate_summary_report()
 
-            self.print_colored(Colors.GREEN, f"\n[OK] S3 cleanup completed!")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.OK} S3 cleanup completed!")
             self.print_colored(Colors.CYAN, f"[FILE] Log file: {self.log_file}")
 
         except KeyboardInterrupt:
             self.print_colored(Colors.YELLOW, "\n[WARN] Cleanup interrupted by user!")
             self.log_action("Cleanup interrupted by user", "WARNING")
         except Exception as e:
-            self.print_colored(Colors.RED, f"\n[ERROR] Error during cleanup: {e}")
+            self.print_colored(Colors.RED, f"\n{Symbols.ERROR} Error during cleanup: {e}")
             self.log_action(f"Error during cleanup: {e}", "ERROR")
 
 
@@ -674,7 +675,7 @@ def main():
     except KeyboardInterrupt:
         print("\n\n[WARN] Operation cancelled by user!")
     except Exception as e:
-        print(f"\n[ERROR] Fatal error: {e}")
+        print(f"\n{Symbols.ERROR} Fatal error: {e}")
 
 
 if __name__ == "__main__":

@@ -12,6 +12,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from root_iam_credential_manager import AWSCredentialManager, Colors
+from text_symbols import Symbols
 
 
 class UltraCleanupELBManager:
@@ -75,7 +76,7 @@ class UltraCleanupELBManager:
                     'us-east-1', 'us-east-2', 'us-west-1', 'us-west-2', 'ap-south-1'
                 ])
         except Exception as e:
-            self.print_colored(Colors.YELLOW, f"[WARN]  Warning: Could not load user regions: {e}")
+            self.print_colored(Colors.YELLOW, f"{Symbols.WARN}  Warning: Could not load user regions: {e}")
 
         return ['us-east-1', 'us-east-2', 'us-west-1', 'us-west-2', 'ap-south-1']
 
@@ -88,7 +89,6 @@ class UltraCleanupELBManager:
             self.log_filename = f"{self.elb_dir}/ultra_elb_cleanup_log_{self.execution_timestamp}.log"
 
             # Create a file handler for detailed logging
-            import logging
 
             # Create logger for detailed operations
             self.operation_logger = logging.getLogger('ultra_elb_cleanup')
@@ -120,7 +120,7 @@ class UltraCleanupELBManager:
 
             # Log initial information
             self.operation_logger.info("=" * 100)
-            self.operation_logger.info("[ALERT] ULTRA ELB CLEANUP SESSION STARTED [ALERT]")
+            self.operation_logger.info(f"{Symbols.ALERT} ULTRA ELB CLEANUP SESSION STARTED {Symbols.ALERT}")
             self.operation_logger.info("=" * 100)
             self.operation_logger.info(f"Execution Time: {self.current_time} UTC")
             self.operation_logger.info(f"Executed By: {self.current_user}")
@@ -285,8 +285,8 @@ class UltraCleanupELBManager:
             load_balancers = []
             account_name = account_info.get('account_key', 'Unknown')
 
-            self.log_operation('INFO', f"[SCAN] Scanning for load balancers in {region} ({account_name})")
-            print(f"   [SCAN] Scanning for load balancers in {region} ({account_name})...")
+            self.log_operation('INFO', f"{Symbols.SCAN} Scanning for load balancers in {region} ({account_name})")
+            print(f"   {Symbols.SCAN} Scanning for load balancers in {region} ({account_name})...")
 
             # Counters for different types
             classic_count = 0
@@ -338,7 +338,7 @@ class UltraCleanupELBManager:
                         if k8s_info['is_kubernetes']:
                             kubernetes_count += 1
                             self.log_operation('INFO',
-                                               f"[TARGET] Kubernetes Classic ELB detected: {lb_name} "
+                                               f"{Symbols.TARGET} Kubernetes Classic ELB detected: {lb_name} "
                                                f"(method: {k8s_info['detection_method']}, "
                                                f"confidence: {k8s_info['confidence']})")
                             if k8s_info['cluster_name']:
@@ -404,7 +404,7 @@ class UltraCleanupELBManager:
                         if k8s_info['is_kubernetes']:
                             kubernetes_count += 1
                             self.log_operation('INFO',
-                                               f"[TARGET] Kubernetes {lb_type.upper()} detected: {lb_name} "
+                                               f"{Symbols.TARGET} Kubernetes {lb_type.upper()} detected: {lb_name} "
                                                f"(method: {k8s_info['detection_method']}, "
                                                f"confidence: {k8s_info['confidence']})")
 
@@ -414,10 +414,10 @@ class UltraCleanupELBManager:
             # Enhanced logging with breakdown
             self.log_operation('INFO',
                                f"[BALANCE]  Found {len(load_balancers)} total load balancers in {region} ({account_name})")
-            self.log_operation('INFO', f"   [STATS] Classic ELBs: {classic_count}")
-            self.log_operation('INFO', f"   [STATS] Application LBs: {alb_count}")
-            self.log_operation('INFO', f"   [STATS] Network LBs: {nlb_count}")
-            self.log_operation('INFO', f"   [TARGET] Kubernetes-managed: {kubernetes_count}")
+            self.log_operation('INFO', f"   {Symbols.STATS} Classic ELBs: {classic_count}")
+            self.log_operation('INFO', f"   {Symbols.STATS} Application LBs: {alb_count}")
+            self.log_operation('INFO', f"   {Symbols.STATS} Network LBs: {nlb_count}")
+            self.log_operation('INFO', f"   {Symbols.TARGET} Kubernetes-managed: {kubernetes_count}")
 
             print(f"   [BALANCE]  Found {len(load_balancers)} load balancers ({classic_count} Classic, "
                   f"{alb_count} ALB, {nlb_count} NLB, {kubernetes_count} Kubernetes-managed)")
@@ -427,7 +427,7 @@ class UltraCleanupELBManager:
         except Exception as e:
             account_name = account_info.get('account_key', 'Unknown')
             self.log_operation('ERROR', f"Error getting load balancers in {region} ({account_name}): {e}")
-            print(f"   [ERROR] Error getting load balancers in {region}: {e}")
+            print(f"   {Symbols.ERROR} Error getting load balancers in {region}: {e}")
             return []
 
     def get_all_target_groups_in_region(self, elbv2_client, region, account_info):
@@ -436,8 +436,8 @@ class UltraCleanupELBManager:
             target_groups = []
             account_name = account_info.get('account_key', 'Unknown')
 
-            self.log_operation('INFO', f"[SCAN] Scanning for target groups in {region} ({account_name})")
-            print(f"   [SCAN] Scanning for target groups in {region} ({account_name})...")
+            self.log_operation('INFO', f"{Symbols.SCAN} Scanning for target groups in {region} ({account_name})")
+            print(f"   {Symbols.SCAN} Scanning for target groups in {region} ({account_name})...")
 
             paginator = elbv2_client.get_paginator('describe_target_groups')
             for page in paginator.paginate():
@@ -464,15 +464,15 @@ class UltraCleanupELBManager:
 
                     target_groups.append(tg_info)
 
-            self.log_operation('INFO', f"[TARGET] Found {len(target_groups)} target groups in {region} ({account_name})")
-            print(f"   [TARGET] Found {len(target_groups)} target groups in {region} ({account_name})")
+            self.log_operation('INFO', f"{Symbols.TARGET} Found {len(target_groups)} target groups in {region} ({account_name})")
+            print(f"   {Symbols.TARGET} Found {len(target_groups)} target groups in {region} ({account_name})")
 
             return target_groups
 
         except Exception as e:
             account_name = account_info.get('account_key', 'Unknown')
             self.log_operation('ERROR', f"Error getting target groups in {region} ({account_name}): {e}")
-            print(f"   [ERROR] Error getting target groups in {region}: {e}")
+            print(f"   {Symbols.ERROR} Error getting target groups in {region}: {e}")
             return []
 
     def get_elb_security_groups_in_region(self, ec2_client, load_balancers, region, account_info):
@@ -482,8 +482,8 @@ class UltraCleanupELBManager:
             processed_sg_ids = set()
             account_name = account_info.get('account_key', 'Unknown')
 
-            self.log_operation('INFO', f"[SCAN] Scanning for ELB security groups in {region} ({account_name})")
-            print(f"   [SCAN] Scanning for ELB security groups in {region} ({account_name})...")
+            self.log_operation('INFO', f"{Symbols.SCAN} Scanning for ELB security groups in {region} ({account_name})")
+            print(f"   {Symbols.SCAN} Scanning for ELB security groups in {region} ({account_name})...")
 
             for lb in load_balancers:
                 for sg_id in lb.get('security_groups', []):
@@ -518,15 +518,15 @@ class UltraCleanupELBManager:
                         self.log_operation('WARNING', f"Could not get details for security group {sg_id}: {e}")
 
             self.log_operation('INFO',
-                               f"[PROTECTED]  Found {len(elb_security_groups)} ELB security groups in {region} ({account_name})")
-            print(f"   [PROTECTED]  Found {len(elb_security_groups)} ELB security groups in {region} ({account_name})")
+                               f"{Symbols.PROTECTED}  Found {len(elb_security_groups)} ELB security groups in {region} ({account_name})")
+            print(f"   {Symbols.PROTECTED}  Found {len(elb_security_groups)} ELB security groups in {region} ({account_name})")
 
             return elb_security_groups
 
         except Exception as e:
             account_name = account_info.get('account_key', 'Unknown')
             self.log_operation('ERROR', f"Error getting ELB security groups in {region} ({account_name}): {e}")
-            print(f"   [ERROR] Error getting ELB security groups in {region}: {e}")
+            print(f"   {Symbols.ERROR} Error getting ELB security groups in {region}: {e}")
             return []
 
     def delete_load_balancer(self, elb_client, elbv2_client, lb_info):
@@ -541,7 +541,7 @@ class UltraCleanupELBManager:
             # Enhanced logging for Kubernetes load balancers
             if k8s_info.get('is_kubernetes'):
                 self.log_operation('INFO',
-                                   f"[DELETE]  Deleting Kubernetes-managed {lb_type} load balancer {lb_name} in {region} ({account_name})")
+                                   f"{Symbols.DELETE}  Deleting Kubernetes-managed {lb_type} load balancer {lb_name} in {region} ({account_name})")
                 self.log_operation('INFO',
                                    f"   Detection method: {k8s_info.get('detection_method')}, "
                                    f"confidence: {k8s_info.get('confidence')}")
@@ -549,11 +549,11 @@ class UltraCleanupELBManager:
                     self.log_operation('INFO', f"   Cluster: {k8s_info['cluster_name']}")
                 if k8s_info.get('service_name'):
                     self.log_operation('INFO', f"   Service: {k8s_info['service_name']}")
-                print(f"   [DELETE]  Deleting Kubernetes {lb_type} load balancer {lb_name}...")
+                print(f"   {Symbols.DELETE}  Deleting Kubernetes {lb_type} load balancer {lb_name}...")
             else:
                 self.log_operation('INFO',
-                                   f"[DELETE]  Deleting {lb_type} load balancer {lb_name} in {region} ({account_name})")
-                print(f"   [DELETE]  Deleting {lb_type} load balancer {lb_name}...")
+                                   f"{Symbols.DELETE}  Deleting {lb_type} load balancer {lb_name} in {region} ({account_name})")
+                print(f"   {Symbols.DELETE}  Deleting {lb_type} load balancer {lb_name}...")
 
             # Add retry logic for Kubernetes load balancers that might be in transitional states
             max_retries = 3 if k8s_info.get('is_kubernetes') else 1
@@ -568,8 +568,8 @@ class UltraCleanupELBManager:
                         # Delete Application/Network Load Balancer
                         elbv2_client.delete_load_balancer(LoadBalancerArn=lb_info['arn'])
 
-                    self.log_operation('INFO', f"[OK] Successfully deleted {lb_type} load balancer {lb_name}")
-                    print(f"   [OK] Successfully deleted {lb_type} load balancer {lb_name}")
+                    self.log_operation('INFO', f"{Symbols.OK} Successfully deleted {lb_type} load balancer {lb_name}")
+                    print(f"   {Symbols.OK} Successfully deleted {lb_type} load balancer {lb_name}")
 
                     # Enhanced cleanup results tracking
                     deletion_record = {
@@ -615,7 +615,7 @@ class UltraCleanupELBManager:
         except Exception as e:
             account_name = lb_info['account_info'].get('account_key', 'Unknown')
             self.log_operation('ERROR', f"Failed to delete load balancer {lb_name}: {e}")
-            print(f"   [ERROR] Failed to delete load balancer {lb_name}: {e}")
+            print(f"   {Symbols.ERROR} Failed to delete load balancer {lb_name}: {e}")
 
             self.cleanup_results['failed_deletions'].append({
                 'resource_type': 'load_balancer',
@@ -636,13 +636,13 @@ class UltraCleanupELBManager:
             region = tg_info['region']
             account_name = tg_info['account_info'].get('account_key', 'Unknown')
 
-            self.log_operation('INFO', f"[DELETE]  Deleting target group {tg_name} in {region} ({account_name})")
-            print(f"   [DELETE]  Deleting target group {tg_name}...")
+            self.log_operation('INFO', f"{Symbols.DELETE}  Deleting target group {tg_name} in {region} ({account_name})")
+            print(f"   {Symbols.DELETE}  Deleting target group {tg_name}...")
 
             elbv2_client.delete_target_group(TargetGroupArn=tg_arn)
 
-            self.log_operation('INFO', f"[OK] Successfully deleted target group {tg_name}")
-            print(f"   [OK] Successfully deleted target group {tg_name}")
+            self.log_operation('INFO', f"{Symbols.OK} Successfully deleted target group {tg_name}")
+            print(f"   {Symbols.OK} Successfully deleted target group {tg_name}")
 
             self.cleanup_results['deleted_target_groups'].append({
                 'name': tg_name,
@@ -661,7 +661,7 @@ class UltraCleanupELBManager:
         except Exception as e:
             account_name = tg_info['account_info'].get('account_key', 'Unknown')
             self.log_operation('ERROR', f"Failed to delete target group {tg_name}: {e}")
-            print(f"   [ERROR] Failed to delete target group {tg_name}: {e}")
+            print(f"   {Symbols.ERROR} Failed to delete target group {tg_name}: {e}")
 
             self.cleanup_results['failed_deletions'].append({
                 'resource_type': 'target_group',
@@ -675,7 +675,7 @@ class UltraCleanupELBManager:
     def clear_security_group_rules(self, ec2_client, sg_id):
         """Clear all ingress and egress rules from a security group"""
         try:
-            self.log_operation('INFO', f"[CLEANUP] Clearing rules for security group {sg_id}")
+            self.log_operation('INFO', f"{Symbols.CLEANUP} Clearing rules for security group {sg_id}")
 
             # Get security group details
             try:
@@ -705,7 +705,7 @@ class UltraCleanupELBManager:
                             IpPermissions=[rule]
                         )
                         rules_cleared += 1
-                        self.log_operation('INFO', f"  [OK] Successfully removed ingress rule {rule_index + 1}")
+                        self.log_operation('INFO', f"  {Symbols.OK} Successfully removed ingress rule {rule_index + 1}")
 
                     except ClientError as e:
                         error_code = e.response['Error']['Code']
@@ -743,7 +743,7 @@ class UltraCleanupELBManager:
                                 IpPermissions=[rule]
                             )
                             rules_cleared += 1
-                            self.log_operation('INFO', f"  [OK] Successfully removed egress rule {rule_index + 1}")
+                            self.log_operation('INFO', f"  {Symbols.OK} Successfully removed egress rule {rule_index + 1}")
 
                         except ClientError as e:
                             error_code = e.response['Error']['Code']
@@ -773,8 +773,8 @@ class UltraCleanupELBManager:
             region = sg_info['region']
             account_name = sg_info['account_info'].get('account_key', 'Unknown')
 
-            self.log_operation('INFO', f"[DELETE]  Deleting security group {sg_id} ({sg_name}) in {region} ({account_name})")
-            print(f"   [DELETE]  Deleting security group {sg_id} ({sg_name})...")
+            self.log_operation('INFO', f"{Symbols.DELETE}  Deleting security group {sg_id} ({sg_name}) in {region} ({account_name})")
+            print(f"   {Symbols.DELETE}  Deleting security group {sg_id} ({sg_name})...")
 
             # Step 1: Clear all security group rules first
             self.log_operation('INFO', f"Step 1: Clearing security group rules for {sg_id}")
@@ -784,8 +784,8 @@ class UltraCleanupELBManager:
             self.log_operation('INFO', f"Step 2: Attempting to delete security group {sg_id}")
             ec2_client.delete_security_group(GroupId=sg_id)
 
-            self.log_operation('INFO', f"[OK] Successfully deleted security group {sg_id} ({sg_name})")
-            print(f"   [OK] Successfully deleted security group {sg_id}")
+            self.log_operation('INFO', f"{Symbols.OK} Successfully deleted security group {sg_id} ({sg_name})")
+            print(f"   {Symbols.OK} Successfully deleted security group {sg_id}")
 
             self.cleanup_results['deleted_security_groups'].append({
                 'group_id': sg_id,
@@ -809,15 +809,15 @@ class UltraCleanupELBManager:
             elif error_code == 'DependencyViolation':
                 self.log_operation('WARNING',
                                    f"Cannot delete security group {sg_id}: dependency violation (still in use)")
-                print(f"   [WARN] Cannot delete security group {sg_id}: still in use")
+                print(f"   {Symbols.WARN} Cannot delete security group {sg_id}: still in use")
                 return False
             else:
                 self.log_operation('ERROR', f"Failed to delete security group {sg_id}: {e}")
-                print(f"   [ERROR] Failed to delete security group {sg_id}: {e}")
+                print(f"   {Symbols.ERROR} Failed to delete security group {sg_id}: {e}")
                 return False
         except Exception as e:
             self.log_operation('ERROR', f"Unexpected error deleting security group {sg_id}: {e}")
-            print(f"   [ERROR] Unexpected error deleting security group {sg_id}: {e}")
+            print(f"   {Symbols.ERROR} Unexpected error deleting security group {sg_id}: {e}")
             return False
 
     def cleanup_account_region(self, account_info, region):
@@ -828,8 +828,8 @@ class UltraCleanupELBManager:
             account_id = account_info['account_id']
             account_key = account_info['account_key']
 
-            self.log_operation('INFO', f"[CLEANUP] Starting ELB cleanup for {account_key} ({account_id}) in {region}")
-            print(f"\n[CLEANUP] Starting ELB cleanup for {account_key} ({account_id}) in {region}")
+            self.log_operation('INFO', f"{Symbols.CLEANUP} Starting ELB cleanup for {account_key} ({account_id}) in {region}")
+            print(f"\n{Symbols.CLEANUP} Starting ELB cleanup for {account_key} ({account_id}) in {region}")
 
             # Create AWS clients
             ec2_client, elb_client, elbv2_client = self.create_aws_clients(access_key, secret_key, region)
@@ -853,7 +853,7 @@ class UltraCleanupELBManager:
             except Exception as discovery_error:
                 self.log_operation('ERROR',
                                    f"Error during resource discovery in {account_key} ({region}): {discovery_error}")
-                print(f"   [ERROR] Error during resource discovery: {discovery_error}")
+                print(f"   {Symbols.ERROR} Error during resource discovery: {discovery_error}")
                 # Continue with whatever we managed to discover
 
             # Count Kubernetes-managed load balancers
@@ -871,26 +871,26 @@ class UltraCleanupELBManager:
 
             self.cleanup_results['regions_processed'].append(region_summary)
 
-            self.log_operation('INFO', f"[STATS] {account_key} ({region}) ELB resources summary:")
+            self.log_operation('INFO', f"{Symbols.STATS} {account_key} ({region}) ELB resources summary:")
             self.log_operation('INFO', f"   [BALANCE]  Load Balancers: {len(load_balancers)}")
-            self.log_operation('INFO', f"   [TARGET] Kubernetes LBs: {len(kubernetes_lbs)}")
-            self.log_operation('INFO', f"   [TARGET] Target Groups: {len(target_groups)}")
-            self.log_operation('INFO', f"   [PROTECTED]  ELB Security Groups: {len(elb_security_groups)}")
+            self.log_operation('INFO', f"   {Symbols.TARGET} Kubernetes LBs: {len(kubernetes_lbs)}")
+            self.log_operation('INFO', f"   {Symbols.TARGET} Target Groups: {len(target_groups)}")
+            self.log_operation('INFO', f"   {Symbols.PROTECTED}  ELB Security Groups: {len(elb_security_groups)}")
 
             print(
-                f"   [STATS] ELB resources found: {len(load_balancers)} LBs ({len(kubernetes_lbs)} K8s), "
+                f"   {Symbols.STATS} ELB resources found: {len(load_balancers)} LBs ({len(kubernetes_lbs)} K8s), "
                 f"{len(target_groups)} TGs, {len(elb_security_groups)} SGs")
 
             if not load_balancers and not target_groups and not elb_security_groups:
                 self.log_operation('INFO', f"No ELB resources found in {account_key} ({region})")
-                print(f"   [OK] No ELB resources to clean up in {region}")
+                print(f"   {Symbols.OK} No ELB resources to clean up in {region}")
                 return True
 
             # Step 1: Delete Load Balancers sequentially
             if load_balancers:
                 self.log_operation('INFO',
-                                   f"[DELETE]  Deleting {len(load_balancers)} load balancers in {account_key} ({region})")
-                print(f"\n   [DELETE]  Deleting {len(load_balancers)} load balancers...")
+                                   f"{Symbols.DELETE}  Deleting {len(load_balancers)} load balancers in {account_key} ({region})")
+                print(f"\n   {Symbols.DELETE}  Deleting {len(load_balancers)} load balancers...")
 
                 deleted_count = 0
                 failed_count = 0
@@ -913,9 +913,9 @@ class UltraCleanupELBManager:
                     except Exception as e:
                         failed_count += 1
                         self.log_operation('ERROR', f"Error deleting load balancer {lb_name}: {e}")
-                        print(f"   [ERROR] Error deleting load balancer {lb_name}: {e}")
+                        print(f"   {Symbols.ERROR} Error deleting load balancer {lb_name}: {e}")
 
-                print(f"   [OK] Deleted {deleted_count} load balancers, [ERROR] Failed: {failed_count}")
+                print(f"   {Symbols.OK} Deleted {deleted_count} load balancers, {Symbols.ERROR} Failed: {failed_count}")
 
                 # Wait for load balancers to be deleted
                 if deleted_count > 0:
@@ -926,8 +926,8 @@ class UltraCleanupELBManager:
             # Step 2: Delete Target Groups sequentially
             if target_groups:
                 self.log_operation('INFO',
-                                   f"[DELETE]  Deleting {len(target_groups)} target groups in {account_key} ({region})")
-                print(f"\n   [DELETE]  Deleting {len(target_groups)} target groups...")
+                                   f"{Symbols.DELETE}  Deleting {len(target_groups)} target groups in {account_key} ({region})")
+                print(f"\n   {Symbols.DELETE}  Deleting {len(target_groups)} target groups...")
 
                 deleted_count = 0
                 failed_count = 0
@@ -945,15 +945,15 @@ class UltraCleanupELBManager:
                     except Exception as e:
                         failed_count += 1
                         self.log_operation('ERROR', f"Error deleting target group {tg_name}: {e}")
-                        print(f"   [ERROR] Error deleting target group {tg_name}: {e}")
+                        print(f"   {Symbols.ERROR} Error deleting target group {tg_name}: {e}")
 
-                print(f"   [OK] Deleted {deleted_count} target groups, [ERROR] Failed: {failed_count}")
+                print(f"   {Symbols.OK} Deleted {deleted_count} target groups, {Symbols.ERROR} Failed: {failed_count}")
 
             # Step 3: Delete ONLY security groups that were attached to load balancers
             if elb_security_groups:
                 self.log_operation('INFO',
-                                   f"[DELETE]  Deleting {len(elb_security_groups)} ELB security groups in {account_key} ({region})")
-                print(f"\n   [DELETE]  Deleting {len(elb_security_groups)} ELB security groups...")
+                                   f"{Symbols.DELETE}  Deleting {len(elb_security_groups)} ELB security groups in {account_key} ({region})")
+                print(f"\n   {Symbols.DELETE}  Deleting {len(elb_security_groups)} ELB security groups...")
 
                 max_retries = 3
                 retry_delay = 15
@@ -961,8 +961,8 @@ class UltraCleanupELBManager:
                 remaining_sgs = elb_security_groups.copy()
 
                 for retry in range(max_retries):
-                    self.log_operation('INFO', f"🔄 Security group deletion attempt {retry + 1}/{max_retries}")
-                    print(f"   🔄 Security group deletion attempt {retry + 1}/{max_retries}")
+                    self.log_operation('INFO', f"{Symbols.SCAN} Security group deletion attempt {retry + 1}/{max_retries}")
+                    print(f"   {Symbols.SCAN} Security group deletion attempt {retry + 1}/{max_retries}")
 
                     sgs_deleted_this_round = 0
                     still_remaining = []
@@ -976,24 +976,24 @@ class UltraCleanupELBManager:
                             if success:
                                 sgs_deleted_this_round += 1
                                 self.log_operation('INFO',
-                                                   f"[OK] Deleted ELB security group {sg_id} in attempt {retry + 1}")
+                                                   f"{Symbols.OK} Deleted ELB security group {sg_id} in attempt {retry + 1}")
                             else:
                                 still_remaining.append(sg)
                                 self.log_operation('WARNING',
                                                    f"[WAIT] ELB security group {sg_id} still has dependencies, will retry")
                         except Exception as e:
                             self.log_operation('ERROR', f"Error deleting ELB security group {sg_id}: {e}")
-                            print(f"   [ERROR] Error deleting ELB security group {sg_id}: {e}")
+                            print(f"   {Symbols.ERROR} Error deleting ELB security group {sg_id}: {e}")
                             still_remaining.append(sg)
 
                     print(
-                        f"   [OK] Deleted {sgs_deleted_this_round} ELB security groups in attempt {retry + 1}, {len(still_remaining)} remaining")
+                        f"   {Symbols.OK} Deleted {sgs_deleted_this_round} ELB security groups in attempt {retry + 1}, {len(still_remaining)} remaining")
 
                     remaining_sgs = still_remaining
 
                     if not remaining_sgs:
-                        self.log_operation('INFO', f"[OK] All ELB security groups deleted in {account_key} ({region})")
-                        print(f"   [OK] All ELB security groups deleted successfully!")
+                        self.log_operation('INFO', f"{Symbols.OK} All ELB security groups deleted in {account_key} ({region})")
+                        print(f"   {Symbols.OK} All ELB security groups deleted successfully!")
                         break
 
                     if retry < max_retries - 1 and remaining_sgs:
@@ -1003,18 +1003,18 @@ class UltraCleanupELBManager:
 
                 if remaining_sgs:
                     self.log_operation('WARNING',
-                                       f"[WARN]  {len(remaining_sgs)} ELB security groups could not be deleted after {max_retries} retries")
+                                       f"{Symbols.WARN}  {len(remaining_sgs)} ELB security groups could not be deleted after {max_retries} retries")
                     print(
-                        f"   [WARN]  {len(remaining_sgs)} ELB security groups could not be deleted after {max_retries} retries")
+                        f"   {Symbols.WARN}  {len(remaining_sgs)} ELB security groups could not be deleted after {max_retries} retries")
 
-            self.log_operation('INFO', f"[OK] ELB cleanup completed for {account_key} ({region})")
-            print(f"\n   [OK] ELB cleanup completed for {account_key} ({region})")
+            self.log_operation('INFO', f"{Symbols.OK} ELB cleanup completed for {account_key} ({region})")
+            print(f"\n   {Symbols.OK} ELB cleanup completed for {account_key} ({region})")
             return True
 
         except Exception as e:
             account_key = account_info.get('account_key', 'Unknown')
             self.log_operation('ERROR', f"Error cleaning up ELB resources in {account_key} ({region}): {e}")
-            print(f"   [ERROR] Error cleaning up ELB resources in {account_key} ({region}): {e}")
+            print(f"   {Symbols.ERROR} Error cleaning up ELB resources in {account_key} ({region}): {e}")
             self.cleanup_results['errors'].append({
                 'account_info': account_info,
                 'region': region,
@@ -1076,68 +1076,26 @@ class UltraCleanupELBManager:
             with open(report_filename, 'w', encoding='utf-8') as f:
                 json.dump(report_data, f, indent=2, default=str)
 
-            self.log_operation('INFO', f"[OK] Ultra ELB cleanup report saved to: {report_filename}")
+            self.log_operation('INFO', f"{Symbols.OK} Ultra ELB cleanup report saved to: {report_filename}")
             return report_filename
 
         except Exception as e:
-            self.log_operation('ERROR', f"[ERROR] Failed to save ultra ELB cleanup report: {e}")
+            self.log_operation('ERROR', f"{Symbols.ERROR} Failed to save ultra ELB cleanup report: {e}")
             return None
-
-    def select_regions_interactive(self) -> Optional[List[str]]:
-        """Interactive region selection."""
-        self.print_colored(Colors.YELLOW, "\n[REGION] Available AWS Regions:")
-        self.print_colored(Colors.YELLOW, "=" * 80)
-
-        for i, region in enumerate(self.user_regions, 1):
-            self.print_colored(Colors.CYAN, f"   {i}. {region}")
-
-        self.print_colored(Colors.YELLOW, "=" * 80)
-        self.print_colored(Colors.YELLOW, "[TIP] Selection options:")
-        self.print_colored(Colors.WHITE, "   • Single: 1")
-        self.print_colored(Colors.WHITE, "   • Multiple: 1,3,5")
-        self.print_colored(Colors.WHITE, "   • Range: 1-5")
-        self.print_colored(Colors.WHITE, "   • All: all")
-        self.print_colored(Colors.YELLOW, "=" * 80)
-
-        while True:
-            try:
-                choice = input(
-                    f"Select regions (1-{len(self.user_regions)}, comma-separated, range, or 'all') or 'q' to quit: ").strip()
-
-                if choice.lower() == 'q':
-                    return None
-
-                if choice.lower() == "all" or not choice:
-                    self.print_colored(Colors.GREEN, f"[OK] Selected all {len(self.user_regions)} regions")
-                    return self.user_regions
-
-                selected_indices = self.cred_manager._parse_selection(choice, len(self.user_regions))
-                if not selected_indices:
-                    self.print_colored(Colors.RED, "[ERROR] Invalid selection format")
-                    continue
-
-                selected_regions = [self.user_regions[i - 1] for i in selected_indices]
-                self.print_colored(Colors.GREEN,
-                                   f"[OK] Selected {len(selected_regions)} regions: {', '.join(selected_regions)}")
-                return selected_regions
-
-            except Exception as e:
-                self.print_colored(Colors.RED, f"[ERROR] Error processing selection: {str(e)}")
-
 
     def run(self):
         """Main execution method - simplified scope"""
         try:
-            self.log_operation('INFO', "[ALERT] STARTING SIMPLIFIED ELB CLEANUP SESSION [ALERT]")
+            self.log_operation('INFO', f"{Symbols.ALERT} STARTING SIMPLIFIED ELB CLEANUP SESSION {Symbols.ALERT}")
 
-            self.print_colored(Colors.YELLOW, "[ALERT]" * 30)
-            self.print_colored(Colors.BLUE, "[START] SIMPLIFIED ELB CLEANUP - KUBERNETES ENHANCED")
-            self.print_colored(Colors.YELLOW, "[ALERT]" * 30)
-            self.print_colored(Colors.WHITE, f"[DATE] Execution Date/Time: {self.current_time} UTC")
+            self.print_colored(Colors.YELLOW, f"{Symbols.ALERT}" * 30)
+            self.print_colored(Colors.BLUE, f"{Symbols.START} SIMPLIFIED ELB CLEANUP - KUBERNETES ENHANCED")
+            self.print_colored(Colors.YELLOW, f"{Symbols.ALERT}" * 30)
+            self.print_colored(Colors.WHITE, f"{Symbols.DATE} Execution Date/Time: {self.current_time} UTC")
             self.print_colored(Colors.WHITE, f"[USER] Executed by: {self.current_user}")
-            self.print_colored(Colors.WHITE, f"[LIST] Log File: {self.log_filename}")
-            self.print_colored(Colors.GREEN, f"[TARGET] Enhanced Kubernetes ELB Detection: ENABLED")
-            self.print_colored(Colors.CYAN, f"[TARGET] Simplified Scope: Load Balancers + Target Groups + Security Groups ONLY")
+            self.print_colored(Colors.WHITE, f"{Symbols.LIST} Log File: {self.log_filename}")
+            self.print_colored(Colors.GREEN, f"{Symbols.TARGET} Enhanced Kubernetes ELB Detection: ENABLED")
+            self.print_colored(Colors.CYAN, f"{Symbols.TARGET} Simplified Scope: Load Balancers + Target Groups + Security Groups ONLY")
 
             # STEP 1: Select root accounts
             self.print_colored(Colors.YELLOW, "\n[KEY] Select Root AWS Accounts for ELB Cleanup:")
@@ -1149,7 +1107,7 @@ class UltraCleanupELBManager:
             selected_accounts = root_accounts
 
             # STEP 2: Select regions
-            selected_regions = self.select_regions_interactive()
+            selected_regions = self.cred_manager.select_regions_interactive()
             if not selected_regions:
                 self.print_colored(Colors.RED, "[ERROR] No regions selected, exiting...")
                 return
@@ -1157,25 +1115,25 @@ class UltraCleanupELBManager:
             # STEP 3: Calculate total operations and confirm
             total_operations = len(selected_accounts) * len(selected_regions)
 
-            self.print_colored(Colors.YELLOW, f"\n[TARGET] SIMPLIFIED ELB CLEANUP CONFIGURATION")
+            self.print_colored(Colors.YELLOW, f"\n{Symbols.TARGET} SIMPLIFIED ELB CLEANUP CONFIGURATION")
             self.print_colored(Colors.YELLOW, "=" * 80)
-            self.print_colored(Colors.WHITE, f"[KEY] Credential source: ROOT ACCOUNTS")
-            self.print_colored(Colors.WHITE, f"[BANK] Selected accounts: {len(selected_accounts)}")
-            self.print_colored(Colors.WHITE, f"[REGION] Regions per account: {len(selected_regions)}")
-            self.print_colored(Colors.WHITE, f"[LIST] Total operations: {total_operations}")
-            self.print_colored(Colors.GREEN, f"[TARGET] Kubernetes ELB Detection: ENHANCED")
-            self.print_colored(Colors.CYAN, f"[TARGET] Scope: SIMPLIFIED - LBs + TGs + SGs ONLY")
+            self.print_colored(Colors.WHITE, f"{Symbols.KEY} Credential source: ROOT ACCOUNTS")
+            self.print_colored(Colors.WHITE, f"{Symbols.ACCOUNT} Selected accounts: {len(selected_accounts)}")
+            self.print_colored(Colors.WHITE, f"{Symbols.REGION} Regions per account: {len(selected_regions)}")
+            self.print_colored(Colors.WHITE, f"{Symbols.LIST} Total operations: {total_operations}")
+            self.print_colored(Colors.GREEN, f"{Symbols.TARGET} Kubernetes ELB Detection: ENHANCED")
+            self.print_colored(Colors.CYAN, f"{Symbols.TARGET} Scope: SIMPLIFIED - LBs + TGs + SGs ONLY")
             self.print_colored(Colors.YELLOW, "=" * 80)
 
             # Show what will be cleaned up
-            self.print_colored(Colors.RED, f"\n[WARN]  WARNING: This will delete the following ELB resources ONLY:")
+            self.print_colored(Colors.RED, f"\n{Symbols.WARN}  WARNING: This will delete the following ELB resources ONLY:")
             self.print_colored(Colors.WHITE, f"    • Classic Load Balancers (ELB) - INCLUDING Kubernetes-managed")
             self.print_colored(Colors.WHITE, f"    • Application Load Balancers (ALB)")
             self.print_colored(Colors.WHITE, f"    • Network Load Balancers (NLB)")
             self.print_colored(Colors.WHITE, f"    • Target Groups")
             self.print_colored(Colors.WHITE, f"    • Security Groups attached to Load Balancers ONLY")
-            self.print_colored(Colors.GREEN, f"    [OK] VPCs, subnets, and other resources will be LEFT ALONE")
-            self.print_colored(Colors.GREEN, f"    [TARGET] Enhanced detection for Kubernetes-managed load balancers")
+            self.print_colored(Colors.GREEN, f"    {Symbols.OK} VPCs, subnets, and other resources will be LEFT ALONE")
+            self.print_colored(Colors.GREEN, f"    {Symbols.TARGET} Enhanced detection for Kubernetes-managed load balancers")
             self.print_colored(Colors.WHITE,
                                f"    across {len(selected_accounts)} accounts in {len(selected_regions)} regions ({total_operations} operations)")
             self.print_colored(Colors.RED, f"    This action CANNOT be undone!")
@@ -1186,7 +1144,7 @@ class UltraCleanupELBManager:
 
             if confirm1 not in ['y', 'yes']:
                 self.log_operation('INFO', "Simplified ELB cleanup cancelled by user")
-                self.print_colored(Colors.RED, "[ERROR] Cleanup cancelled")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Cleanup cancelled")
                 return
 
             # Second confirmation - final check
@@ -1195,13 +1153,13 @@ class UltraCleanupELBManager:
 
             if confirm2 != 'yes':
                 self.log_operation('INFO', "Simplified ELB cleanup cancelled at final confirmation")
-                self.print_colored(Colors.RED, "[ERROR] Cleanup cancelled")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Cleanup cancelled")
                 return
 
             # STEP 4: Start the cleanup sequentially
-            self.print_colored(Colors.CYAN, f"\n[START] Starting simplified Kubernetes-enhanced ELB cleanup...")
+            self.print_colored(Colors.CYAN, f"\n{Symbols.START} Starting simplified Kubernetes-enhanced ELB cleanup...")
             self.log_operation('INFO',
-                               f"[ALERT] SIMPLIFIED ELB CLEANUP INITIATED - {len(selected_accounts)} accounts, {len(selected_regions)} regions")
+                               f"{Symbols.ALERT} SIMPLIFIED ELB CLEANUP INITIATED - {len(selected_accounts)} accounts, {len(selected_regions)} regions")
 
             start_time = time.time()
 
@@ -1228,7 +1186,7 @@ class UltraCleanupELBManager:
                 except Exception as e:
                     failed_tasks += 1
                     self.log_operation('ERROR', f"Task failed for {account_key} ({region}): {e}")
-                    self.print_colored(Colors.RED, f"[ERROR] Task failed for {account_key} ({region}): {e}")
+                    self.print_colored(Colors.RED, f"{Symbols.ERROR} Task failed for {account_key} ({region}): {e}")
 
             end_time = time.time()
             total_time = int(end_time - start_time)
@@ -1241,17 +1199,17 @@ class UltraCleanupELBManager:
             self.print_colored(Colors.GREEN, f"\n" + "=" * 100)
             self.print_colored(Colors.GREEN, "[OK] SIMPLIFIED ELB CLEANUP COMPLETE")
             self.print_colored(Colors.GREEN, "=" * 100)
-            self.print_colored(Colors.WHITE, f"[TIMER]  Total execution time: {total_time} seconds")
-            self.print_colored(Colors.GREEN, f"[OK] Successful operations: {successful_tasks}")
-            self.print_colored(Colors.RED, f"[ERROR] Failed operations: {failed_tasks}")
+            self.print_colored(Colors.WHITE, f"{Symbols.TIMER}  Total execution time: {total_time} seconds")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Successful operations: {successful_tasks}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed operations: {failed_tasks}")
             self.print_colored(Colors.WHITE,
                                f"[BALANCE]  Load balancers deleted: {len(self.cleanup_results['deleted_load_balancers'])}")
-            self.print_colored(Colors.GREEN, f"[TARGET] Kubernetes LBs deleted: {total_k8s_lbs}")
+            self.print_colored(Colors.GREEN, f"{Symbols.TARGET} Kubernetes LBs deleted: {total_k8s_lbs}")
             self.print_colored(Colors.WHITE,
-                               f"[TARGET] Target groups deleted: {len(self.cleanup_results['deleted_target_groups'])}")
+                               f"{Symbols.TARGET} Target groups deleted: {len(self.cleanup_results['deleted_target_groups'])}")
             self.print_colored(Colors.WHITE,
-                               f"[PROTECTED]  Security groups deleted: {len(self.cleanup_results['deleted_security_groups'])}")
-            self.print_colored(Colors.RED, f"[ERROR] Failed deletions: {len(self.cleanup_results['failed_deletions'])}")
+                               f"{Symbols.PROTECTED}  Security groups deleted: {len(self.cleanup_results['deleted_security_groups'])}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed deletions: {len(self.cleanup_results['failed_deletions'])}")
 
             self.log_operation('INFO', f"SIMPLIFIED ELB CLEANUP COMPLETED")
             self.log_operation('INFO', f"Execution time: {total_time} seconds")
@@ -1265,7 +1223,7 @@ class UltraCleanupELBManager:
                     self.cleanup_results['deleted_target_groups'] or
                     self.cleanup_results['deleted_security_groups']):
 
-                self.print_colored(Colors.YELLOW, f"\n[STATS] Deletion Summary by Account:")
+                self.print_colored(Colors.YELLOW, f"\n{Symbols.STATS} Deletion Summary by Account:")
 
                 # Group by account
                 account_summary = {}
@@ -1304,17 +1262,17 @@ class UltraCleanupELBManager:
 
                 for account, summary in account_summary.items():
                     regions_list = ', '.join(sorted(summary['regions']))
-                    self.print_colored(Colors.PURPLE, f"   [BANK] {account}:")
+                    self.print_colored(Colors.PURPLE, f"   {Symbols.ACCOUNT} {account}:")
                     self.print_colored(Colors.WHITE, f"      [BALANCE]  Load Balancers: {summary['load_balancers']}")
                     if summary['kubernetes_lbs'] > 0:
-                        self.print_colored(Colors.GREEN, f"      [TARGET] Kubernetes LBs: {summary['kubernetes_lbs']}")
-                    self.print_colored(Colors.WHITE, f"      [TARGET] Target Groups: {summary['target_groups']}")
-                    self.print_colored(Colors.WHITE, f"      [PROTECTED]  Security Groups: {summary['security_groups']}")
-                    self.print_colored(Colors.WHITE, f"      [REGION] Regions: {regions_list}")
+                        self.print_colored(Colors.GREEN, f"      {Symbols.TARGET} Kubernetes LBs: {summary['kubernetes_lbs']}")
+                    self.print_colored(Colors.WHITE, f"      {Symbols.TARGET} Target Groups: {summary['target_groups']}")
+                    self.print_colored(Colors.WHITE, f"      {Symbols.PROTECTED}  Security Groups: {summary['security_groups']}")
+                    self.print_colored(Colors.WHITE, f"      {Symbols.REGION} Regions: {regions_list}")
 
             # STEP 7: Show failures if any
             if self.cleanup_results['failed_deletions']:
-                self.print_colored(Colors.RED, f"\n[ERROR] Failed Deletions:")
+                self.print_colored(Colors.RED, f"\n{Symbols.ERROR} Failed Deletions:")
                 for failure in self.cleanup_results['failed_deletions'][:10]:  # Show first 10
                     account_key = failure['account_info'].get('account_key', 'Unknown')
                     self.print_colored(Colors.WHITE,
@@ -1329,17 +1287,16 @@ class UltraCleanupELBManager:
             self.print_colored(Colors.CYAN, f"\n[FILE] Saving simplified ELB cleanup report...")
             report_file = self.save_cleanup_report()
             if report_file:
-                self.print_colored(Colors.GREEN, f"[OK] ELB cleanup report saved to: {report_file}")
+                self.print_colored(Colors.GREEN, f"{Symbols.OK} ELB cleanup report saved to: {report_file}")
 
-            self.print_colored(Colors.GREEN, f"[OK] Session log saved to: {self.log_filename}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Session log saved to: {self.log_filename}")
 
-            self.print_colored(Colors.GREEN, f"\n[OK] Simplified Kubernetes-enhanced ELB cleanup completed successfully!")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.OK} Simplified Kubernetes-enhanced ELB cleanup completed successfully!")
             self.print_colored(Colors.YELLOW, "[ALERT]" * 30)
 
         except Exception as e:
             self.log_operation('ERROR', f"FATAL ERROR in simplified ELB cleanup execution: {str(e)}")
-            self.print_colored(Colors.RED, f"\n[ERROR] FATAL ERROR: {e}")
-            import traceback
+            self.print_colored(Colors.RED, f"\n{Symbols.ERROR} FATAL ERROR: {e}")
             traceback.print_exc()
             raise
 
@@ -1352,7 +1309,7 @@ def main():
         print("\n\n[ERROR] ELB cleanup interrupted by user")
         exit(1)
     except Exception as e:
-        print(f"[ERROR] Unexpected error: {e}")
+        print(f"{Symbols.ERROR} Unexpected error: {e}")
         exit(1)
 
 

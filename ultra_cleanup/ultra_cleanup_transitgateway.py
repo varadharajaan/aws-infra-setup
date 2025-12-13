@@ -22,6 +22,7 @@ import time
 from datetime import datetime
 from botocore.exceptions import ClientError
 from root_iam_credential_manager import AWSCredentialManager
+from text_symbols import Symbols
 
 
 class Colors:
@@ -41,9 +42,9 @@ class UltraCleanupTransitGatewayManager:
     def __init__(self):
         """Initialize the Transit Gateway cleanup manager"""
         self.cred_manager = AWSCredentialManager()
-        self.current_time = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+        self.current_time = datetime.now(datetime.UTC).strftime('%Y-%m-%d %H:%M:%S')
         self.current_user = os.getenv('USERNAME') or os.getenv('USER') or 'unknown'
-        self.execution_timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+        self.execution_timestamp = datetime.now(datetime.UTC).strftime('%Y%m%d_%H%M%S')
         
         # Create directories for logs and reports
         self.base_dir = os.path.join(os.getcwd(), 'aws', 'transitgateway')
@@ -78,7 +79,7 @@ class UltraCleanupTransitGatewayManager:
 
     def log_action(self, message, level="INFO"):
         """Log action to file"""
-        timestamp = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp = datetime.now(datetime.UTC).strftime('%Y-%m-%d %H:%M:%S')
         log_entry = f"{timestamp} | {level:8} | {message}\n"
         with open(self.log_file, 'a') as f:
             f.write(log_entry)
@@ -113,7 +114,7 @@ class UltraCleanupTransitGatewayManager:
     def delete_transit_gateway_vpc_attachment(self, ec2_client, attachment_id, region, account_key):
         """Delete a Transit Gateway VPC attachment"""
         try:
-            self.print_colored(Colors.CYAN, f"[DELETE] Deleting VPC attachment: {attachment_id}")
+            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting VPC attachment: {attachment_id}")
             
             ec2_client.delete_transit_gateway_vpc_attachment(
                 TransitGatewayAttachmentId=attachment_id
@@ -121,7 +122,7 @@ class UltraCleanupTransitGatewayManager:
             
             # Wait for deletion to complete
             if self.wait_for_attachment_deletion(ec2_client, attachment_id):
-                self.print_colored(Colors.GREEN, f"[OK] Deleted VPC attachment: {attachment_id}")
+                self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted VPC attachment: {attachment_id}")
                 self.log_action(f"Deleted VPC attachment: {attachment_id} in {region}")
                 
                 self.cleanup_results['deleted_vpc_attachments'].append({
@@ -131,12 +132,12 @@ class UltraCleanupTransitGatewayManager:
                 })
                 return True
             else:
-                self.print_colored(Colors.YELLOW, f"[WARN] VPC attachment deletion timeout: {attachment_id}")
+                self.print_colored(Colors.YELLOW, f"{Symbols.WARN} VPC attachment deletion timeout: {attachment_id}")
                 return False
             
         except ClientError as e:
             error_msg = f"Failed to delete VPC attachment {attachment_id}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['failed_deletions'].append({
                 'type': 'VPCAttachment',
@@ -150,7 +151,7 @@ class UltraCleanupTransitGatewayManager:
     def delete_transit_gateway_vpn_attachment(self, ec2_client, attachment_id, region, account_key):
         """Delete a Transit Gateway VPN attachment"""
         try:
-            self.print_colored(Colors.CYAN, f"[DELETE] Deleting VPN attachment: {attachment_id}")
+            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting VPN attachment: {attachment_id}")
             
             # Get the VPN connection ID from the attachment
             response = ec2_client.describe_transit_gateway_attachments(
@@ -166,7 +167,7 @@ class UltraCleanupTransitGatewayManager:
                     ec2_client.delete_vpn_connection(VpnConnectionId=vpn_conn_id)
                     
                     if self.wait_for_attachment_deletion(ec2_client, attachment_id):
-                        self.print_colored(Colors.GREEN, f"[OK] Deleted VPN attachment: {attachment_id}")
+                        self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted VPN attachment: {attachment_id}")
                         self.log_action(f"Deleted VPN attachment: {attachment_id} in {region}")
                         
                         self.cleanup_results['deleted_vpn_attachments'].append({
@@ -181,7 +182,7 @@ class UltraCleanupTransitGatewayManager:
             
         except ClientError as e:
             error_msg = f"Failed to delete VPN attachment {attachment_id}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['failed_deletions'].append({
                 'type': 'VPNAttachment',
@@ -195,14 +196,14 @@ class UltraCleanupTransitGatewayManager:
     def delete_transit_gateway_peering_attachment(self, ec2_client, attachment_id, region, account_key):
         """Delete a Transit Gateway peering attachment"""
         try:
-            self.print_colored(Colors.CYAN, f"[DELETE] Deleting peering attachment: {attachment_id}")
+            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting peering attachment: {attachment_id}")
             
             ec2_client.delete_transit_gateway_peering_attachment(
                 TransitGatewayAttachmentId=attachment_id
             )
             
             if self.wait_for_attachment_deletion(ec2_client, attachment_id):
-                self.print_colored(Colors.GREEN, f"[OK] Deleted peering attachment: {attachment_id}")
+                self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted peering attachment: {attachment_id}")
                 self.log_action(f"Deleted peering attachment: {attachment_id} in {region}")
                 
                 self.cleanup_results['deleted_peering_attachments'].append({
@@ -216,7 +217,7 @@ class UltraCleanupTransitGatewayManager:
             
         except ClientError as e:
             error_msg = f"Failed to delete peering attachment {attachment_id}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['failed_deletions'].append({
                 'type': 'PeeringAttachment',
@@ -230,14 +231,14 @@ class UltraCleanupTransitGatewayManager:
     def delete_transit_gateway_connect_attachment(self, ec2_client, attachment_id, region, account_key):
         """Delete a Transit Gateway Connect attachment"""
         try:
-            self.print_colored(Colors.CYAN, f"[DELETE] Deleting Connect attachment: {attachment_id}")
+            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting Connect attachment: {attachment_id}")
             
             ec2_client.delete_transit_gateway_connect(
                 TransitGatewayAttachmentId=attachment_id
             )
             
             if self.wait_for_attachment_deletion(ec2_client, attachment_id):
-                self.print_colored(Colors.GREEN, f"[OK] Deleted Connect attachment: {attachment_id}")
+                self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted Connect attachment: {attachment_id}")
                 self.log_action(f"Deleted Connect attachment: {attachment_id} in {region}")
                 
                 self.cleanup_results['deleted_connect_attachments'].append({
@@ -251,7 +252,7 @@ class UltraCleanupTransitGatewayManager:
             
         except ClientError as e:
             error_msg = f"Failed to delete Connect attachment {attachment_id}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['failed_deletions'].append({
                 'type': 'ConnectAttachment',
@@ -265,13 +266,13 @@ class UltraCleanupTransitGatewayManager:
     def delete_transit_gateway_route_table(self, ec2_client, route_table_id, region, account_key):
         """Delete a Transit Gateway route table"""
         try:
-            self.print_colored(Colors.CYAN, f"[DELETE] Deleting route table: {route_table_id}")
+            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting route table: {route_table_id}")
             
             ec2_client.delete_transit_gateway_route_table(
                 TransitGatewayRouteTableId=route_table_id
             )
             
-            self.print_colored(Colors.GREEN, f"[OK] Deleted route table: {route_table_id}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted route table: {route_table_id}")
             self.log_action(f"Deleted route table: {route_table_id} in {region}")
             
             self.cleanup_results['deleted_route_tables'].append({
@@ -283,7 +284,7 @@ class UltraCleanupTransitGatewayManager:
             
         except ClientError as e:
             error_msg = f"Failed to delete route table {route_table_id}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['failed_deletions'].append({
                 'type': 'RouteTable',
@@ -297,11 +298,11 @@ class UltraCleanupTransitGatewayManager:
     def delete_transit_gateway(self, ec2_client, tgw_id, region, account_key):
         """Delete a Transit Gateway"""
         try:
-            self.print_colored(Colors.CYAN, f"[DELETE] Deleting Transit Gateway: {tgw_id}")
+            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting Transit Gateway: {tgw_id}")
             
             ec2_client.delete_transit_gateway(TransitGatewayId=tgw_id)
             
-            self.print_colored(Colors.GREEN, f"[OK] Deleted Transit Gateway: {tgw_id}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted Transit Gateway: {tgw_id}")
             self.log_action(f"Deleted Transit Gateway: {tgw_id} in {region}")
             
             self.cleanup_results['deleted_transit_gateways'].append({
@@ -313,7 +314,7 @@ class UltraCleanupTransitGatewayManager:
             
         except ClientError as e:
             error_msg = f"Failed to delete Transit Gateway {tgw_id}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['failed_deletions'].append({
                 'type': 'TransitGateway',
@@ -327,7 +328,7 @@ class UltraCleanupTransitGatewayManager:
     def cleanup_region_transitgateway(self, account_name, credentials, region):
         """Cleanup all Transit Gateway resources in a specific region"""
         try:
-            self.print_colored(Colors.YELLOW, f"\n[SCAN] Scanning region: {region}")
+            self.print_colored(Colors.YELLOW, f"\n{Symbols.SCAN} Scanning region: {region}")
             
             ec2_client = boto3.client(
                 'ec2',
@@ -423,7 +424,7 @@ class UltraCleanupTransitGatewayManager:
             
         except Exception as e:
             error_msg = f"Error processing region {region}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['errors'].append(error_msg)
 
@@ -431,7 +432,7 @@ class UltraCleanupTransitGatewayManager:
         """Cleanup all Transit Gateway resources in an account across all regions"""
         try:
             self.print_colored(Colors.BLUE, f"\n{'='*100}")
-            self.print_colored(Colors.BLUE, f"[START] Processing Account: {account_name}")
+            self.print_colored(Colors.BLUE, f"{Symbols.START} Processing Account: {account_name}")
             self.print_colored(Colors.BLUE, f"{'='*100}")
             
             self.cleanup_results['accounts_processed'].append(account_name)
@@ -447,17 +448,17 @@ class UltraCleanupTransitGatewayManager:
             regions_response = ec2_client.describe_regions()
             regions = [region['RegionName'] for region in regions_response['Regions']]
             
-            self.print_colored(Colors.CYAN, f"[SCAN] Processing {len(regions)} regions")
+            self.print_colored(Colors.CYAN, f"{Symbols.SCAN} Processing {len(regions)} regions")
             
             # Process each region
             for region in regions:
                 self.cleanup_region_transitgateway(account_name, credentials, region)
             
-            self.print_colored(Colors.GREEN, f"\n[OK] Account {account_name} cleanup completed!")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.OK} Account {account_name} cleanup completed!")
             
         except Exception as e:
             error_msg = f"Error processing account {account_name}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['errors'].append(error_msg)
 
@@ -488,24 +489,24 @@ class UltraCleanupTransitGatewayManager:
             with open(report_path, 'w') as f:
                 json.dump(summary, f, indent=2)
 
-            self.print_colored(Colors.GREEN, f"\n[STATS] Summary report saved: {report_path}")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.STATS} Summary report saved: {report_path}")
 
             # Print summary to console
             self.print_colored(Colors.BLUE, f"\n{'='*100}")
             self.print_colored(Colors.BLUE, "[STATS] CLEANUP SUMMARY")
             self.print_colored(Colors.BLUE, f"{'='*100}")
-            self.print_colored(Colors.GREEN, f"[OK] VPC Attachments Deleted: {summary['summary']['total_vpc_attachments_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] VPN Attachments Deleted: {summary['summary']['total_vpn_attachments_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Peering Attachments Deleted: {summary['summary']['total_peering_attachments_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Connect Attachments Deleted: {summary['summary']['total_connect_attachments_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Route Tables Deleted: {summary['summary']['total_route_tables_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Transit Gateways Deleted: {summary['summary']['total_transit_gateways_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} VPC Attachments Deleted: {summary['summary']['total_vpc_attachments_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} VPN Attachments Deleted: {summary['summary']['total_vpn_attachments_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Peering Attachments Deleted: {summary['summary']['total_peering_attachments_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Connect Attachments Deleted: {summary['summary']['total_connect_attachments_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Route Tables Deleted: {summary['summary']['total_route_tables_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Transit Gateways Deleted: {summary['summary']['total_transit_gateways_deleted']}")
 
             if summary['summary']['total_failed_deletions'] > 0:
-                self.print_colored(Colors.YELLOW, f"[WARN] Failed Deletions: {summary['summary']['total_failed_deletions']}")
+                self.print_colored(Colors.YELLOW, f"{Symbols.WARN} Failed Deletions: {summary['summary']['total_failed_deletions']}")
 
             if summary['summary']['total_errors'] > 0:
-                self.print_colored(Colors.RED, f"[ERROR] Errors: {summary['summary']['total_errors']}")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Errors: {summary['summary']['total_errors']}")
 
             # Display Account Summary
             self.print_colored(Colors.BLUE, f"\n{'='*100}")
@@ -535,18 +536,18 @@ class UltraCleanupTransitGatewayManager:
                     account_summary[account]['regions'].add(item.get('region', 'unknown'))
 
             for account, stats in account_summary.items():
-                self.print_colored(Colors.CYAN, f"\n[LIST] Account: {account}")
-                self.print_colored(Colors.GREEN, f"  [OK] Transit Gateways: {stats['transit_gateways']}")
-                self.print_colored(Colors.GREEN, f"  [OK] VPC Attachments: {stats['vpc_attachments']}")
-                self.print_colored(Colors.GREEN, f"  [OK] VPN Attachments: {stats['vpn_attachments']}")
-                self.print_colored(Colors.GREEN, f"  [OK] Peering Attachments: {stats['peering_attachments']}")
-                self.print_colored(Colors.GREEN, f"  [OK] Connect Attachments: {stats['connect_attachments']}")
-                self.print_colored(Colors.GREEN, f"  [OK] Route Tables: {stats['route_tables']}")
+                self.print_colored(Colors.CYAN, f"\n{Symbols.LIST} Account: {account}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Transit Gateways: {stats['transit_gateways']}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} VPC Attachments: {stats['vpc_attachments']}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} VPN Attachments: {stats['vpn_attachments']}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Peering Attachments: {stats['peering_attachments']}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Connect Attachments: {stats['connect_attachments']}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Route Tables: {stats['route_tables']}")
                 regions_str = ', '.join(sorted(stats['regions'])) if stats['regions'] else 'N/A'
-                self.print_colored(Colors.YELLOW, f"  [SCAN] Regions: {regions_str}")
+                self.print_colored(Colors.YELLOW, f"  {Symbols.SCAN} Regions: {regions_str}")
 
         except Exception as e:
-            self.print_colored(Colors.RED, f"[ERROR] Failed to generate summary report: {e}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to generate summary report: {e}")
 
     def interactive_cleanup(self):
         """Interactive mode for Transit Gateway cleanup"""
@@ -557,15 +558,15 @@ class UltraCleanupTransitGatewayManager:
 
             config = self.cred_manager.load_root_accounts_config()
             if not config or 'accounts' not in config:
-                self.print_colored(Colors.RED, "[ERROR] No accounts configuration found!")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} No accounts configuration found!")
                 return
 
             accounts = config['accounts']
             account_list = list(accounts.keys())
 
-            self.print_colored(Colors.CYAN, "[KEY] Select Root AWS Accounts for Transit Gateway Cleanup:")
+            self.print_colored(Colors.CYAN, f"{Symbols.KEY} Select Root AWS Accounts for Transit Gateway Cleanup:")
             print(f"{Colors.CYAN}[BOOK] Loading root accounts config...{Colors.END}")
-            self.print_colored(Colors.GREEN, f"[OK] Loaded {len(accounts)} root accounts")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Loaded {len(accounts)} root accounts")
             
             self.print_colored(Colors.YELLOW, "\n[KEY] Available Root AWS Accounts:")
             print("=" * 100)
@@ -600,14 +601,14 @@ class UltraCleanupTransitGatewayManager:
                     indices = [int(x.strip()) for x in selection.split(',')]
                     selected_accounts = [account_list[i-1] for i in indices if 0 < i <= len(account_list)]
                 except (ValueError, IndexError):
-                    self.print_colored(Colors.RED, "[ERROR] Invalid selection!")
+                    self.print_colored(Colors.RED, f"{Symbols.ERROR} Invalid selection!")
                     return
 
             if not selected_accounts:
-                self.print_colored(Colors.RED, "[ERROR] No accounts selected!")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} No accounts selected!")
                 return
 
-            self.print_colored(Colors.RED, "\n[WARN] WARNING: This will DELETE all Transit Gateway resources!")
+            self.print_colored(Colors.RED, f"\n{Symbols.WARN} WARNING: This will DELETE all Transit Gateway resources!")
             confirm = input(f"\nType 'yes' to confirm: ").strip().lower()
             if confirm != 'yes':
                 self.print_colored(Colors.YELLOW, "[EXIT] Cleanup cancelled!")
@@ -625,13 +626,13 @@ class UltraCleanupTransitGatewayManager:
 
             self.generate_summary_report()
 
-            self.print_colored(Colors.GREEN, f"\n[OK] Transit Gateway cleanup completed!")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.OK} Transit Gateway cleanup completed!")
             self.print_colored(Colors.CYAN, f"[FILE] Log file: {self.log_file}")
 
         except KeyboardInterrupt:
             self.print_colored(Colors.YELLOW, "\n[WARN] Cleanup interrupted by user!")
         except Exception as e:
-            self.print_colored(Colors.RED, f"\n[ERROR] Error during cleanup: {e}")
+            self.print_colored(Colors.RED, f"\n{Symbols.ERROR} Error during cleanup: {e}")
 
 
 def main():
@@ -642,7 +643,7 @@ def main():
     except KeyboardInterrupt:
         print("\n\n[WARN] Operation cancelled by user!")
     except Exception as e:
-        print(f"\n[ERROR] Fatal error: {e}")
+        print(f"\n{Symbols.ERROR} Fatal error: {e}")
 
 
 if __name__ == "__main__":

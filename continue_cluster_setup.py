@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 EKS Cluster Continuation Script with Error File Selection
 Allows continuation of EKS cluster setup from failed cluster creation logs
@@ -17,6 +17,8 @@ from collections import defaultdict
 from eks_cluster_manager import EKSClusterManager
 from complete_autoscaler_deployment import CompleteAutoscalerDeployer
 import textwrap
+from text_symbols import Symbols
+
 
 class Colors:
     GREEN = '\033[92m'
@@ -118,7 +120,7 @@ class EKSClusterContinuationFromErrors:
             file_paths = glob.glob(error_pattern)
 
             if not file_paths:
-                self.print_colored('YELLOW', f"[WARN]  No error files found matching pattern: {error_pattern}")
+                self.print_colored('YELLOW', f"{Symbols.WARN}  No error files found matching pattern: {error_pattern}")
                 return []
 
             self.logger.info(f"Found {len(file_paths)} error files")
@@ -200,7 +202,7 @@ class EKSClusterContinuationFromErrors:
 
         for date_key in sorted(clusters_by_date.keys(), reverse=True):
             clusters = clusters_by_date[date_key]
-            print(f"\n[DATE] {date_key} ({len(clusters)} failed clusters)")
+            print(f"\n{Symbols.DATE} {date_key} ({len(clusters)} failed clusters)")
             print("-" * 60)
 
             for i, cluster_info in enumerate(clusters, 1):
@@ -226,14 +228,14 @@ class EKSClusterContinuationFromErrors:
     def select_date_and_clusters(self, clusters_by_date: Dict[str, List[Dict]]) -> List[Dict]:
         """Allow user to select date and clusters to continue"""
         if not clusters_by_date:
-            self.print_colored('RED', "[ERROR] No failed clusters found in error files")
+            self.print_colored('RED', f"{Symbols.ERROR} No failed clusters found in error files")
             return []
 
         # Step 1: Select date
         dates = sorted(clusters_by_date.keys(), reverse=True)
 
         print("\n" + "=" * 60)
-        print("[DATE] SELECT DATE")
+        print(f"{Symbols.DATE} SELECT DATE")
         print("=" * 60)
 
         for i, date_key in enumerate(dates, 1):
@@ -251,15 +253,15 @@ class EKSClusterContinuationFromErrors:
                     selected_clusters_pool = clusters_by_date[selected_date]
                     break
                 else:
-                    self.print_colored('RED', f"[ERROR] Please enter a number between 1 and {len(dates)}")
+                    self.print_colored('RED', f"{Symbols.ERROR} Please enter a number between 1 and {len(dates)}")
             except ValueError:
-                self.print_colored('RED', "[ERROR] Please enter a valid number")
+                self.print_colored('RED', f"{Symbols.ERROR} Please enter a valid number")
 
-        self.print_colored('GREEN', f"[OK] Selected date: {selected_date} ({len(selected_clusters_pool)} clusters)")
+        self.print_colored('GREEN', f"{Symbols.OK} Selected date: {selected_date} ({len(selected_clusters_pool)} clusters)")
 
         # Step 2: Select clusters from the chosen date
         print(f"\n" + "=" * 60)
-        print(f"[START] SELECT CLUSTERS FROM {selected_date}")
+        print(f"{Symbols.START} SELECT CLUSTERS FROM {selected_date}")
         print("=" * 60)
 
         for i, cluster_info in enumerate(selected_clusters_pool, 1):
@@ -291,7 +293,7 @@ class EKSClusterContinuationFromErrors:
             selection = input("Select clusters: ").strip().lower()
 
             if not selection:
-                self.print_colored('RED', "[ERROR] Please enter a selection")
+                self.print_colored('RED', f"{Symbols.ERROR} Please enter a selection")
                 continue
 
             try:
@@ -300,7 +302,7 @@ class EKSClusterContinuationFromErrors:
                     selected_clusters = [selected_clusters_pool[i - 1] for i in selected_indices]
 
                     # Display selection summary
-                    self.print_colored('GREEN', f"\n[OK] Selected {len(selected_clusters)} clusters:")
+                    self.print_colored('GREEN', f"\n{Symbols.OK} Selected {len(selected_clusters)} clusters:")
                     for cluster_info in selected_clusters:
                         print(f"   - {cluster_info['cluster_name']}")
 
@@ -309,10 +311,10 @@ class EKSClusterContinuationFromErrors:
                     if confirm != 'n':
                         return selected_clusters
                 else:
-                    self.print_colored('RED', "[ERROR] Invalid selection")
+                    self.print_colored('RED', f"{Symbols.ERROR} Invalid selection")
 
             except Exception as e:
-                self.print_colored('RED', f"[ERROR] Error parsing selection: {str(e)}")
+                self.print_colored('RED', f"{Symbols.ERROR} Error parsing selection: {str(e)}")
 
     def parse_selection(self, selection: str, max_count: int) -> List[int]:
         """Parse user selection string into list of indices"""
@@ -385,10 +387,10 @@ class EKSClusterContinuationFromErrors:
         # Try to determine account type from cluster name
         if 'root-account' in cluster_name.lower() or 'root_account' in cluster_name.lower():
             account_type = 'root'
-            self.print_colored('CYAN', "[LIST] Detected: Root Account (from cluster name)")
+            self.print_colored('CYAN', f"{Symbols.LIST} Detected: Root Account (from cluster name)")
         else:
             account_type = 'iam'
-            self.print_colored('CYAN', "[LIST] Detected: IAM User (from cluster name)")
+            self.print_colored('CYAN', f"{Symbols.LIST} Detected: IAM User (from cluster name)")
 
         # Ask user to confirm or override
         print(f"\nAccount type detected: {account_type.upper()}")
@@ -419,7 +421,7 @@ class EKSClusterContinuationFromErrors:
 
             total_users = sum(acc.get('users_per_account', 0) for acc in accounts.values())
 
-            self.print_colored(Colors.CYAN, f"[STATS] Overview:")
+            self.print_colored(Colors.CYAN, f"{Symbols.STATS} Overview:")
             self.print_colored(Colors.WHITE, f"   • Total Accounts: {len(accounts)}", 1)
             self.print_colored(Colors.WHITE, f"   • Total Users: {total_users}", 1)
 
@@ -429,7 +431,7 @@ class EKSClusterContinuationFromErrors:
                 self.print_colored(Colors.WHITE, f"   • Default Password: {default_password}", 1)
                 self.print_colored(Colors.WHITE, f"   • Allowed Instances: {len(allowed_instances)} types", 1)
 
-            self.print_colored(Colors.CYAN, f"\n[LIST] Accounts:")
+            self.print_colored(Colors.CYAN, f"\n{Symbols.LIST} Accounts:")
             for account_name, account_data in accounts.items():
                 account_id = account_data.get('account_id', 'Unknown')
                 email = account_data.get('email', 'Unknown')
@@ -441,7 +443,7 @@ class EKSClusterContinuationFromErrors:
             self.print_colored(Colors.BOLD, "=" * 80)
 
         except Exception as e:
-            self.print_colored(Colors.RED, f"[ERROR] Failed to show account summary: {str(e)}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to show account summary: {str(e)}")
 
     def get_iam_credentials(self, username: str = None, account_id: str = None, cluster_name: str = None) -> Tuple[
         str, str, str]:
@@ -470,11 +472,11 @@ class EKSClusterContinuationFromErrors:
                 username = self._extract_username_from_cluster_name(cluster_name)
                 if not username:
                     raise ValueError(f"Could not extract username from cluster name: {cluster_name}")
-                self.print_colored(Colors.GREEN, f"[TARGET] Extracted username from cluster: {username}")
+                self.print_colored(Colors.GREEN, f"{Symbols.TARGET} Extracted username from cluster: {username}")
 
             # If no username provided, show available users and prompt
             if not username:
-                print(f"\n[SCAN] No username provided. Let's find your credentials...")
+                print(f"\n{Symbols.SCAN} No username provided. Let's find your credentials...")
                 self._show_available_users()
                 username = input("\n[LOG] Enter your username: ").strip()
 
@@ -483,7 +485,7 @@ class EKSClusterContinuationFromErrors:
 
             # Validate account_id is not a region
             if account_id and any(region_part in account_id for region_part in ['us-', 'eu-', 'ap-', 'sa-', 'ca-']):
-                self.print_colored(Colors.YELLOW, f"[WARN] Account ID looks like a region ({account_id}), ignoring filter")
+                self.print_colored(Colors.YELLOW, f"{Symbols.WARN} Account ID looks like a region ({account_id}), ignoring filter")
                 account_id = None
 
             # Find credential files
@@ -525,7 +527,7 @@ class EKSClusterContinuationFromErrors:
             return self._search_credentials_in_file(selected_file, username, account_id, cluster_name)
 
         except Exception as e:
-            self.print_colored(Colors.RED, f"[ERROR] Error loading IAM credentials: {str(e)}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Error loading IAM credentials: {str(e)}")
             raise ValueError(f"Error accessing credentials: {str(e)}")
 
     def _extract_timestamp_from_filename(self, file_path: str) -> str:
@@ -550,11 +552,11 @@ class EKSClusterContinuationFromErrors:
                 file_path, timestamp, timestamp_str = parsed_files[0]
                 formatted_time = timestamp.strftime("%Y-%m-%d %H:%M:%S")
                 self.print_colored(Colors.GREEN,
-                                   f"[OK] Using credential file: {os.path.basename(file_path)} ({formatted_time})")
+                                   f"{Symbols.OK} Using credential file: {os.path.basename(file_path)} ({formatted_time})")
                 return file_path
 
             # Multiple files - show selection
-            self.print_colored(Colors.CYAN, f"\n[FOLDER] Found {len(parsed_files)} IAM credential files:")
+            self.print_colored(Colors.CYAN, f"\n{Symbols.FOLDER} Found {len(parsed_files)} IAM credential files:")
             self.print_colored(Colors.CYAN, "=" * 80)
 
             for i, (file_path, timestamp, timestamp_str) in enumerate(parsed_files, 1):
@@ -572,7 +574,7 @@ class EKSClusterContinuationFromErrors:
             # Get user selection
             while True:
                 try:
-                    choice = input(f"[FOLDER] Select credential file (1-{len(parsed_files)}, Enter for latest): ").strip()
+                    choice = input(f"{Symbols.FOLDER} Select credential file (1-{len(parsed_files)}, Enter for latest): ").strip()
 
                     # Default to latest (first in list)
                     if not choice:
@@ -585,10 +587,10 @@ class EKSClusterContinuationFromErrors:
                         selected_timestamp = parsed_files[choice_num - 1][1].strftime("%Y-%m-%d %H:%M:%S")
 
                         self.print_colored(Colors.GREEN,
-                                           f"[OK] Selected: {os.path.basename(selected_file)} ({selected_timestamp})")
+                                           f"{Symbols.OK} Selected: {os.path.basename(selected_file)} ({selected_timestamp})")
                         return selected_file
                     else:
-                        self.print_colored(Colors.RED, f"[ERROR] Please enter a number between 1 and {len(parsed_files)}")
+                        self.print_colored(Colors.RED, f"{Symbols.ERROR} Please enter a number between 1 and {len(parsed_files)}")
 
                 except ValueError:
                     self.print_colored(Colors.RED, "[ERROR] Please enter a valid number or press Enter for default")
@@ -598,7 +600,7 @@ class EKSClusterContinuationFromErrors:
                     return parsed_files[0][0]
 
         except Exception as e:
-            self.print_colored(Colors.RED, f"[ERROR] File selection failed: {str(e)}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} File selection failed: {str(e)}")
             # Fallback to latest file
             return parsed_files[0][0]
 
@@ -608,7 +610,7 @@ class EKSClusterContinuationFromErrors:
         try:
             import os
 
-            self.print_colored(Colors.BLUE, f"[FOLDER] Checking file: {os.path.basename(file_path)}")
+            self.print_colored(Colors.BLUE, f"{Symbols.FOLDER} Checking file: {os.path.basename(file_path)}")
 
             with open(file_path, 'r', encoding='utf-8') as f:
                 credential_data = json.load(f)
@@ -642,7 +644,7 @@ class EKSClusterContinuationFromErrors:
 
                         # Success! Print detailed info
                         self.print_colored(Colors.GREEN, "[OK] IAM CREDENTIALS FOUND!")
-                        self.print_colored(Colors.WHITE, f"[LIST] User Details:")
+                        self.print_colored(Colors.WHITE, f"{Symbols.LIST} User Details:")
                         self.print_colored(Colors.WHITE, f"   • Username: {user_username}", 1)
                         self.print_colored(Colors.WHITE, f"   • Account: {account_name} ({current_account_id})", 1)
                         self.print_colored(Colors.WHITE, f"   • Region: {region}", 1)
@@ -669,10 +671,10 @@ class EKSClusterContinuationFromErrors:
             raise ValueError(error_msg)
 
         except json.JSONDecodeError as e:
-            self.print_colored(Colors.RED, f"[ERROR] Error reading {file_path}: Invalid JSON - {str(e)}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Error reading {file_path}: Invalid JSON - {str(e)}")
             raise ValueError(f"Invalid JSON in credential file: {str(e)}")
         except Exception as e:
-            self.print_colored(Colors.RED, f"[ERROR] Error processing {file_path}: {str(e)}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Error processing {file_path}: {str(e)}")
             raise
 
     def _show_available_users(self):
@@ -715,7 +717,7 @@ class EKSClusterContinuationFromErrors:
             latest_file = parsed_files[0][0]
             latest_timestamp = parsed_files[0][1].strftime("%Y-%m-%d %H:%M:%S")
 
-            self.print_colored(Colors.BLUE, f"[FOLDER] File: {os.path.basename(latest_file)} ({latest_timestamp})")
+            self.print_colored(Colors.BLUE, f"{Symbols.FOLDER} File: {os.path.basename(latest_file)} ({latest_timestamp})")
 
             user_count = 0
             try:
@@ -749,7 +751,7 @@ class EKSClusterContinuationFromErrors:
 
             if len(parsed_files) > 1:
                 self.print_colored(Colors.YELLOW,
-                                   f"[TIP] Note: {len(parsed_files)} credential files available - latest shown above")
+                                   f"{Symbols.TIP} Note: {len(parsed_files)} credential files available - latest shown above")
 
         except Exception as e:
             self.print_colored(Colors.RED, f"Error showing available users: {str(e)}")
@@ -805,10 +807,10 @@ class EKSClusterContinuationFromErrors:
                     self.print_colored(Colors.WHITE, f"{formatted_time} - {filename} ({file_size} bytes)")
 
             self.print_colored(Colors.BOLD, "=" * 80)
-            self.print_colored(Colors.CYAN, f"[STATS] Total files: {len(parsed_files)}")
+            self.print_colored(Colors.CYAN, f"{Symbols.STATS} Total files: {len(parsed_files)}")
 
         except Exception as e:
-            self.print_colored(Colors.RED, f"[ERROR] Error showing credential files: {str(e)}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Error showing credential files: {str(e)}")
 
     def get_iam_credentials_from_cluster(self, cluster_name: str, region: str = None) -> Tuple[str, str, str]:
         """
@@ -831,19 +833,19 @@ class EKSClusterContinuationFromErrors:
             if not username:
                 raise ValueError(f"Could not extract username from cluster name: {cluster_name}")
 
-            self.print_colored(Colors.GREEN, f"[TARGET] Extracted username from cluster: {username}")
+            self.print_colored(Colors.GREEN, f"{Symbols.TARGET} Extracted username from cluster: {username}")
 
             # If region not provided, try to extract from cluster name
             if not region:
                 region = self._extract_region_from_cluster_name(cluster_name)
                 if region:
-                    self.print_colored(Colors.GREEN, f"[REGION] Extracted region from cluster: {region}")
+                    self.print_colored(Colors.GREEN, f"{Symbols.REGION} Extracted region from cluster: {region}")
 
             # Get credentials using the extracted username (NO account_id filter)
             return self.get_iam_credentials(username=username, account_id=None, cluster_name=cluster_name)
 
         except Exception as e:
-            self.print_colored(Colors.RED, f"[ERROR] Error extracting credentials from cluster '{cluster_name}': {str(e)}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Error extracting credentials from cluster '{cluster_name}': {str(e)}")
             raise ValueError(f"Error extracting credentials from cluster '{cluster_name}': {str(e)}")
 
     # Alternative method that returns only 2 values for backward compatibility
@@ -917,7 +919,7 @@ class EKSClusterContinuationFromErrors:
             if not accounts:
                 raise ValueError("No accounts found in AWS root accounts configuration")
 
-            self.print_colored(Colors.CYAN, f"[SCAN] Found {len(accounts)} root accounts in configuration")
+            self.print_colored(Colors.CYAN, f"{Symbols.SCAN} Found {len(accounts)} root accounts in configuration")
 
             # Strategy 1: Filter by specific account ID if provided
             if account_id:
@@ -929,7 +931,7 @@ class EKSClusterContinuationFromErrors:
                 if not matching_accounts:
                     raise ValueError(f"No account found with ID: {account_id}")
 
-                self.print_colored(Colors.GREEN, f"[OK] Found account by ID: {account_id}")
+                self.print_colored(Colors.GREEN, f"{Symbols.OK} Found account by ID: {account_id}")
 
             # Strategy 2: Try to extract account name from cluster name
             elif cluster_name:
@@ -939,11 +941,11 @@ class EKSClusterContinuationFromErrors:
                 if account_name_from_cluster and account_name_from_cluster in accounts:
                     matching_accounts.append((account_name_from_cluster, accounts[account_name_from_cluster]))
                     self.print_colored(Colors.GREEN,
-                                       f"[TARGET] Detected account from cluster name: {account_name_from_cluster}")
+                                       f"{Symbols.TARGET} Detected account from cluster name: {account_name_from_cluster}")
                 else:
                     # Include all accounts if no match
                     matching_accounts = list(accounts.items())
-                    self.print_colored(Colors.YELLOW, f"[WARN] Could not detect account from cluster name: {cluster_name}")
+                    self.print_colored(Colors.YELLOW, f"{Symbols.WARN} Could not detect account from cluster name: {cluster_name}")
 
             # Strategy 3: Show all accounts
             else:
@@ -954,7 +956,7 @@ class EKSClusterContinuationFromErrors:
             if len(matching_accounts) == 1:
                 account_name, account_data = matching_accounts[0]
                 account_id = account_data.get('account_id', 'unknown')
-                self.print_colored(Colors.GREEN, f"[OK] Auto-selected account: {account_name} (ID: {account_id})")
+                self.print_colored(Colors.GREEN, f"{Symbols.OK} Auto-selected account: {account_name} (ID: {account_id})")
 
             # Let user choose from multiple accounts
             else:
@@ -976,7 +978,7 @@ class EKSClusterContinuationFromErrors:
 
             # Success! Print detailed info
             self.print_colored(Colors.GREEN, "[OK] ROOT CREDENTIALS LOADED!")
-            self.print_colored(Colors.WHITE, f"[LIST] Account Details:")
+            self.print_colored(Colors.WHITE, f"{Symbols.LIST} Account Details:")
             self.print_colored(Colors.WHITE, f"   • Account Name: {account_name}", 1)
             self.print_colored(Colors.WHITE, f"   • Account ID: {account_id}", 1)
             self.print_colored(Colors.WHITE, f"   • Email: {account_email}", 1)
@@ -990,7 +992,7 @@ class EKSClusterContinuationFromErrors:
             return access_key, secret_key, account_id
 
         except Exception as e:
-            self.print_colored(Colors.RED, f"[ERROR] Error loading root credentials: {str(e)}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Error loading root credentials: {str(e)}")
             raise ValueError(f"Error accessing root credentials: {str(e)}")
 
     def _load_root_accounts_config(self) -> dict:
@@ -1022,7 +1024,7 @@ class EKSClusterContinuationFromErrors:
             # Try to load the first (newest) file
             for file_path in credential_files:
                 try:
-                    self.print_colored(Colors.BLUE, f"[FOLDER] Loading root accounts from: {file_path}")
+                    self.print_colored(Colors.BLUE, f"{Symbols.FOLDER} Loading root accounts from: {file_path}")
 
                     with open(file_path, 'r', encoding='utf-8') as f:
                         config = json.load(f)
@@ -1031,20 +1033,20 @@ class EKSClusterContinuationFromErrors:
                     if not config.get('accounts'):
                         continue
 
-                    self.print_colored(Colors.GREEN, f"[OK] Successfully loaded root accounts configuration")
+                    self.print_colored(Colors.GREEN, f"{Symbols.OK} Successfully loaded root accounts configuration")
                     return config
 
                 except json.JSONDecodeError as e:
-                    self.print_colored(Colors.RED, f"[ERROR] Invalid JSON in {file_path}: {str(e)}")
+                    self.print_colored(Colors.RED, f"{Symbols.ERROR} Invalid JSON in {file_path}: {str(e)}")
                     continue
                 except Exception as e:
-                    self.print_colored(Colors.RED, f"[ERROR] Error reading {file_path}: {str(e)}")
+                    self.print_colored(Colors.RED, f"{Symbols.ERROR} Error reading {file_path}: {str(e)}")
                     continue
 
             raise ValueError("No valid root account configuration files found")
 
         except Exception as e:
-            self.print_colored(Colors.RED, f"[ERROR] Failed to load root accounts config: {str(e)}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to load root accounts config: {str(e)}")
             raise
 
     def _extract_username_from_cluster_name(self, cluster_name: str) -> str:
@@ -1058,7 +1060,7 @@ class EKSClusterContinuationFromErrors:
             if not cluster_name:
                 return None
 
-            self.print_colored(Colors.BLUE, f"[SCAN] Parsing cluster name: {cluster_name}")
+            self.print_colored(Colors.BLUE, f"{Symbols.SCAN} Parsing cluster name: {cluster_name}")
 
             # Root user pattern
             if cluster_name.startswith("eks-cluster-root-account"):
@@ -1066,10 +1068,10 @@ class EKSClusterContinuationFromErrors:
                 parts = cluster_name.split('-')
                 if len(parts) >= 4:
                     username = f"{parts[2]}-{parts[3]}"  # root-account01
-                    self.print_colored(Colors.GREEN, f"[OK] Detected root user: {username}")
+                    self.print_colored(Colors.GREEN, f"{Symbols.OK} Detected root user: {username}")
                     return username
                 else:
-                    self.print_colored(Colors.RED, f"[ERROR] Invalid root cluster name format: {cluster_name}")
+                    self.print_colored(Colors.RED, f"{Symbols.ERROR} Invalid root cluster name format: {cluster_name}")
                     return None
 
             # IAM user pattern
@@ -1078,18 +1080,18 @@ class EKSClusterContinuationFromErrors:
                 if len(parts) >= 3:
                     username = parts[2]
                     if '_' in username:
-                        self.print_colored(Colors.GREEN, f"[OK] Detected IAM user: {username}")
+                        self.print_colored(Colors.GREEN, f"{Symbols.OK} Detected IAM user: {username}")
                         return username
                     else:
                         self.print_colored(Colors.YELLOW,
-                                           f"[WARN] Username does not match expected IAM pattern: {username}")
+                                           f"{Symbols.WARN} Username does not match expected IAM pattern: {username}")
                         return username
 
-            self.print_colored(Colors.RED, f"[ERROR] Unrecognized cluster name format: {cluster_name}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Unrecognized cluster name format: {cluster_name}")
             return None
 
         except Exception as e:
-            self.print_colored(Colors.RED, f"[ERROR] Error parsing cluster name: {str(e)}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Error parsing cluster name: {str(e)}")
             return None
 
     def _extract_account_from_cluster_name(self, cluster_name: str) -> str:
@@ -1142,7 +1144,7 @@ class EKSClusterContinuationFromErrors:
             match = re.search(region_pattern, cluster_name)
             if match:
                 region = match.group()
-                self.print_colored(Colors.GREEN, f"[REGION] Extracted region: {region}")
+                self.print_colored(Colors.GREEN, f"{Symbols.REGION} Extracted region: {region}")
                 return region
 
             # Fallback: try to find region-like patterns in cluster name parts
@@ -1155,14 +1157,14 @@ class EKSClusterContinuationFromErrors:
                         # Check if next part looks like a number
                         if i + 2 < len(parts) and parts[i + 2].isdigit():
                             region = f"{potential_region}-{parts[i + 2]}"
-                            self.print_colored(Colors.GREEN, f"[REGION] Extracted region (fallback): {region}")
+                            self.print_colored(Colors.GREEN, f"{Symbols.REGION} Extracted region (fallback): {region}")
                             return region
 
-            self.print_colored(Colors.YELLOW, f"[WARN] Could not extract region from cluster name: {cluster_name}")
+            self.print_colored(Colors.YELLOW, f"{Symbols.WARN} Could not extract region from cluster name: {cluster_name}")
             return None
 
         except Exception as e:
-            self.print_colored(Colors.RED, f"[ERROR] Error extracting region: {str(e)}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Error extracting region: {str(e)}")
             return None
 
     def _interactive_account_selection(self, matching_accounts: list) -> Tuple[str, dict]:
@@ -1192,18 +1194,18 @@ class EKSClusterContinuationFromErrors:
             # Get user selection
             while True:
                 try:
-                    choice = input(f"[KEY] Select root account (1-{len(matching_accounts)}): ").strip()
+                    choice = input(f"{Symbols.KEY} Select root account (1-{len(matching_accounts)}): ").strip()
                     choice_num = int(choice)
 
                     if 1 <= choice_num <= len(matching_accounts):
                         selected_account = matching_accounts[choice_num - 1]
                         account_name, account_data = selected_account
 
-                        self.print_colored(Colors.GREEN, f"[OK] Selected: {account_name}")
+                        self.print_colored(Colors.GREEN, f"{Symbols.OK} Selected: {account_name}")
                         return selected_account
                     else:
                         self.print_colored(Colors.RED,
-                                           f"[ERROR] Please enter a number between 1 and {len(matching_accounts)}")
+                                           f"{Symbols.ERROR} Please enter a number between 1 and {len(matching_accounts)}")
 
                 except ValueError:
                     self.print_colored(Colors.RED, "[ERROR] Please enter a valid number")
@@ -1233,7 +1235,7 @@ class EKSClusterContinuationFromErrors:
     def verify_cluster_exists(self, cluster_name: str, region: str, access_key: str, secret_key: str) -> bool:
         """Verify that the cluster exists and is accessible"""
         try:
-            self.print_colored('YELLOW', f"[SCAN] Verifying cluster {cluster_name} in {region}...")
+            self.print_colored('YELLOW', f"{Symbols.SCAN} Verifying cluster {cluster_name} in {region}...")
 
             session = boto3.Session(
                 aws_access_key_id=access_key,
@@ -1260,10 +1262,10 @@ class EKSClusterContinuationFromErrors:
             }
 
             if cluster['status'] != 'ACTIVE':
-                self.print_colored('RED', f"[ERROR] Cluster is in {cluster['status']} state, not ACTIVE")
+                self.print_colored('RED', f"{Symbols.ERROR} Cluster is in {cluster['status']} state, not ACTIVE")
                 return False
 
-            self.print_colored('GREEN', f"[OK] Cluster {cluster_name} is ACTIVE")
+            self.print_colored('GREEN', f"{Symbols.OK} Cluster {cluster_name} is ACTIVE")
             self.print_colored('CYAN', f"   Version: {cluster['version']}")
             self.print_colored('CYAN', f"   Created: {self.cluster_info['created_at']}")
             self.print_colored('CYAN', f"   Account: {self.cluster_info['account_id']}")
@@ -1272,12 +1274,12 @@ class EKSClusterContinuationFromErrors:
             return True
 
         except Exception as e:
-            self.print_colored('RED', f"[ERROR] Failed to verify cluster: {str(e)}")
+            self.print_colored('RED', f"{Symbols.ERROR} Failed to verify cluster: {str(e)}")
             return False
 
     def analyze_existing_components(self, cluster_name: str, region: str, access_key: str, secret_key: str) -> Dict:
         """Analyze what components are already installed on the cluster"""
-        self.print_colored('YELLOW', f"[SCAN] Analyzing existing cluster components...")
+        self.print_colored('YELLOW', f"{Symbols.SCAN} Analyzing existing cluster components...")
 
         session = boto3.Session(
             aws_access_key_id=access_key,
@@ -1457,7 +1459,7 @@ class EKSClusterContinuationFromErrors:
                 print(f"    Instance Types: {', '.join(ng['instance_types'])}")
                 print(f"    Scaling: {scaling.get('desiredSize', 0)}/{scaling.get('maxSize', 0)} nodes")
         else:
-            self.print_colored('YELLOW', "  [WARN]  No nodegroups found")
+            self.print_colored('YELLOW', f"  {Symbols.WARN}  No nodegroups found")
 
         # Add-ons
         addons = self.existing_components.get('addons', [])
@@ -1467,7 +1469,7 @@ class EKSClusterContinuationFromErrors:
                 status_color = 'GREEN' if addon['status'] == 'ACTIVE' else 'YELLOW'
                 self.print_colored(status_color, f"  ✓ {addon['name']} (v{addon['version']}) - {addon['status']}")
         else:
-            self.print_colored('YELLOW', "  [WARN]  No add-ons found")
+            self.print_colored('YELLOW', f"  {Symbols.WARN}  No add-ons found")
 
         # Other components
         print(f"\n[CONFIG] Other Components:")
@@ -1482,7 +1484,7 @@ class EKSClusterContinuationFromErrors:
         for component, status in components_status:
             status_color = 'GREEN' if status else 'YELLOW'
             status_text = 'Configured' if status else 'Not configured'
-            icon = '✓' if status else '[WARN]'
+            icon = '✓' if status else f'{Symbols.WARN}'
             self.print_colored(status_color, f"  {icon} {component}: {status_text}")
 
     def show_main_menu(self) -> int:
@@ -1514,13 +1516,13 @@ class EKSClusterContinuationFromErrors:
             # Find and parse error files
             error_files = self.find_error_files()
             if not error_files:
-                self.print_colored('RED', "[ERROR] No cluster creation error files found")
+                self.print_colored('RED', f"{Symbols.ERROR} No cluster creation error files found")
                 return False
 
             # Group clusters by date
             clusters_by_date = self.group_clusters_by_date(error_files)
             if not clusters_by_date:
-                self.print_colored('RED', "[ERROR] No failed clusters found in error files")
+                self.print_colored('RED', f"{Symbols.ERROR} No failed clusters found in error files")
                 return False
 
             # Display clusters by date
@@ -1529,7 +1531,7 @@ class EKSClusterContinuationFromErrors:
             # Let user select date and clusters
             selected_clusters = self.select_date_and_clusters(clusters_by_date)
             if not selected_clusters:
-                self.print_colored('YELLOW', "[WARN]  No clusters selected")
+                self.print_colored('YELLOW', f"{Symbols.WARN}  No clusters selected")
                 return False
 
             # Process each selected cluster
@@ -1539,7 +1541,7 @@ class EKSClusterContinuationFromErrors:
                 cluster_name, region = self.extract_cluster_details(cluster_info)
 
                 print(f"\n{'=' * 80}")
-                print(f"[START] CONTINUING CLUSTER {i}/{len(selected_clusters)}: {cluster_name}")
+                print(f"{Symbols.START} CONTINUING CLUSTER {i}/{len(selected_clusters)}: {cluster_name}")
                 print(f"{'=' * 80}")
 
                 try:
@@ -1548,7 +1550,7 @@ class EKSClusterContinuationFromErrors:
 
                     # Verify cluster exists
                     if not self.verify_cluster_exists(cluster_name, region, admin_access_key, admin_secret_key):
-                        self.print_colored('RED', f"[ERROR] Cluster {cluster_name} verification failed")
+                        self.print_colored('RED', f"{Symbols.ERROR} Cluster {cluster_name} verification failed")
                         continue
 
                     #Analyze existing components
@@ -1561,13 +1563,13 @@ class EKSClusterContinuationFromErrors:
 
                     if cluster_success:
                         successful_continuations += 1
-                        self.print_colored('GREEN', f"[OK] Successfully configured cluster {cluster_name}")
+                        self.print_colored('GREEN', f"{Symbols.OK} Successfully configured cluster {cluster_name}")
                     else:
-                        self.print_colored('YELLOW', f"[WARN]  Partial configuration for cluster {cluster_name}")
+                        self.print_colored('YELLOW', f"{Symbols.WARN}  Partial configuration for cluster {cluster_name}")
 
                 except Exception as e:
                     self.logger.error(f"Error configuring cluster {cluster_name}: {str(e)}")
-                    self.print_colored('RED', f"[ERROR] Error configuring cluster {cluster_name}: {str(e)}")
+                    self.print_colored('RED', f"{Symbols.ERROR} Error configuring cluster {cluster_name}: {str(e)}")
                     continue
 
             # Final summary
@@ -1581,11 +1583,11 @@ class EKSClusterContinuationFromErrors:
             return successful_continuations > 0
 
         except KeyboardInterrupt:
-            self.print_colored('YELLOW', "\n[WARN]  Configuration interrupted by user")
+            self.print_colored('YELLOW', f"\n{Symbols.WARN}  Configuration interrupted by user")
             return False
         except Exception as e:
             self.logger.error(f"Error in cluster continuation: {str(e)}")
-            self.print_colored('RED', f"[ERROR] Error: {str(e)}")
+            self.print_colored('RED', f"{Symbols.ERROR} Error: {str(e)}")
             return False
 
     def configure_single_cluster(self, cluster_name: str, region: str, access_key: str, secret_key: str) -> bool:
@@ -1632,7 +1634,7 @@ class EKSClusterContinuationFromErrors:
                         cluster_name, region, account_id, user_data, access_key, secret_key, is_root
                     )
                 elif choice_num == 11:
-                    self.print_colored(Colors.CYAN, "\n[SECURE] Setting up node protection with NO_DELETE labels...")
+                    self.print_colored(Colors.CYAN, f"\n{Symbols.SECURE} Setting up node protection with NO_DELETE labels...")
 
                     # Apply initial node protection
                     protection_result = self.eks_manager.apply_no_delete_to_matching_nodegroups(
@@ -1644,7 +1646,7 @@ class EKSClusterContinuationFromErrors:
                     nodegroup_names = protection_result.get('all_nodegroups', [])
 
                     if protection_result.get('success'):
-                        self.print_colored(Colors.GREEN, f"[OK] Initial node protection applied")
+                        self.print_colored(Colors.GREEN, f"{Symbols.OK} Initial node protection applied")
 
                         # Setup automated monitoring
                         self.print_colored(Colors.YELLOW, f"\n[ALARM] Setting up automated node protection monitoring...")
@@ -1653,12 +1655,12 @@ class EKSClusterContinuationFromErrors:
                         )
 
                         if monitoring_setup:
-                            self.print_colored(Colors.GREEN, f"[OK] Automated node protection monitoring enabled")
+                            self.print_colored(Colors.GREEN, f"{Symbols.OK} Automated node protection monitoring enabled")
                             self.print_colored(Colors.CYAN,
-                                               f"   [LIST] Lambda will run every time a ec2 is terminated to ensure node protection")
+                                               f"   {Symbols.LIST} Lambda will run every time a ec2 is terminated to ensure node protection")
                         else:
                             self.print_colored(Colors.YELLOW,
-                                               f"[WARN] Automated monitoring setup failed - manual monitoring required")
+                                               f"{Symbols.WARN} Automated monitoring setup failed - manual monitoring required")
 
                 elif choice_num == 12:
                     self.print_colored(Colors.CYAN, "\n[SECURE] Configuring custom cloudwatch agent...")
@@ -1669,7 +1671,7 @@ class EKSClusterContinuationFromErrors:
                             cluster_name, region, access_key, secret_key
                         )
                 else:
-                    self.print_colored(Colors.RED, f"[ERROR] Invalid choice: {choice_num}")
+                    self.print_colored(Colors.RED, f"{Symbols.ERROR} Invalid choice: {choice_num}")
 
                 # # Only re-analyze and show status if something changed
                 # if changed:
@@ -1684,7 +1686,7 @@ class EKSClusterContinuationFromErrors:
 
         except Exception as e:
             self.logger.error(f"Error configuring cluster: {str(e)}")
-            self.print_colored('RED', f"[ERROR] Error configuring cluster: {str(e)}")
+            self.print_colored('RED', f"{Symbols.ERROR} Error configuring cluster: {str(e)}")
             return False
 
 
@@ -1723,7 +1725,7 @@ class EKSClusterContinuationFromErrors:
                     'groups': ['system:masters']
                 })
                 principals_to_add.append(root_arn)
-                self.print_colored('CYAN', f"   👑 Root-created cluster - configuring root access only")
+                self.print_colored('CYAN', f"   [CROWN] Root-created cluster - configuring root access only")
             else:
                 # If created by IAM user, add both IAM user and root user access
                 username = user_data.get('username', 'unknown')
@@ -1749,7 +1751,7 @@ class EKSClusterContinuationFromErrors:
             access_config = cluster_info['cluster'].get('accessConfig', {})
             auth_mode = access_config.get('authenticationMode', 'CONFIG_MAP')
 
-            self.print_colored('CYAN', f"   [LIST] Cluster authentication mode: {auth_mode}")
+            self.print_colored('CYAN', f"   {Symbols.LIST} Cluster authentication mode: {auth_mode}")
 
             # If cluster uses CONFIG_MAP mode or API mode failed, create/update aws-auth ConfigMap
             if auth_mode in ['CONFIG_MAP', 'API_AND_CONFIG_MAP']:
@@ -1761,7 +1763,7 @@ class EKSClusterContinuationFromErrors:
         except Exception as e:
             error_msg = str(e)
             self.logger.error(f"Failed to configure aws-auth ConfigMap for {cluster_name}: {error_msg}")
-            self.print_colored('RED', f"   [ERROR] ConfigMap configuration failed: {error_msg}")
+            self.print_colored('RED', f"   {Symbols.ERROR} ConfigMap configuration failed: {error_msg}")
             return False
 
     def apply_configmap_with_kubectl(self, cluster_name: str, region: str, account_id: str, users_to_add: List[Dict],
@@ -1771,7 +1773,7 @@ class EKSClusterContinuationFromErrors:
         Apply ConfigMap using kubectl with enhanced error handling
         """
         try:
-            self.print_colored('CYAN', "   [LIST] Creating/updating aws-auth ConfigMap...")
+            self.print_colored('CYAN', f"   {Symbols.LIST} Creating/updating aws-auth ConfigMap...")
             import yaml
             import tempfile
             import subprocess
@@ -1781,7 +1783,7 @@ class EKSClusterContinuationFromErrors:
             kubectl_available = shutil.which('kubectl') is not None
 
             if not kubectl_available:
-                self.print_colored('YELLOW', f"   [WARN]  kubectl not found. ConfigMap setup skipped.")
+                self.print_colored('YELLOW', f"   {Symbols.WARN}  kubectl not found. ConfigMap setup skipped.")
                 return True
 
             # Create aws-auth ConfigMap YAML
@@ -1814,7 +1816,7 @@ class EKSClusterContinuationFromErrors:
                     yaml.dump(aws_auth_config, f)
                 self.logger.info(f"Created ConfigMap file: {configmap_file}")
             except Exception as e:
-                self.print_colored('RED', f"   [ERROR] Failed to create ConfigMap file: {str(e)}")
+                self.print_colored('RED', f"   {Symbols.ERROR} Failed to create ConfigMap file: {str(e)}")
                 return False
 
             # Apply ConfigMap with enhanced error handling
@@ -1832,11 +1834,11 @@ class EKSClusterContinuationFromErrors:
                     '--overwrite-existing'
                 ]
 
-                self.print_colored('CYAN', f"   🔄 Updating kubeconfig...")
+                self.print_colored('CYAN', f"   {Symbols.SCAN} Updating kubeconfig...")
                 update_result = subprocess.run(update_cmd, env=env, capture_output=True, text=True, timeout=120)
 
                 if update_result.returncode != 0:
-                    self.print_colored('RED', f"   [ERROR] Failed to update kubeconfig: {update_result.stderr}")
+                    self.print_colored('RED', f"   {Symbols.ERROR} Failed to update kubeconfig: {update_result.stderr}")
                     return False
 
                 # Apply ConfigMap with multiple fallback strategies
@@ -1851,20 +1853,20 @@ class EKSClusterContinuationFromErrors:
 
                 success = False
                 for i, strategy in enumerate(apply_strategies[:2], 1):  # Try first 2 strategies
-                    self.print_colored('CYAN', f"   [LIST] Applying ConfigMap (strategy {i})...")
+                    self.print_colored('CYAN', f"   {Symbols.LIST} Applying ConfigMap (strategy {i})...")
 
                     result = subprocess.run(strategy, env=env, capture_output=True, text=True, timeout=300)
 
                     if result.returncode == 0:
-                        self.print_colored('GREEN', f"   [OK] ConfigMap applied successfully (strategy {i})")
+                        self.print_colored('GREEN', f"   {Symbols.OK} ConfigMap applied successfully (strategy {i})")
                         success = True
                         break
                     else:
-                        self.print_colored('YELLOW', f"   [WARN]  Strategy {i} failed: {result.stderr}")
+                        self.print_colored('YELLOW', f"   {Symbols.WARN}  Strategy {i} failed: {result.stderr}")
 
                 # If standard strategies failed, try delete and recreate
                 if not success:
-                    self.print_colored('CYAN', f"   🔄 Trying delete and recreate strategy...")
+                    self.print_colored('CYAN', f"   {Symbols.SCAN} Trying delete and recreate strategy...")
 
                     # Delete existing ConfigMap
                     delete_cmd = ['kubectl', 'delete', 'configmap', 'aws-auth', '-n', 'kube-system',
@@ -1881,23 +1883,23 @@ class EKSClusterContinuationFromErrors:
                     )
 
                     if create_result.returncode == 0:
-                        self.print_colored('GREEN', f"   [OK] ConfigMap recreated successfully")
+                        self.print_colored('GREEN', f"   {Symbols.OK} ConfigMap recreated successfully")
                         success = True
                     else:
-                        self.print_colored('RED', f"   [ERROR] All strategies failed: {create_result.stderr}")
+                        self.print_colored('RED', f"   {Symbols.ERROR} All strategies failed: {create_result.stderr}")
 
                 if success:
                     if is_root_cluster:
-                        self.print_colored('GREEN', f"   [OK] Root user configured for cluster access")
+                        self.print_colored('GREEN', f"   {Symbols.OK} Root user configured for cluster access")
                     else:
                         username = user_data.get('username', 'unknown')
                         self.print_colored('GREEN',
-                                           f"   [OK] User [{username}] and root user configured for cluster access")
+                                           f"   {Symbols.OK} User [{username}] and root user configured for cluster access")
 
                 return success
 
             except Exception as e:
-                self.print_colored('RED', f"   [ERROR] Command execution failed: {str(e)}")
+                self.print_colored('RED', f"   {Symbols.ERROR} Command execution failed: {str(e)}")
                 return False
 
             finally:
@@ -1910,13 +1912,13 @@ class EKSClusterContinuationFromErrors:
                     self.logger.warning(f"Failed to clean up ConfigMap file: {str(e)}")
 
         except Exception as e:
-            self.print_colored('RED', f"   [ERROR] ConfigMap application failed: {str(e)}")
+            self.print_colored('RED', f"   {Symbols.ERROR} ConfigMap application failed: {str(e)}")
             return False
 
     # Include all the configuration methods from the original continuation class
     def configure_nodegroups(self, cluster_name: str, region: str, access_key: str, secret_key: str) -> bool:
         """Configure nodegroups for the cluster"""
-        self.print_colored('YELLOW', "\n[START] Nodegroup Configuration")
+        self.print_colored('YELLOW', f"\n{Symbols.START} Nodegroup Configuration")
 
         existing_nodegroups = self.existing_components.get('nodegroups', [])
 
@@ -1992,15 +1994,15 @@ class EKSClusterContinuationFromErrors:
                 )
 
             if success:
-                self.print_colored('GREEN', f"[OK] Successfully created nodegroup: {nodegroup_config['name']}")
+                self.print_colored('GREEN', f"{Symbols.OK} Successfully created nodegroup: {nodegroup_config['name']}")
                 return True
             else:
-                self.print_colored('RED', f"[ERROR] Failed to create nodegroup: {nodegroup_config['name']}")
+                self.print_colored('RED', f"{Symbols.ERROR} Failed to create nodegroup: {nodegroup_config['name']}")
                 return False
 
         except Exception as e:
             self.logger.error(f"Error creating nodegroup: {str(e)}")
-            self.print_colored('RED', f"[ERROR] Error creating nodegroup: {str(e)}")
+            self.print_colored('RED', f"{Symbols.ERROR} Error creating nodegroup: {str(e)}")
             return False
 
     def get_nodegroup_configuration(self, cluster_name: str) -> Optional[Dict]:
@@ -2008,7 +2010,7 @@ class EKSClusterContinuationFromErrors:
         print("\n[LOG] Nodegroup Configuration")
 
         # Strategy selection
-        print("\n🔄 Select nodegroup strategy:")
+        print("\n[SCAN] Select nodegroup strategy:")
         print("1. On-Demand (reliable, consistent performance, higher cost)")
         print("2. Spot (cheaper, but can be terminated, best for non-critical workloads)")
         print("3. Mixed (combination of on-demand and spot for balance)")
@@ -2031,7 +2033,7 @@ class EKSClusterContinuationFromErrors:
         instance_type = self.eks_manager.select_instance_type()
 
         # Sizing configuration
-        print("\n🔢 Nodegroup sizing:")
+        print("\n[#] Nodegroup sizing:")
         try:
             min_size = int(input("Minimum nodes [default: 1]: ").strip() or "1")
             desired_size = int(input("Desired nodes [default: 1]: ").strip() or "1")
@@ -2056,7 +2058,7 @@ class EKSClusterContinuationFromErrors:
         instance_selections = {}
 
         if strategy == 'mixed':
-            print("\n[STATS] Mixed strategy configuration:")
+            print(f"\n{Symbols.STATS} Mixed strategy configuration:")
             try:
                 on_demand_percentage = int(
                     input("Percentage of On-Demand capacity (0-100) [default: 30%]: ").strip() or "30")
@@ -2119,7 +2121,7 @@ class EKSClusterContinuationFromErrors:
         missing_addons = [addon for addon in essential_addons if addon not in existing_addons]
 
         if not missing_addons:
-            self.print_colored('GREEN', "[OK] All essential add-ons are already installed")
+            self.print_colored('GREEN', f"{Symbols.OK} All essential add-ons are already installed")
             return True
 
         print(f"\nMissing essential add-ons: {', '.join(missing_addons)}")
@@ -2144,23 +2146,23 @@ class EKSClusterContinuationFromErrors:
             )
 
             if success:
-                self.print_colored('GREEN', "[OK] Add-ons installation completed")
+                self.print_colored('GREEN', f"{Symbols.OK} Add-ons installation completed")
             else:
-                self.print_colored('YELLOW', "[WARN]  Add-ons installation had some issues")
+                self.print_colored('YELLOW', f"{Symbols.WARN}  Add-ons installation had some issues")
 
             return success
 
         except Exception as e:
             self.logger.error(f"Error installing add-ons: {str(e)}")
-            self.print_colored('RED', f"[ERROR] Error installing add-ons: {str(e)}")
+            self.print_colored('RED', f"{Symbols.ERROR} Error installing add-ons: {str(e)}")
             return False
 
     def configure_container_insights(self, cluster_name: str, region: str, access_key: str, secret_key: str) -> bool:
         """Configure Container Insights"""
-        self.print_colored('YELLOW', "\n[STATS] Container Insights Configuration")
+        self.print_colored('YELLOW', f"\n{Symbols.STATS} Container Insights Configuration")
 
         if self.existing_components.get('container_insights', False):
-            self.print_colored('GREEN', "[OK] Container Insights is already configured")
+            self.print_colored('GREEN', f"{Symbols.OK} Container Insights is already configured")
             choice = input("Reconfigure Container Insights? (y/N): ").strip().lower()
             if choice not in ['y', 'yes']:
                 return True
@@ -2175,23 +2177,23 @@ class EKSClusterContinuationFromErrors:
             )
 
             if success:
-                self.print_colored('GREEN', "[OK] Container Insights configured successfully")
+                self.print_colored('GREEN', f"{Symbols.OK} Container Insights configured successfully")
             else:
-                self.print_colored('YELLOW', "[WARN]  Container Insights configuration had issues")
+                self.print_colored('YELLOW', f"{Symbols.WARN}  Container Insights configuration had issues")
 
             return success
 
         except Exception as e:
             self.logger.error(f"Error configuring Container Insights: {str(e)}")
-            self.print_colored('RED', f"[ERROR] Error configuring Container Insights: {str(e)}")
+            self.print_colored('RED', f"{Symbols.ERROR} Error configuring Container Insights: {str(e)}")
             return False
 
     def configure_cluster_autoscaler(self, cluster_name: str, region: str, access_key: str, secret_key: str) -> bool:
         """Configure Cluster Autoscaler"""
-        self.print_colored('YELLOW', "\n🔄 Cluster Autoscaler Configuration")
+        self.print_colored('YELLOW', f"\n{Symbols.SCAN} Cluster Autoscaler Configuration")
 
         if self.existing_components.get('cluster_autoscaler', False):
-            self.print_colored('GREEN', "[OK] Cluster Autoscaler is already configured")
+            self.print_colored('GREEN', f"{Symbols.OK} Cluster Autoscaler is already configured")
             choice = input("Reconfigure Cluster Autoscaler? (y/N): ").strip().lower()
             if choice not in ['y', 'yes']:
                 return True
@@ -2209,15 +2211,15 @@ class EKSClusterContinuationFromErrors:
             )
 
             if success:
-                self.print_colored('GREEN', "[OK] Cluster Autoscaler configured successfully")
+                self.print_colored('GREEN', f"{Symbols.OK} Cluster Autoscaler configured successfully")
             else:
-                self.print_colored('YELLOW', "[WARN]  Cluster Autoscaler configuration had issues")
+                self.print_colored('YELLOW', f"{Symbols.WARN}  Cluster Autoscaler configuration had issues")
 
             return success
 
         except Exception as e:
             self.logger.error(f"Error configuring Cluster Autoscaler: {str(e)}")
-            self.print_colored('RED', f"[ERROR] Error configuring Cluster Autoscaler: {str(e)}")
+            self.print_colored('RED', f"{Symbols.ERROR} Error configuring Cluster Autoscaler: {str(e)}")
             return False
 
     def configure_scheduled_scaling(self, cluster_name: str, region: str, access_key: str, secret_key: str) -> bool:
@@ -2225,7 +2227,7 @@ class EKSClusterContinuationFromErrors:
         self.print_colored('YELLOW', "\n[ALARM] Scheduled Scaling Configuration")
 
         if self.existing_components.get('scheduled_scaling', False):
-            self.print_colored('GREEN', "[OK] Scheduled Scaling is already configured")
+            self.print_colored('GREEN', f"{Symbols.OK} Scheduled Scaling is already configured")
             choice = input("Reconfigure Scheduled Scaling? (y/N): ").strip().lower()
             if choice not in ['y', 'yes']:
                 return True
@@ -2239,7 +2241,7 @@ class EKSClusterContinuationFromErrors:
             nodegroup_names = [ng['name'] for ng in self.existing_components.get('nodegroups', [])]
 
             if not nodegroup_names:
-                self.print_colored('YELLOW', "[WARN]  No nodegroups found for scheduled scaling")
+                self.print_colored('YELLOW', f"{Symbols.WARN}  No nodegroups found for scheduled scaling")
                 return False
 
             success = self.eks_manager.setup_scheduled_scaling_multi_nodegroup(
@@ -2247,23 +2249,23 @@ class EKSClusterContinuationFromErrors:
             )
 
             if success:
-                self.print_colored('GREEN', "[OK] Scheduled Scaling configured successfully")
+                self.print_colored('GREEN', f"{Symbols.OK} Scheduled Scaling configured successfully")
             else:
-                self.print_colored('YELLOW', "[WARN]  Scheduled Scaling configuration had issues")
+                self.print_colored('YELLOW', f"{Symbols.WARN}  Scheduled Scaling configuration had issues")
 
             return success
 
         except Exception as e:
             self.logger.error(f"Error configuring Scheduled Scaling: {str(e)}")
-            self.print_colored('RED', f"[ERROR] Error configuring Scheduled Scaling: {str(e)}")
+            self.print_colored('RED', f"{Symbols.ERROR} Error configuring Scheduled Scaling: {str(e)}")
             return False
 
     def configure_cloudwatch_monitoring(self, cluster_name: str, region: str, access_key: str, secret_key: str) -> bool:
         """Configure CloudWatch monitoring"""
-        self.print_colored('YELLOW', "\n[ALERT] CloudWatch Monitoring Configuration")
+        self.print_colored('YELLOW', f"\n{Symbols.ALERT} CloudWatch Monitoring Configuration")
 
         if self.existing_components.get('cloudwatch_alarms', False):
-            self.print_colored('GREEN', "[OK] CloudWatch Alarms are already configured")
+            self.print_colored('GREEN', f"{Symbols.OK} CloudWatch Alarms are already configured")
             choice = input("Reconfigure CloudWatch Alarms? (y/N): ").strip().lower()
             if choice not in ['y', 'yes']:
                 return True
@@ -2288,23 +2290,23 @@ class EKSClusterContinuationFromErrors:
             )
 
             if success:
-                self.print_colored('GREEN', "[OK] CloudWatch Monitoring configured successfully")
+                self.print_colored('GREEN', f"{Symbols.OK} CloudWatch Monitoring configured successfully")
             else:
-                self.print_colored('YELLOW', "[WARN]  CloudWatch Monitoring configuration had issues")
+                self.print_colored('YELLOW', f"{Symbols.WARN}  CloudWatch Monitoring configuration had issues")
 
             return success
 
         except Exception as e:
             self.logger.error(f"Error configuring CloudWatch Monitoring: {str(e)}")
-            self.print_colored('RED', f"[ERROR] Error configuring CloudWatch Monitoring: {str(e)}")
+            self.print_colored('RED', f"{Symbols.ERROR} Error configuring CloudWatch Monitoring: {str(e)}")
             return False
 
     def configure_cost_monitoring(self, cluster_name: str, region: str, access_key: str, secret_key: str) -> bool:
         """Configure cost monitoring"""
-        self.print_colored('YELLOW', "\n[COST] Cost Monitoring Configuration")
+        self.print_colored('YELLOW', f"\n{Symbols.COST} Cost Monitoring Configuration")
 
         if self.existing_components.get('cost_alarms', False):
-            self.print_colored('GREEN', "[OK] Cost Monitoring is already configured")
+            self.print_colored('GREEN', f"{Symbols.OK} Cost Monitoring is already configured")
             choice = input("Reconfigure Cost Monitoring? (y/N): ").strip().lower()
             if choice not in ['y', 'yes']:
                 return True
@@ -2328,20 +2330,20 @@ class EKSClusterContinuationFromErrors:
             )
 
             if success:
-                self.print_colored('GREEN', "[OK] Cost Monitoring configured successfully")
+                self.print_colored('GREEN', f"{Symbols.OK} Cost Monitoring configured successfully")
             else:
-                self.print_colored('YELLOW', "[WARN]  Cost Monitoring configuration had issues")
+                self.print_colored('YELLOW', f"{Symbols.WARN}  Cost Monitoring configuration had issues")
 
             return success
 
         except Exception as e:
             self.logger.error(f"Error configuring Cost Monitoring: {str(e)}")
-            self.print_colored('RED', f"[ERROR] Error configuring Cost Monitoring: {str(e)}")
+            self.print_colored('RED', f"{Symbols.ERROR} Error configuring Cost Monitoring: {str(e)}")
             return False
 
     def generate_user_instructions(self, cluster_name: str, region: str, access_key: str, secret_key: str) -> bool:
         """Generate user instructions"""
-        self.print_colored('YELLOW', "\n[LIST] Generating User Instructions")
+        self.print_colored('YELLOW', f"\n{Symbols.LIST} Generating User Instructions")
 
         try:
             # Create mock credential info for instruction generation
@@ -2380,12 +2382,12 @@ class EKSClusterContinuationFromErrors:
 
             self.generate_mini_instructions(credential_info, cluster_name, region, credential_info.username)
 
-            self.print_colored('GREEN', "[OK] User instructions generated successfully")
+            self.print_colored('GREEN', f"{Symbols.OK} User instructions generated successfully")
             return True
 
         except Exception as e:
             self.logger.error(f"Error generating user instructions: {str(e)}")
-            self.print_colored('RED', f"[ERROR] Error generating user instructions: {str(e)}")
+            self.print_colored('RED', f"{Symbols.ERROR} Error generating user instructions: {str(e)}")
             return False
 
     def extract_username_from_cluster_name(cluster_name):
@@ -2430,9 +2432,9 @@ class EKSClusterContinuationFromErrors:
             )
 
             if health_check.get('overall_healthy', False):
-                self.print_colored('GREEN', "[OK] Cluster health check passed")
+                self.print_colored('GREEN', f"{Symbols.OK} Cluster health check passed")
             else:
-                self.print_colored('YELLOW', "[WARN]  Cluster health check found issues")
+                self.print_colored('YELLOW', f"{Symbols.WARN}  Cluster health check found issues")
 
             # Display health summary
             summary = health_check.get('summary', {})
@@ -2445,7 +2447,7 @@ class EKSClusterContinuationFromErrors:
 
         except Exception as e:
             self.logger.error(f"Error running health check: {str(e)}")
-            self.print_colored('RED', f"[ERROR] Error running health check: {str(e)}")
+            self.print_colored('RED', f"{Symbols.ERROR} Error running health check: {str(e)}")
             return False
 
     def reconfigure_cluster(self, cluster_names: List[str]) -> bool:
@@ -2459,21 +2461,21 @@ class EKSClusterContinuationFromErrors:
             bool: True if all clusters were successfully reconfigured, False otherwise
         """
         try:
-            self.print_colored(Colors.CYAN, "\n🔄 RECONFIGURING EXISTING CLUSTERS")
+            self.print_colored(Colors.CYAN, "\n[SCAN] RECONFIGURING EXISTING CLUSTERS")
             self.print_colored(Colors.CYAN, "=" * 80)
 
             if not cluster_names:
                 self.print_colored(Colors.RED, "[ERROR] No cluster names provided")
                 return False
 
-            self.print_colored(Colors.BLUE, f"[LIST] Found {len(cluster_names)} clusters to reconfigure")
+            self.print_colored(Colors.BLUE, f"{Symbols.LIST} Found {len(cluster_names)} clusters to reconfigure")
 
             # Process each cluster
             successful_reconfigures = 0
 
             for i, cluster_name in enumerate(cluster_names, 1):
                 self.print_colored(Colors.CYAN, "\n" + "=" * 80)
-                self.print_colored(Colors.CYAN, f"[START] PROCESSING CLUSTER {i}/{len(cluster_names)}: {cluster_name}")
+                self.print_colored(Colors.CYAN, f"{Symbols.START} PROCESSING CLUSTER {i}/{len(cluster_names)}: {cluster_name}")
                 self.print_colored(Colors.CYAN, "=" * 80)
 
                 try:
@@ -2483,10 +2485,10 @@ class EKSClusterContinuationFromErrors:
 
                     if not region:
                         self.print_colored(Colors.YELLOW,
-                                           f"[WARN] Could not extract region from cluster name. Please enter it manually:")
+                                           f"{Symbols.WARN} Could not extract region from cluster name. Please enter it manually:")
                         region = input("Enter AWS region for this cluster: ").strip()
                         if not region:
-                            self.print_colored(Colors.RED, f"[ERROR] No region provided, skipping cluster {cluster_name}")
+                            self.print_colored(Colors.RED, f"{Symbols.ERROR} No region provided, skipping cluster {cluster_name}")
                             continue
 
                     self.print_colored(Colors.BLUE, f"[NETWORK] Using region: {region}")
@@ -2497,26 +2499,26 @@ class EKSClusterContinuationFromErrors:
                     try:
                         access_key, secret_key, account_id = self.get_iam_credentials_from_cluster(cluster_name, region)
                         is_iam = True
-                        self.print_colored(Colors.GREEN, f"[OK] Found IAM credentials for cluster {cluster_name}")
+                        self.print_colored(Colors.GREEN, f"{Symbols.OK} Found IAM credentials for cluster {cluster_name}")
                     except Exception as e1:
-                        self.print_colored(Colors.YELLOW, f"[WARN] Could not get IAM credentials: {str(e1)}")
-                        self.print_colored(Colors.YELLOW, f"[WARN] Attempting to use root credentials...")
+                        self.print_colored(Colors.YELLOW, f"{Symbols.WARN} Could not get IAM credentials: {str(e1)}")
+                        self.print_colored(Colors.YELLOW, f"{Symbols.WARN} Attempting to use root credentials...")
                         try:
                             access_key, secret_key, account_id = self.get_root_credentials(cluster_name, region)
                             is_iam = False
-                            self.print_colored(Colors.GREEN, f"[OK] Found root credentials for cluster {cluster_name}")
+                            self.print_colored(Colors.GREEN, f"{Symbols.OK} Found root credentials for cluster {cluster_name}")
                         except Exception as e2:
                             self.print_colored(Colors.RED,
-                                               f"[ERROR] Failed to get any credentials for cluster {cluster_name}")
-                            self.print_colored(Colors.RED, f"[ERROR] IAM Error: {str(e1)}")
-                            self.print_colored(Colors.RED, f"[ERROR] Root Error: {str(e2)}")
+                                               f"{Symbols.ERROR} Failed to get any credentials for cluster {cluster_name}")
+                            self.print_colored(Colors.RED, f"{Symbols.ERROR} IAM Error: {str(e1)}")
+                            self.print_colored(Colors.RED, f"{Symbols.ERROR} Root Error: {str(e2)}")
                             continue
 
                     # Verify cluster exists and is accessible
                     if not self.verify_cluster_exists(cluster_name, region, access_key, secret_key):
-                        self.print_colored(Colors.RED, f"[ERROR] Could not access cluster {cluster_name}, skipping")
+                        self.print_colored(Colors.RED, f"{Symbols.ERROR} Could not access cluster {cluster_name}, skipping")
                         continue
-                    self.print_colored(Colors.GREEN, f"[OK] Cluster {cluster_name} is accessible")
+                    self.print_colored(Colors.GREEN, f"{Symbols.OK} Cluster {cluster_name} is accessible")
 
                     self.analyze_existing_components(cluster_name, region, access_key, secret_key)
 
@@ -2525,13 +2527,13 @@ class EKSClusterContinuationFromErrors:
 
                     if success:
                         successful_reconfigures += 1
-                        self.print_colored(Colors.GREEN, f"[OK] Successfully reconfigured cluster {cluster_name}")
+                        self.print_colored(Colors.GREEN, f"{Symbols.OK} Successfully reconfigured cluster {cluster_name}")
                     else:
-                        self.print_colored(Colors.YELLOW, f"[WARN] Partial configuration for cluster {cluster_name}")
+                        self.print_colored(Colors.YELLOW, f"{Symbols.WARN} Partial configuration for cluster {cluster_name}")
 
                 except Exception as e:
                     self.logger.error(f"Error reconfiguring cluster {cluster_name}: {str(e)}")
-                    self.print_colored(Colors.RED, f"[ERROR] Error reconfiguring cluster {cluster_name}: {str(e)}")
+                    self.print_colored(Colors.RED, f"{Symbols.ERROR} Error reconfiguring cluster {cluster_name}: {str(e)}")
                     continue
 
             # Final summary
@@ -2549,7 +2551,7 @@ class EKSClusterContinuationFromErrors:
             return False
         except Exception as e:
             self.logger.error(f"Error in cluster reconfiguration: {str(e)}")
-            self.print_colored(Colors.RED, f"[ERROR] Error: {str(e)}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Error: {str(e)}")
             return False
 
     def is_root_created_cluster(self, cluster_name: str) -> bool:
@@ -2655,13 +2657,13 @@ def main():
         success = continuation.reconfigure_cluster(cluster_names)
 
         if success:
-            print("\n[OK] Cluster continuation completed successfully!")
+            print(f"\n{Symbols.OK} Cluster continuation completed successfully!")
         else:
-            print("\n[ERROR] Cluster continuation failed or was cancelled")
+            print(f"\n{Symbols.ERROR} Cluster continuation failed or was cancelled")
             sys.exit(1)
 
     except Exception as e:
-        print(f"\n[ERROR] Fatal error: {str(e)}")
+        print(f"\n{Symbols.ERROR} Fatal error: {str(e)}")
         sys.exit(1)
 
 

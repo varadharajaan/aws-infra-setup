@@ -1,3 +1,4 @@
+﻿from text_symbols import Symbols
 #!/usr/bin/env python3
 """
 Complete Cluster Autoscaler Deployment Solution
@@ -70,7 +71,7 @@ class CompleteAutoscalerDeployer:
         from datetime import datetime
         self.print_colored(
             self.colors.CYAN,
-            f"    Current Date and Time (UTC): {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}"
+            f"    Current Date and Time (UTC): {datetime.now(datetime.UTC).strftime('%Y-%m-%d %H:%M:%S')}"
         )
         self.print_colored(self.colors.CYAN, f"    User: varadharajaan")
         self.print_colored(self.colors.BOLD, "=" * 80)
@@ -590,9 +591,9 @@ spec:
         )
         
         if success:
-            self.log_step("VERIFY", "[OK] Pod status check passed", "SUCCESS")
+            self.log_step("VERIFY", f"{Symbols.OK} Pod status check passed", "SUCCESS")
         else:
-            self.log_step("VERIFY", "[ERROR] Pod status check failed", "ERROR")
+            self.log_step("VERIFY", f"{Symbols.ERROR} Pod status check failed", "ERROR")
             verification_passed = False
         
         # Check 2: Secret exists
@@ -602,9 +603,9 @@ spec:
         )
         
         if success:
-            self.log_step("VERIFY", "[OK] AWS credentials secret exists", "SUCCESS")
+            self.log_step("VERIFY", f"{Symbols.OK} AWS credentials secret exists", "SUCCESS")
         else:
-            self.log_step("VERIFY", "[ERROR] AWS credentials secret missing", "ERROR")
+            self.log_step("VERIFY", f"{Symbols.ERROR} AWS credentials secret missing", "ERROR")
             verification_passed = False
         
         # Check 3: RBAC resources
@@ -623,9 +624,9 @@ spec:
             
             success, stdout, stderr = self.run_command(cmd, env=env)
             if success:
-                self.log_step("VERIFY", f"[OK] {resource_type} {name} exists", "SUCCESS")
+                self.log_step("VERIFY", f"{Symbols.OK} {resource_type} {name} exists", "SUCCESS")
             else:
-                self.log_step("VERIFY", f"[ERROR] {resource_type} {name} missing", "ERROR")
+                self.log_step("VERIFY", f"{Symbols.ERROR} {resource_type} {name} missing", "ERROR")
                 verification_passed = False
         
         return verification_passed
@@ -640,7 +641,7 @@ spec:
         )
         
         if success:
-            self.print_colored(self.colors.WHITE, "[LIST] Recent Autoscaler Logs:")
+            self.print_colored(self.colors.WHITE, f"{Symbols.LIST} Recent Autoscaler Logs:")
             self.print_colored(self.colors.CYAN, "-" * 80)
             print(stdout)
             self.print_colored(self.colors.CYAN, "-" * 80)
@@ -654,7 +655,7 @@ spec:
         elapsed_time = time.time() - self.deployment_start_time
         
         self.print_colored(self.colors.GREEN, "[OK] AUTOSCALER DEPLOYMENT COMPLETED SUCCESSFULLY!")
-        self.print_colored(self.colors.CYAN, f"[STATS] Autoscaler Deployment Summary:")
+        self.print_colored(self.colors.CYAN, f"{Symbols.STATS} Autoscaler Deployment Summary:")
         self.print_colored(self.colors.WHITE, f"   • Cluster: {cluster_name}", 1)
         self.print_colored(self.colors.WHITE, f"   • Region: {region}", 1)
         self.print_colored(self.colors.WHITE, f"   • Tagged ASGs: {len(tagged_asgs)}", 1)
@@ -755,21 +756,21 @@ spec:
             #         tester = AutoscalerTester()
             #         tester.run_interactive_testing()
             #     else:
-            #         print(f"\n[OK] Autoscaler deployment completed. You can test it manually later.")
+            #         print(f"\n{Symbols.OK} Autoscaler deployment completed. You can test it manually later.")
             #         print(f"\nManual testing commands:")
             #         print(f"  kubectl create deployment test-scale --image=nginx --replicas=10")
             #         print(f"  kubectl set resources deployment test-scale --requests=cpu=1000m,memory=1Gi")
             #         print(f"  kubectl logs -n kube-system -l app=cluster-autoscaler -f")
     
             # except KeyboardInterrupt:
-            #     print(f"\n\n[OK] Autoscaler deployment completed successfully!")
+            #     print(f"\n\n{Symbols.OK} Autoscaler deployment completed successfully!")
             #     print(f"Testing was cancelled, but autoscaler is ready to use.")
                 
             return True
             
         except Exception as e:
             self.log_step("DEPLOY", f"Deployment failed with exception: {str(e)}", "ERROR")
-            self.print_colored(self.colors.RED, f"\n[ERROR] DEPLOYMENT FAILED: {str(e)}")
+            self.print_colored(self.colors.RED, f"\n{Symbols.ERROR} DEPLOYMENT FAILED: {str(e)}")
             return False
 
 def main():

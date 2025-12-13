@@ -1,3 +1,4 @@
+﻿from text_symbols import Symbols
 import logging
 import boto3
 import botocore
@@ -427,17 +428,17 @@ def delete_ecr_repositories(region):
                             
                             for deleted_image in deleted_images:
                                 tag = deleted_image.get('imageTag', 'untagged')
-                                print(f"✅ Deleted image: {tag}")
+                                print(f"{Symbols.OK} Deleted image: {tag}")
                             
                             for failed_image in failed_images:
                                 tag = failed_image.get('imageId', {}).get('imageTag', 'untagged')
                                 reason = failed_image.get('failureReason', 'Unknown')
-                                print(f"❌ Failed to delete image {tag}: {reason}")
+                                print(f"{Symbols.ERROR} Failed to delete image {tag}: {reason}")
                             
                         except Exception as e:
-                            print(f"❌ Failed to delete batch of images: {e}")
+                            print(f"{Symbols.ERROR} Failed to delete batch of images: {e}")
                     
-                    print(f"✅ Total images deleted: {total_deleted}")
+                    print(f"{Symbols.OK} Total images deleted: {total_deleted}")
                     
                     # Wait a moment for deletions to propagate
                     time.sleep(5)
@@ -449,22 +450,22 @@ def delete_ecr_repositories(region):
                     ecr_client.get_lifecycle_policy(repositoryName=repo_name)
                     print(f"Deleting lifecycle policy for {repo_name}")
                     ecr_client.delete_lifecycle_policy(repositoryName=repo_name)
-                    print(f"✅ Deleted lifecycle policy for {repo_name}")
+                    print(f"{Symbols.OK} Deleted lifecycle policy for {repo_name}")
                 except ecr_client.exceptions.LifecyclePolicyNotFoundException:
                     print(f"No lifecycle policy found for {repo_name}")
                 except Exception as e:
-                    print(f"❌ Failed to delete lifecycle policy for {repo_name}: {e}")
+                    print(f"{Symbols.ERROR} Failed to delete lifecycle policy for {repo_name}: {e}")
                 
                 # Delete repository policy if it exists
                 try:
                     ecr_client.get_repository_policy(repositoryName=repo_name)
                     print(f"Deleting repository policy for {repo_name}")
                     ecr_client.delete_repository_policy(repositoryName=repo_name)
-                    print(f"✅ Deleted repository policy for {repo_name}")
+                    print(f"{Symbols.OK} Deleted repository policy for {repo_name}")
                 except ecr_client.exceptions.RepositoryPolicyNotFoundException:
                     print(f"No repository policy found for {repo_name}")
                 except Exception as e:
-                    print(f"❌ Failed to delete repository policy for {repo_name}: {e}")
+                    print(f"{Symbols.ERROR} Failed to delete repository policy for {repo_name}: {e}")
                 
                 # Delete scanning configuration
                 try:
@@ -473,7 +474,7 @@ def delete_ecr_repositories(region):
                         repositoryName=repo_name,
                         imageScanningConfiguration={'scanOnPush': False}
                     )
-                    print(f"✅ Disabled scanning for {repo_name}")
+                    print(f"{Symbols.OK} Disabled scanning for {repo_name}")
                 except Exception as e:
                     print(f"Warning: Could not modify scanning configuration for {repo_name}: {e}")
                 
@@ -484,9 +485,9 @@ def delete_ecr_repositories(region):
                         repositoryName=repo_name,
                         force=True  # Force delete even if images remain
                     )
-                    print(f"✅ Deleted ECR repository: {repo_name}")
+                    print(f"{Symbols.OK} Deleted ECR repository: {repo_name}")
                 except Exception as e:
-                    print(f"❌ Failed to delete ECR repository {repo_name}: {e}")
+                    print(f"{Symbols.ERROR} Failed to delete ECR repository {repo_name}: {e}")
                     
                     # Try alternative deletion method
                     try:
@@ -503,12 +504,12 @@ def delete_ecr_repositories(region):
                         
                         # Try deletion again
                         ecr_client.delete_repository(repositoryName=repo_name, force=True)
-                        print(f"✅ Deleted ECR repository: {repo_name} (alternative method)")
+                        print(f"{Symbols.OK} Deleted ECR repository: {repo_name} (alternative method)")
                     except Exception as e2:
-                        print(f"❌ Alternative deletion also failed for {repo_name}: {e2}")
+                        print(f"{Symbols.ERROR} Alternative deletion also failed for {repo_name}: {e2}")
                 
             except Exception as e:
-                print(f"❌ Failed to process ECR repository {repo_name}: {e}")
+                print(f"{Symbols.ERROR} Failed to process ECR repository {repo_name}: {e}")
         
         # Clean up ECR registry settings (if any)
         try:
@@ -519,11 +520,11 @@ def delete_ecr_repositories(region):
                 ecr_client.get_registry_policy()
                 print("Deleting registry policy...")
                 ecr_client.delete_registry_policy()
-                print("✅ Deleted registry policy")
+                print("[OK] Deleted registry policy")
             except ecr_client.exceptions.RegistryPolicyNotFoundException:
                 print("No registry policy found")
             except Exception as e:
-                print(f"❌ Failed to delete registry policy: {e}")
+                print(f"{Symbols.ERROR} Failed to delete registry policy: {e}")
             
             # Reset registry scanning configuration
             try:
@@ -532,17 +533,17 @@ def delete_ecr_repositories(region):
                     scanType='BASIC',
                     rules=[]
                 )
-                print("✅ Reset registry scanning configuration")
+                print(f"{Symbols.OK} Reset registry scanning configuration")
             except Exception as e:
                 print(f"Warning: Could not reset registry scanning: {e}")
                 
         except Exception as e:
             print(f"Warning: Could not process registry settings: {e}")
         
-        print(f"✅ Completed ECR repository cleanup in {region}")
+        print(f"{Symbols.OK} Completed ECR repository cleanup in {region}")
         
     except Exception as e:
-        print(f"❌ Error processing ECR repositories in {region}: {e}")
+        print(f"{Symbols.ERROR} Error processing ECR repositories in {region}: {e}")
 
 @measure_time
 def delete_eks_clusters(region):
@@ -591,9 +592,9 @@ def delete_eks_clusters(region):
                                     clusterName=cluster_name,
                                     fargateProfileName=profile_name
                                 )
-                                print(f"✅ Fargate profile {profile_name} deletion initiated")
+                                print(f"{Symbols.OK} Fargate profile {profile_name} deletion initiated")
                             except Exception as e:
-                                print(f"❌ Failed to delete Fargate profile {profile_name}: {e}")
+                                print(f"{Symbols.ERROR} Failed to delete Fargate profile {profile_name}: {e}")
                         
                         # Wait for Fargate profiles to be deleted
                         print("Waiting for Fargate profiles to be deleted...")
@@ -605,9 +606,9 @@ def delete_eks_clusters(region):
                                     fargateProfileName=profile_name,
                                     WaiterConfig={'Delay': 30, 'MaxAttempts': 40}
                                 )
-                                print(f"✅ Fargate profile {profile_name} deleted")
+                                print(f"{Symbols.OK} Fargate profile {profile_name} deleted")
                             except Exception as e:
-                                print(f"⚠️ Timeout or error waiting for Fargate profile {profile_name}: {e}")
+                                print(f"{Symbols.WARN} Timeout or error waiting for Fargate profile {profile_name}: {e}")
                 
                 except Exception as e:
                     print(f"Warning: Could not process Fargate profiles: {e}")
@@ -647,10 +648,10 @@ def delete_eks_clusters(region):
                                     clusterName=cluster_name,
                                     nodegroupName=nodegroup_name
                                 )
-                                print(f"✅ Node group {nodegroup_name} deletion initiated")
+                                print(f"{Symbols.OK} Node group {nodegroup_name} deletion initiated")
                                 
                             except Exception as e:
-                                print(f"❌ Failed to delete node group {nodegroup_name}: {e}")
+                                print(f"{Symbols.ERROR} Failed to delete node group {nodegroup_name}: {e}")
                         
                         # Wait for all node groups to be deleted
                         print("Waiting for all node groups to be deleted...")
@@ -662,9 +663,9 @@ def delete_eks_clusters(region):
                                     nodegroupName=nodegroup_name,
                                     WaiterConfig={'Delay': 30, 'MaxAttempts': 60}
                                 )
-                                print(f"✅ Node group {nodegroup_name} deleted")
+                                print(f"{Symbols.OK} Node group {nodegroup_name} deleted")
                             except Exception as e:
-                                print(f"⚠️ Timeout or error waiting for node group {nodegroup_name}: {e}")
+                                print(f"{Symbols.WARN} Timeout or error waiting for node group {nodegroup_name}: {e}")
                 
                 except Exception as e:
                     print(f"Warning: Could not process node groups: {e}")
@@ -687,9 +688,9 @@ def delete_eks_clusters(region):
                                         try:
                                             print(f"Deleting ALB/NLB: {alb['LoadBalancerName']}")
                                             elb_client.delete_load_balancer(LoadBalancerArn=alb['LoadBalancerArn'])
-                                            print(f"✅ Deleted ALB/NLB: {alb['LoadBalancerName']}")
+                                            print(f"{Symbols.OK} Deleted ALB/NLB: {alb['LoadBalancerName']}")
                                         except Exception as e:
-                                            print(f"❌ Failed to delete ALB/NLB {alb['LoadBalancerName']}: {e}")
+                                            print(f"{Symbols.ERROR} Failed to delete ALB/NLB {alb['LoadBalancerName']}: {e}")
                                         break
                     except Exception as e:
                         print(f"Warning: Could not process ALBs/NLBs: {e}")
@@ -705,9 +706,9 @@ def delete_eks_clusters(region):
                                         try:
                                             print(f"Deleting Classic LB: {clb['LoadBalancerName']}")
                                             classic_elb_client.delete_load_balancer(LoadBalancerName=clb['LoadBalancerName'])
-                                            print(f"✅ Deleted Classic LB: {clb['LoadBalancerName']}")
+                                            print(f"{Symbols.OK} Deleted Classic LB: {clb['LoadBalancerName']}")
                                         except Exception as e:
-                                            print(f"❌ Failed to delete Classic LB {clb['LoadBalancerName']}: {e}")
+                                            print(f"{Symbols.ERROR} Failed to delete Classic LB {clb['LoadBalancerName']}: {e}")
                                         break
                     except Exception as e:
                         print(f"Warning: Could not process Classic LBs: {e}")
@@ -758,9 +759,9 @@ def delete_eks_clusters(region):
                                     addonName=addon_name,
                                     preserve=False
                                 )
-                                print(f"✅ Add-on {addon_name} deletion initiated")
+                                print(f"{Symbols.OK} Add-on {addon_name} deletion initiated")
                             except Exception as e:
-                                print(f"❌ Failed to delete add-on {addon_name}: {e}")
+                                print(f"{Symbols.ERROR} Failed to delete add-on {addon_name}: {e}")
                         
                         # Wait for add-ons to be deleted
                         print("Waiting for add-ons to be deleted...")
@@ -772,9 +773,9 @@ def delete_eks_clusters(region):
                                     addonName=addon_name,
                                     WaiterConfig={'Delay': 15, 'MaxAttempts': 40}
                                 )
-                                print(f"✅ Add-on {addon_name} deleted")
+                                print(f"{Symbols.OK} Add-on {addon_name} deleted")
                             except Exception as e:
-                                print(f"⚠️ Timeout or error waiting for add-on {addon_name}: {e}")
+                                print(f"{Symbols.WARN} Timeout or error waiting for add-on {addon_name}: {e}")
                 
                 except Exception as e:
                     print(f"Warning: Could not process add-ons: {e}")
@@ -782,7 +783,7 @@ def delete_eks_clusters(region):
                 # 6. Delete the EKS cluster
                 print(f"Deleting EKS cluster: {cluster_name}")
                 eks_client.delete_cluster(name=cluster_name)
-                print(f"✅ EKS cluster {cluster_name} deletion initiated")
+                print(f"{Symbols.OK} EKS cluster {cluster_name} deletion initiated")
                 
                 # Wait for cluster to be deleted
                 print(f"Waiting for cluster {cluster_name} to be deleted...")
@@ -792,9 +793,9 @@ def delete_eks_clusters(region):
                         name=cluster_name,
                         WaiterConfig={'Delay': 30, 'MaxAttempts': 80}  # 40 minutes max
                     )
-                    print(f"✅ EKS cluster {cluster_name} deleted")
+                    print(f"{Symbols.OK} EKS cluster {cluster_name} deleted")
                 except Exception as e:
-                    print(f"⚠️ Timeout or error waiting for cluster deletion: {e}")
+                    print(f"{Symbols.WARN} Timeout or error waiting for cluster deletion: {e}")
                 
                 # 7. Clean up remaining security groups after cluster deletion
                 try:
@@ -808,19 +809,19 @@ def delete_eks_clusters(region):
                                 if sg_name != 'default':
                                     print(f"Deleting security group: {sg_name} ({sg_id})")
                                     ec2_client.delete_security_group(GroupId=sg_id)
-                                    print(f"✅ Deleted security group: {sg_name}")
+                                    print(f"{Symbols.OK} Deleted security group: {sg_name}")
                             except Exception as e:
-                                print(f"❌ Failed to delete security group {sg_id}: {e}")
+                                print(f"{Symbols.ERROR} Failed to delete security group {sg_id}: {e}")
                 except Exception as e:
                     print(f"Warning: Could not clean up security groups: {e}")
                 
             except Exception as e:
-                print(f"❌ Failed to process EKS cluster {cluster_name}: {e}")
+                print(f"{Symbols.ERROR} Failed to process EKS cluster {cluster_name}: {e}")
         
-        print(f"✅ Completed EKS cluster cleanup in {region}")
+        print(f"{Symbols.OK} Completed EKS cluster cleanup in {region}")
         
     except Exception as e:
-        print(f"❌ Error processing EKS clusters in {region}: {e}")
+        print(f"{Symbols.ERROR} Error processing EKS clusters in {region}: {e}")
 
 @measure_time
 def delete_codecommit_repositories(region):
@@ -891,9 +892,9 @@ def delete_elastic_beanstalk_applications(region):
                             TerminateResources=True,
                             ForceTerminate=True  # Add force terminate
                         )
-                        print(f"✅ Environment {env_name} termination initiated")
+                        print(f"{Symbols.OK} Environment {env_name} termination initiated")
                     except Exception as e:
-                        print(f"❌ Failed to terminate environment {env_name}: {e}")
+                        print(f"{Symbols.ERROR} Failed to terminate environment {env_name}: {e}")
                         # Try alternative termination method
                         try:
                             eb_client.terminate_environment(
@@ -901,9 +902,9 @@ def delete_elastic_beanstalk_applications(region):
                                 TerminateResources=True,
                                 ForceTerminate=True
                             )
-                            print(f"✅ Environment {env_name} termination initiated (alternative method)")
+                            print(f"{Symbols.OK} Environment {env_name} termination initiated (alternative method)")
                         except Exception as e2:
-                            print(f"❌ Failed alternative termination for {env_name}: {e2}")
+                            print(f"{Symbols.ERROR} Failed alternative termination for {env_name}: {e2}")
                 else:
                     print(f"Environment {env_name} is already {env_status}")
 
@@ -922,7 +923,7 @@ def delete_elastic_beanstalk_applications(region):
                         active_environments = [env for env in current_environments if env['Status'] != 'Terminated']
                         
                         if not active_environments:
-                            print(f"✅ All environments terminated for application {app_name}")
+                            print(f"{Symbols.OK} All environments terminated for application {app_name}")
                             break
                         
                         print(f"Still waiting... {len(active_environments)} environments remaining:")
@@ -937,10 +938,10 @@ def delete_elastic_beanstalk_applications(region):
                         break
                 
                 if wait_time >= max_wait_time:
-                    print(f"⚠️ Timeout waiting for environments to terminate for {app_name}")
+                    print(f"{Symbols.WARN} Timeout waiting for environments to terminate for {app_name}")
 
         except Exception as e:
-            print(f"❌ Failed to process environments for application {app_name}: {e}")
+            print(f"{Symbols.ERROR} Failed to process environments for application {app_name}: {e}")
 
         # Delete the application
         try:
@@ -949,9 +950,9 @@ def delete_elastic_beanstalk_applications(region):
                 ApplicationName=app_name, 
                 TerminateEnvByForce=True
             )
-            print(f"✅ Application {app_name} deleted successfully")
+            print(f"{Symbols.OK} Application {app_name} deleted successfully")
         except Exception as e:
-            print(f"❌ Failed to delete application {app_name}: {e}")
+            print(f"{Symbols.ERROR} Failed to delete application {app_name}: {e}")
             # Try to force delete application versions first
             try:
                 print(f"Attempting to delete application versions for {app_name}")
@@ -970,11 +971,11 @@ def delete_elastic_beanstalk_applications(region):
                 
                 # Retry application deletion
                 eb_client.delete_application(ApplicationName=app_name, TerminateEnvByForce=True)
-                print(f"✅ Application {app_name} deleted successfully (retry)")
+                print(f"{Symbols.OK} Application {app_name} deleted successfully (retry)")
             except Exception as e2:
-                print(f"❌ Final attempt failed for application {app_name}: {e2}")
+                print(f"{Symbols.ERROR} Final attempt failed for application {app_name}: {e2}")
 
-    print(f"✅ Completed processing Elastic Beanstalk applications in {region}")
+    print(f"{Symbols.OK} Completed processing Elastic Beanstalk applications in {region}")
 
 @measure_time
 def delete_all_sns_subscriptions(region):
@@ -1011,9 +1012,9 @@ def delete_all_sns_subscriptions(region):
             try:
                 print(f"Deleting subscription {subscription_arn}")
                 sns_client.unsubscribe(SubscriptionArn=subscription_arn)
-                print(f"✅ Deleted subscription: {subscription_arn}")
+                print(f"{Symbols.OK} Deleted subscription: {subscription_arn}")
             except Exception as e:
-                print(f"❌ Failed to delete subscription {subscription_arn}: {e}")
+                print(f"{Symbols.ERROR} Failed to delete subscription {subscription_arn}: {e}")
         
         print("Waiting for subscriptions to be deleted...")
         time.sleep(5)  # Reduced wait time since we're being more selective
@@ -1094,10 +1095,10 @@ def delete_all_ecs_clusters(region):
                                 service=service_name,
                                 force=True
                             )
-                            print(f"✅ Deleted service: {service_name}")
+                            print(f"{Symbols.OK} Deleted service: {service_name}")
                             
                         except Exception as e:
-                            print(f"❌ Failed to delete service {service_name}: {e}")
+                            print(f"{Symbols.ERROR} Failed to delete service {service_name}: {e}")
                 
                 # 2. Stop all running tasks
                 tasks_response = ecs_client.list_tasks(cluster=cluster_arn)
@@ -1113,9 +1114,9 @@ def delete_all_ecs_clusters(region):
                                 task=task_arn,
                                 reason='Cluster cleanup by varadharajaan at 2025-06-11 09:11:02 UTC'
                             )
-                            print(f"✅ Stopped task: {task_arn}")
+                            print(f"{Symbols.OK} Stopped task: {task_arn}")
                         except Exception as e:
-                            print(f"❌ Failed to stop task {task_arn}: {e}")
+                            print(f"{Symbols.ERROR} Failed to stop task {task_arn}: {e}")
                 
                 # 3. Deregister container instances
                 instances_response = ecs_client.list_container_instances(cluster=cluster_arn)
@@ -1141,19 +1142,19 @@ def delete_all_ecs_clusters(region):
                                 containerInstance=instance_arn,
                                 force=True
                             )
-                            print(f"✅ Deregistered container instance: {instance_arn}")
+                            print(f"{Symbols.OK} Deregistered container instance: {instance_arn}")
                             
                             # Terminate the underlying EC2 instance if it exists
                             if ec2_instance_id:
                                 try:
                                     print(f"Terminating EC2 instance: {ec2_instance_id}")
                                     ec2_client.terminate_instances(InstanceIds=[ec2_instance_id])
-                                    print(f"✅ Terminated EC2 instance: {ec2_instance_id}")
+                                    print(f"{Symbols.OK} Terminated EC2 instance: {ec2_instance_id}")
                                 except Exception as e:
-                                    print(f"❌ Failed to terminate EC2 instance {ec2_instance_id}: {e}")
+                                    print(f"{Symbols.ERROR} Failed to terminate EC2 instance {ec2_instance_id}: {e}")
                             
                         except Exception as e:
-                            print(f"❌ Failed to deregister container instance {instance_arn}: {e}")
+                            print(f"{Symbols.ERROR} Failed to deregister container instance {instance_arn}: {e}")
                 
                 # 4. Delete capacity providers associated with the cluster
                 try:
@@ -1173,9 +1174,9 @@ def delete_all_ecs_clusters(region):
                                     capacityProviders=[],
                                     defaultCapacityProviderStrategy=[]
                                 )
-                                print(f"✅ Disassociated capacity providers from cluster")
+                                print(f"{Symbols.OK} Disassociated capacity providers from cluster")
                             except Exception as e:
-                                print(f"❌ Failed to disassociate capacity providers: {e}")
+                                print(f"{Symbols.ERROR} Failed to disassociate capacity providers: {e}")
                 except Exception as e:
                     print(f"Warning: Could not check capacity providers: {e}")
                 
@@ -1188,7 +1189,7 @@ def delete_all_ecs_clusters(region):
                         try:
                             current_services = ecs_client.list_services(cluster=cluster_arn)
                             if not current_services.get('serviceArns'):
-                                print(f"✅ All services deleted from cluster {cluster_name}")
+                                print(f"{Symbols.OK} All services deleted from cluster {cluster_name}")
                                 break
                             print(f"Still waiting for services to be deleted... ({len(current_services.get('serviceArns', []))} remaining)")
                             time.sleep(30)
@@ -1199,15 +1200,15 @@ def delete_all_ecs_clusters(region):
                 # 6. Delete the cluster
                 print(f"Deleting ECS cluster: {cluster_name}")
                 ecs_client.delete_cluster(cluster=cluster_arn)
-                print(f"✅ Deleted ECS cluster: {cluster_name}")
+                print(f"{Symbols.OK} Deleted ECS cluster: {cluster_name}")
                 
             except Exception as e:
-                print(f"❌ Failed to process ECS cluster {cluster_name}: {e}")
+                print(f"{Symbols.ERROR} Failed to process ECS cluster {cluster_name}: {e}")
         
-        print(f"✅ Completed ECS cluster cleanup in {region}")
+        print(f"{Symbols.OK} Completed ECS cluster cleanup in {region}")
         
     except Exception as e:
-        print(f"❌ Error processing ECS clusters in {region}: {e}")
+        print(f"{Symbols.ERROR} Error processing ECS clusters in {region}: {e}")
 
 @measure_time
 def stop_codebuild_builds(region):
@@ -1239,14 +1240,14 @@ def stop_codebuild_builds(region):
                 try:
                     print(f"Stopping CodeBuild build: {build_id} (Status: {build_status})")
                     codebuild_client.stop_build(id=build_id)
-                    print(f"✅ Stopped build: {build_id}")
+                    print(f"{Symbols.OK} Stopped build: {build_id}")
                 except Exception as e:
-                    print(f"❌ Failed to stop build {build_id}: {e}")
+                    print(f"{Symbols.ERROR} Failed to stop build {build_id}: {e}")
             else:
                 print(f"Build {build_id} is already {build_status}, no need to stop")
                 
     except Exception as e:
-        print(f"❌ Error processing CodeBuild builds in {region}: {e}")
+        print(f"{Symbols.ERROR} Error processing CodeBuild builds in {region}: {e}")
 
 @measure_time
 def delete_codebuild_projects(region):
@@ -1289,13 +1290,13 @@ def delete_codebuild_projects(region):
                     # Delete the project
                     print(f"Deleting CodeBuild project: {project}")
                     codebuild_client.delete_project(name=project)
-                    print(f"✅ Deleted CodeBuild project: {project}")
+                    print(f"{Symbols.OK} Deleted CodeBuild project: {project}")
                     
             except Exception as e:
-                print(f"❌ Failed to delete CodeBuild project {project}: {e}")
+                print(f"{Symbols.ERROR} Failed to delete CodeBuild project {project}: {e}")
                 
     except Exception as e:
-        print(f"❌ Error processing CodeBuild projects in {region}: {e}")
+        print(f"{Symbols.ERROR} Error processing CodeBuild projects in {region}: {e}")
         
 @measure_time
 def stop_codepipeline_executions(region):
@@ -1334,17 +1335,17 @@ def stop_codepipeline_executions(region):
                                 pipelineExecutionId=execution_id,
                                 abandon=True  # Force stop
                             )
-                            print(f"✅ Stopped execution: {execution_id}")
+                            print(f"{Symbols.OK} Stopped execution: {execution_id}")
                         except Exception as e:
-                            print(f"❌ Failed to stop execution {execution_id}: {e}")
+                            print(f"{Symbols.ERROR} Failed to stop execution {execution_id}: {e}")
                     else:
                         print(f"Execution {execution_id} is {status}, no action needed")
                         
             except Exception as e:
-                print(f"❌ Failed to process pipeline {pipeline_name}: {e}")
+                print(f"{Symbols.ERROR} Failed to process pipeline {pipeline_name}: {e}")
                 
     except Exception as e:
-        print(f"❌ Error processing CodePipeline executions in {region}: {e}")
+        print(f"{Symbols.ERROR} Error processing CodePipeline executions in {region}: {e}")
 
 @measure_time
 def delete_codepipelines(region):
@@ -1387,13 +1388,13 @@ def delete_codepipelines(region):
                 
                 # Delete the pipeline
                 codepipeline_client.delete_pipeline(name=pipeline_name)
-                print(f"✅ Deleted CodePipeline: {pipeline_name}")
+                print(f"{Symbols.OK} Deleted CodePipeline: {pipeline_name}")
                 
             except Exception as e:
-                print(f"❌ Failed to delete CodePipeline {pipeline_name}: {e}")
+                print(f"{Symbols.ERROR} Failed to delete CodePipeline {pipeline_name}: {e}")
                 
     except Exception as e:
-        print(f"❌ Error processing CodePipeline deletion in {region}: {e}")
+        print(f"{Symbols.ERROR} Error processing CodePipeline deletion in {region}: {e}")
 
 
 @measure_time
@@ -1511,16 +1512,16 @@ def delete_route53_hosted_zones(region):
                             )
                             
                             change_id = change_response['ChangeInfo']['Id']
-                            print(f"✅ Submitted batch deletion (Change ID: {change_id})")
+                            print(f"{Symbols.OK} Submitted batch deletion (Change ID: {change_id})")
                             
                             # Wait for change to propagate
                             print(f"Waiting for change {change_id} to complete...")
                             waiter = route53_client.get_waiter('resource_record_sets_changed')
                             waiter.wait(Id=change_id, WaiterConfig={'Delay': 10, 'MaxAttempts': 60})
-                            print(f"✅ Change {change_id} completed")
+                            print(f"{Symbols.OK} Change {change_id} completed")
                             
                         except Exception as e:
-                            print(f"❌ Failed to delete batch of records: {e}")
+                            print(f"{Symbols.ERROR} Failed to delete batch of records: {e}")
                             # Try deleting records individually
                             for record in batch:
                                 try:
@@ -1536,11 +1537,11 @@ def delete_route53_hosted_zones(region):
                                         HostedZoneId=zone_id,
                                         ChangeBatch=individual_change
                                     )
-                                    print(f"✅ Deleted record: {record['Name']} ({record['Type']})")
+                                    print(f"{Symbols.OK} Deleted record: {record['Name']} ({record['Type']})")
                                     time.sleep(1)  # Rate limiting
                                     
                                 except Exception as individual_error:
-                                    print(f"❌ Failed to delete record {record['Name']} ({record['Type']}): {individual_error}")
+                                    print(f"{Symbols.ERROR} Failed to delete record {record['Name']} ({record['Type']}): {individual_error}")
                 else:
                     print(f"No user-created records to delete in {zone_name}")
                 
@@ -1562,9 +1563,9 @@ def delete_route53_hosted_zones(region):
                                         'VPCId': vpc_id
                                     }
                                 )
-                                print(f"✅ Disassociated VPC {vpc_id}")
+                                print(f"{Symbols.OK} Disassociated VPC {vpc_id}")
                             except Exception as e:
-                                print(f"❌ Failed to disassociate VPC {vpc_id}: {e}")
+                                print(f"{Symbols.ERROR} Failed to disassociate VPC {vpc_id}: {e}")
                                 
                     except Exception as e:
                         print(f"Warning: Could not get VPC associations for {zone_name}: {e}")
@@ -1572,15 +1573,15 @@ def delete_route53_hosted_zones(region):
                 # Delete the hosted zone
                 print(f"Deleting hosted zone: {zone_name}")
                 route53_client.delete_hosted_zone(Id=zone_id)
-                print(f"✅ Deleted hosted zone: {zone_name}")
+                print(f"{Symbols.OK} Deleted hosted zone: {zone_name}")
                 
             except Exception as e:
-                print(f"❌ Failed to process hosted zone {zone_name}: {e}")
+                print(f"{Symbols.ERROR} Failed to process hosted zone {zone_name}: {e}")
                 
-        print(f"✅ Completed Route53 hosted zone cleanup")
+        print(f"{Symbols.OK} Completed Route53 hosted zone cleanup")
         
     except Exception as e:
-        print(f"❌ Error processing Route53 hosted zones: {e}")
+        print(f"{Symbols.ERROR} Error processing Route53 hosted zones: {e}")
         
 
 @measure_time
@@ -1621,14 +1622,14 @@ def delete_sns_topics(region):
                     print(f"Unsubscribing: {subscription_arn} from topic: {topic_arn} in {region}")
                     sns_client.unsubscribe(SubscriptionArn=subscription_arn)
                 except Exception as e:
-                    print(f"❌ Failed to unsubscribe {subscription_arn}: {e}")
+                    print(f"{Symbols.ERROR} Failed to unsubscribe {subscription_arn}: {e}")
 
             print(f"Deleting SNS topic: {topic_arn} in {region}")
             sns_client.delete_topic(TopicArn=topic_arn)
-            print(f"✅ Deleted SNS topic: {topic_arn}")
+            print(f"{Symbols.OK} Deleted SNS topic: {topic_arn}")
             
         except Exception as e:
-            print(f"❌ Failed to process topic {topic_arn}: {e}")
+            print(f"{Symbols.ERROR} Failed to process topic {topic_arn}: {e}")
 
 @measure_time
 def delete_rds_instances(region):
@@ -1692,7 +1693,7 @@ def delete_rds_instances(region):
                                 DeletionProtection=False,
                                 ApplyImmediately=True
                             )
-                            print(f"✅ Disabled deletion protection for {instance_id}")
+                            print(f"{Symbols.OK} Disabled deletion protection for {instance_id}")
                             
                             # Wait for modification to complete
                             print(f"Waiting for modification to complete...")
@@ -1701,16 +1702,16 @@ def delete_rds_instances(region):
                                 DBInstanceIdentifier=instance_id,
                                 WaiterConfig={'Delay': 30, 'MaxAttempts': 20}
                             )
-                            print(f"✅ Modification completed for {instance_id}")
+                            print(f"{Symbols.OK} Modification completed for {instance_id}")
                         except Exception as e:
-                            print(f"❌ Failed to disable deletion protection for {instance_id}: {e}")
+                            print(f"{Symbols.ERROR} Failed to disable deletion protection for {instance_id}: {e}")
                     
                     # Stop the instance if it's running (to save costs before deletion)
                     if status == 'available':
                         print(f"Stopping RDS instance {instance_id} before deletion")
                         try:
                             rds_client.stop_db_instance(DBInstanceIdentifier=instance_id)
-                            print(f"✅ Stop initiated for {instance_id}")
+                            print(f"{Symbols.OK} Stop initiated for {instance_id}")
                             
                             # Wait for instance to stop
                             print(f"Waiting for {instance_id} to stop...")
@@ -1719,7 +1720,7 @@ def delete_rds_instances(region):
                                 DBInstanceIdentifier=instance_id,
                                 WaiterConfig={'Delay': 30, 'MaxAttempts': 40}
                             )
-                            print(f"✅ {instance_id} stopped successfully")
+                            print(f"{Symbols.OK} {instance_id} stopped successfully")
                         except Exception as e:
                             print(f"Warning: Could not stop {instance_id}: {e}")
                     
@@ -1737,10 +1738,10 @@ def delete_rds_instances(region):
                         del delete_params['SkipFinalSnapshot']
                     
                     rds_client.delete_db_instance(**delete_params)
-                    print(f"✅ Deletion initiated for RDS instance: {instance_id}")
+                    print(f"{Symbols.OK} Deletion initiated for RDS instance: {instance_id}")
                     
                 except Exception as e:
-                    print(f"❌ Failed to process RDS instance {instance_id}: {e}")
+                    print(f"{Symbols.ERROR} Failed to process RDS instance {instance_id}: {e}")
         
         # Wait for all instances to be deleted
         if all_instances:
@@ -1758,7 +1759,7 @@ def delete_rds_instances(region):
                     ]
                     
                     if not active_instances:
-                        print(f"✅ All RDS instances deleted")
+                        print(f"{Symbols.OK} All RDS instances deleted")
                         break
                     
                     print(f"Still waiting... {len(active_instances)} instances remaining")
@@ -1773,7 +1774,7 @@ def delete_rds_instances(region):
                     break
             
             if wait_time >= max_wait:
-                print(f"⚠️ Timeout waiting for RDS instances to be deleted")
+                print(f"{Symbols.WARN} Timeout waiting for RDS instances to be deleted")
         
         # ========================================
         # 2. DELETE RDS CLUSTERS (Aurora)
@@ -1841,9 +1842,9 @@ def delete_rds_instances(region):
                                         SkipFinalSnapshot=True,
                                         DeleteAutomatedBackups=True
                                     )
-                                    print(f"✅ Deletion initiated for cluster member: {member_id}")
+                                    print(f"{Symbols.OK} Deletion initiated for cluster member: {member_id}")
                                 except Exception as e:
-                                    print(f"❌ Failed to delete cluster member {member_id}: {e}")
+                                    print(f"{Symbols.ERROR} Failed to delete cluster member {member_id}: {e}")
                             
                             # Wait for cluster members to be deleted
                             print(f"Waiting for cluster members to be deleted...")
@@ -1858,7 +1859,7 @@ def delete_rds_instances(region):
                                     
                                     remaining_members = current_cluster.get('DBClusterMembers', [])
                                     if not remaining_members:
-                                        print(f"✅ All cluster members deleted")
+                                        print(f"{Symbols.OK} All cluster members deleted")
                                         break
                                     
                                     print(f"Still waiting... {len(remaining_members)} members remaining")
@@ -1878,10 +1879,10 @@ def delete_rds_instances(region):
                                     DeletionProtection=False,
                                     ApplyImmediately=True
                                 )
-                                print(f"✅ Disabled deletion protection for cluster {cluster_id}")
+                                print(f"{Symbols.OK} Disabled deletion protection for cluster {cluster_id}")
                                 time.sleep(30)
                             except Exception as e:
-                                print(f"❌ Failed to disable deletion protection for cluster {cluster_id}: {e}")
+                                print(f"{Symbols.ERROR} Failed to disable deletion protection for cluster {cluster_id}: {e}")
                         
                         # Delete the cluster
                         print(f"Deleting RDS cluster: {cluster_id}")
@@ -1890,10 +1891,10 @@ def delete_rds_instances(region):
                             SkipFinalSnapshot=True,
                             DeleteAutomatedBackups=True
                         )
-                        print(f"✅ Deletion initiated for RDS cluster: {cluster_id}")
+                        print(f"{Symbols.OK} Deletion initiated for RDS cluster: {cluster_id}")
                         
                     except Exception as e:
-                        print(f"❌ Failed to process RDS cluster {cluster_id}: {e}")
+                        print(f"{Symbols.ERROR} Failed to process RDS cluster {cluster_id}: {e}")
         
         except Exception as e:
             print(f"Warning: Could not process RDS clusters: {e}")
@@ -1921,9 +1922,9 @@ def delete_rds_instances(region):
                     print(f"Deleting DB snapshot: {snapshot_id} (Instance: {db_instance_id}, Status: {status})")
                     try:
                         rds_client.delete_db_snapshot(DBSnapshotIdentifier=snapshot_id)
-                        print(f"✅ Deleted DB snapshot: {snapshot_id}")
+                        print(f"{Symbols.OK} Deleted DB snapshot: {snapshot_id}")
                     except Exception as e:
-                        print(f"❌ Failed to delete DB snapshot {snapshot_id}: {e}")
+                        print(f"{Symbols.ERROR} Failed to delete DB snapshot {snapshot_id}: {e}")
             else:
                 print("No manual DB snapshots found")
             
@@ -1941,9 +1942,9 @@ def delete_rds_instances(region):
                     print(f"Deleting cluster snapshot: {snapshot_id} (Cluster: {cluster_id}, Status: {status})")
                     try:
                         rds_client.delete_db_cluster_snapshot(DBClusterSnapshotIdentifier=snapshot_id)
-                        print(f"✅ Deleted cluster snapshot: {snapshot_id}")
+                        print(f"{Symbols.OK} Deleted cluster snapshot: {snapshot_id}")
                     except Exception as e:
-                        print(f"❌ Failed to delete cluster snapshot {snapshot_id}: {e}")
+                        print(f"{Symbols.ERROR} Failed to delete cluster snapshot {snapshot_id}: {e}")
             else:
                 print("No manual cluster snapshots found")
                 
@@ -1976,9 +1977,9 @@ def delete_rds_instances(region):
                     print(f"Deleting DB subnet group: {group_name} (VPC: {vpc_id}, Subnets: {len(subnets)})")
                     try:
                         rds_client.delete_db_subnet_group(DBSubnetGroupName=group_name)
-                        print(f"✅ Deleted DB subnet group: {group_name}")
+                        print(f"{Symbols.OK} Deleted DB subnet group: {group_name}")
                     except Exception as e:
-                        print(f"❌ Failed to delete DB subnet group {group_name}: {e}")
+                        print(f"{Symbols.ERROR} Failed to delete DB subnet group {group_name}: {e}")
             else:
                 print("No custom DB subnet groups found")
                 
@@ -2011,9 +2012,9 @@ def delete_rds_instances(region):
                     print(f"Deleting DB parameter group: {group_name} (Family: {family})")
                     try:
                         rds_client.delete_db_parameter_group(DBParameterGroupName=group_name)
-                        print(f"✅ Deleted DB parameter group: {group_name}")
+                        print(f"{Symbols.OK} Deleted DB parameter group: {group_name}")
                     except Exception as e:
-                        print(f"❌ Failed to delete DB parameter group {group_name}: {e}")
+                        print(f"{Symbols.ERROR} Failed to delete DB parameter group {group_name}: {e}")
             else:
                 print("No custom DB parameter groups found")
             
@@ -2035,9 +2036,9 @@ def delete_rds_instances(region):
                     print(f"Deleting cluster parameter group: {group_name} (Family: {family})")
                     try:
                         rds_client.delete_db_cluster_parameter_group(DBClusterParameterGroupName=group_name)
-                        print(f"✅ Deleted cluster parameter group: {group_name}")
+                        print(f"{Symbols.OK} Deleted cluster parameter group: {group_name}")
                     except Exception as e:
-                        print(f"❌ Failed to delete cluster parameter group {group_name}: {e}")
+                        print(f"{Symbols.ERROR} Failed to delete cluster parameter group {group_name}: {e}")
             else:
                 print("No custom cluster parameter groups found")
                 
@@ -2069,19 +2070,19 @@ def delete_rds_instances(region):
                     print(f"Deleting option group: {group_name} (Engine: {engine_name})")
                     try:
                         rds_client.delete_option_group(OptionGroupName=group_name)
-                        print(f"✅ Deleted option group: {group_name}")
+                        print(f"{Symbols.OK} Deleted option group: {group_name}")
                     except Exception as e:
-                        print(f"❌ Failed to delete option group {group_name}: {e}")
+                        print(f"{Symbols.ERROR} Failed to delete option group {group_name}: {e}")
             else:
                 print("No custom option groups found")
                 
         except Exception as e:
             print(f"Warning: Could not process option groups: {e}")
         
-        print(f"\n✅ Completed comprehensive RDS cleanup in {region}")
+        print(f"\n{Symbols.OK} Completed comprehensive RDS cleanup in {region}")
         
     except Exception as e:
-        print(f"❌ Error during RDS cleanup in {region}: {e}")
+        print(f"{Symbols.ERROR} Error during RDS cleanup in {region}: {e}")
 
 @measure_time
 def delete_all_objects(bucket_name, region):
@@ -2238,9 +2239,9 @@ def delete_auto_scaling_groups(region):
                 print(f"Suspending all scaling processes for {asg_name}")
                 try:
                     autoscaling_client.suspend_processes(AutoScalingGroupName=asg_name)
-                    print(f"✅ Suspended scaling processes for {asg_name}")
+                    print(f"{Symbols.OK} Suspended scaling processes for {asg_name}")
                 except Exception as e:
-                    print(f"❌ Failed to suspend processes for {asg_name}: {e}")
+                    print(f"{Symbols.ERROR} Failed to suspend processes for {asg_name}: {e}")
                 
                 # 2. Detach and terminate all instances
                 if instances:
@@ -2263,9 +2264,9 @@ def delete_auto_scaling_groups(region):
                                 InstanceId=instance_id,
                                 ShouldDecrementDesiredCapacity=True
                             )
-                            print(f"✅ Terminated instance: {instance_id}")
+                            print(f"{Symbols.OK} Terminated instance: {instance_id}")
                         except Exception as e:
-                            print(f"❌ Failed to terminate instance {instance_id}: {e}")
+                            print(f"{Symbols.ERROR} Failed to terminate instance {instance_id}: {e}")
                     
                     # Wait for instances to terminate
                     print(f"Waiting for instances to terminate...")
@@ -2282,7 +2283,7 @@ def delete_auto_scaling_groups(region):
                             if current_asg['AutoScalingGroups']:
                                 current_instances = current_asg['AutoScalingGroups'][0].get('Instances', [])
                                 if not current_instances:
-                                    print(f"✅ All instances terminated in {asg_name}")
+                                    print(f"{Symbols.OK} All instances terminated in {asg_name}")
                                     break
                                 print(f"Still waiting... {len(current_instances)} instances remaining")
                             else:
@@ -2296,7 +2297,7 @@ def delete_auto_scaling_groups(region):
                             break
                     
                     if wait_time >= max_wait:
-                        print(f"⚠️ Timeout waiting for instances to terminate in {asg_name}")
+                        print(f"{Symbols.WARN} Timeout waiting for instances to terminate in {asg_name}")
                 
                 # 3. Update ASG to zero capacity
                 print(f"Setting ASG {asg_name} capacity to zero")
@@ -2307,9 +2308,9 @@ def delete_auto_scaling_groups(region):
                         MaxSize=0,
                         DesiredCapacity=0
                     )
-                    print(f"✅ Set {asg_name} capacity to zero")
+                    print(f"{Symbols.OK} Set {asg_name} capacity to zero")
                 except Exception as e:
-                    print(f"❌ Failed to update ASG capacity for {asg_name}: {e}")
+                    print(f"{Symbols.ERROR} Failed to update ASG capacity for {asg_name}: {e}")
                 
                 # 4. Detach load balancers
                 target_group_arns = asg.get('TargetGroupARNs', [])
@@ -2322,9 +2323,9 @@ def delete_auto_scaling_groups(region):
                             AutoScalingGroupName=asg_name,
                             TargetGroupARNs=target_group_arns
                         )
-                        print(f"✅ Detached target groups from {asg_name}")
+                        print(f"{Symbols.OK} Detached target groups from {asg_name}")
                     except Exception as e:
-                        print(f"❌ Failed to detach target groups from {asg_name}: {e}")
+                        print(f"{Symbols.ERROR} Failed to detach target groups from {asg_name}: {e}")
                 
                 if load_balancer_names:
                     print(f"Detaching {len(load_balancer_names)} classic load balancers from {asg_name}")
@@ -2333,9 +2334,9 @@ def delete_auto_scaling_groups(region):
                             AutoScalingGroupName=asg_name,
                             LoadBalancerNames=load_balancer_names
                         )
-                        print(f"✅ Detached classic load balancers from {asg_name}")
+                        print(f"{Symbols.OK} Detached classic load balancers from {asg_name}")
                     except Exception as e:
-                        print(f"❌ Failed to detach classic load balancers from {asg_name}: {e}")
+                        print(f"{Symbols.ERROR} Failed to detach classic load balancers from {asg_name}: {e}")
                 
                 # 5. Delete scaling policies
                 try:
@@ -2354,9 +2355,9 @@ def delete_auto_scaling_groups(region):
                                     AutoScalingGroupName=asg_name,
                                     PolicyName=policy_name
                                 )
-                                print(f"✅ Deleted scaling policy: {policy_name}")
+                                print(f"{Symbols.OK} Deleted scaling policy: {policy_name}")
                             except Exception as e:
-                                print(f"❌ Failed to delete scaling policy {policy_name}: {e}")
+                                print(f"{Symbols.ERROR} Failed to delete scaling policy {policy_name}: {e}")
                 
                 except Exception as e:
                     print(f"Warning: Could not process scaling policies for {asg_name}: {e}")
@@ -2378,9 +2379,9 @@ def delete_auto_scaling_groups(region):
                                     AutoScalingGroupName=asg_name,
                                     ScheduledActionName=action_name
                                 )
-                                print(f"✅ Deleted scheduled action: {action_name}")
+                                print(f"{Symbols.OK} Deleted scheduled action: {action_name}")
                             except Exception as e:
-                                print(f"❌ Failed to delete scheduled action {action_name}: {e}")
+                                print(f"{Symbols.ERROR} Failed to delete scheduled action {action_name}: {e}")
                 
                 except Exception as e:
                     print(f"Warning: Could not process scheduled actions for {asg_name}: {e}")
@@ -2402,9 +2403,9 @@ def delete_auto_scaling_groups(region):
                                     AutoScalingGroupName=asg_name,
                                     LifecycleHookName=hook_name
                                 )
-                                print(f"✅ Deleted lifecycle hook: {hook_name}")
+                                print(f"{Symbols.OK} Deleted lifecycle hook: {hook_name}")
                             except Exception as e:
-                                print(f"❌ Failed to delete lifecycle hook {hook_name}: {e}")
+                                print(f"{Symbols.ERROR} Failed to delete lifecycle hook {hook_name}: {e}")
                 
                 except Exception as e:
                     print(f"Warning: Could not process lifecycle hooks for {asg_name}: {e}")
@@ -2416,9 +2417,9 @@ def delete_auto_scaling_groups(region):
                         AutoScalingGroupName=asg_name,
                         ForceDelete=True  # Force delete even if instances exist
                     )
-                    print(f"✅ Deleted Auto Scaling Group: {asg_name}")
+                    print(f"{Symbols.OK} Deleted Auto Scaling Group: {asg_name}")
                 except Exception as e:
-                    print(f"❌ Failed to delete ASG {asg_name}: {e}")
+                    print(f"{Symbols.ERROR} Failed to delete ASG {asg_name}: {e}")
                 
                 # 9. Clean up associated Launch Configuration (if not shared)
                 if launch_config:
@@ -2439,20 +2440,20 @@ def delete_auto_scaling_groups(region):
                             autoscaling_client.delete_launch_configuration(
                                 LaunchConfigurationName=launch_config
                             )
-                            print(f"✅ Deleted launch configuration: {launch_config}")
+                            print(f"{Symbols.OK} Deleted launch configuration: {launch_config}")
                         else:
                             print(f"Launch configuration {launch_config} is used by other ASGs: {other_users}")
                             
                     except Exception as e:
-                        print(f"❌ Failed to delete launch configuration {launch_config}: {e}")
+                        print(f"{Symbols.ERROR} Failed to delete launch configuration {launch_config}: {e}")
                 
             except Exception as e:
-                print(f"❌ Failed to process Auto Scaling Group {asg_name}: {e}")
+                print(f"{Symbols.ERROR} Failed to process Auto Scaling Group {asg_name}: {e}")
         
-        print(f"✅ Completed Auto Scaling Group cleanup in {region}")
+        print(f"{Symbols.OK} Completed Auto Scaling Group cleanup in {region}")
         
     except Exception as e:
-        print(f"❌ Error processing Auto Scaling Groups in {region}: {e}")
+        print(f"{Symbols.ERROR} Error processing Auto Scaling Groups in {region}: {e}")
 
 @measure_time
 def delete_load_balancers_and_target_groups(region):
@@ -2516,9 +2517,9 @@ def delete_load_balancers_and_target_groups(region):
                                 print(f"Deleting listener: {listener_protocol}:{listener_port} ({listener_arn})")
                                 try:
                                     elbv2_client.delete_listener(ListenerArn=listener_arn)
-                                    print(f"✅ Deleted listener: {listener_protocol}:{listener_port}")
+                                    print(f"{Symbols.OK} Deleted listener: {listener_protocol}:{listener_port}")
                                 except Exception as e:
-                                    print(f"❌ Failed to delete listener {listener_arn}: {e}")
+                                    print(f"{Symbols.ERROR} Failed to delete listener {listener_arn}: {e}")
                         else:
                             print("No listeners found")
                     except Exception as e:
@@ -2532,7 +2533,7 @@ def delete_load_balancers_and_target_groups(region):
                     # Delete the load balancer
                     print(f"Deleting {lb_type} load balancer: {lb_name}")
                     elbv2_client.delete_load_balancer(LoadBalancerArn=lb_arn)
-                    print(f"✅ Deletion initiated for {lb_name}")
+                    print(f"{Symbols.OK} Deletion initiated for {lb_name}")
                     
                     # Wait for deletion to complete
                     print(f"Waiting for {lb_name} to be deleted...")
@@ -2547,20 +2548,20 @@ def delete_load_balancers_and_target_groups(region):
                             time.sleep(check_interval)
                             wait_time += check_interval
                         except elbv2_client.exceptions.LoadBalancerNotFoundException:
-                            print(f"✅ {lb_name} deleted successfully")
+                            print(f"{Symbols.OK} {lb_name} deleted successfully")
                             break
                         except Exception as e:
                             print(f"Error checking deletion status: {e}")
                             break
                     
                     if wait_time >= max_wait:
-                        print(f"⚠️ Timeout waiting for {lb_name} deletion")
+                        print(f"{Symbols.WARN} Timeout waiting for {lb_name} deletion")
                     
                 except Exception as e:
-                    print(f"❌ Failed to process load balancer {lb_name}: {e}")
+                    print(f"{Symbols.ERROR} Failed to process load balancer {lb_name}: {e}")
     
     except Exception as e:
-        print(f"❌ Error processing Application/Network Load Balancers: {e}")
+        print(f"{Symbols.ERROR} Error processing Application/Network Load Balancers: {e}")
     
     # ========================================
     # 2. DELETE CLASSIC LOAD BALANCERS
@@ -2604,21 +2605,21 @@ def delete_load_balancers_and_target_groups(region):
                                 LoadBalancerName=clb_name,
                                 Instances=[{'InstanceId': iid} for iid in instance_ids]
                             )
-                            print(f"✅ Deregistered instances from {clb_name}")
+                            print(f"{Symbols.OK} Deregistered instances from {clb_name}")
                             time.sleep(5)  # Wait for deregistration
                         except Exception as e:
-                            print(f"❌ Failed to deregister instances from {clb_name}: {e}")
+                            print(f"{Symbols.ERROR} Failed to deregister instances from {clb_name}: {e}")
                     
                     # Delete the Classic Load Balancer
                     print(f"Deleting Classic Load Balancer: {clb_name}")
                     elb_client.delete_load_balancer(LoadBalancerName=clb_name)
-                    print(f"✅ Deleted Classic Load Balancer: {clb_name}")
+                    print(f"{Symbols.OK} Deleted Classic Load Balancer: {clb_name}")
                     
                 except Exception as e:
-                    print(f"❌ Failed to process Classic Load Balancer {clb_name}: {e}")
+                    print(f"{Symbols.ERROR} Failed to process Classic Load Balancer {clb_name}: {e}")
     
     except Exception as e:
-        print(f"❌ Error processing Classic Load Balancers: {e}")
+        print(f"{Symbols.ERROR} Error processing Classic Load Balancers: {e}")
     
     # ========================================
     # 3. DELETE TARGET GROUPS
@@ -2679,7 +2680,7 @@ def delete_load_balancers_and_target_groups(region):
                                     TargetGroupArn=tg_arn,
                                     Targets=targets_to_deregister
                                 )
-                                print(f"✅ Deregistered targets from {tg_name}")
+                                print(f"{Symbols.OK} Deregistered targets from {tg_name}")
                                 
                                 # Wait for targets to be deregistered
                                 print(f"Waiting for targets to be deregistered from {tg_name}...")
@@ -2696,7 +2697,7 @@ def delete_load_balancers_and_target_groups(region):
                                         ]
                                         
                                         if not healthy_targets:
-                                            print(f"✅ All targets deregistered from {tg_name}")
+                                            print(f"{Symbols.OK} All targets deregistered from {tg_name}")
                                             break
                                         
                                         print(f"Still waiting... {len(healthy_targets)} targets remaining")
@@ -2708,7 +2709,7 @@ def delete_load_balancers_and_target_groups(region):
                                         break
                                 
                                 if wait_time >= max_wait:
-                                    print(f"⚠️ Timeout waiting for targets to deregister from {tg_name}")
+                                    print(f"{Symbols.WARN} Timeout waiting for targets to deregister from {tg_name}")
                         else:
                             print(f"No targets found in {tg_name}")
                             
@@ -2718,13 +2719,13 @@ def delete_load_balancers_and_target_groups(region):
                     # Delete the target group
                     print(f"Deleting Target Group: {tg_name}")
                     elbv2_client.delete_target_group(TargetGroupArn=tg_arn)
-                    print(f"✅ Deleted Target Group: {tg_name}")
+                    print(f"{Symbols.OK} Deleted Target Group: {tg_name}")
                     
                 except Exception as e:
-                    print(f"❌ Failed to process Target Group {tg_name}: {e}")
+                    print(f"{Symbols.ERROR} Failed to process Target Group {tg_name}: {e}")
     
     except Exception as e:
-        print(f"❌ Error processing Target Groups: {e}")
+        print(f"{Symbols.ERROR} Error processing Target Groups: {e}")
     
     # ========================================
     # 4. CLEANUP SECURITY GROUPS (Load Balancer related)
@@ -2774,19 +2775,19 @@ def delete_load_balancers_and_target_groups(region):
                     if not enis:
                         print(f"Deleting unused security group: {sg_name} ({sg_id})")
                         ec2_client.delete_security_group(GroupId=sg_id)
-                        print(f"✅ Deleted security group: {sg_name}")
+                        print(f"{Symbols.OK} Deleted security group: {sg_name}")
                     else:
                         print(f"Security group {sg_name} is still in use by {len(enis)} network interfaces")
                         
                 except Exception as e:
-                    print(f"❌ Failed to delete security group {sg_name} ({sg_id}): {e}")
+                    print(f"{Symbols.ERROR} Failed to delete security group {sg_name} ({sg_id}): {e}")
         else:
             print("No load balancer security groups found for cleanup")
     
     except Exception as e:
         print(f"Warning: Could not clean up security groups: {e}")
     
-    print(f"\n✅ Completed comprehensive load balancer and target group cleanup in {region}")
+    print(f"\n{Symbols.OK} Completed comprehensive load balancer and target group cleanup in {region}")
 
 @measure_time
 def delete_launch_templates(region):
@@ -3126,7 +3127,7 @@ def delete_api_gateway_rest_apis(apis_to_keep, region):
                 
                 # Check if API should be kept
                 if api_name in apis_to_keep or api_id in apis_to_keep:
-                    print(f"🔒 Keeping REST API: {api_name} (in keep list)")
+                    print(f"{Symbols.SECURE} Keeping REST API: {api_name} (in keep list)")
                     continue
                 
                 try:
@@ -3149,9 +3150,9 @@ def delete_api_gateway_rest_apis(apis_to_keep, region):
                                         restApiId=api_id,
                                         deploymentId=deployment_id
                                     )
-                                    print(f"✅ Deleted deployment: {deployment_id}")
+                                    print(f"{Symbols.OK} Deleted deployment: {deployment_id}")
                                 except Exception as e:
-                                    print(f"❌ Failed to delete deployment {deployment_id}: {e}")
+                                    print(f"{Symbols.ERROR} Failed to delete deployment {deployment_id}: {e}")
                         else:
                             print("No deployments found")
                     except Exception as e:
@@ -3176,9 +3177,9 @@ def delete_api_gateway_rest_apis(apis_to_keep, region):
                                         restApiId=api_id,
                                         stageName=stage_name
                                     )
-                                    print(f"✅ Deleted stage: {stage_name}")
+                                    print(f"{Symbols.OK} Deleted stage: {stage_name}")
                                 except Exception as e:
-                                    print(f"❌ Failed to delete stage {stage_name}: {e}")
+                                    print(f"{Symbols.ERROR} Failed to delete stage {stage_name}: {e}")
                         else:
                             print("No stages found")
                     except Exception as e:
@@ -3212,7 +3213,7 @@ def delete_api_gateway_rest_apis(apis_to_keep, region):
                                                 usagePlanId=usage_plan_id,
                                                 keyId=api_key_id
                                             )
-                                            print(f"✅ Removed API key from usage plan")
+                                            print(f"{Symbols.OK} Removed API key from usage plan")
                                         except Exception as e:
                                             print(f"Warning: Could not remove API key from usage plan: {e}")
                             except Exception as e:
@@ -3236,9 +3237,9 @@ def delete_api_gateway_rest_apis(apis_to_keep, region):
                                 print(f"Deleting usage plan: {usage_plan_name} ({usage_plan_id})")
                                 try:
                                     apigateway_client.delete_usage_plan(usagePlanId=usage_plan_id)
-                                    print(f"✅ Deleted usage plan: {usage_plan_name}")
+                                    print(f"{Symbols.OK} Deleted usage plan: {usage_plan_name}")
                                 except Exception as e:
-                                    print(f"❌ Failed to delete usage plan {usage_plan_name}: {e}")
+                                    print(f"{Symbols.ERROR} Failed to delete usage plan {usage_plan_name}: {e}")
                     except Exception as e:
                         print(f"Warning: Could not check usage plans for {api_name}: {e}")
                     
@@ -3265,9 +3266,9 @@ def delete_api_gateway_rest_apis(apis_to_keep, region):
                                                 domainName=domain_name,
                                                 basePath=mapping.get('basePath', '')
                                             )
-                                            print(f"✅ Deleted base path mapping: {base_path}")
+                                            print(f"{Symbols.OK} Deleted base path mapping: {base_path}")
                                         except Exception as e:
-                                            print(f"❌ Failed to delete base path mapping: {e}")
+                                            print(f"{Symbols.ERROR} Failed to delete base path mapping: {e}")
                             except Exception as e:
                                 print(f"Warning: Could not check mappings for domain {domain_name}: {e}")
                     except Exception as e:
@@ -3276,16 +3277,16 @@ def delete_api_gateway_rest_apis(apis_to_keep, region):
                     # 6. Delete the REST API
                     print(f"Deleting REST API: {api_name} ({api_id})")
                     apigateway_client.delete_rest_api(restApiId=api_id)
-                    print(f"✅ Deleted REST API: {api_name}")
+                    print(f"{Symbols.OK} Deleted REST API: {api_name}")
                     
                     # Wait a moment between deletions to avoid rate limiting
                     time.sleep(2)
                     
                 except Exception as e:
-                    print(f"❌ Failed to process REST API {api_name}: {e}")
+                    print(f"{Symbols.ERROR} Failed to process REST API {api_name}: {e}")
     
     except Exception as e:
-        print(f"❌ Error processing REST APIs: {e}")
+        print(f"{Symbols.ERROR} Error processing REST APIs: {e}")
     
     # ========================================
     # 2. DELETE HTTP APIs (API Gateway v2)
@@ -3329,7 +3330,7 @@ def delete_api_gateway_rest_apis(apis_to_keep, region):
                 
                 # Check if API should be kept
                 if api_name in apis_to_keep or api_id in apis_to_keep:
-                    print(f"🔒 Keeping HTTP API: {api_name} (in keep list)")
+                    print(f"{Symbols.SECURE} Keeping HTTP API: {api_name} (in keep list)")
                     continue
                 
                 try:
@@ -3352,9 +3353,9 @@ def delete_api_gateway_rest_apis(apis_to_keep, region):
                                         ApiId=api_id,
                                         StageName=stage_name
                                     )
-                                    print(f"✅ Deleted stage: {stage_name}")
+                                    print(f"{Symbols.OK} Deleted stage: {stage_name}")
                                 except Exception as e:
-                                    print(f"❌ Failed to delete stage {stage_name}: {e}")
+                                    print(f"{Symbols.ERROR} Failed to delete stage {stage_name}: {e}")
                         else:
                             print("No stages found")
                     except Exception as e:
@@ -3379,9 +3380,9 @@ def delete_api_gateway_rest_apis(apis_to_keep, region):
                                         ApiId=api_id,
                                         RouteId=route_id
                                     )
-                                    print(f"✅ Deleted route: {route_key}")
+                                    print(f"{Symbols.OK} Deleted route: {route_key}")
                                 except Exception as e:
-                                    print(f"❌ Failed to delete route {route_id}: {e}")
+                                    print(f"{Symbols.ERROR} Failed to delete route {route_id}: {e}")
                         else:
                             print("No routes found")
                     except Exception as e:
@@ -3406,9 +3407,9 @@ def delete_api_gateway_rest_apis(apis_to_keep, region):
                                         ApiId=api_id,
                                         IntegrationId=integration_id
                                     )
-                                    print(f"✅ Deleted integration: {integration_id}")
+                                    print(f"{Symbols.OK} Deleted integration: {integration_id}")
                                 except Exception as e:
-                                    print(f"❌ Failed to delete integration {integration_id}: {e}")
+                                    print(f"{Symbols.ERROR} Failed to delete integration {integration_id}: {e}")
                         else:
                             print("No integrations found")
                     except Exception as e:
@@ -3440,9 +3441,9 @@ def delete_api_gateway_rest_apis(apis_to_keep, region):
                                                 ApiMappingId=mapping_id,
                                                 DomainName=domain_name
                                             )
-                                            print(f"✅ Deleted API mapping: {api_mapping_key}")
+                                            print(f"{Symbols.OK} Deleted API mapping: {api_mapping_key}")
                                         except Exception as e:
-                                            print(f"❌ Failed to delete API mapping: {e}")
+                                            print(f"{Symbols.ERROR} Failed to delete API mapping: {e}")
                             except Exception as e:
                                 print(f"Warning: Could not check mappings for domain {domain_name}: {e}")
                     except Exception as e:
@@ -3451,16 +3452,16 @@ def delete_api_gateway_rest_apis(apis_to_keep, region):
                     # 5. Delete the HTTP API
                     print(f"Deleting HTTP API: {api_name} ({api_id})")
                     apigatewayv2_client.delete_api(ApiId=api_id)
-                    print(f"✅ Deleted HTTP API: {api_name}")
+                    print(f"{Symbols.OK} Deleted HTTP API: {api_name}")
                     
                     # Wait a moment between deletions
                     time.sleep(2)
                     
                 except Exception as e:
-                    print(f"❌ Failed to process HTTP API {api_name}: {e}")
+                    print(f"{Symbols.ERROR} Failed to process HTTP API {api_name}: {e}")
     
     except Exception as e:
-        print(f"❌ Error processing HTTP APIs: {e}")
+        print(f"{Symbols.ERROR} Error processing HTTP APIs: {e}")
     
     # ========================================
     # 3. DELETE WEBSOCKET APIs (API Gateway v2)
@@ -3492,7 +3493,7 @@ def delete_api_gateway_rest_apis(apis_to_keep, region):
                 
                 # Check if API should be kept
                 if api_name in apis_to_keep or api_id in apis_to_keep:
-                    print(f"🔒 Keeping WebSocket API: {api_name} (in keep list)")
+                    print(f"{Symbols.SECURE} Keeping WebSocket API: {api_name} (in keep list)")
                     continue
                 
                 try:
@@ -3500,13 +3501,13 @@ def delete_api_gateway_rest_apis(apis_to_keep, region):
                     # Delete stages, routes, integrations, then the API itself
                     print(f"Deleting WebSocket API: {api_name} ({api_id})")
                     apigatewayv2_client.delete_api(ApiId=api_id)
-                    print(f"✅ Deleted WebSocket API: {api_name}")
+                    print(f"{Symbols.OK} Deleted WebSocket API: {api_name}")
                     
                 except Exception as e:
-                    print(f"❌ Failed to process WebSocket API {api_name}: {e}")
+                    print(f"{Symbols.ERROR} Failed to process WebSocket API {api_name}: {e}")
     
     except Exception as e:
-        print(f"❌ Error processing WebSocket APIs: {e}")
+        print(f"{Symbols.ERROR} Error processing WebSocket APIs: {e}")
     
     # ========================================
     # 4. CLEANUP REMAINING RESOURCES
@@ -3528,7 +3529,7 @@ def delete_api_gateway_rest_apis(apis_to_keep, region):
                     if not mappings:
                         print(f"Deleting unused v1 domain: {domain_name}")
                         apigateway_client.delete_domain_name(domainName=domain_name)
-                        print(f"✅ Deleted v1 domain: {domain_name}")
+                        print(f"{Symbols.OK} Deleted v1 domain: {domain_name}")
                 except Exception as e:
                     print(f"Warning: Could not delete v1 domain {domain_name}: {e}")
             
@@ -3541,7 +3542,7 @@ def delete_api_gateway_rest_apis(apis_to_keep, region):
                     if not mappings:
                         print(f"Deleting unused v2 domain: {domain_name}")
                         apigatewayv2_client.delete_domain_name(DomainName=domain_name)
-                        print(f"✅ Deleted v2 domain: {domain_name}")
+                        print(f"{Symbols.OK} Deleted v2 domain: {domain_name}")
                 except Exception as e:
                     print(f"Warning: Could not delete v2 domain {domain_name}: {e}")
                     
@@ -3575,9 +3576,9 @@ def delete_api_gateway_rest_apis(apis_to_keep, region):
                     print(f"Deleting unused API key: {api_key_name}")
                     try:
                         apigateway_client.delete_api_key(apiKey=api_key_id)
-                        print(f"✅ Deleted API key: {api_key_name}")
+                        print(f"{Symbols.OK} Deleted API key: {api_key_name}")
                     except Exception as e:
-                        print(f"❌ Failed to delete API key {api_key_name}: {e}")
+                        print(f"{Symbols.ERROR} Failed to delete API key {api_key_name}: {e}")
                         
         except Exception as e:
             print(f"Warning: Could not clean up API keys: {e}")
@@ -3585,7 +3586,7 @@ def delete_api_gateway_rest_apis(apis_to_keep, region):
     except Exception as e:
         print(f"Warning: Could not perform final cleanup: {e}")
     
-    print(f"\n✅ Completed comprehensive API Gateway cleanup in {region}")
+    print(f"\n{Symbols.OK} Completed comprehensive API Gateway cleanup in {region}")
 
 @measure_time
 def delete_kms_keys(keys_to_keep, region):
@@ -3857,9 +3858,9 @@ def set_aws_profile(profile_name, access_key, secret_key, region="us-east-1"):
             region, "--profile", profile_name
         ], check=True, capture_output=True)
         
-        print(f"✅ Set AWS profile: {profile_name}")
+        print(f"{Symbols.OK} Set AWS profile: {profile_name}")
     except subprocess.CalledProcessError as e:
-        print(f"⚠️ Warning: Could not create AWS CLI profile {profile_name}, using environment variables only")
+        print(f"{Symbols.WARN} Warning: Could not create AWS CLI profile {profile_name}, using environment variables only")
 
 @measure_time
 @measure_time
@@ -3946,17 +3947,17 @@ def setup_aws_profiles(accounts):
                 "us-east-1", "--profile", profile_name
             ], check=True, capture_output=True)
             
-            print(f"✅ Profile '{profile_name}' configured successfully")
+            print(f"{Symbols.OK} Profile '{profile_name}' configured successfully")
             
         except subprocess.CalledProcessError as e:
-            print(f"❌ Failed to configure profile '{profile_name}': {e}")
+            print(f"{Symbols.ERROR} Failed to configure profile '{profile_name}': {e}")
 
 def delete_aws_profiles(profiles):
     """Delete AWS profiles"""
     import subprocess
     from pathlib import Path
     
-    print("🗑️ Deleting AWS profiles...")
+    print("[DELETE] Deleting AWS profiles...")
     for profile in profiles:
         try:
             # Remove profile sections by setting empty values
@@ -3975,15 +3976,15 @@ def delete_aws_profiles(profiles):
                 "--profile", profile
             ], capture_output=True)
             
-            print(f"✅ Deleted profile: {profile}")
+            print(f"{Symbols.OK} Deleted profile: {profile}")
             
         except Exception as e:
-            print(f"❌ Failed to delete profile {profile}: {e}")
+            print(f"{Symbols.ERROR} Failed to delete profile {profile}: {e}")
 
 def set_current_profile(profile_name):
     """Set the current AWS profile via environment variable"""
     os.environ['AWS_PROFILE'] = profile_name
-    print(f"🔄 Switched to profile: {profile_name}")
+    print(f"{Symbols.SCAN} Switched to profile: {profile_name}")
 
 if __name__ == "__main__":
     # Load AWS accounts configuration
@@ -3992,12 +3993,12 @@ if __name__ == "__main__":
         with open(CONFIG_FILE, "r", encoding="utf-8") as f:
             config = json.load(f)
         accounts = config["accounts"]
-        print(f"✅ Loaded configuration from {CONFIG_FILE}")
+        print(f"{Symbols.OK} Loaded configuration from {CONFIG_FILE}")
     except FileNotFoundError:
-        print(f"❌ Configuration file {CONFIG_FILE} not found!")
+        print(f"{Symbols.ERROR} Configuration file {CONFIG_FILE} not found!")
         exit(1)
     except json.JSONDecodeError:
-        print(f"❌ Invalid JSON in {CONFIG_FILE}")
+        print(f"{Symbols.ERROR} Invalid JSON in {CONFIG_FILE}")
         exit(1)
 
     # Setup AWS profiles for ALL accounts first
@@ -4006,7 +4007,7 @@ if __name__ == "__main__":
     # Display available accounts and get selection
     account_list = list(accounts.keys())
     print(f"\n{'='*80}")
-    print("📋 Available AWS Accounts:")
+    print("[LIST] Available AWS Accounts:")
     print(f"{'='*80}")
     for i, acc in enumerate(account_list, 1):
         acc_info = accounts[acc]
@@ -4030,21 +4031,21 @@ if __name__ == "__main__":
                         if 1 <= i <= len(account_list):
                             selected_accounts.append(account_list[i-1])
                 except ValueError:
-                    print(f"⚠️ Invalid range: {part}")
+                    print(f"{Symbols.WARN} Invalid range: {part}")
             else:
                 try:
                     num = int(part)
                     if 1 <= num <= len(account_list):
                         selected_accounts.append(account_list[num-1])
                 except ValueError:
-                    print(f"⚠️ Invalid number: {part}")
+                    print(f"{Symbols.WARN} Invalid number: {part}")
         selected_accounts = list(set(selected_accounts))
 
     if not selected_accounts:
-        print("❌ No accounts selected. Exiting.")
+        print("[ERROR] No accounts selected. Exiting.")
         exit(1)
 
-    print(f"\n✅ Selected accounts: {', '.join(selected_accounts)}")
+    print(f"\n{Symbols.OK} Selected accounts: {', '.join(selected_accounts)}")
 
     # Configuration constants
     BUCKETS_TO_KEEP = ["vm-import-export-bucket-01", "vd-employee-app"]
@@ -4053,7 +4054,7 @@ if __name__ == "__main__":
 
     # Start overall timing
     overall_start_time = time.time()
-    start_time = datetime.utcnow()
+    start_time = datetime.now(datetime.UTC)
     successful_accounts = 0
     failed_accounts = []
 
@@ -4065,7 +4066,7 @@ if __name__ == "__main__":
         print(f"{'='*100}")
         print(f"🆔 Account ID: {acc_info['account_id']}")
         print(f"📧 Email: {acc_info['email']}")
-        print(f"⏰ Started at: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC")
+        print(f"{Symbols.TIMER} Started at: {datetime.now(datetime.UTC).strftime('%Y-%m-%d %H:%M:%S')} UTC")
         print(f"{'='*100}")
         
         try:
@@ -4074,7 +4075,7 @@ if __name__ == "__main__":
             
             # Process all regions for this account
             for region in REGIONS:
-                print(f"\n🌍 Working on region: {region}")
+                print(f"\n{Symbols.REGION} Working on region: {region}")
                 
                 # 1. First, disable resource protections
             stop_codebuild_builds(region)               # Stop running builds
@@ -4145,11 +4146,11 @@ if __name__ == "__main__":
             delete_iam_roles(region)                          # Remove duplicate call - use only one IAM role delete
             
             successful_accounts += 1
-            print(f"\n✅ Completed account: {acc}")
+            print(f"\n{Symbols.OK} Completed account: {acc}")
             
         except Exception as e:
             failed_accounts.append(acc)
-            print(f"\n❌ Failed to process account {acc}: {e}")
+            print(f"\n{Symbols.ERROR} Failed to process account {acc}: {e}")
             
         # Pause between accounts if not the last one
         if acc_idx < len(selected_accounts):
@@ -4158,34 +4159,34 @@ if __name__ == "__main__":
 
     # Calculate total time and show summary
     overall_end_time = time.time()
-    end_time = datetime.utcnow()
+    end_time = datetime.now(datetime.UTC)
     total_time = overall_end_time - overall_start_time
     hours, remainder = divmod(total_time, 3600)
     minutes, seconds = divmod(remainder, 60)
 
     # Final summary
     print(f"\n{'='*100}")
-    print("📊 FINAL EXECUTION SUMMARY")
+    print("[STATS] FINAL EXECUTION SUMMARY")
     print(f"{'='*100}")
-    print(f"⏰ Start Time: {start_time.strftime('%Y-%m-%d %H:%M:%S')} UTC")
-    print(f"⏰ End Time: {end_time.strftime('%Y-%m-%d %H:%M:%S')} UTC")
-    print(f"⏱️ Total Duration: {int(hours)} hours {int(minutes)} minutes {seconds:.2f} seconds")
+    print(f"{Symbols.TIMER} Start Time: {start_time.strftime('%Y-%m-%d %H:%M:%S')} UTC")
+    print(f"{Symbols.TIMER} End Time: {end_time.strftime('%Y-%m-%d %H:%M:%S')} UTC")
+    print(f"{Symbols.TIMER} Total Duration: {int(hours)} hours {int(minutes)} minutes {seconds:.2f} seconds")
     print(f"👤 User: varadharajaan")
-    print(f"📁 Config File: {CONFIG_FILE}")
+    print(f"{Symbols.FOLDER} Config File: {CONFIG_FILE}")
     print(f"🏢 Total accounts: {len(selected_accounts)}")
-    print(f"✅ Successful executions: {successful_accounts}")
-    print(f"❌ Failed executions: {len(selected_accounts) - successful_accounts}")
+    print(f"{Symbols.OK} Successful executions: {successful_accounts}")
+    print(f"{Symbols.ERROR} Failed executions: {len(selected_accounts) - successful_accounts}")
     
     if failed_accounts:
-        print(f"\n❌ Failed accounts: {', '.join(failed_accounts)}")
+        print(f"\n{Symbols.ERROR} Failed accounts: {', '.join(failed_accounts)}")
     
     print(f"{'='*100}")
-    print("\n🎉 All selected accounts processed!")
+    print("\n[PARTY] All selected accounts processed!")
 
     # Ask user if they want to delete profiles
-    delete_profiles_confirm = input("\n🗑️ Do you want to delete the AWS profiles that were created? (yes/no): ").strip().lower()
+    delete_profiles_confirm = input("\n[DELETE] Do you want to delete the AWS profiles that were created? (yes/no): ").strip().lower()
     if delete_profiles_confirm == "yes":
         delete_aws_profiles(selected_accounts)
-        print("✅ AWS profiles have been deleted")
+        print("[OK] AWS profiles have been deleted")
     else:
-        print("ℹ️ AWS profiles retained")
+        print("[INFO] AWS profiles retained")

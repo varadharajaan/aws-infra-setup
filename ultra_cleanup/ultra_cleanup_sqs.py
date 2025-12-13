@@ -27,6 +27,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from root_iam_credential_manager import AWSCredentialManager, Colors
+from text_symbols import Symbols
 
 
 class UltraCleanupSQSManager:
@@ -65,7 +66,6 @@ class UltraCleanupSQSManager:
             os.makedirs(self.sqs_dir, exist_ok=True)
             self.log_filename = f"{self.sqs_dir}/ultra_sqs_cleanup_{self.execution_timestamp}.log"
             
-            import logging
             self.logger = logging.getLogger('sqs_cleanup')
             self.logger.setLevel(logging.INFO)
             handler = logging.FileHandler(self.log_filename, encoding='utf-8')
@@ -106,7 +106,7 @@ class UltraCleanupSQSManager:
                     })
             
             if deleted > 0:
-                self.print_colored(Colors.GREEN, f"   [OK] Deleted {deleted} queues")
+                self.print_colored(Colors.GREEN, f"   {Symbols.OK} Deleted {deleted} queues")
             return True
         except:
             return False
@@ -114,7 +114,7 @@ class UltraCleanupSQSManager:
     def cleanup_account_region(self, account_info: dict, region: str) -> bool:
         try:
             account_name = account_info.get('name')
-            self.print_colored(Colors.CYAN, f"\n[CLEANUP] Cleanup: {account_name} - {region}")
+            self.print_colored(Colors.CYAN, f"\n{Symbols.CLEANUP} Cleanup: {account_name} - {region}")
             
             sqs_client = self.create_sqs_client(
                 account_info.get('access_key'),
@@ -129,7 +129,7 @@ class UltraCleanupSQSManager:
             
             return True
         except Exception as e:
-            self.print_colored(Colors.RED, f"   [ERROR] Error: {e}")
+            self.print_colored(Colors.RED, f"   {Symbols.ERROR} Error: {e}")
             return False
 
     def save_report(self):
@@ -149,37 +149,28 @@ class UltraCleanupSQSManager:
             return None
 
     def run(self):
-        self.print_colored(Colors.BLUE, "\n[START] ULTRA SQS CLEANUP MANAGER")
+        self.print_colored(Colors.BLUE, f"\n{Symbols.START} ULTRA SQS CLEANUP MANAGER")
         
         accounts = self.cred_manager.select_root_accounts_interactive()
         if not accounts:
             return
         
-        regions = self.select_regions()
+        regions = self.cred_manager.select_regions_interactive()
         if not regions:
             return
         
-        if input("\nType 'DELETE': ").strip().upper() != 'DELETE':
+        if input("\nType 'yes' to confirm: ").strip().lower() != 'yes':
             return
         
         for acc in accounts:
             for reg in regions:
                 self.cleanup_account_region(acc, reg)
         
-        self.print_colored(Colors.WHITE, f"\n[STATS] Queues deleted: {len(self.cleanup_results['deleted_queues'])}")
+        self.print_colored(Colors.WHITE, f"\n{Symbols.STATS} Queues deleted: {len(self.cleanup_results['deleted_queues'])}")
         
         report = self.save_report()
         if report:
-            self.print_colored(Colors.GREEN, f"[OK] Report: {report}")
-
-    def select_regions(self):
-        print("\nRegions: 1-all, 2-us-east-1, 3-custom")
-        choice = input("→ ").strip()
-        if choice == '1' or not choice:
-            return self.user_regions
-        elif choice == '2':
-            return ['us-east-1']
-        return []
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Report: {report}")
 
 def main():
     try:

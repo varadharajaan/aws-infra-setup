@@ -1,4 +1,5 @@
-﻿#!/usr/bin/env python3
+﻿from text_symbols import Symbols
+#!/usr/bin/env python3
 
 import boto3
 import json
@@ -62,7 +63,6 @@ class IAMLogFileCleanupManager:
             self.log_filename = f"{log_dir}/iam_log_cleanup_{self.execution_timestamp}.log"
             
             # Create a file handler for detailed logging
-            import logging
             
             # Create logger
             self.logger = logging.getLogger('iam_log_cleanup')
@@ -94,7 +94,7 @@ class IAMLogFileCleanupManager:
             
             # Log initial information
             self.logger.info("=" * 100)
-            self.logger.info(f"[CLEANUP] IAM LOG FILE CLEANUP SESSION STARTED (Pattern: {self.file_pattern})")
+            self.logger.info(f"{Symbols.CLEANUP} IAM LOG FILE CLEANUP SESSION STARTED (Pattern: {self.file_pattern})")
             self.logger.info("=" * 100)
             self.logger.info(f"Execution Time: {self.current_time_str}")
             self.logger.info(f"Executed By: {self.current_user}")
@@ -131,7 +131,7 @@ class IAMLogFileCleanupManager:
             with open(self.config_file, 'r', encoding='utf-8') as f:
                 self.aws_config = json.load(f)
             
-            self.log_operation('INFO', f"[OK] AWS accounts configuration loaded from: {self.config_file}")
+            self.log_operation('INFO', f"{Symbols.OK} AWS accounts configuration loaded from: {self.config_file}")
             
             # Validate accounts
             if 'accounts' not in self.aws_config:
@@ -149,7 +149,7 @@ class IAMLogFileCleanupManager:
             
             self.aws_config['accounts'] = valid_accounts
             
-            self.log_operation('INFO', f"[STATS] Valid accounts loaded: {len(valid_accounts)}")
+            self.log_operation('INFO', f"{Symbols.STATS} Valid accounts loaded: {len(valid_accounts)}")
             
             # Map account IDs to account names for easier lookup
             self.account_id_to_name = {}
@@ -180,7 +180,7 @@ class IAMLogFileCleanupManager:
 
     def find_iam_credential_files(self):
         """Find and parse all IAM credential files in the directory"""
-        self.log_operation('INFO', f"[SCAN] Scanning for IAM credential files matching '{self.file_pattern}' in {self.creds_base_dir}")
+        self.log_operation('INFO', f"{Symbols.SCAN} Scanning for IAM credential files matching '{self.file_pattern}' in {self.creds_base_dir}")
         
         if not os.path.exists(self.creds_base_dir):
             # Try to create the directory
@@ -240,7 +240,7 @@ class IAMLogFileCleanupManager:
                     except Exception as e:
                         self.log_operation('ERROR', f"Error processing file {file_path}: {e}")
         
-        self.log_operation('INFO', f"[STATS] Found {valid_files} valid IAM credential files out of {total_files} total files")
+        self.log_operation('INFO', f"{Symbols.STATS} Found {valid_files} valid IAM credential files out of {total_files} total files")
         
         # Sort credential files by date (newest first)
         cred_files.sort(key=lambda x: x['file_date'], reverse=True)
@@ -485,7 +485,7 @@ class IAMLogFileCleanupManager:
             username = user_info['username']
             account_name = user_info['account_name']
             
-            self.log_operation('INFO', f"[DELETE] Deleting IAM user: {username} in {account_name}")
+            self.log_operation('INFO', f"{Symbols.DELETE} Deleting IAM user: {username} in {account_name}")
             
             # Create IAM client
             iam_client = self.create_iam_client(account_name)
@@ -524,7 +524,7 @@ class IAMLogFileCleanupManager:
             self.log_operation('INFO', f"Finally deleting user {username}")
             iam_client.delete_user(UserName=username)
             
-            self.log_operation('INFO', f"[OK] Successfully deleted IAM user: {username} in {account_name}")
+            self.log_operation('INFO', f"{Symbols.OK} Successfully deleted IAM user: {username} in {account_name}")
             
             # Record successful deletion
             self.cleanup_results['users_deleted'].append({
@@ -636,7 +636,7 @@ class IAMLogFileCleanupManager:
             group_name = group_info['group_name']
             account_name = group_info['account_name']
             
-            self.log_operation('INFO', f"[DELETE] Deleting IAM group: {group_name} in {account_name}")
+            self.log_operation('INFO', f"{Symbols.DELETE} Deleting IAM group: {group_name} in {account_name}")
             
             # Create IAM client
             iam_client = self.create_iam_client(account_name)
@@ -657,7 +657,7 @@ class IAMLogFileCleanupManager:
             self.log_operation('INFO', f"Finally deleting group {group_name}")
             iam_client.delete_group(GroupName=group_name)
             
-            self.log_operation('INFO', f"[OK] Successfully deleted IAM group: {group_name} in {account_name}")
+            self.log_operation('INFO', f"{Symbols.OK} Successfully deleted IAM group: {group_name} in {account_name}")
             
             # Record successful deletion
             self.cleanup_results['groups_deleted'].append({
@@ -780,7 +780,7 @@ class IAMLogFileCleanupManager:
             with open(report_filename, 'w', encoding='utf-8') as f:
                 json.dump(report_data, f, indent=2, default=str)
             
-            self.log_operation('INFO', f"[OK] Cleanup report saved to: {report_filename}")
+            self.log_operation('INFO', f"{Symbols.OK} Cleanup report saved to: {report_filename}")
             return report_filename
             
         except Exception as e:
@@ -791,7 +791,7 @@ class IAMLogFileCleanupManager:
         """Main execution method"""
         try:
             print("\n" + "="*80)
-            print(f"[CLEANUP] IAM CREDENTIAL FILE CLEANUP UTILITY")
+            print(f"{Symbols.CLEANUP} IAM CREDENTIAL FILE CLEANUP UTILITY")
             print("="*80)
             print(f"Execution Date/Time: {self.current_time_str}")
             print(f"Searching for IAM credential files in: {self.creds_base_dir}")
@@ -801,7 +801,7 @@ class IAMLogFileCleanupManager:
             cred_files = self.find_iam_credential_files()
             
             if not cred_files:
-                print(f"\n[ERROR] No IAM credential files found matching pattern '{self.file_pattern}'. Nothing to clean up.")
+                print(f"\n{Symbols.ERROR} No IAM credential files found matching pattern '{self.file_pattern}'. Nothing to clean up.")
                 return
             
             # Step 2: Extract IAM users from credential files
@@ -817,9 +817,9 @@ class IAMLogFileCleanupManager:
             age_groups = sorted(self.creds_by_age.keys())
             
             # Step 5: Display age groups and ask user which to process
-            print(f"\n[STATS] Found {len(all_users)} IAM users across {len(cred_files)} credential files")
+            print(f"\n{Symbols.STATS} Found {len(all_users)} IAM users across {len(cred_files)} credential files")
             if all_groups:
-                print(f"[STATS] Found {len(all_groups)} IAM groups across {len(cred_files)} credential files")
+                print(f"{Symbols.STATS} Found {len(all_groups)} IAM groups across {len(cred_files)} credential files")
             
             print(f"\nCredential files grouped by age:")
             for age in age_groups:
@@ -846,7 +846,7 @@ class IAMLogFileCleanupManager:
                 count = len(creds_in_age_group)
                 
                 age_label = "today" if age == 0 else f"{age} day{'s' if age != 1 else ''} old"
-                print(f"\n[DATE] Credential files that are {age_label} ({count} found):")
+                print(f"\n{Symbols.DATE} Credential files that are {age_label} ({count} found):")
                 
                 # Show credential files in this age group
                 print(f"{'#':<4} {'Filename':<40} {'Created By':<15} {'Total Users'}")
@@ -898,20 +898,20 @@ class IAMLogFileCleanupManager:
                     print("  • All users: 'all' or press Enter")
                     print("  • Skip users: 'skip'")
                     
-                    user_selection = input("\n🔢 Select users to delete: ").strip().lower()
+                    user_selection = input("\n[#] Select users to delete: ").strip().lower()
                     
                     if user_selection != 'skip':
                         selected_users = []
                         if not user_selection or user_selection == 'all':
                             selected_users = age_users
-                            print(f"[OK] Selected all {len(age_users)} users from this age group")
+                            print(f"{Symbols.OK} Selected all {len(age_users)} users from this age group")
                         else:
                             try:
                                 indices = self.parse_selection(user_selection, len(age_users))
                                 selected_users = [age_users[i-1] for i in indices]
-                                print(f"[OK] Selected {len(selected_users)} users from this age group")
+                                print(f"{Symbols.OK} Selected {len(selected_users)} users from this age group")
                             except ValueError as e:
-                                print(f"[ERROR] Invalid selection: {e}")
+                                print(f"{Symbols.ERROR} Invalid selection: {e}")
                                 continue
                         
                         # Add selected users to the delete list
@@ -939,20 +939,20 @@ class IAMLogFileCleanupManager:
                     print("  • All groups: 'all' or press Enter")
                     print("  • Skip groups: 'skip'")
                     
-                    group_selection = input("\n🔢 Select groups to delete: ").strip().lower()
+                    group_selection = input("\n[#] Select groups to delete: ").strip().lower()
                     
                     if group_selection != 'skip':
                         selected_groups = []
                         if not group_selection or group_selection == 'all':
                             selected_groups = age_groups
-                            print(f"[OK] Selected all {len(age_groups)} groups from this age group")
+                            print(f"{Symbols.OK} Selected all {len(age_groups)} groups from this age group")
                         else:
                             try:
                                 indices = self.parse_selection(group_selection, len(age_groups))
                                 selected_groups = [age_groups[i-1] for i in indices]
-                                print(f"[OK] Selected {len(selected_groups)} groups from this age group")
+                                print(f"{Symbols.OK} Selected {len(selected_groups)} groups from this age group")
                             except ValueError as e:
-                                print(f"[ERROR] Invalid selection: {e}")
+                                print(f"{Symbols.ERROR} Invalid selection: {e}")
                                 continue
                         
                         # Add selected groups to the delete list
@@ -1002,17 +1002,17 @@ class IAMLogFileCleanupManager:
             confirm = input("\nType 'yes' to confirm deletion: ").strip().lower()
             
             if confirm != 'yes':
-                print("[ERROR] Deletion cancelled.")
+                print(f"{Symbols.ERROR} Deletion cancelled.")
                 return
             
             # Execute deletion
-            print(f"\n[DELETE]  Deleting IAM resources...")
+            print(f"\n{Symbols.DELETE}  Deleting IAM resources...")
             
             start_time = time.time()
             
             # Delete groups first
             if groups_to_delete:
-                print(f"\n[DELETE] Deleting {len(groups_to_delete)} IAM groups...")
+                print(f"\n{Symbols.DELETE} Deleting {len(groups_to_delete)} IAM groups...")
                 
                 successful_groups = 0
                 failed_groups = 0
@@ -1021,18 +1021,18 @@ class IAMLogFileCleanupManager:
                     try:
                         if self.delete_iam_group(group):
                             successful_groups += 1
-                            print(f"[OK] Deleted group: {group['group_name']} in account {group['account_name']}")
+                            print(f"{Symbols.OK} Deleted group: {group['group_name']} in account {group['account_name']}")
                         else:
                             failed_groups += 1
-                            print(f"[ERROR] Failed to delete group: {group['group_name']} in account {group['account_name']}")
+                            print(f"{Symbols.ERROR} Failed to delete group: {group['group_name']} in account {group['account_name']}")
                     except Exception as e:
                         self.log_operation('ERROR', f"Error deleting group {group['group_name']}: {e}")
                         failed_groups += 1
-                        print(f"[ERROR] Error deleting group {group['group_name']}: {e}")
+                        print(f"{Symbols.ERROR} Error deleting group {group['group_name']}: {e}")
             
             # Then delete users
             if users_to_delete:
-                print(f"\n[DELETE] Deleting {len(users_to_delete)} IAM users...")
+                print(f"\n{Symbols.DELETE} Deleting {len(users_to_delete)} IAM users...")
                 
                 successful_users = 0
                 failed_users = 0
@@ -1041,14 +1041,14 @@ class IAMLogFileCleanupManager:
                     try:
                         if self.delete_iam_user(user):
                             successful_users += 1
-                            print(f"[OK] Deleted user: {user['username']} in account {user['account_name']}")
+                            print(f"{Symbols.OK} Deleted user: {user['username']} in account {user['account_name']}")
                         else:
                             failed_users += 1
-                            print(f"[ERROR] Failed to delete user: {user['username']} in account {user['account_name']}")
+                            print(f"{Symbols.ERROR} Failed to delete user: {user['username']} in account {user['account_name']}")
                     except Exception as e:
                         self.log_operation('ERROR', f"Error deleting user {user['username']}: {e}")
                         failed_users += 1
-                        print(f"[ERROR] Error deleting user {user['username']}: {e}")
+                        print(f"{Symbols.ERROR} Error deleting user {user['username']}: {e}")
             
             end_time = time.time()
             total_time = int(end_time - start_time)
@@ -1057,10 +1057,10 @@ class IAMLogFileCleanupManager:
             print("\n" + "="*80)
             print("[OK] CLEANUP COMPLETE")
             print("="*80)
-            print(f"[TIMER]  Total execution time: {total_time} seconds")
-            print(f"[OK] Successfully deleted: {len(self.cleanup_results['users_deleted'])} users")
-            print(f"[OK] Successfully deleted: {len(self.cleanup_results['groups_deleted'])} groups")
-            print(f"[ERROR] Failed deletions: {len(self.cleanup_results['failed_deletions'])}")
+            print(f"{Symbols.TIMER}  Total execution time: {total_time} seconds")
+            print(f"{Symbols.OK} Successfully deleted: {len(self.cleanup_results['users_deleted'])} users")
+            print(f"{Symbols.OK} Successfully deleted: {len(self.cleanup_results['groups_deleted'])} groups")
+            print(f"{Symbols.ERROR} Failed deletions: {len(self.cleanup_results['failed_deletions'])}")
             
             # Save report
             report_file = self.save_cleanup_report()
@@ -1068,15 +1068,14 @@ class IAMLogFileCleanupManager:
             if report_file:
                 print(f"\n[FILE] Cleanup report saved to: {report_file}")
             
-            print(f"[LIST] Log file: {self.log_filename}")
+            print(f"{Symbols.LIST} Log file: {self.log_filename}")
             
         except KeyboardInterrupt:
             print("\n\n[ERROR] Cleanup interrupted by user")
         except Exception as e:
             self.log_operation('ERROR', f"Error in IAM cleanup: {e}")
-            import traceback
             traceback.print_exc()
-            print(f"\n[ERROR] Error: {e}")
+            print(f"\n{Symbols.ERROR} Error: {e}")
 
 def main():
     """Main entry point"""
@@ -1112,7 +1111,7 @@ def main():
         )
         cleanup_manager.run()
     except Exception as e:
-        print(f"\n[ERROR] Fatal error: {e}")
+        print(f"\n{Symbols.ERROR} Fatal error: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)

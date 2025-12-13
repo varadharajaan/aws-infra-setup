@@ -1,10 +1,11 @@
-import boto3
+﻿import boto3
 import subprocess
 import tempfile
 import os
 import json
 import glob
 from kubernetes import config
+from text_symbols import Symbols
 
 class K8sPolicyInstaller:
     def __init__(self, access_key, secret_key, account_id, region, manifests_dir='k8s_manifests'):

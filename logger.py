@@ -1,10 +1,11 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 
 import logging
 import os
 from datetime import datetime
 from colorama import init, Fore, Style
 import sys
+from text_symbols import Symbols
 
 # Initialize colorama for cross-platform colored output
 init(autoreset=True)

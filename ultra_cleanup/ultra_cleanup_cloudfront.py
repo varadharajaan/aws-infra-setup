@@ -23,6 +23,7 @@ import time
 from datetime import datetime
 from botocore.exceptions import ClientError
 from root_iam_credential_manager import AWSCredentialManager
+from text_symbols import Symbols
 
 
 class Colors:
@@ -42,9 +43,9 @@ class UltraCleanupCloudFrontManager:
     def __init__(self):
         """Initialize the CloudFront cleanup manager"""
         self.cred_manager = AWSCredentialManager()
-        self.current_time = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+        self.current_time = datetime.now(datetime.UTC).strftime('%Y-%m-%d %H:%M:%S')
         self.current_user = os.getenv('USERNAME') or os.getenv('USER') or 'unknown'
-        self.execution_timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+        self.execution_timestamp = datetime.now(datetime.UTC).strftime('%Y%m%d_%H%M%S')
         
         # Create directories for logs and reports
         self.base_dir = os.path.join(os.getcwd(), 'aws', 'cloudfront')
@@ -80,7 +81,7 @@ class UltraCleanupCloudFrontManager:
 
     def log_action(self, message, level="INFO"):
         """Log action to file"""
-        timestamp = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp = datetime.now(datetime.UTC).strftime('%Y-%m-%d %H:%M:%S')
         log_entry = f"{timestamp} | {level:8} | {message}\n"
         with open(self.log_file, 'a') as f:
             f.write(log_entry)
@@ -109,7 +110,7 @@ class UltraCleanupCloudFrontManager:
     def disable_and_delete_distribution(self, cf_client, distribution_id, account_key):
         """Disable and delete a CloudFront distribution"""
         try:
-            self.print_colored(Colors.CYAN, f"[DELETE] Processing distribution: {distribution_id}")
+            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Processing distribution: {distribution_id}")
             
             # Get current distribution config
             response = cf_client.get_distribution_config(Id=distribution_id)
@@ -118,7 +119,7 @@ class UltraCleanupCloudFrontManager:
             
             # Check if already disabled
             if not config.get('Enabled', True):
-                self.print_colored(Colors.YELLOW, f"   [SKIP] Distribution already disabled")
+                self.print_colored(Colors.YELLOW, f"   {Symbols.SKIP} Distribution already disabled")
             else:
                 # Disable the distribution
                 self.print_colored(Colors.CYAN, f"   [DISABLE] Disabling distribution...")
@@ -132,7 +133,7 @@ class UltraCleanupCloudFrontManager:
                 
                 self.print_colored(Colors.YELLOW, f"   [WAIT] Waiting for distribution to deploy...")
                 if not self.wait_for_distribution_deployed(cf_client, distribution_id):
-                    self.print_colored(Colors.RED, f"   [ERROR] Timeout waiting for distribution deployment")
+                    self.print_colored(Colors.RED, f"   {Symbols.ERROR} Timeout waiting for distribution deployment")
                     return False
             
             # Get updated config with new ETag
@@ -140,10 +141,10 @@ class UltraCleanupCloudFrontManager:
             etag = response['ETag']
             
             # Delete the distribution
-            self.print_colored(Colors.CYAN, f"   [DELETE] Deleting distribution...")
+            self.print_colored(Colors.CYAN, f"   {Symbols.DELETE} Deleting distribution...")
             cf_client.delete_distribution(Id=distribution_id, IfMatch=etag)
             
-            self.print_colored(Colors.GREEN, f"[OK] Deleted distribution: {distribution_id}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted distribution: {distribution_id}")
             self.log_action(f"Deleted distribution: {distribution_id}")
             
             self.cleanup_results['deleted_distributions'].append({
@@ -154,7 +155,7 @@ class UltraCleanupCloudFrontManager:
             
         except ClientError as e:
             error_msg = f"Failed to delete distribution {distribution_id}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['failed_deletions'].append({
                 'type': 'Distribution',
@@ -167,7 +168,7 @@ class UltraCleanupCloudFrontManager:
     def delete_origin_access_identity(self, cf_client, oai_id, account_key):
         """Delete a CloudFront Origin Access Identity"""
         try:
-            self.print_colored(Colors.CYAN, f"[DELETE] Deleting OAI: {oai_id}")
+            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting OAI: {oai_id}")
             
             # Get current OAI config
             response = cf_client.get_cloud_front_origin_access_identity(Id=oai_id)
@@ -175,7 +176,7 @@ class UltraCleanupCloudFrontManager:
             
             cf_client.delete_cloud_front_origin_access_identity(Id=oai_id, IfMatch=etag)
             
-            self.print_colored(Colors.GREEN, f"[OK] Deleted OAI: {oai_id}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted OAI: {oai_id}")
             self.log_action(f"Deleted OAI: {oai_id}")
             
             self.cleanup_results['deleted_oais'].append({
@@ -186,7 +187,7 @@ class UltraCleanupCloudFrontManager:
             
         except ClientError as e:
             error_msg = f"Failed to delete OAI {oai_id}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['failed_deletions'].append({
                 'type': 'OAI',
@@ -199,7 +200,7 @@ class UltraCleanupCloudFrontManager:
     def delete_origin_access_control(self, cf_client, oac_id, account_key):
         """Delete a CloudFront Origin Access Control"""
         try:
-            self.print_colored(Colors.CYAN, f"[DELETE] Deleting OAC: {oac_id}")
+            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting OAC: {oac_id}")
             
             # Get current OAC config
             response = cf_client.get_origin_access_control(Id=oac_id)
@@ -207,7 +208,7 @@ class UltraCleanupCloudFrontManager:
             
             cf_client.delete_origin_access_control(Id=oac_id, IfMatch=etag)
             
-            self.print_colored(Colors.GREEN, f"[OK] Deleted OAC: {oac_id}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted OAC: {oac_id}")
             self.log_action(f"Deleted OAC: {oac_id}")
             
             self.cleanup_results['deleted_oacs'].append({
@@ -218,7 +219,7 @@ class UltraCleanupCloudFrontManager:
             
         except ClientError as e:
             error_msg = f"Failed to delete OAC {oac_id}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['failed_deletions'].append({
                 'type': 'OAC',
@@ -233,10 +234,10 @@ class UltraCleanupCloudFrontManager:
         try:
             # Skip AWS managed policies
             if policy_name and policy_name.startswith('Managed-'):
-                self.print_colored(Colors.YELLOW, f"[SKIP] Skipping managed cache policy: {policy_name}")
+                self.print_colored(Colors.YELLOW, f"{Symbols.SKIP} Skipping managed cache policy: {policy_name}")
                 return True
             
-            self.print_colored(Colors.CYAN, f"[DELETE] Deleting cache policy: {policy_id}")
+            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting cache policy: {policy_id}")
             
             # Get current policy config
             response = cf_client.get_cache_policy(Id=policy_id)
@@ -244,7 +245,7 @@ class UltraCleanupCloudFrontManager:
             
             cf_client.delete_cache_policy(Id=policy_id, IfMatch=etag)
             
-            self.print_colored(Colors.GREEN, f"[OK] Deleted cache policy: {policy_id}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted cache policy: {policy_id}")
             self.log_action(f"Deleted cache policy: {policy_id}")
             
             self.cleanup_results['deleted_cache_policies'].append({
@@ -256,11 +257,11 @@ class UltraCleanupCloudFrontManager:
             
         except ClientError as e:
             if 'IllegalDelete' in str(e) or 'CachePolicyInUse' in str(e):
-                self.print_colored(Colors.YELLOW, f"[SKIP] Cache policy in use or managed: {policy_id}")
+                self.print_colored(Colors.YELLOW, f"{Symbols.SKIP} Cache policy in use or managed: {policy_id}")
                 return True
             
             error_msg = f"Failed to delete cache policy {policy_id}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['failed_deletions'].append({
                 'type': 'CachePolicy',
@@ -275,10 +276,10 @@ class UltraCleanupCloudFrontManager:
         try:
             # Skip AWS managed policies
             if policy_name and policy_name.startswith('Managed-'):
-                self.print_colored(Colors.YELLOW, f"[SKIP] Skipping managed origin request policy: {policy_name}")
+                self.print_colored(Colors.YELLOW, f"{Symbols.SKIP} Skipping managed origin request policy: {policy_name}")
                 return True
             
-            self.print_colored(Colors.CYAN, f"[DELETE] Deleting origin request policy: {policy_id}")
+            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting origin request policy: {policy_id}")
             
             # Get current policy config
             response = cf_client.get_origin_request_policy(Id=policy_id)
@@ -286,7 +287,7 @@ class UltraCleanupCloudFrontManager:
             
             cf_client.delete_origin_request_policy(Id=policy_id, IfMatch=etag)
             
-            self.print_colored(Colors.GREEN, f"[OK] Deleted origin request policy: {policy_id}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted origin request policy: {policy_id}")
             self.log_action(f"Deleted origin request policy: {policy_id}")
             
             self.cleanup_results['deleted_origin_request_policies'].append({
@@ -298,11 +299,11 @@ class UltraCleanupCloudFrontManager:
             
         except ClientError as e:
             if 'IllegalDelete' in str(e) or 'OriginRequestPolicyInUse' in str(e):
-                self.print_colored(Colors.YELLOW, f"[SKIP] Origin request policy in use or managed: {policy_id}")
+                self.print_colored(Colors.YELLOW, f"{Symbols.SKIP} Origin request policy in use or managed: {policy_id}")
                 return True
             
             error_msg = f"Failed to delete origin request policy {policy_id}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['failed_deletions'].append({
                 'type': 'OriginRequestPolicy',
@@ -317,10 +318,10 @@ class UltraCleanupCloudFrontManager:
         try:
             # Skip AWS managed policies
             if policy_name and policy_name.startswith('Managed-'):
-                self.print_colored(Colors.YELLOW, f"[SKIP] Skipping managed response headers policy: {policy_name}")
+                self.print_colored(Colors.YELLOW, f"{Symbols.SKIP} Skipping managed response headers policy: {policy_name}")
                 return True
             
-            self.print_colored(Colors.CYAN, f"[DELETE] Deleting response headers policy: {policy_id}")
+            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting response headers policy: {policy_id}")
             
             # Get current policy config
             response = cf_client.get_response_headers_policy(Id=policy_id)
@@ -328,7 +329,7 @@ class UltraCleanupCloudFrontManager:
             
             cf_client.delete_response_headers_policy(Id=policy_id, IfMatch=etag)
             
-            self.print_colored(Colors.GREEN, f"[OK] Deleted response headers policy: {policy_id}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted response headers policy: {policy_id}")
             self.log_action(f"Deleted response headers policy: {policy_id}")
             
             self.cleanup_results['deleted_response_headers_policies'].append({
@@ -340,11 +341,11 @@ class UltraCleanupCloudFrontManager:
             
         except ClientError as e:
             if 'IllegalDelete' in str(e) or 'ResponseHeadersPolicyInUse' in str(e):
-                self.print_colored(Colors.YELLOW, f"[SKIP] Response headers policy in use or managed: {policy_id}")
+                self.print_colored(Colors.YELLOW, f"{Symbols.SKIP} Response headers policy in use or managed: {policy_id}")
                 return True
             
             error_msg = f"Failed to delete response headers policy {policy_id}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['failed_deletions'].append({
                 'type': 'ResponseHeadersPolicy',
@@ -357,7 +358,7 @@ class UltraCleanupCloudFrontManager:
     def delete_field_level_encryption_config(self, cf_client, config_id, account_key):
         """Delete a CloudFront field-level encryption config"""
         try:
-            self.print_colored(Colors.CYAN, f"[DELETE] Deleting field-level encryption config: {config_id}")
+            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting field-level encryption config: {config_id}")
             
             # Get current config
             response = cf_client.get_field_level_encryption_config(Id=config_id)
@@ -365,7 +366,7 @@ class UltraCleanupCloudFrontManager:
             
             cf_client.delete_field_level_encryption_config(Id=config_id, IfMatch=etag)
             
-            self.print_colored(Colors.GREEN, f"[OK] Deleted field-level encryption config: {config_id}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted field-level encryption config: {config_id}")
             self.log_action(f"Deleted field-level encryption config: {config_id}")
             
             self.cleanup_results['deleted_field_level_encryption_configs'].append({
@@ -376,7 +377,7 @@ class UltraCleanupCloudFrontManager:
             
         except ClientError as e:
             error_msg = f"Failed to delete field-level encryption config {config_id}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['failed_deletions'].append({
                 'type': 'FieldLevelEncryptionConfig',
@@ -390,7 +391,7 @@ class UltraCleanupCloudFrontManager:
         """Cleanup all CloudFront resources in an account"""
         try:
             self.print_colored(Colors.BLUE, f"\n{'='*100}")
-            self.print_colored(Colors.BLUE, f"[START] Processing Account: {account_name}")
+            self.print_colored(Colors.BLUE, f"{Symbols.START} Processing Account: {account_name}")
             self.print_colored(Colors.BLUE, f"{'='*100}")
             
             self.cleanup_results['accounts_processed'].append(account_name)
@@ -404,7 +405,7 @@ class UltraCleanupCloudFrontManager:
             
             # Delete Distributions
             try:
-                self.print_colored(Colors.YELLOW, "\n[SCAN] Scanning CloudFront distributions...")
+                self.print_colored(Colors.YELLOW, f"\n{Symbols.SCAN} Scanning CloudFront distributions...")
                 distributions_response = cf_client.list_distributions()
                 
                 if 'DistributionList' in distributions_response and 'Items' in distributions_response['DistributionList']:
@@ -517,11 +518,11 @@ class UltraCleanupCloudFrontManager:
             except ClientError as e:
                 self.log_action(f"Error listing field-level encryption configs: {e}", "ERROR")
             
-            self.print_colored(Colors.GREEN, f"\n[OK] Account {account_name} cleanup completed!")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.OK} Account {account_name} cleanup completed!")
             
         except Exception as e:
             error_msg = f"Error processing account {account_name}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['errors'].append(error_msg)
 
@@ -553,25 +554,25 @@ class UltraCleanupCloudFrontManager:
             with open(report_path, 'w') as f:
                 json.dump(summary, f, indent=2)
 
-            self.print_colored(Colors.GREEN, f"\n[STATS] Summary report saved: {report_path}")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.STATS} Summary report saved: {report_path}")
 
             # Print summary to console
             self.print_colored(Colors.BLUE, f"\n{'='*100}")
             self.print_colored(Colors.BLUE, "[STATS] CLEANUP SUMMARY")
             self.print_colored(Colors.BLUE, f"{'='*100}")
-            self.print_colored(Colors.GREEN, f"[OK] Distributions Deleted: {summary['summary']['total_distributions_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Origin Access Identities Deleted: {summary['summary']['total_oais_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Origin Access Controls Deleted: {summary['summary']['total_oacs_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Cache Policies Deleted: {summary['summary']['total_cache_policies_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Origin Request Policies Deleted: {summary['summary']['total_origin_request_policies_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Response Headers Policies Deleted: {summary['summary']['total_response_headers_policies_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Field-Level Encryption Configs Deleted: {summary['summary']['total_field_level_encryption_configs_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Distributions Deleted: {summary['summary']['total_distributions_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Origin Access Identities Deleted: {summary['summary']['total_oais_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Origin Access Controls Deleted: {summary['summary']['total_oacs_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Cache Policies Deleted: {summary['summary']['total_cache_policies_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Origin Request Policies Deleted: {summary['summary']['total_origin_request_policies_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Response Headers Policies Deleted: {summary['summary']['total_response_headers_policies_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Field-Level Encryption Configs Deleted: {summary['summary']['total_field_level_encryption_configs_deleted']}")
 
             if summary['summary']['total_failed_deletions'] > 0:
-                self.print_colored(Colors.YELLOW, f"[WARN] Failed Deletions: {summary['summary']['total_failed_deletions']}")
+                self.print_colored(Colors.YELLOW, f"{Symbols.WARN} Failed Deletions: {summary['summary']['total_failed_deletions']}")
 
             if summary['summary']['total_errors'] > 0:
-                self.print_colored(Colors.RED, f"[ERROR] Errors: {summary['summary']['total_errors']}")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Errors: {summary['summary']['total_errors']}")
 
             # Display Account Summary
             self.print_colored(Colors.BLUE, f"\n{'='*100}")
@@ -601,17 +602,17 @@ class UltraCleanupCloudFrontManager:
                     account_summary[account][key_name] += 1
 
             for account, stats in account_summary.items():
-                self.print_colored(Colors.CYAN, f"\n[LIST] Account: {account}")
-                self.print_colored(Colors.GREEN, f"  [OK] Distributions: {stats['distributions']}")
-                self.print_colored(Colors.GREEN, f"  [OK] Origin Access Identities: {stats['oais']}")
-                self.print_colored(Colors.GREEN, f"  [OK] Origin Access Controls: {stats['oacs']}")
-                self.print_colored(Colors.GREEN, f"  [OK] Cache Policies: {stats['cache_policies']}")
-                self.print_colored(Colors.GREEN, f"  [OK] Origin Request Policies: {stats['origin_request_policies']}")
-                self.print_colored(Colors.GREEN, f"  [OK] Response Headers Policies: {stats['response_headers_policies']}")
-                self.print_colored(Colors.GREEN, f"  [OK] Field-Level Encryption Configs: {stats['field_level_encryption_configs']}")
+                self.print_colored(Colors.CYAN, f"\n{Symbols.LIST} Account: {account}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Distributions: {stats['distributions']}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Origin Access Identities: {stats['oais']}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Origin Access Controls: {stats['oacs']}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Cache Policies: {stats['cache_policies']}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Origin Request Policies: {stats['origin_request_policies']}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Response Headers Policies: {stats['response_headers_policies']}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Field-Level Encryption Configs: {stats['field_level_encryption_configs']}")
 
         except Exception as e:
-            self.print_colored(Colors.RED, f"[ERROR] Failed to generate summary report: {e}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to generate summary report: {e}")
 
     def interactive_cleanup(self):
         """Interactive mode for CloudFront cleanup"""
@@ -622,15 +623,15 @@ class UltraCleanupCloudFrontManager:
 
             config = self.cred_manager.load_root_accounts_config()
             if not config or 'accounts' not in config:
-                self.print_colored(Colors.RED, "[ERROR] No accounts configuration found!")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} No accounts configuration found!")
                 return
 
             accounts = config['accounts']
             account_list = list(accounts.keys())
 
-            self.print_colored(Colors.CYAN, "[KEY] Select Root AWS Accounts for CloudFront Cleanup:")
+            self.print_colored(Colors.CYAN, f"{Symbols.KEY} Select Root AWS Accounts for CloudFront Cleanup:")
             print(f"{Colors.CYAN}[BOOK] Loading root accounts config...{Colors.END}")
-            self.print_colored(Colors.GREEN, f"[OK] Loaded {len(accounts)} root accounts")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Loaded {len(accounts)} root accounts")
             
             self.print_colored(Colors.YELLOW, "\n[KEY] Available Root AWS Accounts:")
             print("=" * 100)
@@ -665,15 +666,15 @@ class UltraCleanupCloudFrontManager:
                     indices = [int(x.strip()) for x in selection.split(',')]
                     selected_accounts = [account_list[i-1] for i in indices if 0 < i <= len(account_list)]
                 except (ValueError, IndexError):
-                    self.print_colored(Colors.RED, "[ERROR] Invalid selection!")
+                    self.print_colored(Colors.RED, f"{Symbols.ERROR} Invalid selection!")
                     return
 
             if not selected_accounts:
-                self.print_colored(Colors.RED, "[ERROR] No accounts selected!")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} No accounts selected!")
                 return
 
-            self.print_colored(Colors.RED, "\n[WARN] WARNING: This will DELETE all CloudFront resources!")
-            self.print_colored(Colors.YELLOW, "[WARN] Note: Distributions will be disabled first, then deleted (may take time)")
+            self.print_colored(Colors.RED, f"\n{Symbols.WARN} WARNING: This will DELETE all CloudFront resources!")
+            self.print_colored(Colors.YELLOW, f"{Symbols.WARN} Note: Distributions will be disabled first, then deleted (may take time)")
             confirm = input(f"\nType 'yes' to confirm: ").strip().lower()
             if confirm != 'yes':
                 self.print_colored(Colors.YELLOW, "[EXIT] Cleanup cancelled!")
@@ -691,13 +692,13 @@ class UltraCleanupCloudFrontManager:
 
             self.generate_summary_report()
 
-            self.print_colored(Colors.GREEN, f"\n[OK] CloudFront cleanup completed!")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.OK} CloudFront cleanup completed!")
             self.print_colored(Colors.CYAN, f"[FILE] Log file: {self.log_file}")
 
         except KeyboardInterrupt:
             self.print_colored(Colors.YELLOW, "\n[WARN] Cleanup interrupted by user!")
         except Exception as e:
-            self.print_colored(Colors.RED, f"\n[ERROR] Error during cleanup: {e}")
+            self.print_colored(Colors.RED, f"\n{Symbols.ERROR} Error during cleanup: {e}")
 
 
 def main():
@@ -708,7 +709,7 @@ def main():
     except KeyboardInterrupt:
         print("\n\n[WARN] Operation cancelled by user!")
     except Exception as e:
-        print(f"\n[ERROR] Fatal error: {e}")
+        print(f"\n{Symbols.ERROR} Fatal error: {e}")
 
 
 if __name__ == "__main__":

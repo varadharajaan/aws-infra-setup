@@ -21,6 +21,7 @@ import time
 from datetime import datetime
 from botocore.exceptions import ClientError
 from root_iam_credential_manager import AWSCredentialManager
+from text_symbols import Symbols
 
 
 class Colors:
@@ -40,9 +41,9 @@ class UltraCleanupEventBridgeManager:
     def __init__(self):
         """Initialize the EventBridge cleanup manager"""
         self.cred_manager = AWSCredentialManager()
-        self.current_time = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+        self.current_time = datetime.now(datetime.UTC).strftime('%Y-%m-%d %H:%M:%S')
         self.current_user = os.getenv('USERNAME') or os.getenv('USER') or 'unknown'
-        self.execution_timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+        self.execution_timestamp = datetime.now(datetime.UTC).strftime('%Y%m%d_%H%M%S')
         
         # Create directories for logs and reports
         self.base_dir = os.path.join(os.getcwd(), 'aws', 'eventbridge')
@@ -78,7 +79,7 @@ class UltraCleanupEventBridgeManager:
 
     def log_action(self, message, level="INFO"):
         """Log action to file"""
-        timestamp = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp = datetime.now(datetime.UTC).strftime('%Y-%m-%d %H:%M:%S')
         log_entry = f"{timestamp} | {level:8} | {message}\n"
         with open(self.log_file, 'a') as f:
             f.write(log_entry)
@@ -99,7 +100,7 @@ class UltraCleanupEventBridgeManager:
                     EventBusName=event_bus_name,
                     Ids=target_ids
                 )
-                self.print_colored(Colors.GREEN, f"   [OK] Removed {len(target_ids)} targets from rule: {rule_name}")
+                self.print_colored(Colors.GREEN, f"   {Symbols.OK} Removed {len(target_ids)} targets from rule: {rule_name}")
             
             return True
         except ClientError as e:
@@ -109,7 +110,7 @@ class UltraCleanupEventBridgeManager:
     def delete_event_rule(self, events_client, rule_name, event_bus_name, region, account_key):
         """Delete an EventBridge rule"""
         try:
-            self.print_colored(Colors.CYAN, f"[DELETE] Deleting rule: {rule_name}")
+            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting rule: {rule_name}")
             
             # Remove all targets first
             self.delete_rule_targets(events_client, rule_name, event_bus_name, region, account_key)
@@ -120,7 +121,7 @@ class UltraCleanupEventBridgeManager:
                 EventBusName=event_bus_name
             )
             
-            self.print_colored(Colors.GREEN, f"[OK] Deleted rule: {rule_name}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted rule: {rule_name}")
             self.log_action(f"Deleted EventBridge rule: {rule_name} in {region}")
             
             self.cleanup_results['deleted_rules'].append({
@@ -133,7 +134,7 @@ class UltraCleanupEventBridgeManager:
             
         except ClientError as e:
             error_msg = f"Failed to delete rule {rule_name}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['failed_deletions'].append({
                 'type': 'Rule',
@@ -151,7 +152,7 @@ class UltraCleanupEventBridgeManager:
             if bus_name == 'default':
                 return True
             
-            self.print_colored(Colors.CYAN, f"[DELETE] Deleting event bus: {bus_name}")
+            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting event bus: {bus_name}")
             
             # Delete all rules on this bus first
             try:
@@ -164,7 +165,7 @@ class UltraCleanupEventBridgeManager:
             
             events_client.delete_event_bus(Name=bus_name)
             
-            self.print_colored(Colors.GREEN, f"[OK] Deleted event bus: {bus_name}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted event bus: {bus_name}")
             self.log_action(f"Deleted event bus: {bus_name} in {region}")
             
             self.cleanup_results['deleted_event_buses'].append({
@@ -176,7 +177,7 @@ class UltraCleanupEventBridgeManager:
             
         except ClientError as e:
             error_msg = f"Failed to delete event bus {bus_name}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['failed_deletions'].append({
                 'type': 'EventBus',
@@ -190,11 +191,11 @@ class UltraCleanupEventBridgeManager:
     def delete_archive(self, events_client, archive_name, region, account_key):
         """Delete an event archive"""
         try:
-            self.print_colored(Colors.CYAN, f"[DELETE] Deleting archive: {archive_name}")
+            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting archive: {archive_name}")
             
             events_client.delete_archive(ArchiveName=archive_name)
             
-            self.print_colored(Colors.GREEN, f"[OK] Deleted archive: {archive_name}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted archive: {archive_name}")
             self.log_action(f"Deleted archive: {archive_name} in {region}")
             
             self.cleanup_results['deleted_archives'].append({
@@ -206,18 +207,18 @@ class UltraCleanupEventBridgeManager:
             
         except ClientError as e:
             error_msg = f"Failed to delete archive {archive_name}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             return False
 
     def delete_api_destination(self, events_client, destination_name, region, account_key):
         """Delete an API destination"""
         try:
-            self.print_colored(Colors.CYAN, f"[DELETE] Deleting API destination: {destination_name}")
+            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting API destination: {destination_name}")
             
             events_client.delete_api_destination(Name=destination_name)
             
-            self.print_colored(Colors.GREEN, f"[OK] Deleted API destination: {destination_name}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted API destination: {destination_name}")
             self.log_action(f"Deleted API destination: {destination_name} in {region}")
             
             self.cleanup_results['deleted_api_destinations'].append({
@@ -229,18 +230,18 @@ class UltraCleanupEventBridgeManager:
             
         except ClientError as e:
             error_msg = f"Failed to delete API destination {destination_name}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             return False
 
     def delete_connection(self, events_client, connection_name, region, account_key):
         """Delete a connection"""
         try:
-            self.print_colored(Colors.CYAN, f"[DELETE] Deleting connection: {connection_name}")
+            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting connection: {connection_name}")
             
             events_client.delete_connection(Name=connection_name)
             
-            self.print_colored(Colors.GREEN, f"[OK] Deleted connection: {connection_name}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted connection: {connection_name}")
             self.log_action(f"Deleted connection: {connection_name} in {region}")
             
             self.cleanup_results['deleted_connections'].append({
@@ -252,14 +253,14 @@ class UltraCleanupEventBridgeManager:
             
         except ClientError as e:
             error_msg = f"Failed to delete connection {connection_name}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             return False
 
     def cleanup_region_eventbridge(self, account_name, credentials, region):
         """Cleanup all EventBridge resources in a specific region"""
         try:
-            self.print_colored(Colors.YELLOW, f"\n[SCAN] Scanning region: {region}")
+            self.print_colored(Colors.YELLOW, f"\n{Symbols.SCAN} Scanning region: {region}")
             
             events_client = boto3.client(
                 'events',
@@ -323,7 +324,7 @@ class UltraCleanupEventBridgeManager:
                             rules_response = events_client.list_rules(EventBusName=bus_name)
                             rules = rules_response.get('Rules', [])
                             if rules:
-                                self.print_colored(Colors.YELLOW, f"   [SCAN] Found {len(rules)} rules on bus: {bus_name}")
+                                self.print_colored(Colors.YELLOW, f"   {Symbols.SCAN} Found {len(rules)} rules on bus: {bus_name}")
                                 for rule in rules:
                                     self.delete_event_rule(events_client, rule['Name'], bus_name, region, account_name)
                                     time.sleep(0.3)
@@ -339,7 +340,7 @@ class UltraCleanupEventBridgeManager:
             
         except Exception as e:
             error_msg = f"Error processing region {region}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['errors'].append(error_msg)
 
@@ -347,7 +348,7 @@ class UltraCleanupEventBridgeManager:
         """Cleanup all EventBridge resources in an account across all regions"""
         try:
             self.print_colored(Colors.BLUE, f"\n{'='*100}")
-            self.print_colored(Colors.BLUE, f"[START] Processing Account: {account_name}")
+            self.print_colored(Colors.BLUE, f"{Symbols.START} Processing Account: {account_name}")
             self.print_colored(Colors.BLUE, f"{'='*100}")
             
             self.cleanup_results['accounts_processed'].append(account_name)
@@ -363,17 +364,17 @@ class UltraCleanupEventBridgeManager:
             regions_response = ec2_client.describe_regions()
             regions = [region['RegionName'] for region in regions_response['Regions']]
             
-            self.print_colored(Colors.CYAN, f"[SCAN] Processing {len(regions)} regions")
+            self.print_colored(Colors.CYAN, f"{Symbols.SCAN} Processing {len(regions)} regions")
             
             # Process each region
             for region in regions:
                 self.cleanup_region_eventbridge(account_name, credentials, region)
             
-            self.print_colored(Colors.GREEN, f"\n[OK] Account {account_name} cleanup completed!")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.OK} Account {account_name} cleanup completed!")
             
         except Exception as e:
             error_msg = f"Error processing account {account_name}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['errors'].append(error_msg)
 
@@ -403,23 +404,23 @@ class UltraCleanupEventBridgeManager:
             with open(report_path, 'w') as f:
                 json.dump(summary, f, indent=2)
 
-            self.print_colored(Colors.GREEN, f"\n[STATS] Summary report saved: {report_path}")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.STATS} Summary report saved: {report_path}")
 
             # Print summary to console
             self.print_colored(Colors.BLUE, f"\n{'='*100}")
             self.print_colored(Colors.BLUE, "[STATS] CLEANUP SUMMARY")
             self.print_colored(Colors.BLUE, f"{'='*100}")
-            self.print_colored(Colors.GREEN, f"[OK] Rules Deleted: {summary['summary']['total_rules_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Event Buses Deleted: {summary['summary']['total_event_buses_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Archives Deleted: {summary['summary']['total_archives_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] API Destinations Deleted: {summary['summary']['total_api_destinations_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Connections Deleted: {summary['summary']['total_connections_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Rules Deleted: {summary['summary']['total_rules_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Event Buses Deleted: {summary['summary']['total_event_buses_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Archives Deleted: {summary['summary']['total_archives_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} API Destinations Deleted: {summary['summary']['total_api_destinations_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Connections Deleted: {summary['summary']['total_connections_deleted']}")
 
             if summary['summary']['total_failed_deletions'] > 0:
-                self.print_colored(Colors.YELLOW, f"[WARN] Failed Deletions: {summary['summary']['total_failed_deletions']}")
+                self.print_colored(Colors.YELLOW, f"{Symbols.WARN} Failed Deletions: {summary['summary']['total_failed_deletions']}")
 
         except Exception as e:
-            self.print_colored(Colors.RED, f"[ERROR] Failed to generate summary report: {e}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to generate summary report: {e}")
 
     def interactive_cleanup(self):
         """Interactive mode for EventBridge cleanup"""
@@ -430,15 +431,15 @@ class UltraCleanupEventBridgeManager:
 
             config = self.cred_manager.load_root_accounts_config()
             if not config or 'accounts' not in config:
-                self.print_colored(Colors.RED, "[ERROR] No accounts configuration found!")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} No accounts configuration found!")
                 return
 
             accounts = config['accounts']
             account_list = list(accounts.keys())
 
-            self.print_colored(Colors.CYAN, "[KEY] Select Root AWS Accounts for EventBridge Cleanup:")
+            self.print_colored(Colors.CYAN, f"{Symbols.KEY} Select Root AWS Accounts for EventBridge Cleanup:")
             print(f"{Colors.CYAN}[BOOK] Loading root accounts config...{Colors.END}")
-            self.print_colored(Colors.GREEN, f"[OK] Loaded {len(accounts)} root accounts")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Loaded {len(accounts)} root accounts")
             
             self.print_colored(Colors.YELLOW, "\n[KEY] Available Root AWS Accounts:")
             print("=" * 100)
@@ -473,14 +474,14 @@ class UltraCleanupEventBridgeManager:
                     indices = [int(x.strip()) for x in selection.split(',')]
                     selected_accounts = [account_list[i-1] for i in indices if 0 < i <= len(account_list)]
                 except (ValueError, IndexError):
-                    self.print_colored(Colors.RED, "[ERROR] Invalid selection!")
+                    self.print_colored(Colors.RED, f"{Symbols.ERROR} Invalid selection!")
                     return
 
             if not selected_accounts:
-                self.print_colored(Colors.RED, "[ERROR] No accounts selected!")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} No accounts selected!")
                 return
 
-            self.print_colored(Colors.RED, "\n[WARN] WARNING: This will DELETE all EventBridge resources!")
+            self.print_colored(Colors.RED, f"\n{Symbols.WARN} WARNING: This will DELETE all EventBridge resources!")
             confirm = input(f"\nType 'yes' to confirm: ").strip().lower()
             if confirm != 'yes':
                 self.print_colored(Colors.YELLOW, "[EXIT] Cleanup cancelled!")
@@ -498,13 +499,13 @@ class UltraCleanupEventBridgeManager:
 
             self.generate_summary_report()
 
-            self.print_colored(Colors.GREEN, f"\n[OK] EventBridge cleanup completed!")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.OK} EventBridge cleanup completed!")
             self.print_colored(Colors.CYAN, f"[FILE] Log file: {self.log_file}")
 
         except KeyboardInterrupt:
             self.print_colored(Colors.YELLOW, "\n[WARN] Cleanup interrupted by user!")
         except Exception as e:
-            self.print_colored(Colors.RED, f"\n[ERROR] Error during cleanup: {e}")
+            self.print_colored(Colors.RED, f"\n{Symbols.ERROR} Error during cleanup: {e}")
 
 
 def main():
@@ -515,7 +516,7 @@ def main():
     except KeyboardInterrupt:
         print("\n\n[WARN] Operation cancelled by user!")
     except Exception as e:
-        print(f"\n[ERROR] Fatal error: {e}")
+        print(f"\n{Symbols.ERROR} Fatal error: {e}")
 
 
 if __name__ == "__main__":

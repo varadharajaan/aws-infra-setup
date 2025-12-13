@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-🚀 Smart EC2 Spot Instance Selector with REAL AWS Integration & ML
+Smart EC2 Spot Instance Selector with REAL AWS Integration & ML
 """
 
 import boto3
@@ -19,6 +19,7 @@ import warnings
 import time
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from text_symbols import Symbols
 warnings.filterwarnings('ignore')
 
 # For ML model
@@ -43,22 +44,22 @@ class Colors:
 
 # Emoji indicators
 class Emoji:
-    ROCKET = "🚀"
-    CHECK = "✅"
-    CROSS = "❌"
-    WARNING = "⚠️"
-    MONEY = "💰"
-    CHART = "📊"
-    STAR = "⭐"
-    FIRE = "🔥"
-    LIGHTNING = "⚡"
-    SHIELD = "🛡️"
-    TARGET = "🎯"
-    BRAIN = "🧠"
-    CLOUD = "☁️"
+    ROCKET = f"{Symbols.START}"
+    CHECK = f"{Symbols.OK}"
+    CROSS = f"{Symbols.ERROR}"
+    WARNING = f"{Symbols.WARN}"
+    MONEY = f"{Symbols.COST}"
+    CHART = f"{Symbols.STATS}"
+    STAR = "[STAR]"
+    FIRE = "[FIRE]"
+    LIGHTNING = "[LIGHTNING]"
+    SHIELD = f"{Symbols.PROTECTED}"
+    TARGET = f"{Symbols.TARGET}"
+    BRAIN = "[BRAIN]"
+    CLOUD = "[CLOUD]"
     GIFT = "🎁"
-    CROWN = "👑"
-    DIAMOND = "💎"
+    CROWN = "[CROWN]"
+    DIAMOND = "[DIAMOND]"
 
 def clear_screen():
     """Clear terminal screen"""
@@ -251,7 +252,7 @@ class AWSSpotDataFetcher:
                     return pickle.load(f)
         
         all_prices = []
-        end_time = datetime.utcnow()
+        end_time = datetime.now(datetime.UTC)
         start_time = end_time - timedelta(days=days)
         
         # Fetch in batches
@@ -787,7 +788,7 @@ class InteractiveSpotSelector:
         print(f"  {Colors.GREEN}✓{Colors.END} Analyzed {len(recommendations)} instances with ML")
         
         if len(recommendations) == 0:
-            print(f"\n  {Colors.RED}⚠️  No valid recommendations found. This may be due to:")
+            print(f"\n  {Colors.RED}{Symbols.WARN}  No valid recommendations found. This may be due to:")
             print(f"     - No spot price history available in this region")
             print(f"     - Selected instance types not available as spot instances")
             print(f"     - API rate limiting{Colors.END}")
@@ -851,7 +852,7 @@ class InteractiveSpotSelector:
                 spot_placement_score=rec['placement_score']
             ))
         
-        print(f"\n  {Colors.GREEN}✅ Analysis complete!{Colors.END}")
+        print(f"\n  {Colors.GREEN}{Symbols.OK} Analysis complete!{Colors.END}")
         time.sleep(1)
     
     def show_welcome(self):
@@ -1021,7 +1022,7 @@ class InteractiveSpotSelector:
             boto3.client('sts').get_caller_identity()
             print(f"  {Colors.GREEN}✓{Colors.END} AWS credentials configured")
         except:
-            print(f"{Colors.RED}⚠️  AWS credentials not configured! {Colors.END}")
+            print(f"{Colors.RED}{Symbols.WARN}  AWS credentials not configured! {Colors.END}")
             print(f"\nPlease configure AWS credentials using:")
             print(f"  aws configure")
             print(f"Or set environment variables:")

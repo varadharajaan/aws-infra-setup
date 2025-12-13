@@ -10,6 +10,7 @@ import functools
 from datetime import datetime
 from typing import Dict, Any, Optional
 import inspect
+from text_symbols import Symbols
 
 class TimingTracker:
     """Class to track timing of operations"""
@@ -91,9 +92,9 @@ def timing_decorator(operation_name: str = None):
             
             # Log start
             if hasattr(self, 'log_operation'):
-                self.log_operation("INFO", f"[START] Starting: {op_name}")
+                self.log_operation("INFO", f"{Symbols.START} Starting: {op_name}")
             else:
-                print(f"[START] Starting: {op_name}")
+                print(f"{Symbols.START} Starting: {op_name}")
             
             try:
                 # Execute the method
@@ -104,9 +105,9 @@ def timing_decorator(operation_name: str = None):
                 formatted_duration = self.timing_tracker.format_duration(duration)
                 
                 if hasattr(self, 'log_operation'):
-                    self.log_operation("INFO", f"[OK] Completed: {op_name} in {formatted_duration}")
+                    self.log_operation("INFO", f"{Symbols.OK} Completed: {op_name} in {formatted_duration}")
                 else:
-                    print(f"[OK] Completed: {op_name} in {formatted_duration}")
+                    print(f"{Symbols.OK} Completed: {op_name} in {formatted_duration}")
                 
                 return result
                 
@@ -116,9 +117,9 @@ def timing_decorator(operation_name: str = None):
                 formatted_duration = self.timing_tracker.format_duration(duration)
                 
                 if hasattr(self, 'log_operation'):
-                    self.log_operation("ERROR", f"[ERROR] Failed: {op_name} after {formatted_duration} - {str(e)}")
+                    self.log_operation("ERROR", f"{Symbols.ERROR} Failed: {op_name} after {formatted_duration} - {str(e)}")
                 else:
-                    print(f"[ERROR] Failed: {op_name} after {formatted_duration} - {str(e)}")
+                    print(f"{Symbols.ERROR} Failed: {op_name} after {formatted_duration} - {str(e)}")
                 raise
                 
         return wrapper
@@ -145,9 +146,9 @@ def add_timing_methods(cls):
         self.initialize_timing_tracker()
         self.timing_tracker.start_operation(operation_name)
         if hasattr(self, 'log_operation'):
-            self.log_operation("INFO", f"[START] Starting: {operation_name}")
+            self.log_operation("INFO", f"{Symbols.START} Starting: {operation_name}")
         else:
-            print(f"[START] Starting: {operation_name}")
+            print(f"{Symbols.START} Starting: {operation_name}")
 
     def end_timing(self, operation_name: str = None):
         """End timing an operation and log duration (auto-detect name if not provided)"""
@@ -159,9 +160,9 @@ def add_timing_methods(cls):
             duration = self.timing_tracker.end_operation(operation_name)
             formatted_duration = self.timing_tracker.format_duration(duration)
             if hasattr(self, 'log_operation'):
-                self.log_operation("INFO", f"[OK] Completed: {operation_name} in {formatted_duration}")
+                self.log_operation("INFO", f"{Symbols.OK} Completed: {operation_name} in {formatted_duration}")
             else:
-                print(f"[OK] Completed: {operation_name} in {formatted_duration}")
+                print(f"{Symbols.OK} Completed: {operation_name} in {formatted_duration}")
             return duration
         return 0.0
     
@@ -180,7 +181,7 @@ def add_timing_methods(cls):
         if not timings:
             return
         
-        print(f"\n[TIMER]  {title}")
+        print(f"\n{Symbols.TIMER}  {title}")
         print("=" * (len(title) + 10))
         
         total_time = sum(timings.values())

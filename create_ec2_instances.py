@@ -1,4 +1,4 @@
-# Databricks notebook source
+﻿# Databricks notebook source
 #!/usr/bin/env python3
 
 import boto3
@@ -8,9 +8,11 @@ import os
 import time
 import glob
 import re
+import logging
 from datetime import datetime
 from botocore.exceptions import ClientError, BotoCoreError
 from logger import setup_logger
+from text_symbols import Symbols
 
 class EC2InstanceManager:
     def __init__(self, ami_mapping_file='ec2-region-ami-mapping.json', userdata_file='userdata.sh'):
@@ -38,9 +40,6 @@ class EC2InstanceManager:
         """Setup detailed logging to file"""
         try:
             self.log_filename = f"ec2_creation_log_{self.execution_timestamp}.log"
-            
-            # Create a file handler for detailed logging
-            import logging
             
             # Create logger for detailed operations
             self.operation_logger = logging.getLogger('ec2_operations')
@@ -127,9 +126,9 @@ class EC2InstanceManager:
                         file_timestamps.append((file_path, timestamp, timestamp_str))
                         self.logger.info(f"  📄 {file_path} (timestamp: {timestamp_str})")
                     except ValueError as e:
-                        self.logger.warning(f"  ⚠️  {file_path} has invalid timestamp format: {e}")
+                        self.logger.warning(f"  {Symbols.WARN}  {file_path} has invalid timestamp format: {e}")
                 else:
-                    self.logger.warning(f"  ⚠️  {file_path} doesn't match expected timestamp pattern")
+                    self.logger.warning(f"  {Symbols.WARN}  {file_path} doesn't match expected timestamp pattern")
             
             if not file_timestamps:
                 raise ValueError("No valid credential files with proper timestamp format found")
@@ -140,13 +139,13 @@ class EC2InstanceManager:
             # Get the latest file
             latest_file, latest_timestamp, latest_timestamp_str = file_timestamps[0]
             
-            self.logger.info(f"🎯 Selected latest file: {latest_file}")
-            self.logger.info(f"📅 File timestamp: {latest_timestamp_str}")
-            self.logger.info(f"📅 Parsed timestamp: {latest_timestamp}")
+            self.logger.info(f"{Symbols.TARGET} Selected latest file: {latest_file}")
+            self.logger.info(f"{Symbols.DATE} File timestamp: {latest_timestamp_str}")
+            self.logger.info(f"{Symbols.DATE} Parsed timestamp: {latest_timestamp}")
             
             # Show what files were skipped
             if len(file_timestamps) > 1:
-                self.logger.info("📋 Other files found (older):")
+                self.logger.info("[LIST] Other files found (older):")
                 for file_path, timestamp, timestamp_str in file_timestamps[1:]:
                     self.logger.info(f"  📄 {file_path} (timestamp: {timestamp_str})")
             
@@ -166,11 +165,11 @@ class EC2InstanceManager:
             with open(self.credentials_file, 'r', encoding='utf-8') as f:
                 self.credentials_data = json.load(f)
             
-            self.logger.info(f"✅ Credentials loaded from: {self.credentials_file}")
+            self.logger.info(f"{Symbols.OK} Credentials loaded from: {self.credentials_file}")
             
             # Extract and log metadata from credentials file
             if 'created_date' in self.credentials_data:
-                self.logger.info(f"📅 Credentials file created: {self.credentials_data['created_date']} {self.credentials_data.get('created_time', '')}")
+                self.logger.info(f"{Symbols.DATE} Credentials file created: {self.credentials_data['created_date']} {self.credentials_data.get('created_time', '')}")
             if 'created_by' in self.credentials_data:
                 self.logger.info(f"👤 Credentials file created by: {self.credentials_data['created_by']}")
             if 'total_users' in self.credentials_data:
@@ -183,8 +182,8 @@ class EC2InstanceManager:
             with open(self.ami_mapping_file, 'r', encoding='utf-8') as f:
                 self.ami_config = json.load(f)
             
-            self.logger.info(f"✅ AMI mappings loaded from: {self.ami_mapping_file}")
-            self.logger.info(f"🌍 Supported regions: {list(self.ami_config['region_ami_mapping'].keys())}")
+            self.logger.info(f"{Symbols.OK} AMI mappings loaded from: {self.ami_mapping_file}")
+            self.logger.info(f"{Symbols.REGION} Supported regions: {list(self.ami_config['region_ami_mapping'].keys())}")
             
         except FileNotFoundError as e:
             self.logger.error(f"Configuration file error: {e}")
@@ -213,7 +212,7 @@ class EC2InstanceManager:
                     with open(self.userdata_file, 'r', encoding=encoding) as f:
                         user_data_content = f.read()
                     encoding_used = encoding
-                    self.logger.info(f"✅ Successfully read user data script using {encoding} encoding")
+                    self.logger.info(f"{Symbols.OK} Successfully read user data script using {encoding} encoding")
                     break
                 except UnicodeDecodeError as e:
                     self.logger.debug(f"Failed to read with {encoding} encoding: {e}")
@@ -263,7 +262,7 @@ class EC2InstanceManager:
         
         self.log_operation('INFO', f"Displaying {len(accounts)} available accounts for selection")
         
-        print(f"\n🏦 Available AWS Accounts ({len(accounts)} total):")
+        print(f"\n{Symbols.ACCOUNT} Available AWS Accounts ({len(accounts)} total):")
         print("=" * 80)
         
         total_users = 0
@@ -286,7 +285,7 @@ class EC2InstanceManager:
             print(f"      📧 Email: {account_email}")
             print(f"      🆔 Account ID: {account_id}")
             print(f"      👥 Users: {user_count}")
-            print(f"      🌍 Regions: {', '.join(sorted(account_regions))}")
+            print(f"      {Symbols.REGION} Regions: {', '.join(sorted(account_regions))}")
             
             # Log account details
             self.log_operation('INFO', f"Account {i}: {account_name} ({account_id}) - {user_count} users in regions: {', '.join(sorted(account_regions))}")
@@ -304,14 +303,14 @@ class EC2InstanceManager:
             print()
         
         print("=" * 80)
-        print(f"📊 Summary:")
-        print(f"   📈 Total accounts: {len(accounts)}")
+        print(f"{Symbols.STATS} Summary:")
+        print(f"   [UP] Total accounts: {len(accounts)}")
         print(f"   👥 Total users: {total_users}")
-        print(f"   🌍 All regions: {', '.join(sorted(regions_used))}")
+        print(f"   {Symbols.REGION} All regions: {', '.join(sorted(regions_used))}")
         
         self.log_operation('INFO', f"Account summary: {len(accounts)} accounts, {total_users} total users, regions: {', '.join(sorted(regions_used))}")
         
-        print(f"\n📝 Selection Options:")
+        print(f"\n{Symbols.LOG} Selection Options:")
         print(f"   • Single accounts: 1,3,5")
         print(f"   • Ranges: 1-{len(accounts)} (accounts 1 through {len(accounts)})")
         print(f"   • Mixed: 1-2,4 (accounts 1, 2, and 4)")
@@ -319,7 +318,7 @@ class EC2InstanceManager:
         print(f"   • Cancel: 'cancel' or 'quit'")
         
         while True:
-            selection = input(f"\n🔢 Select accounts to process: ").strip()
+            selection = input(f"\n[#] Select accounts to process: ").strip()
             
             self.log_operation('INFO', f"User input for account selection: '{selection}'")
             
@@ -359,37 +358,37 @@ class EC2InstanceManager:
                         })
                         selected_users += user_count
                     
-                    print(f"\n✅ Selected {len(selected_indices)} accounts ({selected_users} total users):")
+                    print(f"\n{Symbols.OK} Selected {len(selected_indices)} accounts ({selected_users} total users):")
                     print("-" * 60)
                     for i, account_info in enumerate(selected_accounts, 1):
                         print(f"   {i}. {account_info['name']}")
                         print(f"      🆔 {account_info['id']}")
                         print(f"      👥 {account_info['users']} users")
-                        print(f"      🌍 {', '.join(sorted(account_info['regions']))}")
+                        print(f"      {Symbols.REGION} {', '.join(sorted(account_info['regions']))}")
                     
                     print("-" * 60)
-                    print(f"📊 Total: {len(selected_indices)} accounts, {selected_users} users, {len(selected_regions)} regions")
+                    print(f"{Symbols.STATS} Total: {len(selected_indices)} accounts, {selected_users} users, {len(selected_regions)} regions")
                     
                     # Log selection details
                     self.log_operation('INFO', f"Selected accounts: {[acc['name'] for acc in selected_accounts]}")
                     self.log_operation('INFO', f"Selection summary: {len(selected_indices)} accounts, {selected_users} users, {len(selected_regions)} regions")
                     
-                    confirm = input(f"\n🚀 Proceed with these {len(selected_indices)} accounts? (y/N): ").lower().strip()
+                    confirm = input(f"\n{Symbols.START} Proceed with these {len(selected_indices)} accounts? (y/N): ").lower().strip()
                     self.log_operation('INFO', f"User confirmation for selection: '{confirm}'")
                     
                     if confirm == 'y':
                         return selected_indices
                     else:
-                        print("❌ Selection cancelled, please choose again.")
+                        print(f"{Symbols.ERROR} Selection cancelled, please choose again.")
                         self.log_operation('INFO', "User cancelled selection, requesting new input")
                         continue
                 else:
-                    print("❌ No valid accounts selected. Please try again.")
+                    print(f"{Symbols.ERROR} No valid accounts selected. Please try again.")
                     self.log_operation('WARNING', "No valid accounts selected from user input")
                     continue
                     
             except ValueError as e:
-                print(f"❌ Invalid selection: {e}")
+                print(f"{Symbols.ERROR} Invalid selection: {e}")
                 print("   Please use format like: 1,3,5 or 1-5 or 1-3,5,7-9")
                 self.log_operation('ERROR', f"Invalid account selection format: {e}")
                 continue
@@ -645,15 +644,15 @@ class EC2InstanceManager:
             #             'InstanceInterruptionBehavior': 'terminate'  # or 'stop' or 'hibernate'
             #         }
             #     }
-                
-                # Add max spot price if specified
-                if max_spot_price:
-                    spot_specification['SpotOptions']['MaxPrice'] = str(max_spot_price)
-                    self.log_operation('INFO', f"Using spot instance with max price: ${max_spot_price}")
-                else:
-                    self.log_operation('INFO', "Using spot instance with market price")
-                
-                instance_params['InstanceMarketOptions'] = spot_specification
+            #     
+            #     # Add max spot price if specified
+            #     if max_spot_price:
+            #         spot_specification['SpotOptions']['MaxPrice'] = str(max_spot_price)
+            #         self.log_operation('INFO', f"Using spot instance with max price: ${max_spot_price}")
+            #     else:
+            #         self.log_operation('INFO', "Using spot instance with market price")
+            #     
+            #     instance_params['InstanceMarketOptions'] = spot_specification
             
             # Create instance
             response = ec2_client.run_instances(**instance_params)
@@ -663,7 +662,7 @@ class EC2InstanceManager:
             
             # Log success with market type
             market_info = "spot" if use_spot else "on-demand"
-            self.log_operation('INFO', f"✅ Successfully created {market_info} instance {instance_id} for user {username}")
+            self.log_operation('INFO', f"{Symbols.OK} Successfully created {market_info} instance {instance_id} for user {username}")
             
             return {
                 'instance_id': instance_id,
@@ -682,7 +681,7 @@ class EC2InstanceManager:
             }
             
         except Exception as e:
-            self.log_operation('ERROR', f"❌ Failed to create instance for user {username}: {str(e)}")
+            self.log_operation('ERROR', f"{Symbols.ERROR} Failed to create instance for user {username}: {str(e)}")
             raise
 
     def wait_for_instance_running(self, ec2_client, instance_id, username, timeout=300):
@@ -708,7 +707,7 @@ class EC2InstanceManager:
                     private_ip = instance.get('PrivateIpAddress', 'N/A')
                     
                     elapsed_time = int(time.time() - start_time)
-                    self.log_operation('INFO', f"✅ Instance {instance_id} is running (took {elapsed_time}s) - Public: {public_ip}, Private: {private_ip}")
+                    self.log_operation('INFO', f"{Symbols.OK} Instance {instance_id} is running (took {elapsed_time}s) - Public: {public_ip}, Private: {private_ip}")
                     
                     return {
                         'state': state,
@@ -717,7 +716,7 @@ class EC2InstanceManager:
                         'startup_time_seconds': elapsed_time
                     }
                 elif state in ['terminated', 'terminating']:
-                    self.log_operation('ERROR', f"❌ Instance {instance_id} terminated unexpectedly")
+                    self.log_operation('ERROR', f"{Symbols.ERROR} Instance {instance_id} terminated unexpectedly")
                     return None
                 else:
                     time.sleep(10)
@@ -727,7 +726,7 @@ class EC2InstanceManager:
                 time.sleep(10)
         
         elapsed_time = int(time.time() - start_time)
-        self.log_operation('ERROR', f"⏰ Timeout waiting for instance {instance_id} after {elapsed_time} seconds")
+        self.log_operation('ERROR', f"{Symbols.TIMER} Timeout waiting for instance {instance_id} after {elapsed_time} seconds")
         return None
 
     def create_instances_for_selected_accounts(self, selected_accounts, instance_type='t3.micro', wait_for_running=True):
@@ -735,7 +734,7 @@ class EC2InstanceManager:
         created_instances = []
         failed_instances = []
         
-        self.log_operation('INFO', "🚀 Starting EC2 instance creation process")
+        self.log_operation('INFO', f"{Symbols.START} Starting EC2 instance creation process")
         self.log_operation('INFO', f"Instance type: {instance_type}")
         self.log_operation('INFO', f"User data script: {self.userdata_file}")
         self.log_operation('INFO', f"Credentials source: {self.credentials_file}")
@@ -751,7 +750,7 @@ class EC2InstanceManager:
             account_id = account_data.get('account_id', 'Unknown')
             account_email = account_data.get('account_email', 'Unknown')
             
-            self.log_operation('INFO', f"🏦 Processing account: {account_name} ({account_id})")
+            self.log_operation('INFO', f"{Symbols.ACCOUNT} Processing account: {account_name} ({account_id})")
             
             if 'users' not in account_data:
                 self.log_operation('WARNING', f"No users found in account: {account_name}")
@@ -771,7 +770,7 @@ class EC2InstanceManager:
                 
                 if not access_key or not secret_key:
                     error_msg = "Missing AWS credentials"
-                    self.log_operation('ERROR', f"❌ {username}: {error_msg}")
+                    self.log_operation('ERROR', f"{Symbols.ERROR} {username}: {error_msg}")
                     failed_instances.append({
                         'username': username,
                         'real_name': real_name,
@@ -818,21 +817,21 @@ class EC2InstanceManager:
                     created_instances.append(instance_info)
                     
                     # Print success message
-                    print(f"\n🎉 SUCCESS: Instance created for {real_name}")
+                    print(f"\n[PARTY] SUCCESS: Instance created for {real_name}")
                     print(f"   👤 Username: {username}")
                     print(f"   📍 Instance ID: {instance_info['instance_id']}")
-                    print(f"   🌍 Region: {region}")
+                    print(f"   {Symbols.REGION} Region: {region}")
                     print(f"   💻 Instance Type: {instance_info['instance_type']}")
-                    print(f"   🏦 Account: {account_name} ({account_id})")
+                    print(f"   {Symbols.ACCOUNT} Account: {account_name} ({account_id})")
                     if 'public_ip' in instance_info:
                         print(f"   🌐 Public IP: {instance_info['public_ip']}")
                     if 'startup_time_seconds' in instance_info:
-                        print(f"   ⏱️  Startup Time: {instance_info['startup_time_seconds']}s")
+                        print(f"   {Symbols.TIMER}  Startup Time: {instance_info['startup_time_seconds']}s")
                     print("-" * 60)
                     
                 except Exception as e:
                     error_msg = str(e)
-                    self.log_operation('ERROR', f"❌ Failed to create instance for {username}: {error_msg}")
+                    self.log_operation('ERROR', f"{Symbols.ERROR} Failed to create instance for {username}: {error_msg}")
                     failed_instances.append({
                         'username': username,
                         'real_name': real_name,
@@ -841,9 +840,9 @@ class EC2InstanceManager:
                         'account_id': account_id,
                         'error': error_msg
                     })
-                    print(f"\n❌ FAILED: Instance creation failed for {real_name}")
+                    print(f"\n{Symbols.ERROR} FAILED: Instance creation failed for {real_name}")
                     print(f"   👤 Username: {username}")
-                    print(f"   🏦 Account: {account_name}")
+                    print(f"   {Symbols.ACCOUNT} Account: {account_name}")
                     print(f"   Error: {error_msg}")
                     print("-" * 60)
                     continue
@@ -924,11 +923,11 @@ class EC2InstanceManager:
             with open(mapping_filename, 'w', encoding='utf-8') as f:
                 json.dump(mapping_data, f, indent=2, default=str)
             
-            self.log_operation('INFO', f"✅ IAM user to instance mapping saved to: {mapping_filename}")
+            self.log_operation('INFO', f"{Symbols.OK} IAM user to instance mapping saved to: {mapping_filename}")
             return mapping_filename
             
         except Exception as e:
-            self.log_operation('ERROR', f"❌ Failed to save user-instance mapping: {e}")
+            self.log_operation('ERROR', f"{Symbols.ERROR} Failed to save user-instance mapping: {e}")
             return None
 
     def save_instance_report(self, created_instances, failed_instances):
@@ -1004,11 +1003,11 @@ class EC2InstanceManager:
             with open(report_filename, 'w', encoding='utf-8') as f:
                 json.dump(report_data, f, indent=2, default=str)
             
-            self.log_operation('INFO', f"✅ Detailed instance report saved to: {report_filename}")
+            self.log_operation('INFO', f"{Symbols.OK} Detailed instance report saved to: {report_filename}")
             return report_filename
             
         except Exception as e:
-            self.log_operation('ERROR', f"❌ Failed to save instance report: {e}")
+            self.log_operation('ERROR', f"{Symbols.ERROR} Failed to save instance report: {e}")
             return None
         
     def convert_selected_users_to_accounts(self, selected_user_indices, user_mapping):
@@ -1084,7 +1083,7 @@ class EC2InstanceManager:
         
         for account_name, users in users_by_account.items():
             account_id = users[0]['account_id']
-            print(f"\n🏦 {account_name} ({account_id}) - {len(users)} users:")
+            print(f"\n{Symbols.ACCOUNT} {account_name} ({account_id}) - {len(users)} users:")
             print("-" * 80)
             
             for user_info in users:
@@ -1096,16 +1095,16 @@ class EC2InstanceManager:
                 print(f"  {user_index:3}. {full_name}")
                 print(f"       👤 Username: {user_info['username']}")
                 print(f"       📧 Email: {email}")
-                print(f"       🌍 Region: {region}")
-                print(f"       🔑 Has Credentials: {'✅' if user_info['access_key'] and user_info['secret_key'] else '❌'}")
+                print(f"       {Symbols.REGION} Region: {region}")
+                print(f"       {Symbols.KEY} Has Credentials: {'{Symbols.OK}' if user_info['access_key'] and user_info['secret_key'] else '{Symbols.ERROR}'}")
                 
                 user_mapping[user_index] = user_info
                 user_index += 1
                 print()
         
         print("=" * 100)
-        print(f"📊 Summary:")
-        print(f"   📈 Total accounts: {len(users_by_account)}")
+        print(f"{Symbols.STATS} Summary:")
+        print(f"   [UP] Total accounts: {len(users_by_account)}")
         print(f"   👥 Total users: {len(all_users)}")
         
         # Count users by region
@@ -1113,11 +1112,11 @@ class EC2InstanceManager:
         for user_info in all_users:
             region = user_info['region']
             regions[region] = regions.get(region, 0) + 1
-        print(f"   🌍 Regions: {', '.join(f'{region}({count})' for region, count in sorted(regions.items()))}")
+        print(f"   {Symbols.REGION} Regions: {', '.join(f'{region}({count})' for region, count in sorted(regions.items()))}")
         
         self.log_operation('INFO', f"User summary: {len(all_users)} users across {len(users_by_account)} accounts in {len(regions)} regions")
         
-        print(f"\n📝 Selection Options:")
+        print(f"\n{Symbols.LOG} Selection Options:")
         print(f"   • Single users: 1,3,5")
         print(f"   • Ranges: 1-{len(all_users)} (users 1 through {len(all_users)})")
         print(f"   • Mixed: 1-5,8,10-12 (users 1-5, 8, and 10-12)")
@@ -1125,7 +1124,7 @@ class EC2InstanceManager:
         print(f"   • Cancel: 'cancel' or 'quit'")
         
         while True:
-            selection = input(f"\n🔢 Select users to process: ").strip()
+            selection = input(f"\n[#] Select users to process: ").strip()
             
             self.log_operation('INFO', f"User input for user selection: '{selection}'")
             
@@ -1163,7 +1162,7 @@ class EC2InstanceManager:
                         selected_regions.add(user_info['region'])
                         selected_accounts.add(user_info['account_name'])
                     
-                    print(f"\n✅ Selected {len(selected_indices)} users:")
+                    print(f"\n{Symbols.OK} Selected {len(selected_indices)} users:")
                     print("-" * 80)
                     
                     # Group by account for display
@@ -1176,42 +1175,42 @@ class EC2InstanceManager:
                     
                     for account_name, users in by_account.items():
                         account_id = users[0]['account_id']
-                        print(f"\n🏦 {account_name} ({account_id}) - {len(users)} users:")
+                        print(f"\n{Symbols.ACCOUNT} {account_name} ({account_id}) - {len(users)} users:")
                         for user in users:
-                            creds_status = "✅" if user['has_credentials'] else "❌"
+                            creds_status = "[OK]" if user['has_credentials'] else f"{Symbols.ERROR}"
                             print(f"   • {user['full_name']} ({user['username']}) in {user['region']} {creds_status}")
                     
                     print("-" * 80)
-                    print(f"📊 Selection Summary:")
+                    print(f"{Symbols.STATS} Selection Summary:")
                     print(f"   👥 Users: {len(selected_indices)}")
-                    print(f"   🏦 Accounts: {len(selected_accounts)}")
-                    print(f"   🌍 Regions: {len(selected_regions)}")
+                    print(f"   {Symbols.ACCOUNT} Accounts: {len(selected_accounts)}")
+                    print(f"   {Symbols.REGION} Regions: {len(selected_regions)}")
                     
                     # Check for users without credentials
                     users_without_creds = [u for u in selected_user_info if not u['has_credentials']]
                     if users_without_creds:
-                        print(f"   ⚠️  Users without credentials: {len(users_without_creds)}")
+                        print(f"   {Symbols.WARN}  Users without credentials: {len(users_without_creds)}")
                     
                     # Log selection details
                     self.log_operation('INFO', f"Selected users: {[u['username'] for u in selected_user_info]}")
                     self.log_operation('INFO', f"Selection summary: {len(selected_indices)} users, {len(selected_accounts)} accounts, {len(selected_regions)} regions")
                     
-                    confirm = input(f"\n🚀 Proceed with these {len(selected_indices)} users? (y/N): ").lower().strip()
+                    confirm = input(f"\n{Symbols.START} Proceed with these {len(selected_indices)} users? (y/N): ").lower().strip()
                     self.log_operation('INFO', f"User confirmation for user selection: '{confirm}'")
                     
                     if confirm == 'y':
                         return selected_indices, user_mapping
                     else:
-                        print("❌ Selection cancelled, please choose again.")
+                        print(f"{Symbols.ERROR} Selection cancelled, please choose again.")
                         self.log_operation('INFO', "User cancelled user selection, requesting new input")
                         continue
                 else:
-                    print("❌ No valid users selected. Please try again.")
+                    print(f"{Symbols.ERROR} No valid users selected. Please try again.")
                     self.log_operation('WARNING', "No valid users selected from user input")
                     continue
                     
             except ValueError as e:
-                print(f"❌ Invalid selection: {e}")
+                print(f"{Symbols.ERROR} Invalid selection: {e}")
                 print("   Please use format like: 1,3,5 or 1-5 or 1-3,5,7-9")
                 self.log_operation('ERROR', f"Invalid user selection format: {e}")
                 continue
@@ -1273,7 +1272,7 @@ class EC2InstanceManager:
         
         while True:
             try:
-                choice = input(f"\n🔢 Select instance type (1-{len(allowed_types)}) or press Enter for default: ").strip()
+                choice = input(f"\n[#] Select instance type (1-{len(allowed_types)}) or press Enter for default: ").strip()
                 
                 self.log_operation('INFO', f"User input for instance type: '{choice}'")
                 
@@ -1287,29 +1286,29 @@ class EC2InstanceManager:
                     self.log_operation('INFO', f"User selected instance type: {selected_type}")
                     return selected_type
                 else:
-                    print(f"❌ Invalid choice. Please enter a number between 1 and {len(allowed_types)}")
+                    print(f"{Symbols.ERROR} Invalid choice. Please enter a number between 1 and {len(allowed_types)}")
                     self.log_operation('WARNING', f"Invalid instance type choice: {choice}")
             except ValueError:
-                print("❌ Invalid input. Please enter a number or press Enter for default.")
+                print("[ERROR] Invalid input. Please enter a number or press Enter for default.")
                 self.log_operation('WARNING', f"Invalid instance type input format: {choice}")
 
     def run(self):
         """Main execution method"""
         try:
-            self.log_operation('INFO', "🚀 Starting EC2 Instance Creation Session")
+            self.log_operation('INFO', f"{Symbols.START} Starting EC2 Instance Creation Session")
             
-            print("🚀 EC2 Instance Creation for IAM Users")
+            print(f"{Symbols.START} EC2 Instance Creation for IAM Users")
             print("=" * 80)
-            print(f"📅 Execution Date/Time: {self.current_time} UTC")
+            print(f"{Symbols.DATE} Execution Date/Time: {self.current_time} UTC")
             print(f"👤 Executed by: {self.current_user}")
             print(f"📄 Credentials Source: {self.credentials_file}")
             print(f"📜 User Data Script: {self.userdata_file}")
-            print(f"📋 Log File: {self.log_filename}")
+            print(f"{Symbols.LIST} Log File: {self.log_filename}")
             
             # Display credential file info
             if 'created_date' in self.credentials_data:
                 cred_time = f"{self.credentials_data['created_date']} {self.credentials_data.get('created_time', '')}"
-                print(f"📅 Credentials created: {cred_time}")
+                print(f"{Symbols.DATE} Credentials created: {cred_time}")
                 self.log_operation('INFO', f"Using credentials created: {cred_time}")
             if 'created_by' in self.credentials_data:
                 print(f"👤 Credentials created by: {self.credentials_data['created_by']}")
@@ -1319,11 +1318,11 @@ class EC2InstanceManager:
             # Verify user data file exists and show preview
             if os.path.exists(self.userdata_file):
                 file_size = os.path.getsize(self.userdata_file)
-                print(f"✅ User data script found: {self.userdata_file}")
+                print(f"{Symbols.OK} User data script found: {self.userdata_file}")
                 print(f"📏 Script size: {file_size} bytes")
                 self.log_operation('INFO', f"User data script verified: {self.userdata_file} ({file_size} bytes)")
             else:
-                print(f"❌ User data script not found: {self.userdata_file}")
+                print(f"{Symbols.ERROR} User data script not found: {self.userdata_file}")
                 self.log_operation('ERROR', f"User data script not found: {self.userdata_file}")
                 return
             
@@ -1331,20 +1330,20 @@ class EC2InstanceManager:
             selected_account_indices = self.display_accounts_menu()
             if not selected_account_indices:
                 self.log_operation('INFO', "Session cancelled - no accounts selected")
-                print("❌ Account selection cancelled")
+                print(f"{Symbols.ERROR} Account selection cancelled")
                 return
             
             selected_accounts = self.get_selected_accounts_data(selected_account_indices)
             
             # Step 2: Ask for selection level preference
-            print(f"\n🎯 Selection Level:")
+            print(f"\n{Symbols.TARGET} Selection Level:")
             print("=" * 50)
             print("  1. Process ALL users in selected accounts")
             print("  2. Select specific users from selected accounts")
             print("=" * 50)
             
             while True:
-                selection_level = input("🔢 Choose selection level (1-2): ").strip()
+                selection_level = input("[#] Choose selection level (1-2): ").strip()
                 self.log_operation('INFO', f"User input for selection level: '{selection_level}'")
                 
                 if selection_level == '1':
@@ -1360,14 +1359,14 @@ class EC2InstanceManager:
                     selected_user_indices, user_mapping = self.display_users_menu(selected_accounts)
                     if not selected_user_indices:
                         self.log_operation('INFO', "Session cancelled - no users selected")
-                        print("❌ User selection cancelled")
+                        print(f"{Symbols.ERROR} User selection cancelled")
                         return
                     
                     # Convert selected users back to account format
                     final_accounts = self.convert_selected_users_to_accounts(selected_user_indices, user_mapping)
                     break
                 else:
-                    print("❌ Invalid choice. Please enter 1 or 2.")
+                    print(f"{Symbols.ERROR} Invalid choice. Please enter 1 or 2.")
                     self.log_operation('WARNING', f"Invalid selection level choice: {selection_level}")
             
             # Select instance type
@@ -1378,14 +1377,14 @@ class EC2InstanceManager:
                             for account_data in final_accounts.values())
             
             # Show final confirmation with detailed breakdown
-            print(f"\n📊 Final Execution Summary:")
+            print(f"\n{Symbols.STATS} Final Execution Summary:")
             print("=" * 60)
-            print(f"   📈 Selected accounts: {len(final_accounts)}")
+            print(f"   [UP] Selected accounts: {len(final_accounts)}")
             print(f"   👥 Total users: {total_users}")
             print(f"   💻 Instance type: {instance_type}")
             
             # Show account breakdown
-            print(f"\n🏦 Final Account/User Breakdown:")
+            print(f"\n{Symbols.ACCOUNT} Final Account/User Breakdown:")
             for account_name, account_data in final_accounts.items():
                 user_count = len(account_data.get('users', []))
                 account_id = account_data.get('account_id', 'Unknown')
@@ -1402,24 +1401,24 @@ class EC2InstanceManager:
             print(f"\n🔧 Configuration:")
             print(f"   📜 User data: {self.userdata_file}")
             print(f"   📄 Credentials: {self.credentials_file}")
-            print(f"   📋 Log file: {self.log_filename}")
+            print(f"   {Symbols.LIST} Log file: {self.log_filename}")
             print("=" * 60)
             
             # Log final configuration
             self.log_operation('INFO', f"Final configuration - Accounts: {len(final_accounts)}, Users: {total_users}, Instance type: {instance_type}")
             
             # Final confirmation
-            confirm = input(f"\n🚀 Create {total_users} EC2 instances across {len(final_accounts)} accounts? (y/N): ").lower().strip()
+            confirm = input(f"\n{Symbols.START} Create {total_users} EC2 instances across {len(final_accounts)} accounts? (y/N): ").lower().strip()
             self.log_operation('INFO', f"Final confirmation: '{confirm}'")
             
             if confirm != 'y':
                 self.log_operation('INFO', "Session cancelled by user at final confirmation")
-                print("❌ Instance creation cancelled")
+                print(f"{Symbols.ERROR} Instance creation cancelled")
                 return
             
             # Create instances (rest of the method remains the same...)
-            print(f"\n🔄 Starting instance creation...")
-            self.log_operation('INFO', f"🔄 Beginning instance creation for {total_users} users")
+            print(f"\n{Symbols.SCAN} Starting instance creation...")
+            self.log_operation('INFO', f"{Symbols.SCAN} Beginning instance creation for {total_users} users")
             
             created_instances, failed_instances = self.create_instances_for_selected_accounts(
                 final_accounts,
@@ -1428,32 +1427,32 @@ class EC2InstanceManager:
             )
             
             # Display summary (rest remains the same...)
-            print(f"\n🎯" * 25 + " CREATION SUMMARY " + "🎯" * 25)
+            print(f"\n{Symbols.TARGET}" * 25 + " CREATION SUMMARY " + "[TARGET]" * 25)
             print("=" * 100)
-            print(f"✅ Total instances created: {len(created_instances)}")
-            print(f"❌ Total instances failed: {len(failed_instances)}")
+            print(f"{Symbols.OK} Total instances created: {len(created_instances)}")
+            print(f"{Symbols.ERROR} Total instances failed: {len(failed_instances)}")
             
             self.log_operation('INFO', f"FINAL RESULTS - Created: {len(created_instances)}, Failed: {len(failed_instances)}")
             
             if created_instances:
-                print(f"\n✅ Successfully Created Instances:")
+                print(f"\n{Symbols.OK} Successfully Created Instances:")
                 print("-" * 80)
                 for instance in created_instances:
                     real_name = instance.get('real_user_info', {}).get('full_name', instance['username'])
                     print(f"   • {real_name} ({instance['username']})")
                     print(f"     📍 Instance: {instance['instance_id']} in {instance['region']}")
-                    print(f"     🏦 Account: {instance['account_name']} ({instance['account_id']})")
+                    print(f"     {Symbols.ACCOUNT} Account: {instance['account_name']} ({instance['account_id']})")
                     if 'public_ip' in instance and instance['public_ip'] != 'N/A':
                         print(f"     🌐 Public IP: {instance['public_ip']}")
                     print()
             
             if failed_instances:
-                print(f"\n❌ Failed Instances:")
+                print(f"\n{Symbols.ERROR} Failed Instances:")
                 print("-" * 80)
                 for failure in failed_instances:
                     print(f"   • {failure.get('real_name', failure['username'])} ({failure['username']})")
-                    print(f"     🏦 Account: {failure['account_name']}")
-                    print(f"     ❌ Error: {failure['error']}")
+                    print(f"     {Symbols.ACCOUNT} Account: {failure['account_name']}")
+                    print(f"     {Symbols.ERROR} Error: {failure['error']}")
                     print()
             
             # Save all reports
@@ -1462,14 +1461,14 @@ class EC2InstanceManager:
             # Save user-instance mapping
             mapping_file = self.save_user_instance_mapping(created_instances, failed_instances)
             if mapping_file:
-                print(f"✅ User-instance mapping saved to: {mapping_file}")
+                print(f"{Symbols.OK} User-instance mapping saved to: {mapping_file}")
             
             # Save detailed report
             report_file = self.save_instance_report(created_instances, failed_instances)
             if report_file:
-                print(f"✅ Detailed instance report saved to: {report_file}")
+                print(f"{Symbols.OK} Detailed instance report saved to: {report_file}")
             
-            print(f"✅ Session log saved to: {self.log_filename}")
+            print(f"{Symbols.OK} Session log saved to: {self.log_filename}")
             
             # Log final summary
             total_processed = len(created_instances) + len(failed_instances)
@@ -1487,8 +1486,8 @@ class EC2InstanceManager:
                 self.log_operation('INFO', f"Detailed report file: {report_file}")
             self.log_operation('INFO', "=" * 80)
             
-            print(f"\n🎉 EC2 instance creation completed!")
-            print(f"📊 Success rate: {success_rate:.1f}%")
+            print(f"\n[PARTY] EC2 instance creation completed!")
+            print(f"{Symbols.STATS} Success rate: {success_rate:.1f}%")
             print("=" * 100)
             
         except Exception as e:
@@ -1501,10 +1500,10 @@ def main():
         manager = EC2InstanceManager()
         manager.run()
     except KeyboardInterrupt:
-        print("\n\n❌ Script interrupted by user")
+        print("\n\n[ERROR] Script interrupted by user")
         sys.exit(1)
     except Exception as e:
-        print(f"❌ Unexpected error: {e}")
+        print(f"{Symbols.ERROR} Unexpected error: {e}")
         sys.exit(1)
 
 if __name__ == "__main__":

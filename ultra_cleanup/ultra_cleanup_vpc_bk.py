@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 
 import boto3
 import json
@@ -13,6 +13,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from root_iam_credential_manager import AWSCredentialManager
+from text_symbols import Symbols
 
 class UltraCleanupCustomVPCManager:
     def __init__(self):
@@ -59,7 +60,6 @@ class UltraCleanupCustomVPCManager:
             self.log_filename = f"{log_dir}/ultra_vpc_cleanup_log_{self.execution_timestamp}.log"
             
             # Create a file handler for detailed logging
-            import logging
             
             # Create logger for detailed operations
             self.operation_logger = logging.getLogger('ultra_vpc_cleanup')
@@ -91,7 +91,7 @@ class UltraCleanupCustomVPCManager:
             
             # Log initial information
             self.operation_logger.info("=" * 100)
-            self.operation_logger.info("[ALERT] ULTRA CUSTOM VPC CLEANUP SESSION STARTED [ALERT]")
+            self.operation_logger.info(f"{Symbols.ALERT} ULTRA CUSTOM VPC CLEANUP SESSION STARTED {Symbols.ALERT}")
             self.operation_logger.info("=" * 100)
             self.operation_logger.info(f"Execution Time: {self.current_time} UTC")
             self.operation_logger.info(f"Executed By: {self.current_user}")
@@ -139,8 +139,8 @@ class UltraCleanupCustomVPCManager:
         try:
             vpcs = []
             
-            self.log_operation('INFO', f"[SCAN] Scanning for custom VPCs in {region} ({account_name})")
-            print(f"   [SCAN] Scanning for custom VPCs in {region} ({account_name})...")
+            self.log_operation('INFO', f"{Symbols.SCAN} Scanning for custom VPCs in {region} ({account_name})")
+            print(f"   {Symbols.SCAN} Scanning for custom VPCs in {region} ({account_name})...")
             
             response = ec2_client.describe_vpcs()
             
@@ -174,14 +174,14 @@ class UltraCleanupCustomVPCManager:
                 
                 vpcs.append(vpc_info)
             
-            self.log_operation('INFO', f"🏗️  Found {len(vpcs)} custom VPCs in {region} ({account_name})")
-            print(f"   🏗️  Found {len(vpcs)} custom VPCs in {region} ({account_name})")
+            self.log_operation('INFO', f"[BUILD]  Found {len(vpcs)} custom VPCs in {region} ({account_name})")
+            print(f"   [BUILD]  Found {len(vpcs)} custom VPCs in {region} ({account_name})")
             
             return vpcs
             
         except Exception as e:
             self.log_operation('ERROR', f"Error getting custom VPCs in {region} ({account_name}): {e}")
-            print(f"   [ERROR] Error getting custom VPCs in {region}: {e}")
+            print(f"   {Symbols.ERROR} Error getting custom VPCs in {region}: {e}")
             return []
 
     def get_vpc_dependencies(self, ec2_client, vpc_id):
@@ -287,8 +287,8 @@ class UltraCleanupCustomVPCManager:
 
     def cleanup_vpc_dependencies(self, ec2_client, vpc_id, vpc_name):
         """Clean up all VPC dependencies in the correct order"""
-        self.log_operation('INFO', f"[CLEANUP] Cleaning VPC dependencies for {vpc_id} ({vpc_name})")
-        print(f"   [CLEANUP] Cleaning VPC dependencies for {vpc_id} ({vpc_name})...")
+        self.log_operation('INFO', f"{Symbols.CLEANUP} Cleaning VPC dependencies for {vpc_id} ({vpc_name})")
+        print(f"   {Symbols.CLEANUP} Cleaning VPC dependencies for {vpc_id} ({vpc_name})...")
         
         dependencies = self.get_vpc_dependencies(ec2_client, vpc_id)
         cleanup_success = True
@@ -560,8 +560,8 @@ class UltraCleanupCustomVPCManager:
             region = vpc_info['region']
             account_name = vpc_info['account_name']
             
-            self.log_operation('INFO', f"[DELETE]  Deleting custom VPC {vpc_id} ({vpc_name}) in {region} ({account_name})")
-            print(f"   [DELETE]  Deleting custom VPC {vpc_id} ({vpc_name})...")
+            self.log_operation('INFO', f"{Symbols.DELETE}  Deleting custom VPC {vpc_id} ({vpc_name}) in {region} ({account_name})")
+            print(f"   {Symbols.DELETE}  Deleting custom VPC {vpc_id} ({vpc_name})...")
             
             # Clean dependencies first
             if force_delete:
@@ -573,8 +573,8 @@ class UltraCleanupCustomVPCManager:
             self.log_operation('INFO', f"Attempting to delete VPC {vpc_id}")
             ec2_client.delete_vpc(VpcId=vpc_id)
             
-            self.log_operation('INFO', f"[OK] Successfully deleted VPC {vpc_id} ({vpc_name})")
-            print(f"   [OK] Successfully deleted VPC {vpc_id}")
+            self.log_operation('INFO', f"{Symbols.OK} Successfully deleted VPC {vpc_id} ({vpc_name})")
+            print(f"   {Symbols.OK} Successfully deleted VPC {vpc_id}")
             
             self.cleanup_results['deleted_vpcs'].append({
                 'vpc_id': vpc_id,
@@ -594,7 +594,7 @@ class UltraCleanupCustomVPCManager:
                 return True
             elif error_code == 'DependencyViolation':
                 self.log_operation('WARNING', f"Cannot delete VPC {vpc_id}: dependency violation")
-                print(f"   [WARN] Cannot delete VPC {vpc_id}: still has dependencies")
+                print(f"   {Symbols.WARN} Cannot delete VPC {vpc_id}: still has dependencies")
                 self.cleanup_results['failed_deletions'].append({
                     'resource_type': 'vpc',
                     'resource_id': vpc_id,
@@ -605,7 +605,7 @@ class UltraCleanupCustomVPCManager:
                 return False
             else:
                 self.log_operation('ERROR', f"Failed to delete VPC {vpc_id}: {e}")
-                print(f"   [ERROR] Failed to delete VPC {vpc_id}: {e}")
+                print(f"   {Symbols.ERROR} Failed to delete VPC {vpc_id}: {e}")
                 self.cleanup_results['failed_deletions'].append({
                     'resource_type': 'vpc',
                     'resource_id': vpc_id,
@@ -616,7 +616,7 @@ class UltraCleanupCustomVPCManager:
                 return False
         except Exception as e:
             self.log_operation('ERROR', f"Unexpected error deleting VPC {vpc_id}: {e}")
-            print(f"   [ERROR] Unexpected error deleting VPC {vpc_id}: {e}")
+            print(f"   {Symbols.ERROR} Unexpected error deleting VPC {vpc_id}: {e}")
             self.cleanup_results['failed_deletions'].append({
                 'resource_type': 'vpc',
                 'resource_id': vpc_id,
@@ -632,8 +632,8 @@ class UltraCleanupCustomVPCManager:
             account_name = account_info['name']
             credentials = account_info['credentials']
             
-            self.log_operation('INFO', f"[CLEANUP] Starting VPC cleanup for {account_name} in {region}")
-            print(f"\n[CLEANUP] Starting VPC cleanup for {account_name} in {region}")
+            self.log_operation('INFO', f"{Symbols.CLEANUP} Starting VPC cleanup for {account_name} in {region}")
+            print(f"\n{Symbols.CLEANUP} Starting VPC cleanup for {account_name} in {region}")
             
             # Create VPC client
             ec2_client = self.create_vpc_client(credentials, region)
@@ -649,19 +649,19 @@ class UltraCleanupCustomVPCManager:
             
             self.cleanup_results['regions_processed'].append(region_summary)
             
-            self.log_operation('INFO', f"[STATS] {account_name} ({region}) summary:")
-            self.log_operation('INFO', f"   🏗️  Custom VPCs: {len(vpcs)}")
+            self.log_operation('INFO', f"{Symbols.STATS} {account_name} ({region}) summary:")
+            self.log_operation('INFO', f"   [BUILD]  Custom VPCs: {len(vpcs)}")
             
-            print(f"   [STATS] Resources found: {len(vpcs)} custom VPCs")
+            print(f"   {Symbols.STATS} Resources found: {len(vpcs)} custom VPCs")
             
             if not vpcs:
                 self.log_operation('INFO', f"No custom VPCs found in {account_name} ({region})")
-                print(f"   [OK] No custom VPCs to clean up in {region}")
+                print(f"   {Symbols.OK} No custom VPCs to clean up in {region}")
                 return True
             
             # Delete VPCs with retries for dependency issues
-            self.log_operation('INFO', f"[DELETE]  Deleting {len(vpcs)} custom VPCs in {account_name} ({region})")
-            print(f"\n   [DELETE]  Deleting {len(vpcs)} custom VPCs...")
+            self.log_operation('INFO', f"{Symbols.DELETE}  Deleting {len(vpcs)} custom VPCs in {account_name} ({region})")
+            print(f"\n   {Symbols.DELETE}  Deleting {len(vpcs)} custom VPCs...")
             
             max_retries = 4
             retry_delay = 30
@@ -669,8 +669,8 @@ class UltraCleanupCustomVPCManager:
             remaining_vpcs = vpcs.copy()
             
             for retry in range(max_retries):
-                self.log_operation('INFO', f"🔄 VPC deletion attempt {retry + 1}/{max_retries}")
-                print(f"   🔄 VPC deletion attempt {retry + 1}/{max_retries}")
+                self.log_operation('INFO', f"{Symbols.SCAN} VPC deletion attempt {retry + 1}/{max_retries}")
+                print(f"   {Symbols.SCAN} VPC deletion attempt {retry + 1}/{max_retries}")
                 
                 vpcs_deleted_this_round = 0
                 still_remaining = []
@@ -683,23 +683,23 @@ class UltraCleanupCustomVPCManager:
                         success = self.delete_vpc(ec2_client, vpc, force_delete=True)
                         if success:
                             vpcs_deleted_this_round += 1
-                            self.log_operation('INFO', f"[OK] Deleted {vpc_id} in attempt {retry + 1}")
+                            self.log_operation('INFO', f"{Symbols.OK} Deleted {vpc_id} in attempt {retry + 1}")
                         else:
                             still_remaining.append(vpc)
                             self.log_operation('WARNING', f"[WAIT] {vpc_id} still has dependencies, will retry")
                     except Exception as e:
                         self.log_operation('ERROR', f"Error deleting VPC {vpc_id}: {e}")
-                        print(f"   [ERROR] Error deleting VPC {vpc_id}: {e}")
+                        print(f"   {Symbols.ERROR} Error deleting VPC {vpc_id}: {e}")
                         still_remaining.append(vpc)
                 
                 self.log_operation('INFO', f"Attempt {retry + 1} results: {vpcs_deleted_this_round} deleted, {len(still_remaining)} remaining")
-                print(f"   [OK] Deleted {vpcs_deleted_this_round} VPCs in attempt {retry + 1}, {len(still_remaining)} remaining")
+                print(f"   {Symbols.OK} Deleted {vpcs_deleted_this_round} VPCs in attempt {retry + 1}, {len(still_remaining)} remaining")
                 
                 remaining_vpcs = still_remaining
                 
                 if not remaining_vpcs:
-                    self.log_operation('INFO', f"[OK] All custom VPCs deleted in {account_name} ({region})")
-                    print(f"   [OK] All custom VPCs deleted successfully!")
+                    self.log_operation('INFO', f"{Symbols.OK} All custom VPCs deleted in {account_name} ({region})")
+                    print(f"   {Symbols.OK} All custom VPCs deleted successfully!")
                     break
                 
                 if retry < max_retries - 1 and remaining_vpcs:
@@ -709,17 +709,17 @@ class UltraCleanupCustomVPCManager:
                     retry_delay += 15  # Increase delay for subsequent retries
             
             if remaining_vpcs:
-                self.log_operation('WARNING', f"[WARN]  {len(remaining_vpcs)} VPCs could not be deleted after {max_retries} retries")
-                print(f"   [WARN]  {len(remaining_vpcs)} VPCs could not be deleted after {max_retries} retries")
+                self.log_operation('WARNING', f"{Symbols.WARN}  {len(remaining_vpcs)} VPCs could not be deleted after {max_retries} retries")
+                print(f"   {Symbols.WARN}  {len(remaining_vpcs)} VPCs could not be deleted after {max_retries} retries")
                 self.log_operation('WARNING', f"Remaining VPCs: {[vpc['vpc_id'] for vpc in remaining_vpcs]}")
             
-            self.log_operation('INFO', f"[OK] VPC cleanup completed for {account_name} ({region})")
-            print(f"\n   [OK] VPC cleanup completed for {account_name} ({region})")
+            self.log_operation('INFO', f"{Symbols.OK} VPC cleanup completed for {account_name} ({region})")
+            print(f"\n   {Symbols.OK} VPC cleanup completed for {account_name} ({region})")
             return True
             
         except Exception as e:
             self.log_operation('ERROR', f"Error cleaning up VPCs in {account_name} ({region}): {e}")
-            print(f"   [ERROR] Error cleaning up VPCs in {account_name} ({region}): {e}")
+            print(f"   {Symbols.ERROR} Error cleaning up VPCs in {account_name} ({region}): {e}")
             self.cleanup_results['errors'].append({
                 'account_name': account_name,
                 'region': region,
@@ -791,24 +791,24 @@ class UltraCleanupCustomVPCManager:
             with open(report_filename, 'w', encoding='utf-8') as f:
                 json.dump(report_data, f, indent=2, default=str)
             
-            self.log_operation('INFO', f"[OK] VPC cleanup report saved to: {report_filename}")
+            self.log_operation('INFO', f"{Symbols.OK} VPC cleanup report saved to: {report_filename}")
             return report_filename
             
         except Exception as e:
-            self.log_operation('ERROR', f"[ERROR] Failed to save VPC cleanup report: {e}")
+            self.log_operation('ERROR', f"{Symbols.ERROR} Failed to save VPC cleanup report: {e}")
             return None
 
     def run(self):
         """Main execution method"""
         try:
-            self.log_operation('INFO', "[ALERT] STARTING ULTRA CUSTOM VPC CLEANUP SESSION [ALERT]")
+            self.log_operation('INFO', f"{Symbols.ALERT} STARTING ULTRA CUSTOM VPC CLEANUP SESSION {Symbols.ALERT}")
             
-            print("[ALERT]" * 30)
+            print(f"{Symbols.ALERT}" * 30)
             print("[BOOM] ULTRA CUSTOM VPC CLEANUP [BOOM]")
-            print("[ALERT]" * 30)
-            print(f"[DATE] Execution Date/Time: {self.current_time} UTC")
+            print(f"{Symbols.ALERT}" * 30)
+            print(f"{Symbols.DATE} Execution Date/Time: {self.current_time} UTC")
             print(f"👤 Executed by: {self.current_user}")
-            print(f"[LIST] Log File: {self.log_filename}")
+            print(f"{Symbols.LIST} Log File: {self.log_filename}")
             
             # Get account credentials using the credential manager
             print(f"\n[LOCKED] Loading AWS account credentials...")
@@ -816,7 +816,7 @@ class UltraCleanupCustomVPCManager:
             
             if not accounts:
                 self.log_operation('INFO', "No accounts selected for cleanup")
-                print("[ERROR] No accounts selected")
+                print(f"{Symbols.ERROR} No accounts selected")
                 return
             
             # Get regions (using common AWS regions)
@@ -825,17 +825,17 @@ class UltraCleanupCustomVPCManager:
             # Calculate total operations
             total_operations = len(accounts) * len(regions)
             
-            print(f"\n[TARGET] CLEANUP CONFIGURATION")
+            print(f"\n{Symbols.TARGET} CLEANUP CONFIGURATION")
             print("=" * 80)
-            print(f"[BANK] Selected accounts: {len(accounts)}")
+            print(f"{Symbols.ACCOUNT} Selected accounts: {len(accounts)}")
             for account in accounts:
                 print(f"   • {account['name']}")
-            print(f"[REGION] Regions per account: {len(regions)}")
-            print(f"[LIST] Total operations: {total_operations}")
+            print(f"{Symbols.REGION} Regions per account: {len(regions)}")
+            print(f"{Symbols.LIST} Total operations: {total_operations}")
             print("=" * 80)
             
             # Confirmation
-            print(f"\n[WARN]  WARNING: This will delete ALL custom VPCs and their dependencies")
+            print(f"\n{Symbols.WARN}  WARNING: This will delete ALL custom VPCs and their dependencies")
             print(f"    across {len(accounts)} accounts in {len(regions)} regions")
             print(f"    This includes subnets, route tables, internet gateways, NAT gateways, etc.")
             print(f"    This action CANNOT be undone!")
@@ -843,18 +843,18 @@ class UltraCleanupCustomVPCManager:
             confirm1 = input(f"\nContinue with VPC cleanup? (y/n): ").strip().lower()
             if confirm1 not in ['y', 'yes']:
                 self.log_operation('INFO', "VPC cleanup cancelled by user")
-                print("[ERROR] Cleanup cancelled")
+                print(f"{Symbols.ERROR} Cleanup cancelled")
                 return
             
             confirm2 = input(f"Are you sure? Type 'yes' to confirm: ").strip().lower()
             if confirm2 != 'yes':
                 self.log_operation('INFO', "VPC cleanup cancelled at final confirmation")
-                print("[ERROR] Cleanup cancelled")
+                print(f"{Symbols.ERROR} Cleanup cancelled")
                 return
             
             # Start cleanup
             print(f"\n[BOOM] STARTING VPC CLEANUP...")
-            self.log_operation('INFO', f"[ALERT] VPC CLEANUP INITIATED - {len(accounts)} accounts, {len(regions)} regions")
+            self.log_operation('INFO', f"{Symbols.ALERT} VPC CLEANUP INITIATED - {len(accounts)} accounts, {len(regions)} regions")
             
             start_time = time.time()
             successful_tasks = 0
@@ -878,30 +878,30 @@ class UltraCleanupCustomVPCManager:
                     except Exception as e:
                         failed_tasks += 1
                         self.log_operation('ERROR', f"Task failed for {account['name']} ({region}): {e}")
-                        print(f"[ERROR] Task failed for {account['name']} ({region}): {e}")
+                        print(f"{Symbols.ERROR} Task failed for {account['name']} ({region}): {e}")
             
             end_time = time.time()
             total_time = int(end_time - start_time)
             
             # Display final results
             print(f"\n[BOOM]" + "="*25 + " CLEANUP COMPLETE " + "="*25)
-            print(f"[TIMER]  Total execution time: {total_time} seconds")
-            print(f"[OK] Successful operations: {successful_tasks}")
-            print(f"[ERROR] Failed operations: {failed_tasks}")
-            print(f"🏗️  Custom VPCs deleted: {len(self.cleanup_results['deleted_vpcs'])}")
+            print(f"{Symbols.TIMER}  Total execution time: {total_time} seconds")
+            print(f"{Symbols.OK} Successful operations: {successful_tasks}")
+            print(f"{Symbols.ERROR} Failed operations: {failed_tasks}")
+            print(f"[BUILD]  Custom VPCs deleted: {len(self.cleanup_results['deleted_vpcs'])}")
             
             # Show dependency breakdown
             total_dependencies = sum(len(deps) for deps in self.cleanup_results['deleted_dependencies'].values())
-            print(f"[CLEANUP] Total dependencies deleted: {total_dependencies}")
+            print(f"{Symbols.CLEANUP} Total dependencies deleted: {total_dependencies}")
             for dep_type, deps in self.cleanup_results['deleted_dependencies'].items():
                 if deps:
                     print(f"   • {dep_type.replace('_', ' ').title()}: {len(deps)}")
             
-            print(f"[ERROR] Failed deletions: {len(self.cleanup_results['failed_deletions'])}")
+            print(f"{Symbols.ERROR} Failed deletions: {len(self.cleanup_results['failed_deletions'])}")
             
             # Show account summary
             if self.cleanup_results['deleted_vpcs']:
-                print(f"\n[STATS] VPC Deletion Summary by Account:")
+                print(f"\n{Symbols.STATS} VPC Deletion Summary by Account:")
                 account_summary = {}
                 for vpc in self.cleanup_results['deleted_vpcs']:
                     account = vpc['account_name']
@@ -912,11 +912,11 @@ class UltraCleanupCustomVPCManager:
                 
                 for account, summary in account_summary.items():
                     regions_list = ', '.join(sorted(summary['regions']))
-                    print(f"   [BANK] {account}: {summary['vpcs']} VPCs in {regions_list}")
+                    print(f"   {Symbols.ACCOUNT} {account}: {summary['vpcs']} VPCs in {regions_list}")
             
             # Show failures if any
             if self.cleanup_results['failed_deletions']:
-                print(f"\n[ERROR] Failed Deletions:")
+                print(f"\n{Symbols.ERROR} Failed Deletions:")
                 for failure in self.cleanup_results['failed_deletions'][:10]:
                     print(f"   • {failure['resource_type']} {failure['resource_id']} in {failure['account_name']} ({failure['region']})")
                     print(f"     Error: {failure['error']}")
@@ -929,16 +929,15 @@ class UltraCleanupCustomVPCManager:
             print(f"\n[FILE] Saving VPC cleanup report...")
             report_file = self.save_cleanup_report()
             if report_file:
-                print(f"[OK] VPC cleanup report saved to: {report_file}")
+                print(f"{Symbols.OK} VPC cleanup report saved to: {report_file}")
             
-            print(f"[OK] Session log saved to: {self.log_filename}")
+            print(f"{Symbols.OK} Session log saved to: {self.log_filename}")
             print(f"\n[BOOM] VPC CLEANUP COMPLETE! [BOOM]")
             print("[ALERT]" * 30)
             
         except Exception as e:
             self.log_operation('ERROR', f"FATAL ERROR in VPC cleanup execution: {str(e)}")
-            print(f"\n[ERROR] FATAL ERROR: {e}")
-            import traceback
+            print(f"\n{Symbols.ERROR} FATAL ERROR: {e}")
             traceback.print_exc()
             raise
 
@@ -951,7 +950,7 @@ def main():
         print("\n\n[ERROR] VPC cleanup interrupted by user")
         sys.exit(1)
     except Exception as e:
-        print(f"[ERROR] Unexpected error: {e}")
+        print(f"{Symbols.ERROR} Unexpected error: {e}")
         sys.exit(1)
 
 if __name__ == "__main__":

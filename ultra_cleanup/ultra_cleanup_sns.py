@@ -30,6 +30,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from root_iam_credential_manager import AWSCredentialManager, Colors
+from text_symbols import Symbols
 
 
 class UltraCleanupSNSManager:
@@ -74,7 +75,7 @@ class UltraCleanupSNSManager:
                     'us-east-1', 'us-east-2', 'us-west-1', 'us-west-2', 'ap-south-1'
                 ])
         except Exception as e:
-            self.print_colored(Colors.YELLOW, f"[WARN]  Warning: Could not load user regions: {e}")
+            self.print_colored(Colors.YELLOW, f"{Symbols.WARN}  Warning: Could not load user regions: {e}")
         return ['us-east-1', 'us-east-2', 'us-west-1', 'us-west-2', 'ap-south-1']
 
     def setup_detailed_logging(self):
@@ -83,7 +84,6 @@ class UltraCleanupSNSManager:
             os.makedirs(self.sns_dir, exist_ok=True)
             self.log_filename = f"{self.sns_dir}/ultra_sns_cleanup_log_{self.execution_timestamp}.log"
             
-            import logging
             self.operation_logger = logging.getLogger('ultra_sns_cleanup')
             self.operation_logger.setLevel(logging.INFO)
             
@@ -97,7 +97,7 @@ class UltraCleanupSNSManager:
             self.operation_logger.addHandler(file_handler)
             
             self.operation_logger.info("=" * 100)
-            self.operation_logger.info("[ALERT] ULTRA SNS CLEANUP SESSION STARTED [ALERT]")
+            self.operation_logger.info(f"{Symbols.ALERT} ULTRA SNS CLEANUP SESSION STARTED {Symbols.ALERT}")
             self.operation_logger.info("=" * 100)
         except Exception as e:
             print(f"Warning: Could not setup detailed logging: {e}")
@@ -114,7 +114,8 @@ class UltraCleanupSNSManager:
         """Create SNS client"""
         try:
             client = boto3.client('sns', aws_access_key_id=access_key, aws_secret_access_key=secret_key, region_name=region)
-            client.list_topics(MaxItems=1)
+            # Test client connectivity
+            client.list_topics()
             return client
         except Exception as e:
             self.log_operation('ERROR', f"Failed to create SNS client for {region}: {e}")
@@ -130,7 +131,7 @@ class UltraCleanupSNSManager:
                 for topic in page.get('Topics', []):
                     topic_arn = topic['TopicArn']
                     try:
-                        self.log_operation('INFO', f"[DELETE]  Deleting topic: {topic_arn}")
+                        self.log_operation('INFO', f"{Symbols.DELETE}  Deleting topic: {topic_arn}")
                         sns_client.delete_topic(TopicArn=topic_arn)
                         deleted_count += 1
                         
@@ -151,7 +152,7 @@ class UltraCleanupSNSManager:
                         })
             
             if deleted_count > 0:
-                self.print_colored(Colors.GREEN, f"   [OK] Deleted {deleted_count} topics")
+                self.print_colored(Colors.GREEN, f"   {Symbols.OK} Deleted {deleted_count} topics")
             return True
         except Exception as e:
             self.log_operation('ERROR', f"Failed to delete topics: {e}")
@@ -180,7 +181,7 @@ class UltraCleanupSNSManager:
                         self.log_operation('ERROR', f"Failed to delete app {app_arn}: {e}")
             
             if deleted_count > 0:
-                self.print_colored(Colors.GREEN, f"   [OK] Deleted {deleted_count} platform apps")
+                self.print_colored(Colors.GREEN, f"   {Symbols.OK} Deleted {deleted_count} platform apps")
             return True
         except Exception as e:
             self.log_operation('ERROR', f"Failed to delete platform apps: {e}")
@@ -193,12 +194,12 @@ class UltraCleanupSNSManager:
             access_key = account_info.get('access_key')
             secret_key = account_info.get('secret_key')
         
-            self.print_colored(Colors.CYAN, f"\n[CLEANUP] Starting cleanup for {account_name} in {region}")
+            self.print_colored(Colors.CYAN, f"\n{Symbols.CLEANUP} Starting cleanup for {account_name} in {region}")
         
             try:
                 sns_client = self.create_sns_client(access_key, secret_key, region)
             except Exception as e:
-                self.print_colored(Colors.RED, f"   [ERROR] Could not create SNS client: {e}")
+                self.print_colored(Colors.RED, f"   {Symbols.ERROR} Could not create SNS client: {e}")
                 return False
         
             self.delete_topics(sns_client, region, account_name)
@@ -209,10 +210,10 @@ class UltraCleanupSNSManager:
             if account_name not in [a['account_name'] for a in self.cleanup_results['accounts_processed']]:
                 self.cleanup_results['accounts_processed'].append({'account_name': account_name})
         
-            self.print_colored(Colors.GREEN, f"   [OK] Cleanup completed")
+            self.print_colored(Colors.GREEN, f"   {Symbols.OK} Cleanup completed")
             return True
         except Exception as e:
-            self.print_colored(Colors.RED, f"   [ERROR] Error: {e}")
+            self.print_colored(Colors.RED, f"   {Symbols.ERROR} Error: {e}")
             return False
 
     def save_cleanup_report(self):
@@ -253,13 +254,13 @@ class UltraCleanupSNSManager:
             if not selected_accounts:
                 return
             
-            selected_regions = self.select_regions_interactive(self._get_user_regions())
+            selected_regions = self.cred_manager.select_regions_interactive()
             if not selected_regions:
                 return
             
-            self.print_colored(Colors.YELLOW, f"\n[WARN]  Type 'DELETE' to confirm:")
-            if input("   → ").strip().upper() != 'DELETE':
-                self.print_colored(Colors.YELLOW, "[ERROR] Cleanup cancelled")
+            self.print_colored(Colors.YELLOW, f"\n{Symbols.WARN}  Type 'yes' to confirm:")
+            if input("   → ").strip().lower() != 'yes':
+                self.print_colored(Colors.YELLOW, f"{Symbols.ERROR} Cleanup cancelled")
                 return
             
             start_time = time.time()
@@ -270,31 +271,51 @@ class UltraCleanupSNSManager:
             
             total_time = int(time.time() - start_time)
             
-            self.print_colored(Colors.GREEN, f"\n[OK] Cleanup completed successfully!")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.OK} Cleanup completed successfully!")
             self.print_colored(Colors.WHITE, f"📧 Topics: {len(self.cleanup_results['deleted_topics'])}")
             self.print_colored(Colors.WHITE, f"[MOBILE] Platform Apps: {len(self.cleanup_results['deleted_platform_apps'])}")
             
             report_file = self.save_cleanup_report()
             if report_file:
-                self.print_colored(Colors.GREEN, f"\n[OK] Report: {report_file}")
+                self.print_colored(Colors.GREEN, f"\n{Symbols.OK} Report: {report_file}")
             
         except Exception as e:
-            self.print_colored(Colors.RED, f"\n[ERROR] ERROR: {e}")
+            self.print_colored(Colors.RED, f"\n{Symbols.ERROR} ERROR: {e}")
 
     def select_regions_interactive(self, available_regions: List[str]) -> List[str]:
-        """Interactive region selection"""
-        self.print_colored(Colors.CYAN, f"\n[REGION] Select regions (1-{len(available_regions)}, 'all'):")
-        for i, region in enumerate(available_regions, 1):
-            print(f"  {i}. {region}")
+        """Interactive region selection with modern formatting"""
+        self.print_colored(Colors.CYAN, "\n" + "="*100)
+        self.print_colored(Colors.WHITE, "AVAILABLE REGIONS")
+        self.print_colored(Colors.CYAN, "="*100)
         
-        selection = input("→ ").strip().lower()
+        for idx, region in enumerate(available_regions, 1):
+            self.print_colored(Colors.WHITE, f"  {idx}. {region}")
+        
+        self.print_colored(Colors.CYAN, "="*100)
+        self.print_colored(Colors.WHITE, "\nRegion Selection Options:")
+        self.print_colored(Colors.WHITE, "  • Single regions: 1,3,5")
+        self.print_colored(Colors.WHITE, "  • Ranges: 1-3")
+        self.print_colored(Colors.WHITE, "  • Mixed: 1-2,4")
+        self.print_colored(Colors.WHITE, "  • All regions: 'all' or press Enter")
+        self.print_colored(Colors.WHITE, "  • Cancel: 'cancel' or 'quit'")
+        self.print_colored(Colors.CYAN, "="*100)
+        
+        selection = input("\n[#] Select regions to process: ").strip().lower()
+        
+        if selection in ['cancel', 'quit']:
+            return []
+        
         if not selection or selection == 'all':
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Selected all {len(available_regions)} regions")
             return available_regions
         
         try:
             indices = self.cred_manager._parse_selection(selection, len(available_regions))
-            return [available_regions[i] for i in indices]
-        except:
+            selected_regions = [available_regions[i] for i in indices]
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Selected {len(selected_regions)} regions: {', '.join(selected_regions)}")
+            return selected_regions
+        except ValueError as e:
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Invalid selection: {e}")
             return []
 
 def main():

@@ -1,5 +1,6 @@
-import os
+﻿import os
 import sys
+from text_symbols import Symbols
 
 # Simulated environment locations
 env_locations = {

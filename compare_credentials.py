@@ -2,6 +2,7 @@
 
 import json
 import os
+from text_symbols import Symbols
 
 def compare_credential_files():
     """Compare credentials between different config files"""
@@ -22,23 +23,23 @@ def compare_credential_files():
                 with open(filename, 'r') as f:
                     data = json.load(f)
                 
-                print(f"[OK] File exists and is valid JSON")
+                print(f"{Symbols.OK} File exists and is valid JSON")
                 
                 # Look for account02 credentials
                 if 'accounts' in data and 'account02' in data['accounts']:
                     account02 = data['accounts']['account02']
                     access_key = account02.get('access_key', 'Not found')
-                    print(f"[KEY] account02 access_key: {access_key[:10]}...{access_key[-4:] if len(access_key) > 10 else access_key}")
+                    print(f"{Symbols.KEY} account02 access_key: {access_key[:10]}...{access_key[-4:] if len(access_key) > 10 else access_key}")
                     
                 elif isinstance(data, dict):
                     # Check if it's a different structure
                     for key, value in data.items():
                         if isinstance(value, dict) and 'access_key' in value:
                             access_key = value['access_key']
-                            print(f"[KEY] {key} access_key: {access_key[:10]}...{access_key[-4:] if len(access_key) > 10 else access_key}")
+                            print(f"{Symbols.KEY} {key} access_key: {access_key[:10]}...{access_key[-4:] if len(access_key) > 10 else access_key}")
                         elif key == 'account02' and isinstance(value, dict):
                             access_key = value.get('access_key', 'Not found')
-                            print(f"[KEY] account02 access_key: {access_key[:10]}...{access_key[-4:] if len(access_key) > 10 else access_key}")
+                            print(f"{Symbols.KEY} account02 access_key: {access_key[:10]}...{access_key[-4:] if len(access_key) > 10 else access_key}")
                 
                 else:
                     print("[SCAN] Structure doesn't match expected format, showing keys:")
@@ -46,13 +47,13 @@ def compare_credential_files():
                         print(f"   Top-level keys: {list(data.keys())}")
                     
             except json.JSONDecodeError as e:
-                print(f"[ERROR] Invalid JSON: {e}")
+                print(f"{Symbols.ERROR} Invalid JSON: {e}")
             except Exception as e:
-                print(f"[ERROR] Error reading file: {e}")
+                print(f"{Symbols.ERROR} Error reading file: {e}")
         else:
-            print(f"[ERROR] File not found")
+            print(f"{Symbols.ERROR} File not found")
     
-    print(f"\n[TIP] RECOMMENDATIONS:")
+    print(f"\n{Symbols.TIP} RECOMMENDATIONS:")
     print(f"1. Use the same credential file that worked for EC2 creation")
     print(f"2. Update your cleanup script to use: iam_users_credentials_20250605_224146.json")
     print(f"3. Or copy the working credentials to aws_accounts_config.json")

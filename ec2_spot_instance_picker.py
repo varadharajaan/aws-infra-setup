@@ -24,6 +24,7 @@ from collections import defaultdict
 from typing import List, Dict, Tuple, Optional, Any
 from botocore.exceptions import ClientError
 from root_iam_credential_manager import AWSCredentialManager
+from text_symbols import Symbols
 
 # -----------------------------
 # Pretty output
@@ -240,10 +241,10 @@ class EC2SpotInstancePicker:
                 json.dump(data, f, indent=2)
             meta["cached"] = True
             meta["cache_age_hours"] = 0.0
-            self.print_colored(Colors.GREEN, "[OK] Spot Advisor data cached successfully")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Spot Advisor data cached successfully")
             return data, meta
         except Exception as e:
-            self.print_colored(Colors.RED, f"[ERROR] Failed to fetch Spot Advisor data: {e}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to fetch Spot Advisor data: {e}")
             return {}, meta
 
     def get_interruption_rate(self, instance_type: str, region: str, spot_data: Dict[str, Any]) -> Tuple[int, str]:
@@ -356,7 +357,7 @@ class EC2SpotInstancePicker:
                 except ClientError as e:
                     code = e.response.get("Error", {}).get("Code", "")
                     msg = e.response.get("Error", {}).get("Message", "")
-                    self.print_colored(Colors.YELLOW, f"[WARN] get_spot_placement_scores batch failed: {code} - {msg}")
+                    self.print_colored(Colors.YELLOW, f"{Symbols.WARN} get_spot_placement_scores batch failed: {code} - {msg}")
                     if code == "MaxConfigLimitExceeded":
                         break
 
@@ -377,7 +378,7 @@ class EC2SpotInstancePicker:
             return scores, meta
 
         except Exception as e:
-            self.print_colored(Colors.YELLOW, f"[WARN] Placement score API unavailable: {e}")
+            self.print_colored(Colors.YELLOW, f"{Symbols.WARN} Placement score API unavailable: {e}")
             meta["ok"] = False
             raise
 
@@ -483,7 +484,7 @@ class EC2SpotInstancePicker:
             except ClientError as e:
                 # If batch failed due to one bad instance type, fall back to per-item calls
                 code = e.response.get("Error", {}).get("Code", "")
-                self.print_colored(Colors.YELLOW, f"[WARN] describe_instance_types batch failed ({code}). Falling back to per-instance lookup...")
+                self.print_colored(Colors.YELLOW, f"{Symbols.WARN} describe_instance_types batch failed ({code}). Falling back to per-instance lookup...")
 
                 for it in batch:
                     try:
@@ -504,7 +505,7 @@ class EC2SpotInstancePicker:
                         continue
 
             except Exception as e:
-                self.print_colored(Colors.YELLOW, f"[WARN] describe_instance_types failed for a batch: {e}")
+                self.print_colored(Colors.YELLOW, f"{Symbols.WARN} describe_instance_types failed for a batch: {e}")
                 continue
 
         return specs
@@ -660,18 +661,18 @@ class EC2SpotInstancePicker:
 
         if not families:
             families = self.instance_families.get("general", [])
-        self.print_colored(Colors.GREEN, f"[OK] Using families: {', '.join(families)}")
+        self.print_colored(Colors.GREEN, f"{Symbols.OK} Using families: {', '.join(families)}")
 
         # Step 2: Build candidate instance types (fast if advisor available)
         self.print_colored(Colors.CYAN, "[STEP 2] Building candidate instance types...")
         candidates, cand_meta = self.build_candidates(ec2_client, families, spot_advisor_data)
         if not candidates:
             raise RuntimeError("No candidate instance types found (Spot Advisor missing and region scan failed).")
-        self.print_colored(Colors.GREEN, f"[OK] Candidates: {len(candidates)} (mode={cand_meta['mode']})")
+        self.print_colored(Colors.GREEN, f"{Symbols.OK} Candidates: {len(candidates)} (mode={cand_meta['mode']})")
 
         self.print_colored(Colors.CYAN, "[STEP 2.5] Filtering candidates to instance types offered in this region...")
         candidates = self.filter_to_offered_instance_types(ec2_client, region, candidates)
-        self.print_colored(Colors.GREEN, f"[OK] Region-offered candidates: {len(candidates)}")
+        self.print_colored(Colors.GREEN, f"{Symbols.OK} Region-offered candidates: {len(candidates)}")
 
         if not candidates:
             raise RuntimeError("No candidates are offered in this region after filtering.")
@@ -686,7 +687,7 @@ class EC2SpotInstancePicker:
             if vcpu_min <= sp["vcpus"] <= vcpu_max and memory_min_gb <= sp["memory_gb"] <= memory_max_gb:
                 filtered.append(it)
 
-        self.print_colored(Colors.GREEN, f"[OK] Filtered: {len(filtered)} match vCPU={vcpu_min}-{vcpu_max}, RAM={memory_min_gb}-{memory_max_gb} GB")
+        self.print_colored(Colors.GREEN, f"{Symbols.OK} Filtered: {len(filtered)} match vCPU={vcpu_min}-{vcpu_max}, RAM={memory_min_gb}-{memory_max_gb} GB")
         if not filtered:
             raise RuntimeError("No instances match your vCPU/memory requirements.")
 
@@ -714,7 +715,7 @@ class EC2SpotInstancePicker:
             msg = f"Missing required data sources: {', '.join(missing_required)}. Results would be unreliable."
             if self.scoring.get("fail_fast", True):
                 raise RuntimeError(msg)
-            self.print_colored(Colors.YELLOW, f"[WARN] {msg} Proceeding in degraded mode.")
+            self.print_colored(Colors.YELLOW, f"{Symbols.WARN} {msg} Proceeding in degraded mode.")
 
         # Step 7: Score & rank
         self.print_colored(Colors.CYAN, "[STEP 6] Scoring and ranking...")
@@ -874,7 +875,7 @@ class EC2SpotInstancePicker:
 
         accounts = self.load_accounts()
         acct_name, acct = self.choose_account(accounts, preferred=account_name)
-        self.print_colored(Colors.GREEN, f"[OK] Using account: {acct_name}")
+        self.print_colored(Colors.GREEN, f"{Symbols.OK} Using account: {acct_name}")
         session = self.make_session(acct)
 
         regions = self.list_regions(session)
@@ -891,7 +892,7 @@ class EC2SpotInstancePicker:
 
         # Validate early
         ident = self.validate_access(session, region)
-        self.print_colored(Colors.GREEN, f"[OK] Identity: {ident.get('Arn', '')}")
+        self.print_colored(Colors.GREEN, f"{Symbols.OK} Identity: {ident.get('Arn', '')}")
 
         print(f"\n{Colors.YELLOW}Workload type:{Colors.END}")
         print(f"  0. Mixed (best of multiple families)")
@@ -975,7 +976,7 @@ def main():
         try:
             picker.interactive_picker(account_name=args.account)
         except KeyboardInterrupt:
-            print(f"\n{Colors.YELLOW}[WARN] Cancelled by user{Colors.END}")
+            print(f"\n{Colors.YELLOW}{Symbols.WARN} Cancelled by user{Colors.END}")
         return
 
     # Non-interactive path
@@ -984,11 +985,11 @@ def main():
 
     accounts = picker.load_accounts()
     acct_name, acct = picker.choose_account(accounts, preferred=args.account)
-    picker.print_colored(Colors.GREEN, f"[OK] Using account: {acct_name}")
+    picker.print_colored(Colors.GREEN, f"{Symbols.OK} Using account: {acct_name}")
 
     session = picker.make_session(acct)
     ident = picker.validate_access(session, args.region)
-    picker.print_colored(Colors.GREEN, f"[OK] Identity: {ident.get('Arn', '')}")
+    picker.print_colored(Colors.GREEN, f"{Symbols.OK} Identity: {ident.get('Arn', '')}")
 
     recs, meta = picker.get_instance_recommendations(
         session=session,

@@ -8,6 +8,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from root_iam_credential_manager import AWSCredentialManager, Colors
+from text_symbols import Symbols
 
 class UltraCleanupLambdaManager:
     def __init__(self, config_dir: str = None):
@@ -57,7 +58,7 @@ class UltraCleanupLambdaManager:
                     })
         
         if deleted > 0:
-            self.print_colored(Colors.GREEN, f"   [OK] Deleted {deleted} functions")
+            self.print_colored(Colors.GREEN, f"   {Symbols.OK} Deleted {deleted} functions")
 
     def delete_layers(self, client, region, account):
         deleted = 0
@@ -84,7 +85,7 @@ class UltraCleanupLambdaManager:
                     })
         
         if deleted > 0:
-            self.print_colored(Colors.GREEN, f"   [OK] Deleted {deleted} layers")
+            self.print_colored(Colors.GREEN, f"   {Symbols.OK} Deleted {deleted} layers")
 
     def delete_event_source_mappings(self, client, region, account):
         deleted = 0
@@ -104,12 +105,12 @@ class UltraCleanupLambdaManager:
                     })
         
         if deleted > 0:
-            self.print_colored(Colors.GREEN, f"   [OK] Deleted {deleted} event mappings")
+            self.print_colored(Colors.GREEN, f"   {Symbols.OK} Deleted {deleted} event mappings")
 
     def cleanup_account_region(self, account_info: dict, region: str):
         try:
             account_name = account_info.get('name')
-            self.print_colored(Colors.CYAN, f"\n[CLEANUP] {account_name} - {region}")
+            self.print_colored(Colors.CYAN, f"\n{Symbols.CLEANUP} {account_name} - {region}")
             
             client = boto3.client('lambda',
                 aws_access_key_id=account_info.get('access_key'),
@@ -125,7 +126,7 @@ class UltraCleanupLambdaManager:
             
             return True
         except Exception as e:
-            self.print_colored(Colors.RED, f"   [ERROR] {e}")
+            self.print_colored(Colors.RED, f"   {Symbols.ERROR} {e}")
             return False
 
     def save_report(self):
@@ -139,15 +140,18 @@ class UltraCleanupLambdaManager:
         return report_file
 
     def run(self):
-        self.print_colored(Colors.BLUE, "\n[START] ULTRA LAMBDA CLEANUP MANAGER")
+        self.print_colored(Colors.BLUE, f"\n{Symbols.START} ULTRA LAMBDA CLEANUP MANAGER")
         
         accounts = self.cred_manager.select_root_accounts_interactive()
         if not accounts:
             return
         
-        regions = self._get_regions()
+        regions = self.cred_manager.select_regions_interactive()
+        if not regions:
+            self.print_colored(Colors.YELLOW, f"{Symbols.ERROR} No regions selected. Exiting.")
+            return
         
-        if input("\nType 'DELETE': ").strip().upper() != 'DELETE':
+        if input("\nType 'yes': ").strip().lower() != 'yes':
             return
         
         for acc in accounts:
@@ -155,8 +159,8 @@ class UltraCleanupLambdaManager:
                 self.cleanup_account_region(acc, reg)
         
         total = len(self.cleanup_results['deleted_functions'])
-        self.print_colored(Colors.WHITE, f"\n[STATS] Functions deleted: {total}")
-        self.print_colored(Colors.GREEN, f"[OK] Report: {self.save_report()}")
+        self.print_colored(Colors.WHITE, f"\n{Symbols.STATS} Functions deleted: {total}")
+        self.print_colored(Colors.GREEN, f"{Symbols.OK} Report: {self.save_report()}")
 
 def main():
     try:

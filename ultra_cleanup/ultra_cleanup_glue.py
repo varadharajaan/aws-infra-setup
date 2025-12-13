@@ -23,6 +23,7 @@ import time
 from datetime import datetime
 from botocore.exceptions import ClientError
 from root_iam_credential_manager import AWSCredentialManager
+from text_symbols import Symbols
 
 
 class Colors:
@@ -42,9 +43,9 @@ class UltraCleanupGlueManager:
     def __init__(self):
         """Initialize the Glue cleanup manager"""
         self.cred_manager = AWSCredentialManager()
-        self.current_time = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+        self.current_time = datetime.now(datetime.UTC).strftime('%Y-%m-%d %H:%M:%S')
         self.current_user = os.getenv('USERNAME') or os.getenv('USER') or 'unknown'
-        self.execution_timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+        self.execution_timestamp = datetime.now(datetime.UTC).strftime('%Y%m%d_%H%M%S')
         
         # Create directories for logs and reports
         self.base_dir = os.path.join(os.getcwd(), 'aws', 'glue')
@@ -81,7 +82,7 @@ class UltraCleanupGlueManager:
 
     def log_action(self, message, level="INFO"):
         """Log action to file"""
-        timestamp = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp = datetime.now(datetime.UTC).strftime('%Y-%m-%d %H:%M:%S')
         log_entry = f"{timestamp} | {level:8} | {message}\n"
         with open(self.log_file, 'a') as f:
             f.write(log_entry)
@@ -94,7 +95,7 @@ class UltraCleanupGlueManager:
                 Name=table_name
             )
             
-            self.print_colored(Colors.GREEN, f"   [OK] Deleted table: {table_name}")
+            self.print_colored(Colors.GREEN, f"   {Symbols.OK} Deleted table: {table_name}")
             self.log_action(f"Deleted Glue table: {table_name} from database {database_name} in {region}")
             
             self.cleanup_results['deleted_tables'].append({
@@ -107,14 +108,14 @@ class UltraCleanupGlueManager:
             
         except ClientError as e:
             error_msg = f"Failed to delete table {table_name}: {e}"
-            self.print_colored(Colors.RED, f"   [ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"   {Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             return False
 
     def delete_glue_database(self, glue_client, database_name, region, account_key):
         """Delete a Glue database and all its tables"""
         try:
-            self.print_colored(Colors.CYAN, f"[DELETE] Deleting database: {database_name}")
+            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting database: {database_name}")
             
             # Get all tables in the database
             try:
@@ -122,7 +123,7 @@ class UltraCleanupGlueManager:
                 for page in paginator.paginate(DatabaseName=database_name):
                     tables = page.get('TableList', [])
                     if tables:
-                        self.print_colored(Colors.YELLOW, f"   [SCAN] Found {len(tables)} tables in database")
+                        self.print_colored(Colors.YELLOW, f"   {Symbols.SCAN} Found {len(tables)} tables in database")
                         for table in tables:
                             self.delete_glue_table(glue_client, database_name, table['Name'], region, account_key)
             except ClientError:
@@ -131,7 +132,7 @@ class UltraCleanupGlueManager:
             # Delete the database
             glue_client.delete_database(Name=database_name)
             
-            self.print_colored(Colors.GREEN, f"[OK] Deleted database: {database_name}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted database: {database_name}")
             self.log_action(f"Deleted Glue database: {database_name} in {region}")
             
             self.cleanup_results['deleted_databases'].append({
@@ -143,7 +144,7 @@ class UltraCleanupGlueManager:
             
         except ClientError as e:
             error_msg = f"Failed to delete database {database_name}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['failed_deletions'].append({
                 'type': 'Database',
@@ -157,11 +158,11 @@ class UltraCleanupGlueManager:
     def delete_glue_crawler(self, glue_client, crawler_name, region, account_key):
         """Delete a Glue crawler"""
         try:
-            self.print_colored(Colors.CYAN, f"[DELETE] Deleting crawler: {crawler_name}")
+            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting crawler: {crawler_name}")
             
             glue_client.delete_crawler(Name=crawler_name)
             
-            self.print_colored(Colors.GREEN, f"[OK] Deleted crawler: {crawler_name}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted crawler: {crawler_name}")
             self.log_action(f"Deleted Glue crawler: {crawler_name} in {region}")
             
             self.cleanup_results['deleted_crawlers'].append({
@@ -173,7 +174,7 @@ class UltraCleanupGlueManager:
             
         except ClientError as e:
             error_msg = f"Failed to delete crawler {crawler_name}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['failed_deletions'].append({
                 'type': 'Crawler',
@@ -187,11 +188,11 @@ class UltraCleanupGlueManager:
     def delete_glue_job(self, glue_client, job_name, region, account_key):
         """Delete a Glue job"""
         try:
-            self.print_colored(Colors.CYAN, f"[DELETE] Deleting job: {job_name}")
+            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting job: {job_name}")
             
             glue_client.delete_job(JobName=job_name)
             
-            self.print_colored(Colors.GREEN, f"[OK] Deleted job: {job_name}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted job: {job_name}")
             self.log_action(f"Deleted Glue job: {job_name} in {region}")
             
             self.cleanup_results['deleted_jobs'].append({
@@ -203,7 +204,7 @@ class UltraCleanupGlueManager:
             
         except ClientError as e:
             error_msg = f"Failed to delete job {job_name}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['failed_deletions'].append({
                 'type': 'Job',
@@ -217,11 +218,11 @@ class UltraCleanupGlueManager:
     def delete_glue_trigger(self, glue_client, trigger_name, region, account_key):
         """Delete a Glue trigger"""
         try:
-            self.print_colored(Colors.CYAN, f"[DELETE] Deleting trigger: {trigger_name}")
+            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting trigger: {trigger_name}")
             
             glue_client.delete_trigger(Name=trigger_name)
             
-            self.print_colored(Colors.GREEN, f"[OK] Deleted trigger: {trigger_name}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted trigger: {trigger_name}")
             self.log_action(f"Deleted Glue trigger: {trigger_name} in {region}")
             
             self.cleanup_results['deleted_triggers'].append({
@@ -233,7 +234,7 @@ class UltraCleanupGlueManager:
             
         except ClientError as e:
             error_msg = f"Failed to delete trigger {trigger_name}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['failed_deletions'].append({
                 'type': 'Trigger',
@@ -247,11 +248,11 @@ class UltraCleanupGlueManager:
     def delete_glue_dev_endpoint(self, glue_client, endpoint_name, region, account_key):
         """Delete a Glue dev endpoint"""
         try:
-            self.print_colored(Colors.CYAN, f"[DELETE] Deleting dev endpoint: {endpoint_name}")
+            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting dev endpoint: {endpoint_name}")
             
             glue_client.delete_dev_endpoint(EndpointName=endpoint_name)
             
-            self.print_colored(Colors.GREEN, f"[OK] Deleted dev endpoint: {endpoint_name}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted dev endpoint: {endpoint_name}")
             self.log_action(f"Deleted Glue dev endpoint: {endpoint_name} in {region}")
             
             self.cleanup_results['deleted_dev_endpoints'].append({
@@ -263,7 +264,7 @@ class UltraCleanupGlueManager:
             
         except ClientError as e:
             error_msg = f"Failed to delete dev endpoint {endpoint_name}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['failed_deletions'].append({
                 'type': 'DevEndpoint',
@@ -277,11 +278,11 @@ class UltraCleanupGlueManager:
     def delete_glue_ml_transform(self, glue_client, transform_id, region, account_key):
         """Delete a Glue ML transform"""
         try:
-            self.print_colored(Colors.CYAN, f"[DELETE] Deleting ML transform: {transform_id}")
+            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting ML transform: {transform_id}")
             
             glue_client.delete_ml_transform(TransformId=transform_id)
             
-            self.print_colored(Colors.GREEN, f"[OK] Deleted ML transform: {transform_id}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted ML transform: {transform_id}")
             self.log_action(f"Deleted Glue ML transform: {transform_id} in {region}")
             
             self.cleanup_results['deleted_ml_transforms'].append({
@@ -293,7 +294,7 @@ class UltraCleanupGlueManager:
             
         except ClientError as e:
             error_msg = f"Failed to delete ML transform {transform_id}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['failed_deletions'].append({
                 'type': 'MLTransform',
@@ -307,11 +308,11 @@ class UltraCleanupGlueManager:
     def delete_glue_workflow(self, glue_client, workflow_name, region, account_key):
         """Delete a Glue workflow"""
         try:
-            self.print_colored(Colors.CYAN, f"[DELETE] Deleting workflow: {workflow_name}")
+            self.print_colored(Colors.CYAN, f"{Symbols.DELETE} Deleting workflow: {workflow_name}")
             
             glue_client.delete_workflow(Name=workflow_name)
             
-            self.print_colored(Colors.GREEN, f"[OK] Deleted workflow: {workflow_name}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Deleted workflow: {workflow_name}")
             self.log_action(f"Deleted Glue workflow: {workflow_name} in {region}")
             
             self.cleanup_results['deleted_workflows'].append({
@@ -323,7 +324,7 @@ class UltraCleanupGlueManager:
             
         except ClientError as e:
             error_msg = f"Failed to delete workflow {workflow_name}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['failed_deletions'].append({
                 'type': 'Workflow',
@@ -337,7 +338,7 @@ class UltraCleanupGlueManager:
     def cleanup_region_glue(self, account_name, credentials, region):
         """Cleanup all Glue resources in a specific region"""
         try:
-            self.print_colored(Colors.YELLOW, f"\n[SCAN] Scanning region: {region}")
+            self.print_colored(Colors.YELLOW, f"\n{Symbols.SCAN} Scanning region: {region}")
             
             glue_client = boto3.client(
                 'glue',
@@ -439,7 +440,7 @@ class UltraCleanupGlueManager:
             
         except Exception as e:
             error_msg = f"Error processing region {region}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['errors'].append(error_msg)
 
@@ -447,7 +448,7 @@ class UltraCleanupGlueManager:
         """Cleanup all Glue resources in an account across all regions"""
         try:
             self.print_colored(Colors.BLUE, f"\n{'='*100}")
-            self.print_colored(Colors.BLUE, f"[START] Processing Account: {account_name}")
+            self.print_colored(Colors.BLUE, f"{Symbols.START} Processing Account: {account_name}")
             self.print_colored(Colors.BLUE, f"{'='*100}")
             
             self.cleanup_results['accounts_processed'].append(account_name)
@@ -463,17 +464,17 @@ class UltraCleanupGlueManager:
             regions_response = ec2_client.describe_regions()
             regions = [region['RegionName'] for region in regions_response['Regions']]
             
-            self.print_colored(Colors.CYAN, f"[SCAN] Processing {len(regions)} regions")
+            self.print_colored(Colors.CYAN, f"{Symbols.SCAN} Processing {len(regions)} regions")
             
             # Process each region
             for region in regions:
                 self.cleanup_region_glue(account_name, credentials, region)
             
-            self.print_colored(Colors.GREEN, f"\n[OK] Account {account_name} cleanup completed!")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.OK} Account {account_name} cleanup completed!")
             
         except Exception as e:
             error_msg = f"Error processing account {account_name}: {e}"
-            self.print_colored(Colors.RED, f"[ERROR] {error_msg}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} {error_msg}")
             self.log_action(error_msg, "ERROR")
             self.cleanup_results['errors'].append(error_msg)
 
@@ -506,27 +507,27 @@ class UltraCleanupGlueManager:
             with open(report_path, 'w') as f:
                 json.dump(summary, f, indent=2)
 
-            self.print_colored(Colors.GREEN, f"\n[STATS] Summary report saved: {report_path}")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.STATS} Summary report saved: {report_path}")
             self.log_action(f"Summary report saved: {report_path}")
 
             # Print summary to console
             self.print_colored(Colors.BLUE, f"\n{'='*100}")
             self.print_colored(Colors.BLUE, "[STATS] CLEANUP SUMMARY")
             self.print_colored(Colors.BLUE, f"{'='*100}")
-            self.print_colored(Colors.GREEN, f"[OK] Databases Deleted: {summary['summary']['total_databases_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Tables Deleted: {summary['summary']['total_tables_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Crawlers Deleted: {summary['summary']['total_crawlers_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Jobs Deleted: {summary['summary']['total_jobs_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Triggers Deleted: {summary['summary']['total_triggers_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Dev Endpoints Deleted: {summary['summary']['total_dev_endpoints_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] ML Transforms Deleted: {summary['summary']['total_ml_transforms_deleted']}")
-            self.print_colored(Colors.GREEN, f"[OK] Workflows Deleted: {summary['summary']['total_workflows_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Databases Deleted: {summary['summary']['total_databases_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Tables Deleted: {summary['summary']['total_tables_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Crawlers Deleted: {summary['summary']['total_crawlers_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Jobs Deleted: {summary['summary']['total_jobs_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Triggers Deleted: {summary['summary']['total_triggers_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Dev Endpoints Deleted: {summary['summary']['total_dev_endpoints_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} ML Transforms Deleted: {summary['summary']['total_ml_transforms_deleted']}")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Workflows Deleted: {summary['summary']['total_workflows_deleted']}")
 
             if summary['summary']['total_failed_deletions'] > 0:
-                self.print_colored(Colors.YELLOW, f"[WARN] Failed Deletions: {summary['summary']['total_failed_deletions']}")
+                self.print_colored(Colors.YELLOW, f"{Symbols.WARN} Failed Deletions: {summary['summary']['total_failed_deletions']}")
 
             if summary['summary']['total_errors'] > 0:
-                self.print_colored(Colors.RED, f"[ERROR] Errors: {summary['summary']['total_errors']}")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} Errors: {summary['summary']['total_errors']}")
 
             # Display Account Summary
             self.print_colored(Colors.BLUE, f"\n{'='*100}")
@@ -557,20 +558,20 @@ class UltraCleanupGlueManager:
                     account_summary[account]['regions'].add(resource.get('region', 'unknown'))
 
             for account, stats in account_summary.items():
-                self.print_colored(Colors.CYAN, f"\n[LIST] Account: {account}")
-                self.print_colored(Colors.GREEN, f"  [OK] Databases: {stats['databases']}")
-                self.print_colored(Colors.GREEN, f"  [OK] Tables: {stats['tables']}")
-                self.print_colored(Colors.GREEN, f"  [OK] Crawlers: {stats['crawlers']}")
-                self.print_colored(Colors.GREEN, f"  [OK] Jobs: {stats['jobs']}")
-                self.print_colored(Colors.GREEN, f"  [OK] Triggers: {stats['triggers']}")
-                self.print_colored(Colors.GREEN, f"  [OK] Dev Endpoints: {stats['dev_endpoints']}")
-                self.print_colored(Colors.GREEN, f"  [OK] ML Transforms: {stats['ml_transforms']}")
-                self.print_colored(Colors.GREEN, f"  [OK] Workflows: {stats['workflows']}")
+                self.print_colored(Colors.CYAN, f"\n{Symbols.LIST} Account: {account}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Databases: {stats['databases']}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Tables: {stats['tables']}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Crawlers: {stats['crawlers']}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Jobs: {stats['jobs']}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Triggers: {stats['triggers']}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Dev Endpoints: {stats['dev_endpoints']}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} ML Transforms: {stats['ml_transforms']}")
+                self.print_colored(Colors.GREEN, f"  {Symbols.OK} Workflows: {stats['workflows']}")
                 regions_str = ', '.join(sorted(stats['regions'])) if stats['regions'] else 'N/A'
-                self.print_colored(Colors.YELLOW, f"  [SCAN] Regions: {regions_str}")
+                self.print_colored(Colors.YELLOW, f"  {Symbols.SCAN} Regions: {regions_str}")
 
         except Exception as e:
-            self.print_colored(Colors.RED, f"[ERROR] Failed to generate summary report: {e}")
+            self.print_colored(Colors.RED, f"{Symbols.ERROR} Failed to generate summary report: {e}")
             self.log_action(f"Failed to generate summary report: {e}", "ERROR")
 
     def interactive_cleanup(self):
@@ -583,15 +584,15 @@ class UltraCleanupGlueManager:
             # Load accounts
             config = self.cred_manager.load_root_accounts_config()
             if not config or 'accounts' not in config:
-                self.print_colored(Colors.RED, "[ERROR] No accounts configuration found!")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} No accounts configuration found!")
                 return
 
             accounts = config['accounts']
 
             # Display accounts
-            self.print_colored(Colors.CYAN, "[KEY] Select Root AWS Accounts for Glue Cleanup:")
+            self.print_colored(Colors.CYAN, f"{Symbols.KEY} Select Root AWS Accounts for Glue Cleanup:")
             print(f"{Colors.CYAN}[BOOK] Loading root accounts config...{Colors.END}")
-            self.print_colored(Colors.GREEN, f"[OK] Loaded {len(accounts)} root accounts")
+            self.print_colored(Colors.GREEN, f"{Symbols.OK} Loaded {len(accounts)} root accounts")
             
             self.print_colored(Colors.YELLOW, "\n[KEY] Available Root AWS Accounts:")
             print("=" * 100)
@@ -631,16 +632,16 @@ class UltraCleanupGlueManager:
                     indices = [int(x.strip()) for x in selection.split(',')]
                     selected_accounts = [account_list[i-1] for i in indices if 0 < i <= len(account_list)]
                 except (ValueError, IndexError):
-                    self.print_colored(Colors.RED, "[ERROR] Invalid selection!")
+                    self.print_colored(Colors.RED, f"{Symbols.ERROR} Invalid selection!")
                     return
 
             if not selected_accounts:
-                self.print_colored(Colors.RED, "[ERROR] No accounts selected!")
+                self.print_colored(Colors.RED, f"{Symbols.ERROR} No accounts selected!")
                 return
 
             # Confirm deletion
-            self.print_colored(Colors.RED, "\n[WARN] WARNING: This will DELETE all Glue resources!")
-            self.print_colored(Colors.YELLOW, f"[INFO] Accounts: {len(selected_accounts)}")
+            self.print_colored(Colors.RED, f"\n{Symbols.WARN} WARNING: This will DELETE all Glue resources!")
+            self.print_colored(Colors.YELLOW, f"{Symbols.INFO} Accounts: {len(selected_accounts)}")
             
             confirm = input(f"\nType 'yes' to confirm: ").strip().lower()
             if confirm != 'yes':
@@ -663,14 +664,14 @@ class UltraCleanupGlueManager:
             # Generate summary
             self.generate_summary_report()
 
-            self.print_colored(Colors.GREEN, f"\n[OK] Glue cleanup completed!")
+            self.print_colored(Colors.GREEN, f"\n{Symbols.OK} Glue cleanup completed!")
             self.print_colored(Colors.CYAN, f"[FILE] Log file: {self.log_file}")
 
         except KeyboardInterrupt:
             self.print_colored(Colors.YELLOW, "\n[WARN] Cleanup interrupted by user!")
             self.log_action("Cleanup interrupted by user", "WARNING")
         except Exception as e:
-            self.print_colored(Colors.RED, f"\n[ERROR] Error during cleanup: {e}")
+            self.print_colored(Colors.RED, f"\n{Symbols.ERROR} Error during cleanup: {e}")
             self.log_action(f"Error during cleanup: {e}", "ERROR")
 
 
@@ -682,7 +683,7 @@ def main():
     except KeyboardInterrupt:
         print("\n\n[WARN] Operation cancelled by user!")
     except Exception as e:
-        print(f"\n[ERROR] Fatal error: {e}")
+        print(f"\n{Symbols.ERROR} Fatal error: {e}")
 
 
 if __name__ == "__main__":
