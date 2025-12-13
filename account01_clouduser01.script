@@ -1,0 +1,48 @@
+# 1. Create the IAM user
+aws iam create-user --user-name account01_clouduser01
+
+# 2. Attach AdministratorAccess managed policy
+aws iam attach-user-policy \
+  --user-name account01_clouduser01 \
+  --policy-arn arn:aws:iam::aws:policy/AdministratorAccess
+
+# 3. Add inline policy with restrictions
+aws iam put-user-policy \
+  --user-name account01_clouduser01 \
+  --policy-name Restrict-Region-And-EC2Types \
+  --policy-document '{
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Sid": "DenyIfNotInRegion",
+        "Effect": "Deny",
+        "Action": "*",
+        "Resource": "*",
+        "Condition": {
+          "StringNotEquals": {
+            "aws:RequestedRegion": "us-east-1"
+          }
+        }
+      },
+      {
+        "Sid": "DenyIfDisallowedInstanceType",
+        "Effect": "Deny",
+        "Action": [
+          "ec2:RunInstances",
+          "ec2:CreateFleet",
+          "ec2:CreateLaunchTemplate",
+          "ec2:CreateLaunchTemplateVersion"
+        ],
+        "Resource": "*",
+        "Condition": {
+          "StringNotEqualsIfExists": {
+            "ec2:InstanceType": [
+              "t2.micro",
+              "t3.micro",
+              "c6a.large"
+            ]
+          }
+        }
+      }
+    ]
+  }'
