@@ -7,10 +7,9 @@ import os
 import time
 import threading
 import re
-from datetime import datetime, timedelta
+from datetime import datetime
 from botocore.exceptions import ClientError
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import List, Dict, Any, Set, Optional
+from typing import List
 
 class IAMLogFileCleanupManager:
     def __init__(self, config_file='aws_accounts_config.json', creds_base_dir='aws/iam', 

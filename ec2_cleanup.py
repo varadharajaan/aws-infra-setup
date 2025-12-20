@@ -11,12 +11,11 @@ import os
 import boto3
 import re
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from collections import defaultdict
-from typing import Dict, List, Tuple, Any
+from typing import Dict, List, Tuple
 import logging
-import subprocess
-from botocore.exceptions import ClientError, NoCredentialsError
+from botocore.exceptions import ClientError
 
 # Configure logging
 import os

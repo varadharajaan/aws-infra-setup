@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Ultra Lambda Cleanup Manager - Deletes Lambda functions, layers, and event source mappings"""
 
-import os, json, boto3, time
+import os
+import json
+import boto3
 from datetime import datetime
-from typing import List
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

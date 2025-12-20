@@ -3,7 +3,6 @@ import random
 import requests
 from random_word import RandomWords
 from faker import Faker
-import json
 import time
 
 # Initialize libraries

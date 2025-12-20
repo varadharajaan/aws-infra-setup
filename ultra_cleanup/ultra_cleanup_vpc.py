@@ -6,8 +6,8 @@ import sys
 import os
 import time
 from datetime import datetime
-from botocore.exceptions import ClientError, BotoCoreError
-from typing import List, Dict, Any, Set, Optional, Tuple
+from botocore.exceptions import ClientError
+from typing import List, Dict, Optional
 import logging
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from root_iam_credential_manager import AWSCredentialManager

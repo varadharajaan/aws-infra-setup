@@ -4,7 +4,8 @@ Ultra AWS SageMaker Cleanup Manager
 """
 import sys,os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import boto3,json,time
+import boto3
+import time
 from datetime import datetime
 from botocore.exceptions import ClientError
 from root_iam_credential_manager import AWSCredentialManager

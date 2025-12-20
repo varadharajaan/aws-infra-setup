@@ -5,8 +5,8 @@ import json
 import boto3
 import time
 from datetime import datetime
-from typing import Dict, List, Optional, Any
-from botocore.exceptions import ClientError, BotoCoreError
+from typing import List, Optional
+from botocore.exceptions import ClientError
 import botocore
 import sys
 import os

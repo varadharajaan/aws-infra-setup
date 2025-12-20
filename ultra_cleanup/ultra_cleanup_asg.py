@@ -7,8 +7,7 @@ import os
 import time
 import logging
 from datetime import datetime
-from botocore.exceptions import ClientError
-from typing import List, Dict, Any, Set, Tuple
+from typing import List
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

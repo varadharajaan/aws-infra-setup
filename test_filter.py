@@ -1,5 +1,4 @@
 import os
-import sys
 
 # Simulated environment locations
 env_locations = {

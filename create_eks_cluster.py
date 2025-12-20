@@ -9,13 +9,10 @@ Description: Interactive tool to create EKS clusters for multiple AWS accounts a
 import json
 import os
 import sys
-import time
 import boto3
 import glob
 from datetime import datetime
-from typing import Dict, List, Tuple, Optional
-import threading
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Dict, List, Tuple
 
 # Import your existing logging module
 try:

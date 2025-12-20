@@ -6,7 +6,7 @@ Handles credential selection flow for EC2 and EKS automation
 import json
 import os
 import boto3
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Optional
 from dataclasses import dataclass
 from datetime import datetime
 import re

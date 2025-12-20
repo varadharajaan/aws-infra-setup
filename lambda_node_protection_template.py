@@ -9,14 +9,10 @@ Created by: {{CURRENT_USER}}
 
 import json
 import os
-import sys
 import boto3
 from datetime import datetime
 import logging
 import time
-import base64
-import tempfile
-from botocore.exceptions import ClientError, BotoCoreError
 
 # Configure enhanced logging
 logger = logging.getLogger()

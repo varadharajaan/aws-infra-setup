@@ -9,7 +9,7 @@ import sys
 import os
 import tempfile
 import json
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 
 # Add the main directory to the path
 sys.path.append('/home/runner/work/aws-infra-setup/aws-infra-setup')

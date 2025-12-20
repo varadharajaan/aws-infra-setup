@@ -4,10 +4,8 @@ import os
 import json
 import boto3
 import time
-import subprocess
 from datetime import datetime
-from typing import Dict, List, Optional, Any, Set
-from botocore.exceptions import ClientError, BotoCoreError
+from botocore.exceptions import ClientError
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

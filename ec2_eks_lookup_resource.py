@@ -13,7 +13,7 @@ import argparse
 import sys
 from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional, Tuple
-from botocore.exceptions import ClientError, NoCredentialsError
+from botocore.exceptions import ClientError
 import glob
 from collections import defaultdict
 

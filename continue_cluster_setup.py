@@ -9,14 +9,13 @@ import os
 import sys
 import time
 import boto3
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 import logging
 import glob
 from collections import defaultdict
 from eks_cluster_manager import EKSClusterManager
 from complete_autoscaler_deployment import CompleteAutoscalerDeployer
-import textwrap
 
 class Colors:
     GREEN = '\033[92m'
@@ -460,7 +459,6 @@ class EKSClusterContinuationFromErrors:
             Tuple[access_key, secret_key, account_id]: AWS credentials and account ID
         """
         import glob
-        import re
         import os
         from datetime import datetime
 

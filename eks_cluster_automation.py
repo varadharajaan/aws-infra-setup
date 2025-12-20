@@ -8,16 +8,15 @@ Supports on-demand, spot, and mixed instance type selection with quota analysis
 import json
 import os
 import sys
-import time
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple, Set
+from typing import Dict, List, Tuple
 import boto3
 
 # Import ENHANCED credential manager for Root/IAM support
 from enhanced_aws_credential_manager import EnhancedAWSCredentialManager, MultiUserCredentials, CredentialInfo
 
 # Import spot analyzer for instance analysis
-from spot_instance_analyzer import SpotInstanceAnalyzer, SpotAnalysis
+from spot_instance_analyzer import SpotInstanceAnalyzer
 
 # Import EKS manager for cluster operations
 from eks_cluster_manager import EKSClusterManager

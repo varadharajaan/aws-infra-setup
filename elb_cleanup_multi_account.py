@@ -13,7 +13,7 @@ import json
 import time
 import boto3
 from datetime import datetime
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 

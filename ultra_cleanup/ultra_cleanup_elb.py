@@ -7,7 +7,7 @@ import time
 import re
 from datetime import datetime
 from typing import Dict, List, Optional, Any
-from botocore.exceptions import ClientError, BotoCoreError
+from botocore.exceptions import ClientError
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

@@ -11,10 +11,9 @@ import re
 import random
 import string
 from datetime import datetime
-from botocore.exceptions import ClientError, BotoCoreError
+from botocore.exceptions import ClientError
 from logger import setup_logger
 from typing import Set
-from spot_analyzer import SpotInstanceAnalyzer, SpotAvailabilityResult, InstanceAlternative
 from typing import Tuple, Optional, List, Dict
 from datetime import datetime, timedelta
 from instance_config_manager import InstanceConfigManager

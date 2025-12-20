@@ -4,7 +4,6 @@ import pandas as pd
 import requests
 import json
 import re
-import os
 from datetime import datetime, timedelta
 from pathlib import Path
 import logging

@@ -2,7 +2,7 @@ import json
 import os
 import glob
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Optional, Any
 import re
 
 

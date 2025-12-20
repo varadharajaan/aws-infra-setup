@@ -5,15 +5,11 @@ Handles ASG creation with On-Demand, Spot, and Mixed strategies
 
 import json
 import os
-import re
-import stat
-from turtle import st
 import boto3
 from typing import Dict, List, Optional, Tuple, Set
 from dataclasses import dataclass, asdict
 from datetime import datetime, timedelta
 
-from botocore import regions
 from aws_credential_manager import CredentialInfo
 from spot_instance_analyzer import SpotInstanceAnalyzer, SpotAnalysis, ServiceQuotaInfo
 import random
@@ -1079,7 +1075,6 @@ class AutoScalingGroupManager:
         Build ASG configuration based on user selections.
         For mixed, combines on-demand and spot instance types without duplicates.
         """
-        from datetime import datetime
         import boto3
 
         region = cred_info.regions[0]

@@ -8,10 +8,8 @@ import json
 import os
 import sys
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List
 import time
-from concurrent.futures import ThreadPoolExecutor
-from botocore.exceptions import ClientError
 
 REGIONS = [
     "us-east-1", "us-east-2", "us-west-1", "us-west-2",

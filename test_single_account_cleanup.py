@@ -2,8 +2,6 @@
 
 import boto3
 import json
-import sys
-from botocore.exceptions import ClientError
 
 def test_single_account():
     """Test cleanup script logic with account02 (the one that just worked)"""

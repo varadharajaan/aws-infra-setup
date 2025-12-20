@@ -1135,7 +1135,6 @@ class EC2ASGAutomation:
         """Setup Unicode support for Windows terminals"""
         if sys.platform.startswith('win'):
             try:
-                import codecs
                 sys.stdout.reconfigure(encoding='utf-8')
                 sys.stderr.reconfigure(encoding='utf-8')
             except (AttributeError, UnicodeError):

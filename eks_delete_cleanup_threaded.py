@@ -34,10 +34,8 @@ setup_unicode_support()
 import json
 import time
 import boto3
-import glob
-import re
 from datetime import datetime
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 

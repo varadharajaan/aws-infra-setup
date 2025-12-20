@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Ultra CloudWatch Cleanup Manager - Deletes alarms, log groups, dashboards, and metrics"""
 
-import os, json, boto3, time
+import os
+import json
+import boto3
 from datetime import datetime
-from typing import List
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

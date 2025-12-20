@@ -1,9 +1,7 @@
 import json
 import os
-import sys
 import boto3
 import argparse
-from datetime import datetime
 import glob
 
 class SessionRollback:
