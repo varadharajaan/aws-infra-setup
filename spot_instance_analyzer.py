@@ -14,8 +14,6 @@ from pathlib import Path
 import pytz
 import boto3
 import statistics
-import requests
-import re
 
 from aws_credential_manager import CredentialInfo
 

@@ -6,7 +6,6 @@ Handles batch operations on EKS clusters with smart credential detection and sel
 
 import json
 import os
-import sys
 import time
 import boto3
 import glob
@@ -15,7 +14,7 @@ import yaml
 import subprocess
 import shutil
 from datetime import datetime
-from typing import Dict, List, Tuple, Optional, Set
+from typing import Dict, List, Tuple
 import tempfile
 import logging
 

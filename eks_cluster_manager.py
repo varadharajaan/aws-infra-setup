@@ -7,9 +7,7 @@ Handles EKS cluster creation with on-demand, spot, and mixed nodegroup strategie
 import json
 import os
 import time
-from os import environ
 import re
-import textwrap
 
 import boto3
 
@@ -30,7 +28,6 @@ from jinja2 import Environment, FileSystemLoader
 import logging
 from logging.handlers import RotatingFileHandler
 from complete_autoscaler_deployment import CompleteAutoscalerDeployer
-from timing_utils import timing_decorator, add_timing_methods
 
 
 class Colors:
@@ -8377,7 +8374,6 @@ class EKSClusterManager:
             import subprocess
             import shutil
             import json
-            import re
 
             # Check if kubectl is available
             kubectl_available = shutil.which('kubectl') is not None

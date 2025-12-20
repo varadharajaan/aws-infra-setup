@@ -5,8 +5,7 @@ import json
 import sys
 import os
 from datetime import datetime
-from botocore.exceptions import ClientError, BotoCoreError
-import threading
+from botocore.exceptions import ClientError
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 class AWSDefaultVPCChecker:

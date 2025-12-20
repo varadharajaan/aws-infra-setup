@@ -3,7 +3,6 @@
 Script to update import statements in ultra_cleanup files after folder reorganization.
 """
 
-import os
 from pathlib import Path
 
 def update_imports_in_file(file_path):

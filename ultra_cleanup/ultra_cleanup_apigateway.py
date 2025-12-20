@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Ultra API Gateway Cleanup Manager - Deletes REST APIs, HTTP APIs, WebSocket APIs"""
 
-import os, json, boto3, time    
+import os    
+import json    
+import boto3    
 from datetime import datetime
-from typing import List 
 import sys
-import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from root_iam_credential_manager import AWSCredentialManager, Colors
 

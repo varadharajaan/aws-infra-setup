@@ -4,9 +4,6 @@ import boto3
 import json
 import sys
 import os
-import time
-import threading
-import requests
 import logging
 from datetime import datetime, timedelta
 
@@ -2981,8 +2978,6 @@ class LiveCostCalculator:
     def generate_html_report(self, aggregated_results, all_ec2_results, all_eks_results, all_historical_results=None,
                              all_forecast_results=None):
         """Generate a modern HTML report with visualizations"""
-        import base64
-        from datetime import datetime
 
         # Create the HTML report directory
         html_dir = "aws/live-cost"

@@ -5,9 +5,8 @@ Handles EC2 instance creation with automatic ASG attachment
 
 import json
 import os
-from tkinter import SE
 import boto3
-from typing import Dict, List, Optional, Tuple, Set
+from typing import Dict, List, Optional, Set
 from dataclasses import dataclass
 from datetime import datetime
 from aws_credential_manager import CredentialInfo

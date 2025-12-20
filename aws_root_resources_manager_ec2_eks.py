@@ -17,7 +17,7 @@ import re
 import random
 import string
 from datetime import datetime
-from botocore.exceptions import ClientError, BotoCoreError
+from botocore.exceptions import ClientError
 from logger import setup_logger
 
 # UTF-8 Encoding Support

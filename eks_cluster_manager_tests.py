@@ -8,13 +8,11 @@ import unittest
 from unittest.mock import patch, MagicMock
 import sys
 import json
-import boto3
 import os
-from datetime import datetime
 
 # Add parent directory to path to import EKSClusterManager
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from eks_cluster_manager import EKSClusterManager, Colors
+from eks_cluster_manager import EKSClusterManager
 from aws_credential_manager import CredentialInfo
 
 class TestEKSClusterManager(unittest.TestCase):

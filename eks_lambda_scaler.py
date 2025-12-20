@@ -2,7 +2,7 @@ import os
 import glob
 import json
 import boto3
-from datetime import datetime, timedelta
+from datetime import datetime
 import re
 from typing import Dict, List, Optional, Any
 from root_iam_credential_manager import AWSCredentialManager, Colors

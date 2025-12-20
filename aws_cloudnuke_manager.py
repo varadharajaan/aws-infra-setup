@@ -8,7 +8,6 @@ import logging
 from datetime import datetime
 import time
 import threading
-import queue
 import re
 
 class CloudNukeManager:

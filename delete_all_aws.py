@@ -3954,7 +3954,6 @@ def setup_aws_profiles(accounts):
 def delete_aws_profiles(profiles):
     """Delete AWS profiles"""
     import subprocess
-    from pathlib import Path
     
     print("🗑️ Deleting AWS profiles...")
     for profile in profiles:

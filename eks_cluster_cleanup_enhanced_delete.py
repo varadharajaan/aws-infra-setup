@@ -11,17 +11,13 @@ import os
 import boto3
 import re
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from collections import defaultdict
-from typing import Dict, List, Tuple, Any
+from typing import Dict, List, Tuple
 import logging
-import subprocess
-from botocore.exceptions import ClientError, NoCredentialsError
+from botocore.exceptions import ClientError
 
 # Configure logging
-import os
-from datetime import datetime
-
 # Create timestamp for filename
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 log_dir = "aws/eks"

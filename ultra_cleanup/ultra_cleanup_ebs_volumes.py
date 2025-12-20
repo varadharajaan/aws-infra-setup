@@ -6,7 +6,6 @@ import sys
 import os
 import time
 from datetime import datetime
-from botocore.exceptions import ClientError, BotoCoreError
 
 class UltraEBSVolumeCleanupManager:
     def __init__(self, config_file='aws_accounts_config.json'):

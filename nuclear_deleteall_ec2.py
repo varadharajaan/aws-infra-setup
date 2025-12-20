@@ -7,7 +7,7 @@ import os
 import time
 import threading
 from datetime import datetime
-from botocore.exceptions import ClientError, BotoCoreError
+from botocore.exceptions import ClientError
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 class UltraEC2CleanupManager:

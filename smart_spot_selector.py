@@ -10,22 +10,19 @@ import os
 import pickle
 import hashlib
 from datetime import datetime, timedelta
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict
 from dataclasses import dataclass
 import pandas as pd
 import numpy as np
-from collections import defaultdict
 import warnings
 import time
-import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 warnings.filterwarnings('ignore')
 
 # For ML model
-from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
-import joblib
 
 # Color codes for terminal
 class Colors:

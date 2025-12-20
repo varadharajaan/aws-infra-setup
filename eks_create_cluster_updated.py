@@ -15,16 +15,9 @@ import boto3
 import glob
 import re
 from datetime import datetime
-from typing import Dict, List, Tuple, Optional
-import threading
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Dict, List, Tuple, Set
 import yaml
-import base64
-import queue
 import subprocess
-import json
-import os
-from typing import List, Tuple, Set
 
 # Import your existing logging module
 try:

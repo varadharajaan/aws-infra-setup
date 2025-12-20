@@ -7,7 +7,6 @@ Current User's Login: varadharajaan
 
 import time
 import subprocess
-import os
 
 class Colors:
     GREEN = '\033[92m'

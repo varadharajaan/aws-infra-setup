@@ -2,14 +2,10 @@
 
 import boto3
 import json
-import time
 import statistics
-import os
-import sys
 from datetime import datetime, timedelta
-from typing import Dict, List, Tuple, Optional, Set
+from typing import Dict, List, Optional
 from dataclasses import dataclass
-from botocore.exceptions import ClientError
 
 
 # Import logger from your existing setup

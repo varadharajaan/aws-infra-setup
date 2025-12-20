@@ -5,7 +5,6 @@ import json
 import sys
 import os
 from datetime import datetime
-from botocore.exceptions import ClientError, BotoCoreError
 
 class AWSCredentialDiagnostics:
     def __init__(self, config_file='aws_accounts_config.json'):

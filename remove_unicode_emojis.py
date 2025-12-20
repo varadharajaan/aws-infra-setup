@@ -3,8 +3,6 @@
 Script to remove Unicode emojis from Python files and replace with text markers.
 """
 
-import os
-import re
 from pathlib import Path
 
 # Emoji to text replacement mapping
