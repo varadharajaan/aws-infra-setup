@@ -2978,7 +2978,6 @@ class LiveCostCalculator:
     def generate_html_report(self, aggregated_results, all_ec2_results, all_eks_results, all_historical_results=None,
                              all_forecast_results=None):
         """Generate a modern HTML report with visualizations"""
-        pass
 
         # Create the HTML report directory
         html_dir = "aws/live-cost"
