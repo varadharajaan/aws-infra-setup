@@ -18,9 +18,6 @@ import logging
 from botocore.exceptions import ClientError
 
 # Configure logging
-import os
-from datetime import datetime
-
 # Create timestamp for filename
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 log_dir = "aws/asg"

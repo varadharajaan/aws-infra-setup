@@ -10,12 +10,10 @@ import glob
 import re
 import random
 import string
-from datetime import datetime
+from datetime import datetime, timedelta
 from botocore.exceptions import ClientError
 from logger import setup_logger
-from typing import Set
-from typing import Tuple, Optional, List, Dict
-from datetime import datetime, timedelta
+from typing import Set, Tuple, Optional, List, Dict
 from instance_config_manager import InstanceConfigManager
 
 class EC2InstanceManager:

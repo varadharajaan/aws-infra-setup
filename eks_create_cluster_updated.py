@@ -15,12 +15,9 @@ import boto3
 import glob
 import re
 from datetime import datetime
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Set
 import yaml
 import subprocess
-import json
-import os
-from typing import List, Tuple, Set
 
 # Import your existing logging module
 try:

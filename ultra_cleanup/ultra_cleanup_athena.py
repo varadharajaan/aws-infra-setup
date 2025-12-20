@@ -27,7 +27,6 @@ import time
 from datetime import datetime
 from typing import List
 import sys
-import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from root_iam_credential_manager import AWSCredentialManager, Colors
 
